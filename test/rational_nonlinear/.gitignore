@@ -1,7 +1,0 @@
-figs/e1net_loss_history.png
-figs/pnet_approx.png
-figs/pnet_loss_history.png
-figs/pnet_resdiual.png
-output/e1_net.pth
-output/e1_net_train_loss.npy
-
