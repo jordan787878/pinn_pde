@@ -236,8 +236,9 @@ def show_p_net_results(p_net):
 
 
 class E1Net(nn.Module):
-    def __init__(self):
+    def __init__(self, scale=1.0):
         neurons = 32
+        self.scale = scale
         super(E1Net, self).__init__()
         self.hidden_layer1 = (nn.Linear(2,neurons))
         self.hidden_layer2 = (nn.Linear(neurons,neurons))
@@ -255,6 +256,7 @@ class E1Net(nn.Module):
         layer4_out = torch.tanh((self.hidden_layer4(layer3_out)))
         layer5_out = torch.tanh((self.hidden_layer5(layer4_out)))
         output = self.output_layer(layer5_out)
+        output = self.scale*output
         return output
     def initialize_weights(self):
         for module in self.modules():
@@ -266,7 +268,7 @@ class E1Net(nn.Module):
 class E1NetFourier(nn.Module):
     def __init__(self, degree=3, scale=1.0):
         super(E1NetFourier, self).__init__()
-        neurons = 50
+        neurons = 100
         self.degree = degree
         self.scale = scale
         self.hidden_layer1 = nn.Linear(2, neurons)
@@ -305,6 +307,49 @@ class E1NetFourier(nn.Module):
         for module in self.modules():
             if isinstance(module, nn.Linear):
                 init.xavier_uniform_(module.weight)
+
+
+class E1NetFourierFix(nn.Module):
+    def __init__(self, scale=1.0):
+        neurons = 60
+        self.scale = scale
+        super(E1NetFourierFix, self).__init__()
+        self.hidden_layer1 = nn.Linear(2, neurons)
+        self.hidden_layer2 = nn.Linear(neurons, neurons)
+        self.hidden_layer3 = nn.Linear(neurons, neurons)
+        self.hidden_layer4 = nn.Linear(neurons, neurons)
+        self.output_layer = nn.Linear(neurons, 11*2)  # Change output size to 5
+        # Initialize weights with random values
+        self.initialize_weights()
+    def forward(self, x, t):
+        inputs = torch.cat([x, t], dim=1)
+        layer1_out = torch.tanh(self.hidden_layer1(inputs))
+        layer2_out = torch.tanh(self.hidden_layer2(layer1_out))
+        layer3_out = torch.tanh(self.hidden_layer3(layer2_out))
+        layer4_out = torch.tanh(self.hidden_layer4(layer3_out))
+        H = self.output_layer(layer4_out)
+        # Calculating the final output based on the specified formula
+        H1 = H[:,0].view(-1,1) \
+            + H[:,1].view(-1,1) * torch.sin(0.25*x) +   H[:,2].view(-1,1) * torch.cos(0.25*x) \
+            + H[:,3].view(-1,1) * torch.sin(0.5*x) +   H[:,4].view(-1,1) * torch.cos(0.5*x) \
+            + H[:,5].view(-1,1) * torch.sin(x) +   H[:,6].view(-1,1) * torch.cos(x) \
+            + H[:,7].view(-1,1) * torch.sin(2*x) + H[:,8].view(-1,1) * torch.cos(2*x) \
+            + H[:,9].view(-1,1) * torch.sin(4*x) + H[:,10].view(-1,1) * torch.cos(4*x)
+        H2 = H[:,11].view(-1,1) \
+            + H[:,12].view(-1,1) * torch.sin(0.25*t) +   H[:,13].view(-1,1) * torch.cos(0.25*t) \
+            + H[:,14].view(-1,1) * torch.sin(0.5*t) +   H[:,15].view(-1,1) * torch.cos(0.5*t) \
+            + H[:,16].view(-1,1) * torch.sin(t) +   H[:,17].view(-1,1) * torch.cos(t) \
+            + H[:,18].view(-1,1) * torch.sin(2*t) + H[:,19].view(-1,1) * torch.cos(2*t) \
+            + H[:,20].view(-1,1) * torch.sin(4*t) + H[:,21].view(-1,1) * torch.cos(4*t)
+        output = self.scale * H1 * H2  # Ensure output shape is (batch_size, 1)
+        return output
+    def initialize_weights(self):
+        for module in self.modules():
+            if isinstance(module, nn.Linear):
+                # Initialize weights with random values using a normal distribution
+                init.xavier_uniform_(module.weight)
+                if module.bias is not None:
+                    module.bias.data.fill_(0.01)
 
 
 class E1NetFourierEmbed(nn.Module):
@@ -350,7 +395,7 @@ class E1NetFourierEmbed(nn.Module):
                     module.bias.data.fill_(0.01)
 
 
-def e1_res_func(x, t, e1_net, p_net, max_abs_e1_x_0, verbose=False):
+def e1_res_func(x, t, e1_net, p_net, verbose=False):
     global a, b, c, d, e
     net_out = e1_net(x,t)
     net_out_x = torch.autograd.grad(net_out, x, grad_outputs=torch.ones_like(net_out), create_graph=True)[0]
@@ -407,10 +452,10 @@ def train_e1_net(e1_net, optimizer, scheduler, mse_cost_function, p_net, max_abs
         p_bc = Variable(torch.from_numpy(p_bc).float(), requires_grad=False).to(device)
         phat_bc = p_net(x_bc, t_bc)
         u_bc = p_bc - phat_bc
-        net_bc_out = e1_net(x_bc, t_bc)*max_abs_e1_x_0
+        net_bc_out = e1_net(x_bc, t_bc)
         mse_u = mse_cost_function(net_bc_out, u_bc)
 
-        # Loss based on PDE
+        # Loss based on residual
         t_quad = torch.arange(t0, T_end+dt_train, dt_train, dtype=torch.float, requires_grad=True).view(-1, 1).to(device)
         t = (torch.rand(batch_size, 1, requires_grad=True) * (T_end - t0 + 2*t_mar) + t0-t_mar).to(device)
         t = torch.cat((t_quad, t, t+dt_step, t+dt_step*2), dim=0)
@@ -418,22 +463,22 @@ def train_e1_net(e1_net, optimizer, scheduler, mse_cost_function, p_net, max_abs
         # t = torch.cat((t, t_bc), dim=0)
         # x = torch.cat((x, x_bc), dim=0)
         all_zeros = torch.zeros((len(t),1), dtype=torch.float32, requires_grad=False).to(device)
-        f_out = e1_res_func(x, t, e1_net, p_net, max_abs_e1_x_0)
+        f_out = e1_res_func(x, t, e1_net, p_net)
         # e1_out_for_res = e1_net(x, t)*max_abs_e1_x_0
         mse_res = mse_cost_function(f_out, all_zeros)
         l_inf_res = linf_loss(f_out, all_zeros)
 
         # Loss based on time integral of residual
-        t = (torch.rand(10, 1, requires_grad=True) * (T_end - t0 + 2*t_mar) + t0-t_mar).to(device)
-        t = torch.cat((t_quad, t), dim=0)
-        # x_quad = torch.arange(x_low-x_mar, x_hig+3+x_mar, 3, dtype=torch.float, requires_grad=True).view(-1, 1).to(device)
-        aug_x, aug_t = augment_tensors(x_quad, t)
-        res_aug = e1_res_func(aug_x, aug_t, e1_net, p_net, max_abs_e1_x_0).view(t.size(0), x_quad.size(0))
-        e1_aug = e1_net(aug_x, aug_t).view(t.size(0), x_quad.size(0))
-        res_aug_max = torch.max(torch.abs(res_aug), dim=1)
-        e1_aug_max =  torch.max(torch.abs(e1_aug), dim=1)
-        quotient = res_aug_max.values/e1_aug_max.values
-        quotient_max = torch.max(quotient)  #; print(quotient.shape, torch.max(quotient))
+        # t = (torch.rand(10, 1, requires_grad=True) * (T_end - t0 + 2*t_mar) + t0-t_mar).to(device)
+        # t = torch.cat((t_quad, t), dim=0)
+        # # x_quad = torch.arange(x_low-x_mar, x_hig+3+x_mar, 3, dtype=torch.float, requires_grad=True).view(-1, 1).to(device)
+        # aug_x, aug_t = augment_tensors(x_quad, t)
+        # res_aug = e1_res_func(aug_x, aug_t, e1_net, p_net, max_abs_e1_x_0).view(t.size(0), x_quad.size(0))
+        # e1_aug = e1_net(aug_x, aug_t).view(t.size(0), x_quad.size(0))
+        # res_aug_max = torch.max(torch.abs(res_aug), dim=1)
+        # e1_aug_max =  torch.max(torch.abs(e1_aug), dim=1)
+        # quotient = res_aug_max.values/e1_aug_max.values
+        # quotient_max = torch.max(quotient)  #; print(quotient.shape, torch.max(quotient))
 
         # Loss based on alpha_1(t0)
         x = x_bc
@@ -447,20 +492,19 @@ def train_e1_net(e1_net, optimizer, scheduler, mse_cost_function, p_net, max_abs
         alpha1_t0 = linf_loss(e1_hat, e1)/ torch.max(torch.abs(e1_hat))
         
         # Combining the loss functions
-        # loss = normalized*mse_u/max_abs_e1_x_0 + 0.0*normalized*mse_res/max_abs_e1_x_0
-        
+        loss = normalized*mse_u/max_abs_e1_x_0 + normalized*mse_res/max_abs_e1_x_0
         # [NEW] denominator for l-inf-res
         # loss = normalized*(alpha1_t0 + error1_t0 + l_inf_res/max_abs_e1_x_0 + 1e-3*quotient_max )
-        loss = normalized*torch.max(alpha1_t0, 0*alpha1_t0+0.1) + normalized*torch.max(error1_t0, 0*alpha1_t0+0.1) + 1e-1*(normalized*l_inf_res/max_abs_e1_x_0 + 1e-4*normalized*quotient_max)
+        # loss = normalized*torch.max(alpha1_t0, 0*alpha1_t0+0.1) + normalized*torch.max(error1_t0, 0*alpha1_t0+0.1) + 1e-1*(normalized*l_inf_res/max_abs_e1_x_0 + 1e-4*normalized*quotient_max)
         # loss = normalized*max(alpha1_t0, error1_t0, l_inf_res) + 1e-2*quotient_max
         # loss = max(max(alpha1_t0, 0.1), max(error1_t0, 0.1), max(l_inf_res, 0.001), max(quotient_max, 0.1))
         # loss = normalized*(max(alpha1_t0, 0.1) + max(error1_t0, 0.1) + l_inf_res)
-        # loss = normalized*(alpha1_t0+error1_t0+l_inf_res)
+        # loss = normalized*(alpha1_t0+error1_t0+mse_res/max_abs_e1_x_0)
         
         # Save the min loss model
         if(loss.data < min_loss):
             print("e1net epoch:", epoch, ",loss:", loss.data/normalized, ",ic loss:", mse_u.data,
-                  ",res:", mse_res.data, l_inf_res.data, quotient_max.data,
+                  ",res:", mse_res.data, l_inf_res.data,# quotient_max.data,
                   ",a1(t0):", alpha1_t0.data, "error(t0):",error1_t0.data)
             torch.save({
                     'epoch': epoch,
@@ -569,8 +613,8 @@ def show_uniform_bound(p_net, e1_net, max_abs_e1_x_0):
     global x_low, x_hig, t0, X_sim, P_sim_t10, P_sim_t15, P_sim_t20
     x = np.arange(x_low, x_hig+0.1, 0.1).reshape(-1,1)
     x_sim_ = X_sim
-    t1 = 2.0
-    P_sim = P_sim_t20
+    t1 = 1.5
+    P_sim = P_sim_t15
     T0 = 0*x + t0
     T1 = 0*x + t1
     pt_x = Variable(torch.from_numpy(x).float(), requires_grad=True).to(device)
@@ -596,17 +640,17 @@ def show_uniform_bound(p_net, e1_net, max_abs_e1_x_0):
     plt.figure(figsize=(8,6))
     plt.plot(x, p_i, "black", linewidth=0.5, alpha=0.5, label="$p_i$")
     plt.plot(x_sim_, p_f, "red", linewidth=0.5, alpha=0.5, label="$p_f$ [Monte]")
-    plt.plot(x, p_approx1, "b", linewidth=0.5, label="p_net(t)")
+    plt.plot(x, p_approx1, "b", linewidth=0.5, label="$\hat{p}(t)$")
     plt.scatter(x_sim_, p_exact1, s=2, color="blue", marker="*", label="$p(t)$ [Monte]")
     plt.fill_between(x.reshape(-1), y1=p_approx1.reshape(-1)+e_bound_1, y2=p_approx1.reshape(-1)-e_bound_1, color="blue", alpha=0.1, label="Error Bound(t)")
     plt.legend(loc="upper right")
     plt.xlabel('x')
     plt.ylabel('y')
-    textstr = 't='+str(t1) + '\nError Bound='+str(np.round(e_bound_1[0],3))
+    textstr = "t="+str(t1)+", Error Bound="+str(np.round(e_bound_1[0],3))
     props = dict(boxstyle='round', facecolor='wheat', alpha=0.5)
     plt.text(0.01, 0.99, textstr, transform=plt.gca().transAxes, fontsize=10,
             verticalalignment='top', bbox=props)
-    plt.savefig("figs/uniform_error_t.png")
+    plt.savefig("figs/uniform_error_bound_t="+str(t1)+".png")
     plt.close()
 
     # plot unform error bound in error space at t
@@ -618,30 +662,33 @@ def show_uniform_bound(p_net, e1_net, max_abs_e1_x_0):
     error_t = p_exact1.reshape(-1,1) - p_net(pt_x_sim, pt_t_sim).data.cpu().numpy()
     alpha1_t = max(abs(error_t - e1_t))/ max(abs(e1_t))
     print("alpha1(t):", alpha1_t)
-    plt.fill_between(x.reshape(-1), y1=0*p_approx1.reshape(-1)+e_bound_1, y2=0*p_approx1.reshape(-1)-e_bound_1, color="blue", alpha=0.1, label="Error Bound")
+    plt.fill_between(x.reshape(-1), y1=0*p_approx1.reshape(-1)+e_bound_1, y2=0*p_approx1.reshape(-1)-e_bound_1, color="blue", alpha=0.1, label="Error Bound(t)")
     plt.scatter(x_sim_, error_t, s=5, color="blue", marker="*", label="$e_1(t)$ [Monte]")
-    plt.plot(x, e1_1, "b--", label="$e_1(t)$ Approx")
+    plt.plot(x, e1_1, "b--", label="$\hat{e}_1(t)$")
     plt.plot([x_low, x_hig], [-e_bound_1, -e_bound_1], "black")
     plt.plot([x_low, x_hig], [e_bound_1, e_bound_1], "black")
     plt.plot([x_low, x_hig], [0, 0], "k:", linewidth=0.5)
+    textstr = "t="+str(t1)+", Error Bound="+str(np.round(e_bound_1[0],3))
+    props = dict(boxstyle='round', facecolor='wheat', alpha=0.5)
+    plt.text(0.01, 0.99, textstr, transform=plt.gca().transAxes, fontsize=10,
+            verticalalignment='top', bbox=props)
     plt.legend(loc="upper right")
     plt.xlabel('x')
     plt.ylabel('error')
-    plt.savefig("figs/uniform_error_space_t.png")
+    plt.savefig("figs/uniform_error_bound(zoom-in)_t="+str(t1)+".png")
     plt.close()
-
     # plot e1 approximation
-    plt.figure()
-    plt.subplot(2,1,1)
-    plt.plot(x, e1_exact_0, "b--")
-    plt.plot(x, e1_0, "b")
-    plt.plot([x_low, x_hig], [0,0], color="black", linewidth=0.5, linestyle=":")
-    plt.subplot(2,1,2)
-    plt.plot(x, e1_1, "r")
-    plt.scatter(x_sim_, error_t, s=5, color="r", marker="*", label="$e_1(t)$ [Monte]")
-    plt.plot([x_low, x_hig], [0,0], color="black", linewidth=0.5, linestyle=":")
-    plt.savefig("figs/e1net_approx_ti_t")
-    plt.close()
+    # plt.figure()
+    # plt.subplot(2,1,1)
+    # plt.plot(x, e1_exact_0, "b--")
+    # plt.plot(x, e1_0, "b")
+    # plt.plot([x_low, x_hig], [0,0], color="black", linewidth=0.5, linestyle=":")
+    # plt.subplot(2,1,2)
+    # plt.plot(x, e1_1, "r")
+    # plt.scatter(x_sim_, error_t, s=5, color="r", marker="*", label="$e_1(t)$ [Monte]")
+    # plt.plot([x_low, x_hig], [0,0], color="black", linewidth=0.5, linestyle=":")
+    # plt.savefig("figs/e1net_approx_ti_t")
+    # plt.close()
 
 # Run this next time: 06.01
 def main():
@@ -660,15 +707,16 @@ def main():
     print("max abs e1(x,0):", max_abs_e1_x_0)
 
     # create e1_net
-    # e1_net = E1Net().to(device)
-    e1_net = E1NetFourier(degree=10, scale=max_abs_e1_x_0).to(device)
+    e1_net = E1Net(scale=max_abs_e1_x_0).to(device)
+    # e1_net = E1NetFourierFix(scale=max_abs_e1_x_0).to(device)
+    # e1_net = E1NetFourier(degree=20, scale=max_abs_e1_x_0).to(device)
     # e1_net = E1NetFourierEmbed(m=100, sigma=1.0, constant=max_abs_e1_x_0).to(device)
 
-    # optimizer = torch.optim.Adam(e1_net.parameters(), lr=1e-3)
-    optimizer = torch.optim.Adamax(e1_net.parameters(), lr=1e-4)
-    scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=1.0)
-    e1_net = pos_e1_net_train(e1_net, PATH="output/e1_net.pth", PATH_LOSS="output/e1_net_train_loss.npy")
-    train_e1_net(e1_net, optimizer, scheduler, mse_cost_function, p_net, max_abs_e1_x_0, iterations=40000); print("[e1_net train complete]")
+    optimizer = torch.optim.Adam(e1_net.parameters(), lr=1e-3)
+    # optimizer = torch.optim.Adamax(e1_net.parameters(), lr=1e-4)
+    scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.9)
+    # e1_net = pos_e1_net_train(e1_net, PATH="output/e1_net.pth", PATH_LOSS="output/e1_net_train_loss.npy")
+    train_e1_net(e1_net, optimizer, scheduler, mse_cost_function, p_net, max_abs_e1_x_0, iterations=0); print("[e1_net train complete]")
     e1_net = pos_e1_net_train(e1_net, PATH="output/e1_net.pth", PATH_LOSS="output/e1_net_train_loss.npy")
     e1_net.eval()
     show_uniform_bound(p_net, e1_net, max_abs_e1_x_0)
