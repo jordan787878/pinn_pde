@@ -16,6 +16,7 @@ import random
 #     device = torch.device("mps")
 # else:
 #     device = torch.device("cpu")
+FOLDER = "exp/tmp/"
 device = "cpu"
 print(device)
 
@@ -72,7 +73,7 @@ class Net(nn.Module):
     def __init__(self):
         neurons = 32
         super(Net, self).__init__()
-        self.hidden_layer1 = spectral_norm(nn.Linear(2,neurons))
+        self.hidden_layer1 = (nn.Linear(2,neurons))
         self.hidden_layer2 = (nn.Linear(neurons,neurons))
         self.hidden_layer3 = (nn.Linear(neurons,neurons))
         self.hidden_layer4 = (nn.Linear(neurons,neurons))
@@ -82,14 +83,14 @@ class Net(nn.Module):
         self.initialize_weights()
     def forward(self, x,t):
         inputs = torch.cat([x,t],axis=1)
-        layer1_out = nn.functional.softplus(self.hidden_layer1(inputs))
-        layer2_out = nn.functional.softplus(self.hidden_layer2(layer1_out))
-        layer3_out = nn.functional.softplus(self.hidden_layer3(layer2_out))
-        layer4_out = nn.functional.softplus(self.hidden_layer4(layer3_out))
-        layer5_out = nn.functional.softplus(self.hidden_layer5(layer4_out))
+        layer1_out = F.softplus(self.hidden_layer1(inputs))
+        layer2_out = F.softplus(self.hidden_layer2(layer1_out))
+        layer3_out = F.softplus(self.hidden_layer3(layer2_out))
+        layer4_out = F.softplus(self.hidden_layer4(layer3_out))
+        layer5_out = F.softplus(self.hidden_layer5(layer4_out))
         output = self.output_layer(layer5_out)
         # output = torch.square(output)
-        output = nn.functional.softplus(output)
+        output = F.softplus(output)
         return output
     def initialize_weights(self):
         for module in self.modules():
@@ -97,6 +98,24 @@ class Net(nn.Module):
                 # Initialize weights with random values using a normal distribution
                 init.xavier_uniform_(module.weight)
 
+def count_approx_zero_elements(tensor, epsilon=1e-3):
+    """
+    Approximate the count of elements in the tensor that are close to zero within epsilon distance.
+
+    Args:
+        tensor (torch.Tensor): Input tensor of shape (N, 1).
+        epsilon (float): Distance from zero to consider.
+
+    Returns:
+        torch.Tensor: A tensor containing a single value which is the approximate count.
+    """
+    # Calculate the distance of each element from zero
+    distances = torch.abs(tensor)
+    # Apply a smooth indicator function (sigmoid)
+    soft_indicators = torch.sigmoid((epsilon - distances) * 10000)  # scale factor 100000 to make transition sharp
+    # Sum the soft indicators to get the approximate count
+    approx_count = torch.sum(soft_indicators)
+    return approx_count
 
 def train_p_net(p_net, optimizer, scheduler, mse_cost_function, PATH, PATH_LOSS, iterations=40000):
     global x_low, x_hig, t0, T_end
@@ -136,16 +155,38 @@ def train_p_net(p_net, optimizer, scheduler, mse_cost_function, PATH, PATH_LOSS,
 
         res_x = torch.autograd.grad(f_out, x, grad_outputs=torch.ones_like(f_out), create_graph=True)[0]
         res_t = torch.autograd.grad(f_out, t, grad_outputs=torch.ones_like(f_out), create_graph=True)[0]
+        mse_res_x = mse_cost_function(res_x, all_zeros)
+        mse_res_t = mse_cost_function(res_t, all_zeros)
         linf_res_x = linf_loss(res_x, all_zeros)
         linf_res_t = linf_loss(res_t, all_zeros)
 
+        # <Baseline>
+        # loss = torch.max(linf_u, linf_u*0+0.05) + linf_res + 1e-4*linf_res_x + 1e-4*linf_res_t
+        # <Mse>
         # loss = mse_u + mse_f
-        loss = torch.max(linf_u, linf_u*0+0.05) + linf_res + 1e-4*linf_res_x + 1e-4*linf_res_t
+        # <Linf>
+        # loss = linf_u + linf_res
+        # <LinfDerivative>
+        # loss = linf_u + linf_res + linf_res_x + linf_res_t
+        # <LinfDerivativeWeighted>
+        # loss = linf_u + linf_res + 1e-4*linf_res_x + 1e-4*linf_res_t
+        # <LinfDerivativeWeighted02>
+        # loss = linf_u + linf_res + 1e-2*linf_res_x + 1e-2*linf_res_t
+        # <LinfDerivativeSatIC>
+        # loss = torch.max(linf_u, linf_u*0+0.05) + linf_res + linf_res_x + linf_res_t
+        # <LinfDerivativeSatICWeighted>
+        # loss = torch.max(linf_u, linf_u*0+0.05) + linf_res + 1e-4*linf_res_x + 1e-4*linf_res_t
+        # <superp>
+        # loss = mse_u + mse_f + 1e-5*(linf_res_x + linf_res_t)
+        # <linfresfreq>
+        num_zero_res_x_smooth = count_approx_zero_elements(res_x)
+        loss = torch.max(linf_u, linf_u*0+0.05) + torch.max(linf_res, linf_res*0+0.01) + 1e-4*(num_zero_res_x_smooth)/batch_size + 1e-5*linf_res_t
 
         # Save the min loss model
         if(loss.data < min_loss):
             print("save epoch:", epoch, ", loss:", loss.data, ", ic:",mse_u.data, ", res:",mse_f.data, ",l-inf ic:",
-                  linf_u.data, ",l-inf res:",linf_res.data, linf_res_x.data, linf_res_t.data)
+                  linf_u.data, ",l-inf res:",linf_res.data, ",D res:", linf_res_x.data, linf_res_t.data, mse_res_x.data, mse_res_t.data,
+                  "res freq:", num_zero_res_x_smooth.data)
             torch.save({
                     'epoch': epoch,
                     'model_state_dict': p_net.state_dict(),
@@ -186,7 +227,7 @@ def pos_p_net_train(p_net, PATH, PATH_LOSS):
     plt.ylim([min_loss, 10*min_loss])
     plt.xlabel("epoch")
     plt.ylabel("loss")
-    plt.savefig("figs/pnet_loss_history.png")
+    plt.savefig(FOLDER+"figs/pnet_loss_history.png")
     plt.close()
     return p_net
 
@@ -209,24 +250,24 @@ def show_p_net_results(p_net):
     p_exact1 = P_sim
 
     plt.figure()
-    plt.plot(x, p_approx0, "b--", label="NN t")
-    plt.plot(x, p_exact0,  "b:", linewidth=5, label="True t: ")
-    plt.plot(x, p_approx1, "r--", label="NN t")
-    plt.plot(X_sim, p_exact1,  "r:", linewidth=5, label="True t: ")
+    plt.plot(x, p_exact0,  "k:", linewidth=5, label="$p(t_i)$")
+    plt.plot(x, p_approx0, "k--", label=r"$\hat{p}(t_i)$")
+    plt.plot(X_sim, p_exact1,  "r:", linewidth=5, label="$p(t_f)$ [Monte]")
+    plt.plot(x, p_approx1, "r--", label=r"$\hat{p}(t_f)$")
     plt.legend()
     plt.xlabel('x')
     plt.ylabel('pdf')
-    plt.savefig("figs/pnet_approx.png")
+    plt.savefig(FOLDER+"figs/pnet_approx.png")
     plt.close()
 
     res_0 = res_func(pt_x, pt_T0, p_net)
     res_1 = res_func(pt_x, pt_T1, p_net)
     plt.figure()
-    plt.plot(x, res_0.detach().numpy(), "blue", alpha=0.3, label="res t0")
-    plt.plot(x, res_1.detach().numpy(), "red", alpha=0.3, label="res t1")
+    plt.plot(x, res_0.detach().numpy(), "black", label="$r_1(t_i)$")
+    plt.plot(x, res_1.detach().numpy(), "red", label="$r_1(t_f)$")
     plt.plot([x_low, x_hig], [0,0], "black")
     plt.legend()
-    plt.savefig("figs/pnet_resdiual.png")
+    plt.savefig(FOLDER+"figs/pnet_resdiual.png")
     plt.close()
 
     max_abs_e1_x_0 = max(abs(p_exact0-p_approx0))
@@ -425,13 +466,12 @@ def augment_tensors(x_tensor, t_tensor):
     return augmented_x_tensor, augmented_t_tensor
 
 
-def train_e1_net(e1_net, optimizer, scheduler, mse_cost_function, p_net, max_abs_e1_x_0, iterations=40000):
+def train_e1_net(e1_net, optimizer, scheduler, mse_cost_function, p_net, max_abs_e1_x_0, PATH, PATH_LOSS, iterations=40000):
     global x_low, x_hig, t0, T_end
     batch_size = 200
     iterations_per_decay = 1000
     min_loss = np.inf
     loss_history = []
-    PATH = "output/e1_net.pth"
     
     dx_train = 0.1
     dt_train = 0.1
@@ -500,7 +540,9 @@ def train_e1_net(e1_net, optimizer, scheduler, mse_cost_function, p_net, max_abs
         # loss = max(max(alpha1_t0, 0.1), max(error1_t0, 0.1), max(l_inf_res, 0.001), max(quotient_max, 0.1))
         # loss = normalized*(max(alpha1_t0, 0.1) + max(error1_t0, 0.1) + l_inf_res)
         # loss = normalized*(alpha1_t0+error1_t0+mse_res/max_abs_e1_x_0)
-        
+        # <tmp>
+        # loss = torch.max(error1_t0, error1_t0*0+0.1) + torch.max(alpha1_t0, alpha1_t0*0+0.1) + mse_res
+
         # Save the min loss model
         if(loss.data < min_loss):
             print("e1net epoch:", epoch, ",loss:", loss.data/normalized, ",ic loss:", mse_u.data,
@@ -527,7 +569,7 @@ def train_e1_net(e1_net, optimizer, scheduler, mse_cost_function, p_net, max_abs
         with torch.autograd.no_grad():
             if (epoch%1000 == 0):
                 print(epoch,"Traning Loss:",loss.data/normalized)
-                np.save("output/e1_net_train_loss.npy", np.array(loss_history))
+                np.save(PATH_LOSS, np.array(loss_history))
 
 
 def pos_e1_net_train(e1_net, PATH, PATH_LOSS):
@@ -546,10 +588,10 @@ def pos_e1_net_train(e1_net, PATH, PATH_LOSS):
     min_loss = min(loss_history)
     plt.figure()
     plt.plot(np.arange(len(loss_history)), loss_history)
-    plt.ylim([min_loss, 2*min_loss])
+    plt.ylim([min_loss, 5*min_loss])
     plt.xlabel("epoch")
     plt.ylabel("loss")
-    plt.savefig("figs/e1net_loss_history.png")
+    plt.savefig(FOLDER+"figs/e1net_loss_history.png")
     plt.close()
     # print(loss_history)
     print("save e1net loss history")
@@ -557,41 +599,57 @@ def pos_e1_net_train(e1_net, PATH, PATH_LOSS):
 
 
 def show_e1_net(p_net, e1_net, max_abs_e1_x_0):
+    a1_t0 = 0.0095
     global x_low, x_hig, t0, X_sim, P_sim_t01, P_sim_t05, P_sim_t10, P_sim_t15, P_sim_t20
     x = np.arange(x_low, x_hig+0.1, 0.1).reshape(-1,1)
-    # pt_x = Variable(torch.from_numpy(x).float(), requires_grad=True).to(device)
+    pt_x = Variable(torch.from_numpy(x).float(), requires_grad=True).to(device)
     x_sim_ = X_sim
     t1s = np.array([0.1, 0.5, 1.0, 1.5, 2.0])
-    plt.figure(figsize=(8,8))
+    plt.figure(figsize=(10,8))
+    plt.subplot(3,2,1)
+    p_exact_t = p_init(x).reshape(-1,1)
+    T1 = 0*x + 0
+    pt_T1 = Variable(torch.from_numpy(T1).float(), requires_grad=True).to(device)
+    p_approx_t = p_net(pt_x, pt_T1).data.cpu().numpy()
+    e1 = e1_net(pt_x, pt_T1).data.cpu().numpy()
+    plt.plot(x, p_exact_t-p_approx_t, color="blue", marker='o', markersize=2, linewidth=0.3, label="$e_1$")
+    plt.plot(x, e1, linestyle="-", linewidth=1, color="blue", label=r"$\hat{e}_1$")
+    plt.plot(x_sim_, x_sim_*0.0, color="black", linestyle=":", linewidth=0.3)
+    plt.text(0.98, 0.02, "t=0"+ r"$, \alpha_1=$"+str(np.round(a1_t0,2)), transform=plt.gca().transAxes, verticalalignment='bottom', horizontalalignment='right')
+    plt.legend(loc='upper right')
+
     for t1 in t1s:
         if t1 == 0.1:
             p_exact_t = P_sim_t01
-            plt.subplot(5,1,1)
+            plt.subplot(3,2,2)
         if t1 == 0.5:
             p_exact_t = P_sim_t05
-            plt.subplot(5,1,2)
+            plt.subplot(3,2,3)
         if t1 == 1.0:
             p_exact_t = P_sim_t10
-            plt.subplot(5,1,3)
+            plt.subplot(3,2,4)
         if t1 == 1.5:
             p_exact_t = P_sim_t15
-            plt.subplot(5,1,4)
+            plt.subplot(3,2,5)
+            plt.xlabel('x')
         if t1 == 2.0:
             p_exact_t = P_sim_t20
-            plt.subplot(5,1,5)
+            plt.subplot(3,2,6)
+            plt.xlabel('x')
         T1 = 0*x + t1
         # pt_T1 = Variable(torch.from_numpy(T1).float(), requires_grad=True).to(device)
         pt_x_sim = Variable(torch.from_numpy(x_sim_.reshape(-1,1)).float(), requires_grad=False).to(device)
         pt_t_sim = 0*pt_x_sim + t1
         error_t = p_exact_t.reshape(-1,1) - p_net(pt_x_sim, pt_t_sim).data.cpu().numpy()
         e1 = e1_net(pt_x_sim, pt_t_sim).data.cpu().numpy()
-        line1, = plt.plot(x_sim_, e1, linestyle="-", linewidth=1, label=str(t1)+" Approx")
-        plt.plot(x_sim_, error_t, color=line1.get_color(), marker='o', markersize=2, linewidth=0.3, label=str(t1)+" True")
+        line1, = plt.plot(x_sim_, e1, linestyle="-", linewidth=1, color="blue", label="Approx")
+        plt.plot(x_sim_, error_t, color=line1.get_color(), marker='o', markersize=2, linewidth=0.3, label="True")
         plt.plot(x_sim_, x_sim_*0.0, color="black", linestyle=":", linewidth=0.3)
         a1 = np.array(max(abs(error_t - e1))/ max(abs(e1)))
-        plt.ylabel("a1:"+str(np.round(a1[0],2)))
-        plt.legend(loc='upper right')
-    plt.savefig("figs/e1net_result")
+        plt.text(0.98, 0.02, "t="+str(t1)+ r"$, \alpha_1=$"+str(np.round(a1[0],2)), transform=plt.gca().transAxes, verticalalignment='bottom', horizontalalignment='right')
+
+        # plt.ylabel("a1:"+str(np.round(a1[0],2)))
+    plt.savefig(FOLDER+"figs/e1net_result")
     plt.close()
 
     # plt.figure()
@@ -613,8 +671,8 @@ def show_uniform_bound(p_net, e1_net, max_abs_e1_x_0):
     global x_low, x_hig, t0, X_sim, P_sim_t10, P_sim_t15, P_sim_t20
     x = np.arange(x_low, x_hig+0.1, 0.1).reshape(-1,1)
     x_sim_ = X_sim
-    t1 = 1.5
-    P_sim = P_sim_t15
+    t1 = 2.0
+    P_sim = P_sim_t20
     T0 = 0*x + t0
     T1 = 0*x + t1
     pt_x = Variable(torch.from_numpy(x).float(), requires_grad=True).to(device)
@@ -640,7 +698,7 @@ def show_uniform_bound(p_net, e1_net, max_abs_e1_x_0):
     plt.figure(figsize=(8,6))
     plt.plot(x, p_i, "black", linewidth=0.5, alpha=0.5, label="$p_i$")
     plt.plot(x_sim_, p_f, "red", linewidth=0.5, alpha=0.5, label="$p_f$ [Monte]")
-    plt.plot(x, p_approx1, "b", linewidth=0.5, label="$\hat{p}(t)$")
+    plt.plot(x, p_approx1, "b", linewidth=0.5, label=r"$\hat{p}(t)$")
     plt.scatter(x_sim_, p_exact1, s=2, color="blue", marker="*", label="$p(t)$ [Monte]")
     plt.fill_between(x.reshape(-1), y1=p_approx1.reshape(-1)+e_bound_1, y2=p_approx1.reshape(-1)-e_bound_1, color="blue", alpha=0.1, label="Error Bound(t)")
     plt.legend(loc="upper right")
@@ -650,7 +708,7 @@ def show_uniform_bound(p_net, e1_net, max_abs_e1_x_0):
     props = dict(boxstyle='round', facecolor='wheat', alpha=0.5)
     plt.text(0.01, 0.99, textstr, transform=plt.gca().transAxes, fontsize=10,
             verticalalignment='top', bbox=props)
-    plt.savefig("figs/uniform_error_bound_t="+str(t1)+".png")
+    plt.savefig(FOLDER+"figs/uniform_error_bound_t="+str(t1)+".png")
     plt.close()
 
     # plot unform error bound in error space at t
@@ -664,7 +722,7 @@ def show_uniform_bound(p_net, e1_net, max_abs_e1_x_0):
     print("alpha1(t):", alpha1_t)
     plt.fill_between(x.reshape(-1), y1=0*p_approx1.reshape(-1)+e_bound_1, y2=0*p_approx1.reshape(-1)-e_bound_1, color="blue", alpha=0.1, label="Error Bound(t)")
     plt.scatter(x_sim_, error_t, s=5, color="blue", marker="*", label="$e_1(t)$ [Monte]")
-    plt.plot(x, e1_1, "b--", label="$\hat{e}_1(t)$")
+    plt.plot(x, e1_1, "b--", label=r"$\hat{e}_1(t)$")
     plt.plot([x_low, x_hig], [-e_bound_1, -e_bound_1], "black")
     plt.plot([x_low, x_hig], [e_bound_1, e_bound_1], "black")
     plt.plot([x_low, x_hig], [0, 0], "k:", linewidth=0.5)
@@ -675,7 +733,7 @@ def show_uniform_bound(p_net, e1_net, max_abs_e1_x_0):
     plt.legend(loc="upper right")
     plt.xlabel('x')
     plt.ylabel('error')
-    plt.savefig("figs/uniform_error_bound(zoom-in)_t="+str(t1)+".png")
+    plt.savefig(FOLDER+"figs/uniform_error_bound(zoom-in)_t="+str(t1)+".png")
     plt.close()
     # plot e1 approximation
     # plt.figure()
@@ -692,38 +750,34 @@ def show_uniform_bound(p_net, e1_net, max_abs_e1_x_0):
 
 # Run this next time: 06.01
 def main():
-    # create p_net
-    # p_net = Net()
-    p_net = Net().to(device)
     mse_cost_function = torch.nn.MSELoss() # Mean squared error
-    optimizer = torch.optim.Adam(p_net.parameters())
-    # optimizer = torch.optim.Adamax(p_net.parameters())
+
+    # create p_net
+    p_net = Net().to(device)
+    # optimizer = torch.optim.Adam(p_net.parameters())
+    optimizer = torch.optim.Adamax(p_net.parameters(), lr=1e-3)
+
     scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.95)
-    train_p_net(p_net, optimizer, scheduler, mse_cost_function, 
-                PATH="output/p_net.pt", PATH_LOSS="output/p_net_train_loss.npy", iterations=0); print("[p_net train complete]")
-    p_net = pos_p_net_train(p_net, PATH="output/p_net.pt", PATH_LOSS="output/p_net_train_loss.npy")
+    # train_p_net(p_net, optimizer, scheduler, mse_cost_function, 
+    #               PATH=FOLDER+"output/p_net.pt", PATH_LOSS=FOLDER+"output/p_net_train_loss.npy", iterations=40000); print("[p_net train complete]")
+    p_net = pos_p_net_train(p_net, PATH=FOLDER+"output/p_net.pt", PATH_LOSS=FOLDER+"output/p_net_train_loss.npy"); p_net.eval()
     max_abs_e1_x_0 = show_p_net_results(p_net)
-    p_net.eval()
     print("max abs e1(x,0):", max_abs_e1_x_0)
+
+
 
     # create e1_net
     e1_net = E1Net(scale=max_abs_e1_x_0).to(device)
-    # e1_net = E1NetFourierFix(scale=max_abs_e1_x_0).to(device)
-    # e1_net = E1NetFourier(degree=20, scale=max_abs_e1_x_0).to(device)
-    # e1_net = E1NetFourierEmbed(m=100, sigma=1.0, constant=max_abs_e1_x_0).to(device)
-
     optimizer = torch.optim.Adam(e1_net.parameters(), lr=1e-3)
-    # optimizer = torch.optim.Adamax(e1_net.parameters(), lr=1e-4)
+    # optimizer = torch.optim.Adamax(e1_net.parameters(), lr=1e-3)
+
     scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.9)
-    # e1_net = pos_e1_net_train(e1_net, PATH="output/e1_net.pth", PATH_LOSS="output/e1_net_train_loss.npy")
-    train_e1_net(e1_net, optimizer, scheduler, mse_cost_function, p_net, max_abs_e1_x_0, iterations=0); print("[e1_net train complete]")
-    e1_net = pos_e1_net_train(e1_net, PATH="output/e1_net.pth", PATH_LOSS="output/e1_net_train_loss.npy")
-    e1_net.eval()
+    train_e1_net(e1_net, optimizer, scheduler, mse_cost_function, p_net, max_abs_e1_x_0, 
+                 PATH=FOLDER+"output/e1_net.pth", PATH_LOSS=FOLDER+"output/e1_net_train_loss.npy", iterations=40000); print("[e1_net train complete]")
+    e1_net = pos_e1_net_train(e1_net, PATH=FOLDER+"output/e1_net.pth", PATH_LOSS=FOLDER+"output/e1_net_train_loss.npy"); e1_net.eval()
     show_uniform_bound(p_net, e1_net, max_abs_e1_x_0)
     show_e1_net(p_net, e1_net, max_abs_e1_x_0)
 
-    # train_e1_net_time(e1_net, optimizer, mse_cost_function, p_net)
-    # e1_net = pos_e1_net_train(e1_net, PATH="output/e1_net_time.pt", PATH_LOSS="output/e1_net_time_train_loss.npy")
     print("[complete rational nonlinear]")
 
 

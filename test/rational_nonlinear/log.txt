@@ -1,0 +1,137 @@
+Investigate the Loss function of p_net.
+
+<All p_net is trained by ADAM optimizer>
+<Baseline>
+p_net: re-run of the baseline
+p_net loss function: loss = torch.max(linf_u, linf_u*0+0.05) + linf_res + 1e-4*linf_res_x + 1e-4*linf_res_t
+p_net result: loss: tensor(0.0612) , ic: tensor(0.0001) , res: tensor(2.2216e-05) ,l-inf ic: tensor(0.0490) ,l-inf res: tensor(0.0112) tensor(0.0405) tensor(0.1360)
+e1_net result: 37611 ,loss: tensor(2.4032e-06) ,ic loss: tensor(6.3015e-09) ,res: tensor(4.0631e-08) tensor(0.0010) ,a1(t0): tensor(0.0095) error(t0): tensor(0.0095)
+[Success]
+[Load the p_net to inspect! training loss, epoch, p_net model structure? It is correct. Could it be the optimizer?]
+
+<Mse>
+p_net loss function: use mse for IC and Residual, loss = mse_u + mse_f
+p_net result: 29469 , loss: tensor(1.7477e-06) , ic: tensor(6.8301e-07) , res: tensor(1.0647e-06) ,l-inf ic: tensor(0.0106) ,l-inf res: tensor(0.0037) tensor(0.0304) tensor(0.1543)
+e1_net result: 38124 ,loss: tensor(8.8968e-06) ,ic loss: tensor(5.7233e-09) ,res: tensor(3.1817e-08) tensor(0.0009) ,a1(t0): tensor(0.0747) error(t0): tensor(0.0724)
+[Fail]
+
+<Linf>
+p_net loss function: use L-infinity norm for IC and Residaul, loss = linf_u + linf_res
+p_net result: 29808 , loss: tensor(0.0315) , ic: tensor(7.7308e-06) , res: tensor(7.0646e-05) ,l-inf ic: tensor(0.0126) ,l-inf res: tensor(0.0189) tensor(0.0755) tensor(0.4473)
+e1_net result: 37280 ,loss: tensor(2.0089e-06) ,ic loss: tensor(1.3572e-09) ,res: tensor(8.6709e-09) tensor(0.0004) ,a1(t0): tensor(0.0224) error(t0): tensor(0.0221)
+[Fail]
+
+<LinfDerivative>
+p_net loss function: use L-infinity norm of IC, Resdiaul, dR/dx, and dR/dt, loss = linf_u + linf_res + linf_res_x + linf_res_t
+p_net result: 29811 , loss: tensor(0.0774) , ic: tensor(0.0002) , res: tensor(1.1113e-06) ,l-inf ic: tensor(0.0649) ,l-inf res: tensor(0.0025) tensor(0.0043) tensor(0.0057)
+p_net does not approximate p well!
+e1_net result: 39251 ,loss: tensor(9.0911e-07) ,ic loss: tensor(4.3185e-09) ,res: tensor(2.0725e-08) tensor(0.0007) ,a1(t0): tensor(0.0166) error(t0): tensor(0.0167)
+[Fail at t=2.0]
+
+<LinfDerivativeWeighted>
+p_net loss function: use L-infinity norm of IC, Residual with weighted dR/dx and dR/dt, loss = linf_u + linf_res + 1e-4*linf_res_x + 1e-4*linf_res_t
+p_net result: 29349 , loss: tensor(0.0275) , ic: tensor(7.6293e-06) , res: tensor(4.0422e-05) ,l-inf ic: tensor(0.0136) ,l-inf res: tensor(0.0139) tensor(0.0578) tensor(0.1677)
+e1_net result: 39337 ,loss: tensor(1.2406e-06) ,ic loss: tensor(5.2429e-10) ,res: tensor(6.2166e-09) tensor(0.0004) ,a1(t0): tensor(0.0125) error(t0): tensor(0.0124)
+[Fail]
+
+<LinfDerivativeWeighted02>
+p_net loss function: loss = linf_u + linf_res + 1e-2*linf_res_x + 1e-2*linf_res_t
+p_net result: 29715 , loss: tensor(0.0241) , ic: tensor(3.7202e-06) , res: tensor(2.5699e-05) ,l-inf ic: tensor(0.0093) ,l-inf res: tensor(0.0127) tensor(0.0563) tensor(0.1519)
+e1_net result: 35517 ,loss: tensor(1.5890e-06) ,ic loss: tensor(1.3537e-09) ,res: tensor(4.4940e-09) tensor(0.0003) ,a1(t0): tensor(0.0425) error(t0): tensor(0.0409)
+[Fail]
+[Simply adding weigths to derivative residual does not work]
+[NOTE: the p_net seems to be the BEST???]
+
+<LinfDerivativeSatIC>
+p_net loss function: loss = torch.max(linf_u, linf_u*0+0.05) + linf_res + linf_res_x + linf_res_t
+p_net result: 29837 , loss: tensor(0.0765) , ic: tensor(0.0002) , res: tensor(1.9100e-06) ,l-inf ic: tensor(0.0632) ,l-inf res: tensor(0.0026) tensor(0.0044) tensor(0.0062)
+e1_net result: 39092 ,loss: tensor(8.3210e-07) ,ic loss: tensor(2.1704e-09) ,res: tensor(2.0216e-08) tensor(0.0007) ,a1(t0): tensor(0.0088) error(t0): tensor(0.0088)
+= Should Fail, because it is equivalent to <LinfDerivative> if SatIC=0.05
+= Unexpectedly, it Success!
+= Suppose that the loss terms fully characterize the functions, then we see that p_net does not change a lot compared to LinfDerivative.
+= However, e1 DOES change: the L-inf IC loss is half compared to LinfDerivative
+= Compared to baseline, the error bound at t=2.0 is 1.5 times
+= NOTE: balance of training p_net with IC and RS, and Der-RS loss is important
+= Rerun <LinfDerivative> for e1 double the training epochs
+
+<LinfDerivativeSatICWeigthed01>
+p_net loss function: loss = torch.max(linf_u, linf_u*0+0.05) + linf_res + 1e-1*linf_res_x + 1e-1*linf_res_t
+p_net result: 29935 , loss: tensor(0.0635) , ic: tensor(9.8032e-05) , res: tensor(7.2631e-06) ,l-inf ic: tensor(0.0477) ,l-inf res: tensor(0.0080) tensor(0.0233) tensor(0.0324)
+e1_net result: 38480 ,loss: tensor(3.9293e-06) ,ic loss: tensor(3.0805e-09) ,res: tensor(7.1419e-08) tensor(0.0013) ,a1(t0): tensor(0.0155) error(t0): tensor(0.0156)
+= Success
+[Rerun-1]
+p_net result: 29636 , loss: tensor(0.0610) , ic: tensor(0.0001) , res: tensor(8.9889e-06) ,l-inf ic: tensor(0.0481) ,l-inf res: tensor(0.0064) tensor(0.0194) tensor(0.0269)
+e1_net result: 38998 ,loss: tensor(1.5549e-06) ,ic loss: tensor(9.1174e-10) ,res: tensor(3.0081e-08) tensor(0.0009) ,a1(t0): tensor(0.0063) error(t0): tensor(0.0063)
+= Fail at t=2.0
+[Rerun-2]
+p_net result: 29748 , loss: tensor(0.0659) , ic: tensor(0.0001) , res: tensor(1.1802e-05) ,l-inf ic: tensor(0.0476) ,l-inf res: tensor(0.0089) tensor(0.0272) tensor(0.0433)
+e1_net result: 38465 ,loss: tensor(8.4325e-07) ,ic loss: tensor(6.8591e-10) ,res: tensor(1.5413e-08) tensor(0.0006) ,a1(t0): tensor(0.0035) error(t0): tensor(0.0035)
+= Success* by luck, I assume
+
+<LinfDerivativeSatICWeigthed02>
+p_net loss function: loss = torch.max(linf_u, linf_u*0+0.05) + linf_res + 1e-2*linf_res_x + 1e-2*linf_res_t
+p_net result:  28270 , loss: tensor(0.0558) , ic: tensor(0.0001) , res: tensor(5.3243e-06) ,l-inf ic: tensor(0.0476) ,l-inf res: tensor(0.0050) tensor(0.0223) tensor(0.0576)
+e1_net result: 38730 ,loss: tensor(1.7942e-06) ,ic loss: tensor(1.8592e-09) ,res: tensor(3.3902e-08) tensor(0.0008) ,a1(t0): tensor(0.0101) error(t0): tensor(0.0101)
+= Fail at t=2.0, a1=1.24
+= Rerun <LinfDerivativeSatICWeigthed01>. This contradiction might point to the insufficient training epoches of e1_net
+
+<LinfDerivativeSatICWeigthed03>
+p_net loss function: loss = torch.max(linf_u, linf_u*0+0.05) + linf_res + 1e-3*linf_res_x + 1e-3*linf_res_t
+p_net result: 29758 , loss: tensor(0.0585) , ic: tensor(9.7670e-05) , res: tensor(1.3336e-05) ,l-inf ic: tensor(0.0436) ,l-inf res: tensor(0.0084) tensor(0.0367) tensor(0.0795) 
+e1_net result: 39107 ,loss: tensor(1.0564e-06) ,ic loss: tensor(1.1596e-09) ,res: tensor(1.7825e-08) tensor(0.0005) ,a1(t0): tensor(0.0050) error(t0): tensor(0.0050)
+= Fail at t=2.0, a1=1.15
+
+<LinfDerivativeSatICWeigthed04>
+p_net loss function: loss = torch.max(linf_u, linf_u*0+0.05) + linf_res + 1e-4*linf_res_x + 1e-4*linf_res_t
+p_net result: 29672 , loss: tensor(0.0556) , ic: tensor(8.7303e-05) , res: tensor(5.0568e-06) ,l-inf ic: tensor(0.0482) ,l-inf res: tensor(0.0056) tensor(0.0251) tensor(0.1107)
+e1_net result: 38213 ,loss: tensor(2.4327e-06) ,ic loss: tensor(5.7003e-09) ,res: tensor(4.2397e-08) tensor(0.0009) ,a1(t0): tensor(0.0101) error(t0): tensor(0.0101)
+= Run-1 Almost Success, at t=2.0, a1=1.0. Note that the p_approx is different from the baseline, which may suggest insufficient/or OVER training of p_net?
+= Run-2 P_net Very Bad, loss: 0.1799!!!
+= It suggests that the training of p_net is not STABLE!
+
+<superp>
+[Spectral Norm on First Layer, Linf with SatIC and 1e-4 Derivative, AdaMax]
+p:  29962 , loss: tensor(0.0654) , ic: tensor(0.0001) , res: tensor(5.7489e-05) ,l-inf ic: tensor(0.0480) ,l-inf res: tensor(0.0154) tensor(0.0721) tensor(0.3098)
+e1: 37768 ,loss: tensor(1.1392e-06) ,ic loss: tensor(4.6009e-09) ,res: tensor(1.7840e-08) tensor(0.0005) ,a1(t0): tensor(0.0138) error(t0): tensor(0.0138)
+= Almost Success, at t=2.0, a1=0.96
+[No Spectral Norm, Linf with SatIC and 1e-4 Derivative, AdaMax]
+p:  29625 , loss: tensor(0.0549) , ic: tensor(8.4330e-05) , res: tensor(4.6266e-06) ,l-inf ic: tensor(0.0457) ,l-inf res: tensor(0.0049) tensor(0.0242) tensor(0.0427)
+e1: 39312 ,loss: tensor(9.5750e-07) ,ic loss: tensor(1.8443e-09) ,res: tensor(1.5659e-08) tensor(0.0005) ,a1(t0): tensor(0.0114) error(t0): tensor(0.0114)
+= Success by luck ???
+[No spectral norm, loss = mse_u + mse_f + 1e-5*(linf_res_x + linf_res_t), 20000 epochs, Adam]
+p: 19723 , loss: tensor(1.3291e-06) , ic: tensor(3.1082e-07) , res: tensor(5.8051e-07) ,l-inf ic: tensor(0.0070) ,l-inf res: tensor(0.0038) ,D res: tensor(0.0149) tensor(0.0289) tensor(1.0504e-05) tensor(3.9136e-05)
+= Best p and r1 so far
+e: 39500 ,loss: tensor(7.3977e-07) ,ic loss: tensor(4.7491e-10) ,res: tensor(1.5933e-09) tensor(0.0002) ,a1(t0): tensor(0.0370) error(t0): tensor(0.0357)
+= Best e in terms of loss so far. However, It
+= Fail
+= It shows that GOOD p and r1, and minimal e1_loss does not guarantee SUCCESS e1_net!
+
+<lowfreqres>
+[p_net: Two spectral norms, baseline loss, 40000 epochs Adam; e1_net: 60000 epochs]
+p_net: 38352 , loss: tensor(0.2374) , ic: tensor(0.0005) , res: tensor(0.0042) ,l-inf ic: tensor(0.0864) ,l-inf res: tensor(0.1509) ,D res: tensor(0.3715) tensor(0.2778) tensor(0.0119) tensor(0.0083)
+= Very poor approximation. But! the residual(x,t) is very "regular", i.e., low frequnecy wave
+e1_net: 59696 ,loss: tensor(1.5401e-06) ,ic loss: tensor(5.4984e-09) ,res: tensor(4.8651e-08) tensor(0.0009) ,a1(t0): tensor(0.0056) error(t0): tensor(0.0056)
+= Small loss. And! e1_net approx e1 very well! 
+= Success
+
+### IDEA: Combine Two Above ###
+<linfresfreq>
+[Run-1. p_net: Two spectral norm, loss = mse_u + mse_f + 1e-5*(linf_res_x + linf_res_t), 40000 epochs, Adam; e1_net: 60000 epochs ]
+p: 39359 , loss: tensor(0.0008) , ic: tensor(0.0002) , res: tensor(0.0006) ,l-inf ic: tensor(0.1224) ,l-inf res: tensor(0.1539) ,D res: tensor(0.2509) tensor(1.8474) tensor(0.0017) tensor(0.0193)
+= Does not fully converge
+e: 58775 ,loss: tensor(2.2712e-06) ,ic loss: tensor(1.6478e-08) ,res: tensor(9.4644e-08) tensor(0.0013) ,a1(t0): tensor(0.0051) error(t0): tensor(0.0051)
+= Fail at t=2.0, a1=1.22
+[Thinking of a Good Loss Metric: res1 frequnecy approximation]
+<lowfreqres> zero-res_x method: 61; curvature method: 0.3078
+<superp>     zero-res_x method: 163; curvature method: 0.3026
+[Run-2. p_net: No spectral norm, loss = torch.max(linf_u, linf_u*0+0.05) + torch.max(linf_res, linf_res*0+0.01) + 1e-4*(num_zero_res_x_smooth)/batch_size + 1e-5*linf_res_t, <2000 epochs, Adamax. e1_net: 40000 epochs]
+p: 16823 , loss: tensor(0.1188) , ic: tensor(0.0004) , res: tensor(0.0003) ,l-inf ic: tensor(0.0859) ,l-inf res: tensor(0.0330) ,D res: tensor(0.1052) tensor(0.2117) tensor(0.0011) tensor(0.0015) res freq: tensor(86.7290)
+e: 38498 ,loss: tensor(2.0437e-06) ,ic loss: tensor(7.3529e-09) ,res: tensor(6.7674e-08) tensor(0.0012) ,a1(t0): tensor(0.0148) error(t0): tensor(0.0148)
+[SUCCESS!!!!]
+
+
+
+
+### IDEA: the MLP generate two vectors (mean, std), and the final output is z~N(mean,std) ###
+regularization loss = KL(N(mean,std), N(0,1)), z = mean + e*std, e~N(0,1)
+
