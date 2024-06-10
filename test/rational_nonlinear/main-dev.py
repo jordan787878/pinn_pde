@@ -163,7 +163,7 @@ def train_p_net(p_net, optimizer, scheduler, mse_cost_function, PATH, PATH_LOSS,
         # <Baseline>
         # loss = torch.max(linf_u, linf_u*0+0.05) + linf_res + 1e-4*linf_res_x + 1e-4*linf_res_t
         # <Mse>
-        # loss = mse_u + mse_f
+        loss = mse_u + mse_f
         # <Linf>
         # loss = linf_u + linf_res
         # <LinfDerivative>
@@ -180,7 +180,7 @@ def train_p_net(p_net, optimizer, scheduler, mse_cost_function, PATH, PATH_LOSS,
         # loss = mse_u + mse_f + 1e-5*(linf_res_x + linf_res_t)
         # <linfresfreq>
         num_zero_res_x_smooth = count_approx_zero_elements(res_x)
-        loss = torch.max(linf_u, linf_u*0+0.05) + torch.max(linf_res, linf_res*0+0.01) + 1e-4*(num_zero_res_x_smooth)/batch_size + 1e-5*linf_res_t
+        # loss = torch.max(linf_u, linf_u*0+0.05) + torch.max(linf_res, linf_res*0+0.01) + 1e-4*(num_zero_res_x_smooth)/batch_size + 1e-5*linf_res_t
 
         # Save the min loss model
         if(loss.data < min_loss):
@@ -278,7 +278,7 @@ def show_p_net_results(p_net):
 
 class E1Net(nn.Module):
     def __init__(self, scale=1.0):
-        neurons = 32
+        neurons = 100
         self.scale = scale
         super(E1Net, self).__init__()
         self.hidden_layer1 = (nn.Linear(2,neurons))
@@ -754,12 +754,12 @@ def main():
 
     # create p_net
     p_net = Net().to(device)
-    # optimizer = torch.optim.Adam(p_net.parameters())
-    optimizer = torch.optim.Adamax(p_net.parameters(), lr=1e-3)
+    optimizer = torch.optim.Adam(p_net.parameters())
+    # optimizer = torch.optim.Adamax(p_net.parameters(), lr=1e-3)
 
     scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.95)
-    # train_p_net(p_net, optimizer, scheduler, mse_cost_function, 
-    #               PATH=FOLDER+"output/p_net.pt", PATH_LOSS=FOLDER+"output/p_net_train_loss.npy", iterations=40000); print("[p_net train complete]")
+    train_p_net(p_net, optimizer, scheduler, mse_cost_function, 
+                 PATH=FOLDER+"output/p_net.pt", PATH_LOSS=FOLDER+"output/p_net_train_loss.npy", iterations=200000); print("[p_net train complete]")
     p_net = pos_p_net_train(p_net, PATH=FOLDER+"output/p_net.pt", PATH_LOSS=FOLDER+"output/p_net_train_loss.npy"); p_net.eval()
     max_abs_e1_x_0 = show_p_net_results(p_net)
     print("max abs e1(x,0):", max_abs_e1_x_0)
@@ -773,7 +773,7 @@ def main():
 
     scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.9)
     train_e1_net(e1_net, optimizer, scheduler, mse_cost_function, p_net, max_abs_e1_x_0, 
-                 PATH=FOLDER+"output/e1_net.pth", PATH_LOSS=FOLDER+"output/e1_net_train_loss.npy", iterations=40000); print("[e1_net train complete]")
+                 PATH=FOLDER+"output/e1_net.pth", PATH_LOSS=FOLDER+"output/e1_net_train_loss.npy", iterations=80000); print("[e1_net train complete]")
     e1_net = pos_e1_net_train(e1_net, PATH=FOLDER+"output/e1_net.pth", PATH_LOSS=FOLDER+"output/e1_net_train_loss.npy"); e1_net.eval()
     show_uniform_bound(p_net, e1_net, max_abs_e1_x_0)
     show_e1_net(p_net, e1_net, max_abs_e1_x_0)

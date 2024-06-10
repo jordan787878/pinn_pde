@@ -121,6 +121,7 @@ p: 39359 , loss: tensor(0.0008) , ic: tensor(0.0002) , res: tensor(0.0006) ,l-in
 = Does not fully converge
 e: 58775 ,loss: tensor(2.2712e-06) ,ic loss: tensor(1.6478e-08) ,res: tensor(9.4644e-08) tensor(0.0013) ,a1(t0): tensor(0.0051) error(t0): tensor(0.0051)
 = Fail at t=2.0, a1=1.22
+
 [Thinking of a Good Loss Metric: res1 frequnecy approximation]
 <lowfreqres> zero-res_x method: 61; curvature method: 0.3078
 <superp>     zero-res_x method: 163; curvature method: 0.3026
@@ -128,9 +129,30 @@ e: 58775 ,loss: tensor(2.2712e-06) ,ic loss: tensor(1.6478e-08) ,res: tensor(9.4
 p: 16823 , loss: tensor(0.1188) , ic: tensor(0.0004) , res: tensor(0.0003) ,l-inf ic: tensor(0.0859) ,l-inf res: tensor(0.0330) ,D res: tensor(0.1052) tensor(0.2117) tensor(0.0011) tensor(0.0015) res freq: tensor(86.7290)
 e: 38498 ,loss: tensor(2.0437e-06) ,ic loss: tensor(7.3529e-09) ,res: tensor(6.7674e-08) tensor(0.0012) ,a1(t0): tensor(0.0148) error(t0): tensor(0.0148)
 [SUCCESS!!!!]
+<linfresfreqlongpnet>
+[Run-3. traing p_net for 200000 epochs. Adamax]
+p: 198480 , loss: tensor(0.0734) , ic: tensor(0.0001) , res: tensor(0.0001) ,l-inf ic: tensor(0.0499) ,l-inf res: tensor(0.0233) ,D res: tensor(0.1107) tensor(0.3038) tensor(0.0008) tensor(0.0019) res freq: tensor(53.0130)
+e: 38090 ,loss: tensor(6.3429e-07) ,ic loss: tensor(3.8665e-09) ,res: tensor(9.3485e-09) tensor(0.0006) ,a1(t0): tensor(0.0197) error(t0): tensor(0.0198)
+[Success, but e1_net could be better]
 
+<linfresfreq200kpnet80ke1net>
+[Run-4. train e1_net more to 80k epochs]
+p: 198480 , loss: tensor(0.0734) , ic: tensor(0.0001) , res: tensor(0.0001) ,l-inf ic: tensor(0.0499) ,l-inf res: tensor(0.0233) ,D res: tensor(0.1107) tensor(0.3038) tensor(0.0008) tensor(0.0019) res freq: tensor(53.0130)
+e: 68304 ,loss: tensor(5.5960e-08) ,ic loss: tensor(1.7046e-10) ,res: tensor(9.9543e-10) tensor(0.0001) ,a1(t0): tensor(0.0043) error(t0): tensor(0.0043)
+e1_net neurons 100, 5 layers
+[BIG SUCCESS so far]
 
+<linfresfreq200kpnete1net>
+[Run-5. train e1_net more to 200k epochs]
+p: 198480 , loss: tensor(0.0734) , ic: tensor(0.0001) , res: tensor(0.0001) ,l-inf ic: tensor(0.0499) ,l-inf res: tensor(0.0233) ,D res: tensor(0.1107) tensor(0.3038) tensor(0.0008) tensor(0.0019) res freq: tensor(53.0130)
+e: 165933 ,loss: tensor(5.2424e-08) ,ic loss: tensor(2.3186e-10) ,res: tensor(8.6037e-10) tensor(0.0001) ,a1(t0): tensor(0.0048) error(t0): tensor(0.0048)
+[Success, but not as good <linfresfreq200kpnet80ke1net>]
 
+<mse200kpnet80ke1net>
+[Run mse-loss pnet 200k epochs Adam; and 100 neurons e1_net 80k epochs Adam for comparision with <linfresfreq200kpnet80ke1net>]
+p: 175112 , loss: tensor(1.0563e-06) , ic: tensor(4.7165e-07) , res: tensor(5.8462e-07) ,l-inf ic: tensor(0.0090) ,l-inf res: tensor(0.0045) ,D res: tensor(0.0275) tensor(0.0691) tensor(1.4518e-05) tensor(8.9630e-05) res freq: tensor(240.0752)
+e: 61808 ,loss: tensor(9.4677e-08) ,ic loss: tensor(3.0636e-11) ,res: tensor(3.0791e-10) tensor(7.6455e-05) ,a1(t0): tensor(0.0073) error(t0): tensor(0.0072)
+[FAIL! Great! the loss of res freq seems to work!]
 
 ### IDEA: the MLP generate two vectors (mean, std), and the final output is z~N(mean,std) ###
 regularization loss = KL(N(mean,std), N(0,1)), z = mean + e*std, e~N(0,1)
