@@ -1,0 +1,8 @@
+Using default mse-loss for both IC, Res, BC is sufficient!
+Only one modification is the normalization loss and output of training e1_net by max(abs(e1(x,t=0)))
+I assume it is for numerical stabilization
+
+p_net: 3 layers with 64 neurons
+e1_net: 5 layers with 100 neurons
+e: 67972 , loss: tensor(1.4579e-06) ,ic: tensor(7.2939e-08) ,res: tensor(9.8084e-07) ,bc: tensor(4.0412e-07)
+[Big Success]
