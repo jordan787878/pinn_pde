@@ -163,7 +163,7 @@ def train_p_net(p_net, optimizer, scheduler, mse_cost_function, PATH, PATH_LOSS,
         # <Baseline>
         # loss = torch.max(linf_u, linf_u*0+0.05) + linf_res + 1e-4*linf_res_x + 1e-4*linf_res_t
         # <Mse>
-        loss = mse_u + mse_f
+        # loss = mse_u + mse_f
         # <Linf>
         # loss = linf_u + linf_res
         # <LinfDerivative>
@@ -178,9 +178,13 @@ def train_p_net(p_net, optimizer, scheduler, mse_cost_function, PATH, PATH_LOSS,
         # loss = torch.max(linf_u, linf_u*0+0.05) + linf_res + 1e-4*linf_res_x + 1e-4*linf_res_t
         # <superp>
         # loss = mse_u + mse_f + 1e-5*(linf_res_x + linf_res_t)
-        # <linfresfreq>
+        # <linfresfreq> BIG SUCCESS!
         num_zero_res_x_smooth = count_approx_zero_elements(res_x)
         # loss = torch.max(linf_u, linf_u*0+0.05) + torch.max(linf_res, linf_res*0+0.01) + 1e-4*(num_zero_res_x_smooth)/batch_size + 1e-5*linf_res_t
+        # <mseresfreq200kpnet80ke1net>
+        # loss = mse_u + mse_f + 1e-7*(num_zero_res_x_smooth)/batch_size
+        # <tmp>
+        loss = torch.max(linf_u, linf_u*0+0.05) + torch.max(linf_res, linf_res*0+0.01) + 1e-5*(num_zero_res_x_smooth)/batch_size
 
         # Save the min loss model
         if(loss.data < min_loss):
@@ -754,8 +758,8 @@ def main():
 
     # create p_net
     p_net = Net().to(device)
-    optimizer = torch.optim.Adam(p_net.parameters())
-    # optimizer = torch.optim.Adamax(p_net.parameters(), lr=1e-3)
+    # optimizer = torch.optim.Adam(p_net.parameters())
+    optimizer = torch.optim.Adamax(p_net.parameters(), lr=1e-3)
 
     scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.95)
     train_p_net(p_net, optimizer, scheduler, mse_cost_function, 

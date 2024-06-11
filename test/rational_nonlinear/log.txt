@@ -154,6 +154,25 @@ p: 175112 , loss: tensor(1.0563e-06) , ic: tensor(4.7165e-07) , res: tensor(5.84
 e: 61808 ,loss: tensor(9.4677e-08) ,ic loss: tensor(3.0636e-11) ,res: tensor(3.0791e-10) tensor(7.6455e-05) ,a1(t0): tensor(0.0073) error(t0): tensor(0.0072)
 [FAIL! Great! the loss of res freq seems to work!]
 
+<mseresfreq200kpnet80ke1net>
+[Run mse-loss with 1e-4 x res_freq_loss for pnet 200k epochs Adam; and 100 neurons e1_net 80k epochs Adam for comparision with <linfresfreq200kpnet80ke1net>]
+p: 95462 , loss: tensor(7.4413e-06) , ic: tensor(1.0758e-06) , res: tensor(3.7255e-06) ,l-inf ic: tensor(0.0103) ,l-inf res: tensor(0.0082) ,D res: tensor(0.0394) tensor(0.1656) tensor(8.6788e-05) tensor(0.0002) res freq: tensor(13.1998)
+e: 95462 , loss: tensor(7.4413e-06) , ic: tensor(1.0758e-06) , res: tensor(3.7255e-06) ,l-inf ic: tensor(0.0103) ,l-inf res: tensor(0.0082) ,D res: tensor(0.0394) tensor(0.1656) tensor(8.6788e-05) tensor(0.0002) res freq: tensor(13.1998)
+[FAIL]
+
+<mseresfreq200kpnet80ke1net_1e-7>
+[Run mse-loss with 1e-7 x res_freq_loss for pnet 200k epochs Adam; and 100 neurons e1_net 80k epochs Adam for comparision with <linfresfreq200kpnet80ke1net>]
+p: 160168 , loss: tensor(1.7630e-07) , ic: tensor(2.0739e-08) , res: tensor(8.8925e-08) ,l-inf ic: tensor(0.0021) ,l-inf res: tensor(0.0015) ,D res: tensor(0.0085) tensor(0.0614) tensor(2.2102e-06) tensor(3.0618e-05) res freq: tensor(333.1538)
+e: 72650 ,loss: tensor(3.2316e-08) ,ic loss: tensor(4.2842e-12) ,res: tensor(2.3334e-11) tensor(2.2544e-05) ,a1(t0): tensor(0.0243) error(t0): tensor(0.0237)
+[FAIL]
+
+<linfresfreq200kpnet80ke1net_1e-5>
+[Further Investigate the p_net loss: loss = torch.max(linf_u, linf_u*0+0.05) + torch.max(linf_res, linf_res*0+0.01) + 1e-5*(num_zero_res_x_smooth)/batch_size
+Adamax optimizer 200k epochs. 100 neurons e1_net 80 k epochs Adam optimizer]
+p: 114994 , loss: tensor(0.0770) , ic: tensor(9.9209e-05) , res: tensor(0.0002) ,l-inf ic: tensor(0.0499) ,l-inf res: tensor(0.0270) ,D res: tensor(0.1055) tensor(0.2273) tensor(0.0007) tensor(0.0013) res freq: tensor(74.7429)
+e: 78172 ,loss: tensor(5.8824e-08) ,ic loss: tensor(1.3184e-10) ,res: tensor(1.0324e-09) tensor(0.0001) ,a1(t0): tensor(0.0023) error(t0): tensor(0.0023)
+[Success]
+
 ### IDEA: the MLP generate two vectors (mean, std), and the final output is z~N(mean,std) ###
 regularization loss = KL(N(mean,std), N(0,1)), z = mean + e*std, e~N(0,1)
 
