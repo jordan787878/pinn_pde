@@ -9,6 +9,8 @@ import matplotlib.pyplot as plt
 from matplotlib import cm
 from matplotlib.ticker import LinearLocator, FormatStrFormatter
 import random
+from pinnsformer import PINNsformer
+from torch.optim import LBFGS
 
 # global variable
 # Check if MPS (Apple's Metal Performance Shaders) is available
@@ -66,6 +68,12 @@ def res_func(x,t, net, verbose=False):
 # Custom L-infinity loss function
 def linf_loss(output, target):
     return torch.max(torch.abs(output - target))
+
+
+def init_weights(m):
+    if isinstance(m, nn.Linear):
+        init.xavier_uniform_(m.weight)
+        m.bias.data.fill_(0.01)
 
 
 # p_net
@@ -163,7 +171,7 @@ def train_p_net(p_net, optimizer, scheduler, mse_cost_function, PATH, PATH_LOSS,
         # <Baseline>
         # loss = torch.max(linf_u, linf_u*0+0.05) + linf_res + 1e-4*linf_res_x + 1e-4*linf_res_t
         # <Mse>
-        # loss = mse_u + mse_f
+        loss = mse_u + mse_f
         # <Linf>
         # loss = linf_u + linf_res
         # <LinfDerivative>
@@ -184,7 +192,7 @@ def train_p_net(p_net, optimizer, scheduler, mse_cost_function, PATH, PATH_LOSS,
         # <mseresfreq200kpnet80ke1net>
         # loss = mse_u + mse_f + 1e-7*(num_zero_res_x_smooth)/batch_size
         # <tmp>
-        loss = torch.max(linf_u, linf_u*0+0.05) + torch.max(linf_res, linf_res*0+0.01) + 1e-5*(num_zero_res_x_smooth)/batch_size
+        # loss = torch.max(linf_u, linf_u*0+0.05) + torch.max(linf_res, linf_res*0+0.01) + 1e-5*(num_zero_res_x_smooth)/batch_size
 
         # Save the min loss model
         if(loss.data < min_loss):
@@ -476,14 +484,11 @@ def train_e1_net(e1_net, optimizer, scheduler, mse_cost_function, p_net, max_abs
     iterations_per_decay = 1000
     min_loss = np.inf
     loss_history = []
-    
     dx_train = 0.1
     dt_train = 0.1
-    dt_step = 0.02
+    dt_step = 1e-3
     x_mar = 0
     t_mar = 0
-    normalized = 1.0
-
     for epoch in range(iterations):
         optimizer.zero_grad() # to make the gradients zero
 
@@ -497,32 +502,18 @@ def train_e1_net(e1_net, optimizer, scheduler, mse_cost_function, p_net, max_abs
         phat_bc = p_net(x_bc, t_bc)
         u_bc = p_bc - phat_bc
         net_bc_out = e1_net(x_bc, t_bc)
-        mse_u = mse_cost_function(net_bc_out, u_bc)
+        mse_u = mse_cost_function(net_bc_out, u_bc)/max_abs_e1_x_0
 
         # Loss based on residual
         t_quad = torch.arange(t0, T_end+dt_train, dt_train, dtype=torch.float, requires_grad=True).view(-1, 1).to(device)
         t = (torch.rand(batch_size, 1, requires_grad=True) * (T_end - t0 + 2*t_mar) + t0-t_mar).to(device)
-        t = torch.cat((t_quad, t, t+dt_step, t+dt_step*2), dim=0)
-        x = (torch.rand(len(t), 1, requires_grad=True) * (x_hig - x_low + 2*x_mar) + x_low-x_mar).to(device)
-        # t = torch.cat((t, t_bc), dim=0)
-        # x = torch.cat((x, x_bc), dim=0)
+        x = (torch.rand(batch_size, 1, requires_grad=True) * (x_hig - x_low + 2*x_mar) + x_low-x_mar).to(device)
+        t = torch.cat((t, t+dt_step, t+dt_step*2, t+dt_step*3, t+dt_step*4, t+dt_step*5), dim=0)
+        x = x.repeat((6,1))
         all_zeros = torch.zeros((len(t),1), dtype=torch.float32, requires_grad=False).to(device)
         f_out = e1_res_func(x, t, e1_net, p_net)
-        # e1_out_for_res = e1_net(x, t)*max_abs_e1_x_0
-        mse_res = mse_cost_function(f_out, all_zeros)
-        l_inf_res = linf_loss(f_out, all_zeros)
-
-        # Loss based on time integral of residual
-        # t = (torch.rand(10, 1, requires_grad=True) * (T_end - t0 + 2*t_mar) + t0-t_mar).to(device)
-        # t = torch.cat((t_quad, t), dim=0)
-        # # x_quad = torch.arange(x_low-x_mar, x_hig+3+x_mar, 3, dtype=torch.float, requires_grad=True).view(-1, 1).to(device)
-        # aug_x, aug_t = augment_tensors(x_quad, t)
-        # res_aug = e1_res_func(aug_x, aug_t, e1_net, p_net, max_abs_e1_x_0).view(t.size(0), x_quad.size(0))
-        # e1_aug = e1_net(aug_x, aug_t).view(t.size(0), x_quad.size(0))
-        # res_aug_max = torch.max(torch.abs(res_aug), dim=1)
-        # e1_aug_max =  torch.max(torch.abs(e1_aug), dim=1)
-        # quotient = res_aug_max.values/e1_aug_max.values
-        # quotient_max = torch.max(quotient)  #; print(quotient.shape, torch.max(quotient))
+        mse_res = mse_cost_function(f_out, all_zeros)/max_abs_e1_x_0
+        l_inf_res = linf_loss(f_out, all_zeros)/max_abs_e1_x_0
 
         # Loss based on alpha_1(t0)
         x = x_bc
@@ -536,22 +527,13 @@ def train_e1_net(e1_net, optimizer, scheduler, mse_cost_function, p_net, max_abs
         alpha1_t0 = linf_loss(e1_hat, e1)/ torch.max(torch.abs(e1_hat))
         
         # Combining the loss functions
-        loss = normalized*mse_u/max_abs_e1_x_0 + normalized*mse_res/max_abs_e1_x_0
-        # [NEW] denominator for l-inf-res
-        # loss = normalized*(alpha1_t0 + error1_t0 + l_inf_res/max_abs_e1_x_0 + 1e-3*quotient_max )
-        # loss = normalized*torch.max(alpha1_t0, 0*alpha1_t0+0.1) + normalized*torch.max(error1_t0, 0*alpha1_t0+0.1) + 1e-1*(normalized*l_inf_res/max_abs_e1_x_0 + 1e-4*normalized*quotient_max)
-        # loss = normalized*max(alpha1_t0, error1_t0, l_inf_res) + 1e-2*quotient_max
-        # loss = max(max(alpha1_t0, 0.1), max(error1_t0, 0.1), max(l_inf_res, 0.001), max(quotient_max, 0.1))
-        # loss = normalized*(max(alpha1_t0, 0.1) + max(error1_t0, 0.1) + l_inf_res)
-        # loss = normalized*(alpha1_t0+error1_t0+mse_res/max_abs_e1_x_0)
-        # <tmp>
-        # loss = torch.max(error1_t0, error1_t0*0+0.1) + torch.max(alpha1_t0, alpha1_t0*0+0.1) + mse_res
+        loss = (torch.max(mse_u, mse_u*0+1e-4) + mse_res)
 
         # Save the min loss model
         if(loss.data < min_loss):
-            print("e1net epoch:", epoch, ",loss:", loss.data/normalized, ",ic loss:", mse_u.data,
-                  ",res:", mse_res.data, l_inf_res.data,# quotient_max.data,
-                  ",a1(t0):", alpha1_t0.data, "error(t0):",error1_t0.data)
+            print("e1net epoch:", epoch, ",loss:", loss.data, ",ic loss:", mse_u.data,
+                ",res:", mse_res.data, l_inf_res.data,# quotient_max.data,
+                ",a1(t0):", alpha1_t0.data, "error(t0):",error1_t0.data)
             torch.save({
                     'epoch': epoch,
                     'model_state_dict': e1_net.state_dict(),
@@ -565,15 +547,14 @@ def train_e1_net(e1_net, optimizer, scheduler, mse_cost_function, p_net, max_abs
         loss_history.append(loss.data)
         loss.backward() 
         optimizer.step()
-
+        # Apply gradient clipping to prevent exploding gradients
+        torch.nn.utils.clip_grad_norm_(e1_net.parameters(), max_norm=1.0)
         # Exponential learning rate decay
         if (epoch + 1) % iterations_per_decay == 0:
             scheduler.step()
-
-        with torch.autograd.no_grad():
-            if (epoch%1000 == 0):
-                print(epoch,"Traning Loss:",loss.data/normalized)
-                np.save(PATH_LOSS, np.array(loss_history))
+        if (epoch) %1000 == 0:
+            print(epoch,"Traning Loss:",loss.data)
+            np.save(PATH_LOSS, np.array(loss_history))
 
 
 def pos_e1_net_train(e1_net, PATH, PATH_LOSS):
@@ -650,7 +631,8 @@ def show_e1_net(p_net, e1_net, max_abs_e1_x_0):
         plt.plot(x_sim_, error_t, color=line1.get_color(), marker='o', markersize=2, linewidth=0.3, label="True")
         plt.plot(x_sim_, x_sim_*0.0, color="black", linestyle=":", linewidth=0.3)
         a1 = np.array(max(abs(error_t - e1))/ max(abs(e1)))
-        plt.text(0.98, 0.02, "t="+str(t1)+ r"$, \alpha_1=$"+str(np.round(a1[0],2)), transform=plt.gca().transAxes, verticalalignment='bottom', horizontalalignment='right')
+        print(t1, a1)
+        plt.text(0.98, 0.02, "t="+str(t1)+ r"$, \alpha_1=$"+str(np.round(a1,2)), transform=plt.gca().transAxes, verticalalignment='bottom', horizontalalignment='right')
 
         # plt.ylabel("a1:"+str(np.round(a1[0],2)))
     plt.savefig(FOLDER+"figs/e1net_result")
@@ -758,12 +740,12 @@ def main():
 
     # create p_net
     p_net = Net().to(device)
-    # optimizer = torch.optim.Adam(p_net.parameters())
-    optimizer = torch.optim.Adamax(p_net.parameters(), lr=1e-3)
+    optimizer = torch.optim.Adam(p_net.parameters())
+    # optimizer = torch.optim.Adamax(p_net.parameters(), lr=1e-3)
 
     scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.95)
-    train_p_net(p_net, optimizer, scheduler, mse_cost_function, 
-                 PATH=FOLDER+"output/p_net.pt", PATH_LOSS=FOLDER+"output/p_net_train_loss.npy", iterations=200000); print("[p_net train complete]")
+    # train_p_net(p_net, optimizer, scheduler, mse_cost_function, 
+    #              PATH=FOLDER+"output/p_net.pt", PATH_LOSS=FOLDER+"output/p_net_train_loss.npy", iterations=40000); print("[p_net train complete]")
     p_net = pos_p_net_train(p_net, PATH=FOLDER+"output/p_net.pt", PATH_LOSS=FOLDER+"output/p_net_train_loss.npy"); p_net.eval()
     max_abs_e1_x_0 = show_p_net_results(p_net)
     print("max abs e1(x,0):", max_abs_e1_x_0)
@@ -771,7 +753,10 @@ def main():
 
 
     # create e1_net
-    e1_net = E1Net(scale=max_abs_e1_x_0).to(device)
+    # e1_net = E1Net(scale=max_abs_e1_x_0).to(device)
+    e1_net = PINNsformer(d_out=1, d_hidden=64, d_model=16, N=1, heads=2, scale=max_abs_e1_x_0).to(device)
+    e1_net.apply(init_weights)
+    # optimizer = LBFGS(e1_net.parameters(), line_search_fn='strong_wolfe', lr)
     optimizer = torch.optim.Adam(e1_net.parameters(), lr=1e-3)
     # optimizer = torch.optim.Adamax(e1_net.parameters(), lr=1e-3)
 

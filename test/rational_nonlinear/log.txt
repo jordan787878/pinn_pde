@@ -157,8 +157,9 @@ e: 61808 ,loss: tensor(9.4677e-08) ,ic loss: tensor(3.0636e-11) ,res: tensor(3.0
 <mseresfreq200kpnet80ke1net>
 [Run mse-loss with 1e-4 x res_freq_loss for pnet 200k epochs Adam; and 100 neurons e1_net 80k epochs Adam for comparision with <linfresfreq200kpnet80ke1net>]
 p: 95462 , loss: tensor(7.4413e-06) , ic: tensor(1.0758e-06) , res: tensor(3.7255e-06) ,l-inf ic: tensor(0.0103) ,l-inf res: tensor(0.0082) ,D res: tensor(0.0394) tensor(0.1656) tensor(8.6788e-05) tensor(0.0002) res freq: tensor(13.1998)
-e: 95462 , loss: tensor(7.4413e-06) , ic: tensor(1.0758e-06) , res: tensor(3.7255e-06) ,l-inf ic: tensor(0.0103) ,l-inf res: tensor(0.0082) ,D res: tensor(0.0394) tensor(0.1656) tensor(8.6788e-05) tensor(0.0002) res freq: tensor(13.1998)
 [FAIL]
+[Note: the combination of mseloss and res_freq loss may not work]
+[Re-run this one]
 
 <mseresfreq200kpnet80ke1net_1e-7>
 [Run mse-loss with 1e-7 x res_freq_loss for pnet 200k epochs Adam; and 100 neurons e1_net 80k epochs Adam for comparision with <linfresfreq200kpnet80ke1net>]
@@ -172,6 +173,30 @@ Adamax optimizer 200k epochs. 100 neurons e1_net 80 k epochs Adam optimizer]
 p: 114994 , loss: tensor(0.0770) , ic: tensor(9.9209e-05) , res: tensor(0.0002) ,l-inf ic: tensor(0.0499) ,l-inf res: tensor(0.0270) ,D res: tensor(0.1055) tensor(0.2273) tensor(0.0007) tensor(0.0013) res freq: tensor(74.7429)
 e: 78172 ,loss: tensor(5.8824e-08) ,ic loss: tensor(1.3184e-10) ,res: tensor(1.0324e-09) tensor(0.0001) ,a1(t0): tensor(0.0023) error(t0): tensor(0.0023)
 [Success]
+
+<pinnsformer-base>
+[testing pinnsformer for e1_net]
+[p_net: loss = mse_u + mse_f]
+[e_net: default pinnsformer, loss = normalized(mse_u + mse_res), e1_net scale=1.0]
+p: 38413 , loss: tensor(1.2999e-06) , ic: tensor(5.2598e-07) , res: tensor(7.7394e-07) ,l-inf ic: tensor(0.0092) ,l-inf res: tensor(0.0047) ,D res: tensor(0.0250) tensor(0.0865) tensor(1.7365e-05) tensor(0.0001) res freq: tensor(283.9882)
+e: 68711 ,loss: tensor(0.0002) ,ic loss: tensor(2.6241e-05) ,res: tensor(0.0002) tensor(1.2239) ,a1(t0): tensor(0.2141) error(t0): tensor(0.2583)
+[Fail]
+
+<pinnsformer-e1scale>
+[p_net: pretrained by pinssformer-base]
+[e_net: same as <pinnsformer-base>, e1_net scale=max_abs_e1_ti]
+e: 54755 ,loss: tensor(1.1276e-07) ,ic loss: tensor(9.2131e-09) ,res: tensor(1.0355e-07) tensor(0.0191) ,a1(t0): tensor(0.0047) error(t0): tensor(0.0047)
+[Fail]
+
+<pinnsformer-e1loss>
+[p_net: pretrained by pinssformer-base]
+[e_net: same as <pinnsformer-e1scale> with new loss = (torch.max(mse_u, mse_u*0+1e-4) + mse_res)]
+e: 66572 ,loss: tensor(0.0001) ,ic loss: tensor(6.6867e-05) ,res: tensor(3.5012e-08) tensor(0.0108) ,a1(t0): tensor(0.5777) error(t0): tensor(0.4232)
+[FAIL]
+
+== Seems that using PINNsFormer for e1_net does not work ==
+
+
 
 ### IDEA: the MLP generate two vectors (mean, std), and the final output is z~N(mean,std) ###
 regularization loss = KL(N(mean,std), N(0,1)), z = mean + e*std, e~N(0,1)
