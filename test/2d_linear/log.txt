@@ -122,6 +122,7 @@ alpha_1=0.42, 1.75, 1.83, 1.90, 1.72
 extend the input domain to
 x = [-3,3]
 t = [0,3]
+p_net: 100 neurons 5 layers softplus MLP
 
 <0-mse-baseline>
 p loss function. loss = mse_u + mse_res
@@ -146,3 +147,65 @@ alpha_1(t):
 3.0 [0.41728715]
 
 === There is not much difference with/without res_gradient_loss ===
+
+
+### June 19 ###
+testing p_net with smaller NN. p_net 32 neurons 5 layers softplus activation MLP
+
+<0-mse-32neuron_pnet>
+p loss function. loss = mse_u + mse_res
+p: 55700 ,loss: tensor(2.3789e-06) ,ic: tensor(1.2501e-06) ,res: tensor(1.1288e-06) ,norm. linf-ic: tensor(0.0051) ,norm. linf-res: tensor(0.0057) ,res_freq: tensor(0.0007)
+e: 37380 , loss: tensor(2.6189e-05) ,ic: tensor(5.8779e-06) ,res: tensor(2.0311e-05)
+alpha_1(t)
+0.1 [0.08947794]
+0.5 [0.27392018]
+1.0 [0.28074854]
+2.0 [0.22771716]
+3.0 [0.21183001]
+
+<0-mse-32neuron_pnet-rerun1>
+p: 57476 ,loss: tensor(4.5561e-06) ,ic: tensor(1.8612e-06) ,res: tensor(2.6948e-06) ,norm. linf-ic: tensor(0.0039) ,norm. linf-res: tensor(0.0063) ,res_freq: tensor(0.0028)
+e: 38789 , loss: tensor(2.5180e-05) ,ic: tensor(4.6303e-06) ,res: tensor(2.0550e-05)
+alpha_1(t)
+0.1 [0.09073112]
+0.5 [0.21499348]
+1.0 [0.21328533]
+2.0 [0.13720355]
+3.0 [0.09537189]
+
+<0-mse-32neuron_pnet-rerun2>
+p: 52229 ,loss: tensor(3.9685e-06) ,ic: tensor(1.8805e-06) ,res: tensor(2.0880e-06) ,norm. linf-ic: tensor(0.0050) ,norm. linf-res: tensor(0.0067) ,res_freq: tensor(0.0014)
+e: 39938 , loss: tensor(3.6221e-05) ,ic: tensor(6.4878e-06) ,res: tensor(2.9733e-05)
+alpha_1(t)
+0.1 [0.07753182]
+0.5 [0.24114615]
+1.0 [0.2785678]
+2.0 [0.19490604]
+3.0 [0.15175769]
+
+<0-mse-resgrad-32neuron_pnet>
+p: 59187 ,loss: tensor(1.0321e-05) ,ic: tensor(4.0518e-06) ,res: tensor(4.5219e-08) ,norm. linf-ic: tensor(0.0061) ,norm. linf-res: tensor(0.0008) ,res_freq: tensor(6.2237e-06)
+e: 39150 , loss: tensor(3.4258e-06) ,ic: tensor(1.0641e-06) ,res: tensor(2.3617e-06)
+alpha_1(t)
+
+
+Extend input domian to x=[-4,4], t=[0,5]
+<1-mse>
+p: 45867 ,loss: tensor(1.3426e-05) ,ic: tensor(3.2448e-06) ,res: tensor(1.0182e-05) ,norm. linf-ic: tensor(0.0074) ,norm. linf-res: tensor(0.0238) ,res_freq: tensor(0.0127)
+e: 39823 , loss: tensor(6.1646e-05) ,ic: tensor(1.6199e-05) ,res: tensor(4.5448e-05)
+0.1 [0.01504333]
+1.0 [0.02982054]
+2.0 [0.02658088]
+3.0 [0.01886517]
+4.0 [0.01743075]
+5.0 [0.01644806]
+
+<1-mse-resgrad>
+p: 48488 ,loss: tensor(2.3103e-05) ,ic: tensor(5.5505e-06) ,res: tensor(1.0207e-07) ,norm. linf-ic: tensor(0.0128) ,norm. linf-res: tensor(0.0014) ,res_freq: tensor(1.7450e-05)
+e: 35807 , loss: tensor(2.4003e-06) ,ic: tensor(8.3102e-07) ,res: tensor(1.5693e-06)
+0.1 [0.01289016]
+1.0 [0.04626706]
+2.0 [0.05318178]
+3.0 [0.05513677]
+4.0 [0.0611121]
+5.0 [0.07268258]

@@ -9,6 +9,7 @@ from matplotlib import cm
 from matplotlib.ticker import LinearLocator, FormatStrFormatter
 from scipy.stats import multivariate_normal
 from scipy.linalg import expm
+from matplotlib.lines import Line2D
 
 import torch.nn.functional as F
 
@@ -34,17 +35,17 @@ import torch.nn.functional as F
 #     device = torch.device("mps")
 # else:
 #     device = torch.device("cpu")
-FOLDER = "exp/tmp/"
+FOLDER = "exp/1-mse-resgrad/"
 device = "cpu"
 print(device)
 n_d = 2
 mu_0 = np.array([1.0, -1.0]).reshape(2,)
 cov_0 = np.array([[0.5, 0.0], [0.0, 0.5]])
 A = np.array([[0.0, 1.0],[0.0, 0.0]])
-x_low = -3
-x_hig = 3
+x_low = -4.0
+x_hig =  4.0
 ti = 0.0
-tf = 3.0
+tf = 5.0
 
 def p_init(x):
     pdf_func = multivariate_normal(mean=mu_0, cov=cov_0)
@@ -68,7 +69,7 @@ def p_init_torch(x):
 def p_sol(x, t):
     exp_At = expm(A*t)
     mu_t = np.dot(exp_At, mu_0)
-    cov_t = exp_At @ cov_0 @ exp_At.T
+    cov_t = exp_At @ cov_0 @ (exp_At.T)
     pdf_func = multivariate_normal(mean=mu_t, cov=cov_t)
     pdf_eval = pdf_func.pdf(x).reshape(-1,1)
     return pdf_eval
@@ -126,7 +127,7 @@ def init_weights(m):
 # p_net
 class Net(nn.Module):
     def __init__(self, scale=1.0): 
-        neurons = 100
+        neurons = 32
         self.scale = scale
         super(Net, self).__init__()
         self.hidden_layer1 = (nn.Linear(n_d+1,neurons))
@@ -317,15 +318,15 @@ def pos_p_net_train(p_net, PATH, PATH_LOSS):
         l2_norm = torch.norm(p_net.state_dict()[k], p=2)
         print(f"L2 norm of {k} : {l2_norm.item()}")
     # plot loss history
-    # loss_history = np.load(PATH_LOSS)
-    # min_loss = min(loss_history)
-    # plt.figure()
-    # plt.plot(np.arange(len(loss_history)), loss_history)
-    # plt.ylim([min_loss, 10*min_loss])
-    # plt.xlabel("epoch")
-    # plt.ylabel("loss")
-    # plt.savefig(FOLDER+"figs/pnet_loss_history.png")
-    # plt.close()
+    loss_history = np.load(PATH_LOSS)
+    min_loss = min(loss_history)
+    plt.figure()
+    plt.plot(np.arange(len(loss_history)), loss_history)
+    plt.ylim([min_loss, 10*min_loss])
+    plt.xlabel("epoch")
+    plt.ylabel("loss")
+    plt.savefig(FOLDER+"figs/pnet_loss_history.png")
+    plt.close()
     return p_net
 
 
@@ -333,7 +334,7 @@ def show_p_net_results(p_net):
     # x_low = -2.0
     # x_hig = 2.0
     max_abe_e1_ti = np.inf
-    sample_size = 50
+    sample_size = 200
     x1s = np.linspace(x_low, x_hig, num=sample_size)
     x2s = np.linspace(x_low, x_hig, num=sample_size)
     x1, x2 = np.meshgrid(x1s, x2s)
@@ -345,31 +346,46 @@ def show_p_net_results(p_net):
     e1 = p - p_hat
     max_abe_e1_ti = max(abs(e1))[0]
 
-    t1s = [0.1, 0.5, 1.0, 2.0, 3.0]
-    fig, axs = plt.subplots(2, 5, figsize=(18, 6), subplot_kw={'projection': '3d'})
+    t1s = [0.1, 1.0, 2.0, 3.0, 4.0, 5.0]
+    fig, axs = plt.subplots(1, 6, figsize=(18, 6), subplot_kw={'projection': '3d'})
     j = 0
+    rstride = 10
+    cstride = 10
     for t1 in t1s:
         p = p_sol(x, t=t1).reshape((sample_size, sample_size))
         pt_t1 = Variable(torch.from_numpy(x[:,0]*0+t1).float(), requires_grad=True).view(-1,1).to(device)
         # print(pt_x.shape); print(pt_t1.shape)
         p_hat = p_net(pt_x, pt_t1).data.cpu().numpy().reshape((sample_size, sample_size))
-        axp = axs[0, j]
-        axphat = axs[1, j]
-        axp.plot_surface(x1, x2, p, cmap='viridis')
-        axphat.plot_surface(x1, x2, p_hat, cmap='viridis')
+        axp = axs[j]
+        axp.view_init(elev=20, azim=135)
+        wire1 = axp.plot_wireframe(x1, x2, p, color="blue", alpha=1.0, rstride=rstride, cstride=cstride)
+        wire2 = axp.plot_wireframe(x1, x2, p_hat, color="red", alpha=1.0, rstride=rstride, cstride=cstride)
+        wire1.set_linewidth(0.5)
+        wire2.set_linewidth(0.5)  # Adjust the line width as needed
+        wire2.set_linestyle("--")
         # cp = axp.imshow(p, extent=[x_low, x_hig, x_low, x_hig], cmap='viridis', aspect='equal', origin='lower')
         # cphat = axphat.imshow(p_hat, extent=[x_low, x_hig, x_low, x_hig], cmap='viridis', aspect='equal', origin='lower')
         # fig.colorbar(cp, ax=axp)
         # fig.colorbar(cphat, ax=axphat)
         if(j == 0):
+            axp.set_xlabel(r"$x_1$")
+            axp.set_ylabel(r"$x_2$")
+        #     axp.set_zlabel(r"$p$")
+        # Add legend
+        if j == 0:
             axp.set_zlabel(r"$p$")
-            axphat.set_zlabel(r"$\hat{p}$")
+            legend_elements = [
+                Line2D([0], [0], color='blue', lw=2, label=r"$p$"),
+                Line2D([0], [0], color='red', lw=2, linestyle='--', label=r"$\hat{p}$")
+            ]
+            axp.legend(handles=legend_elements)
+            
         axp.set_title("t="+str(t1))
         j = j + 1
     plt.savefig(FOLDER+"figs/pnet_result.png")
     plt.close()
 
-    fig, axs = plt.subplots(2, 5, figsize=(18, 6), subplot_kw={'projection': '3d'})
+    fig, axs = plt.subplots(2, 6, figsize=(18, 6), subplot_kw={'projection': '3d'})
     j = 0
     for t1 in t1s:
         pt_t1 = Variable(torch.from_numpy(x[:,0]*0+t1).float(), requires_grad=True).view(-1,1).to(device)
@@ -377,10 +393,6 @@ def show_p_net_results(p_net):
         p_hat = p_net(pt_x, pt_t1).data.cpu().numpy().reshape((sample_size, sample_size))
         e1 = p - p_hat
         res_out = res_func(pt_x, pt_t1, p_net)
-        res_close_to_zero = count_approx_zero_elements(res_out)
-        res_x = torch.autograd.grad(res_out, pt_x, grad_outputs=torch.ones_like(res_out))[0]
-        res_x_close_to_zero = count_approx_zero_elements(res_x)
-        print("res function shape:", res_close_to_zero.data, res_x_close_to_zero)
         res_numpy = res_out.data.cpu().numpy().reshape((sample_size, sample_size))
         ax1 = axs[0, j]
         surf1 = ax1.plot_surface(x1, x2, res_numpy, cmap='viridis')
@@ -410,13 +422,14 @@ class E1Net(nn.Module):
         self.hidden_layer4 = (nn.Linear(neurons,neurons))
         self.hidden_layer5 = (nn.Linear(neurons,neurons))
         self.output_layer =  (nn.Linear(neurons,1))
+        self.activation = nn.Tanh()
     def forward(self, x, t):
         inputs = torch.cat([x,t],axis=1)
-        layer1_out = torch.tanh((self.hidden_layer1(inputs)))
-        layer2_out = torch.tanh((self.hidden_layer2(layer1_out)))
-        layer3_out = torch.tanh((self.hidden_layer3(layer2_out)))
-        layer4_out = torch.tanh((self.hidden_layer4(layer3_out)))
-        layer5_out = torch.tanh((self.hidden_layer5(layer4_out)))
+        layer1_out = self.activation((self.hidden_layer1(inputs)))
+        layer2_out = self.activation((self.hidden_layer2(layer1_out)))
+        layer3_out = self.activation((self.hidden_layer3(layer2_out)))
+        layer4_out = self.activation((self.hidden_layer4(layer3_out)))
+        layer5_out = self.activation((self.hidden_layer5(layer4_out)))
         output = self.output_layer(layer5_out)
         output = self.scale * output
         return output
@@ -578,8 +591,8 @@ def show_e1_net_results(p_net, e1_net):
     x2s = np.linspace(x_low, x_hig, num=sample_size)
     x1, x2 = np.meshgrid(x1s, x2s)
     x = np.column_stack([x1.ravel(), x2.ravel()])#; print(x)
-    t1s = [0.1, 0.5, 1.0, 2.0, 3.0]
-    fig, axs = plt.subplots(2, 5, figsize=(18, 6), subplot_kw={'projection': '3d'})
+    t1s = [0.1, 1.0, 2.0, 3.0, 4.0, 5.0]
+    fig, axs = plt.subplots(2, 6, figsize=(18, 6), subplot_kw={'projection': '3d'})
     j = 0
     for t1 in t1s:
         pt_x = Variable(torch.from_numpy(x).float(), requires_grad=True).to(device)
@@ -591,8 +604,8 @@ def show_e1_net_results(p_net, e1_net):
         ax1 = axs[0, j]
         ax2 = axs[1, j]
         # Set the desired viewing angle
-        ax1.view_init(elev=30, azim=-20)  # Change the elevation and azimuth to your preference
-        ax2.view_init(elev=30, azim=-20)  # Change the elevation and azimuth to your preference
+        # ax1.view_init(elev=30, azim=-20)  # Change the elevation and azimuth to your preference
+        # ax2.view_init(elev=30, azim=-20)  # Change the elevation and azimuth to your preference
         ax1.plot_surface(x1, x2, e1, cmap='viridis')
         ax2.plot_surface(x1, x2, e1_hat, cmap='viridis')
         if(j == 0):
@@ -619,8 +632,8 @@ def show_uniform_error_bound(p_net, e1_net):
     x2s = np.linspace(x_low, x_hig, num=sample_size)
     x1, x2 = np.meshgrid(x1s, x2s)
     x = np.column_stack([x1.ravel(), x2.ravel()])#; print(x)
-    t1s = [0.1, 0.5, 1.0, 2.0, 3.0]
-    fig, axs = plt.subplots(1, 5, figsize=(18, 6), subplot_kw={'projection': '3d'})
+    t1s = [0.1, 1.0, 2.0, 3.0, 4.0, 5.0]
+    fig, axs = plt.subplots(1, 6, figsize=(18, 6), subplot_kw={'projection': '3d'})
     j = 0
     for t1 in t1s:
         pt_x = Variable(torch.from_numpy(x).float(), requires_grad=True).to(device)
@@ -670,7 +683,7 @@ def main():
     # optimizer = torch.optim.Adamax(p_net.parameters(), lr=1e-3)
     scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.9)
     # p_net = pos_p_net_train(p_net, PATH=FOLDER+"output/p_net.pt", PATH_LOSS=FOLDER+"output/p_net_train_loss.npy"); p_net.eval()
-    train_p_net(p_net, optimizer, scheduler, mse_cost_function, max_pi, iterations=60000); print("p_net train complete")
+    # train_p_net(p_net, optimizer, scheduler, mse_cost_function, max_pi, iterations=60000); print("p_net train complete")
     p_net = pos_p_net_train(p_net, PATH=FOLDER+"output/p_net.pt", PATH_LOSS=FOLDER+"output/p_net_train_loss.npy"); p_net.eval()
     max_abe_e1_ti = show_p_net_results(p_net)
     print("max abs e1(x,ti):", max_abe_e1_ti)
@@ -682,7 +695,7 @@ def main():
     optimizer = torch.optim.Adam(e1_net.parameters(), lr=1e-3)
     # optimizer = torch.optim.Adamax(e1_net.parameters(), lr=1e-3)
     scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.9)
-    train_e1_net(e1_net, optimizer, scheduler, mse_cost_function, p_net, max_abe_e1_ti, iterations=40000); print("e1_net train complete")
+    # train_e1_net(e1_net, optimizer, scheduler, mse_cost_function, p_net, max_abe_e1_ti, iterations=40000); print("e1_net train complete")
     e1_net = pos_e1_net_train(e1_net, PATH=FOLDER+"output/e1_net.pt", PATH_LOSS=FOLDER+"output/e1_net_train_loss.npy"); e1_net.eval()
     show_e1_net_results(p_net ,e1_net)
     show_uniform_error_bound(p_net, e1_net)
