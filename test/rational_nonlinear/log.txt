@@ -176,3 +176,28 @@ e: 78172 ,loss: tensor(5.8824e-08) ,ic loss: tensor(1.3184e-10) ,res: tensor(1.0
 ### IDEA: the MLP generate two vectors (mean, std), and the final output is z~N(mean,std) ###
 regularization loss = KL(N(mean,std), N(0,1)), z = mean + e*std, e~N(0,1)
 
+### June 19 ###
+
+BASELINE
+<0-mse>
+p: 77435 , loss: tensor(0.0010) , ic: tensor(0.0005) , res: tensor(0.0005)
+e: 58469 ,loss: tensor(0.0001) ,ic loss: tensor(1.6181e-05) ,res: tensor(0.0001)
+<0-mse-resgrad>
+p: 66618 , loss: tensor(0.0021) , ic: tensor(0.0008) , res: tensor(5.1218e-05) , res freq: tensor(0.0012)
+e: 49138 ,loss: tensor(0.0004) ,ic loss: tensor(8.4124e-05) ,res: tensor(0.0003)
+
+SAME P FROM BASELINE. ADD E1 NEURONS TO 150
+<1-mse>
+e: 73065 ,loss: tensor(0.0004) ,ic loss: tensor(0.0001) ,res: tensor(0.0002)
+<1-mse-resgrad>
+e: 68350 ,loss: tensor(4.2505e-05) ,ic loss: tensor(7.1625e-06) ,res: tensor(3.5342e-05)
+
+ADD P NEURONS TO 100. ADD E1 NEURONS TO 150
+<2-mse-resgrad>
+p: 73992 , loss: tensor(0.0002) , ic: tensor(0.0001) , res: tensor(1.6101e-06) , res freq: tensor(3.7487e-05)
+
+
+
+
+ADD RESFREQ LOSS FOR E1 train
+
