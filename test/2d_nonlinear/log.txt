@@ -1,0 +1,14 @@
+<32/5p-baseline>
+p: 35800 ,loss: tensor(3.2237e-06) ,ic: tensor(1.1048e-06) ,res: tensor(2.1190e-06) ,linf-ic: tensor(0.0094) ,norm. linf-res: tensor(0.0142) ,res_freq: tensor(0.0011)
+
+<128/5p-baseline>
+p: 36403 ,loss: tensor(7.7124e-06) ,ic: tensor(4.3459e-06) ,res: tensor(3.3665e-06) ,linf-ic: tensor(0.0257) ,norm. linf-res: tensor(0.0148) ,res_freq: tensor(0.0012)
+
+<16/5p-baseline>
+p: 15069 ,loss: tensor(1.7288e-05) ,ic: tensor(6.1313e-06) ,res: tensor(1.1157e-05) ,linf-ic: tensor(0.0266) ,norm. linf-res: tensor(0.0447) ,res_freq: tensor(0.0060)
+
+<32/7p-baseline>
+p: 26013 ,loss: tensor(6.9810e-06) ,ic: tensor(3.3387e-06) ,res: tensor(3.6423e-06) ,linf-ic: tensor(0.0213) ,norm. linf-res: tensor(0.0223) ,res_freq: tensor(0.0005)
+
+
+Multi-Head Parallel MLP Architecture
