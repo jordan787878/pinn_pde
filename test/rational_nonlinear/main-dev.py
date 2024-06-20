@@ -16,7 +16,7 @@ import random
 #     device = torch.device("mps")
 # else:
 #     device = torch.device("cpu")
-FOLDER = "exp2/tmp/"
+FOLDER = "exp2/2-mse-resgrad/"
 device = "cpu"
 print(device)
 
@@ -103,6 +103,7 @@ def linf_loss(output, target):
 def init_weights(m):
     if isinstance(m, nn.Linear):
         init.xavier_uniform_(m.weight)
+        m.bias.data.fill_(0.01)
 
 
 # p_net
@@ -153,9 +154,9 @@ def train_p_net(p_net, optimizer, scheduler, mse_cost_function, max_abs_p_ti, it
     batch_size = 200
     min_loss = np.inf
     loss_history = []
-    iterations_per_decay = 1000
     PATH = FOLDER+"output/p_net.pt"
     PATH_LOSS = FOLDER+"output/p_net_train_loss.npy"
+    iterations_per_decay = 1000
 
     for epoch in range(iterations):
         optimizer.zero_grad() # to make the gradients zero
@@ -202,15 +203,15 @@ def train_p_net(p_net, optimizer, scheduler, mse_cost_function, max_abs_p_ti, it
         loss_history.append(loss.data)
         loss.backward() # This is for computing gradients using backward propagation
         optimizer.step() # This is equivalent to : theta_new = theta_old - alpha * derivative of J w.r.t theta
-
         # Exponential learning rate decay
         if (epoch + 1) % iterations_per_decay == 0:
             scheduler.step()
         with torch.autograd.no_grad():
             if (epoch%1000 == 0):
                 print(epoch,"Traning Loss:",loss.data, 
-                      ", Time domain:", min(t).data, ",", max(t).data,
-                      ", X domain:", min(x[:,0]).data, ",", max(x[:,0]).data)
+                    #   ", Time domain:", min(t).data, ",", max(t).data,
+                    #   ", X domain:", min(x[:,0]).data, ",", max(x[:,0]).data
+                     )
                 np.save(PATH_LOSS, np.array(loss_history))
 
 
@@ -268,8 +269,6 @@ def show_p_net_results(p_net):
         p_hat_list.append(p_hat)
         e1 = p_monte - p_hat
         e1_list.append(e1)
-
-    # Plot each subplot with the shared y-axis limits and add grid
     for i, (ax1, p_monte, p_hat) in enumerate(zip(axs, p_monte_list, p_hat_list)):
         if i == 0:
             ax1.plot(x_monte, p_monte, "blue", label=r"$p$")
@@ -296,11 +295,9 @@ def show_p_net_results(p_net):
         global_min = min(global_min, current_min)
         global_max = max(global_max, current_max)
         res_list.append(res)
-    # Plot each subplot with the shared y-axis limits
     for i, (ax1, res) in enumerate(zip(axs, res_list)):
         if i == 0:
             ax1.plot(x, res, "red", linestyle="--", label=r"$r_1$")
-            ax1.set_ylim(global_min, global_max)
             ax1.legend()
         else:
             ax1.plot(x, res, "red", linestyle="--")
@@ -326,7 +323,7 @@ def show_p_net_results(p_net):
 
 class E1Net(nn.Module):
     def __init__(self, scale=1.0): 
-        neurons = 100
+        neurons = 150
         self.scale = scale
         super(E1Net, self).__init__()
         self.hidden_layer1 = (nn.Linear(n_d+1,neurons))
@@ -505,13 +502,13 @@ def e1_res_func(x, t, e1_net, p_net, verbose=False):
 #     return augmented_x_tensor, augmented_t_tensor
 
 
-def train_e1_net(e1_net, optimizer, scheduler, mse_cost_function, p_net, max_abs_e1_x_0, iterations=40000):
-    batch_size = 400
-    iterations_per_decay = 1000
+def train_e1_net(e1_net, optimizer, scheduler1, scheduler2, mse_cost_function, p_net, max_abs_e1_x_0, iterations=40000):
+    batch_size = 200
     min_loss = np.inf
     loss_history = []
     PATH = FOLDER+"output/e1_net.pt"
     PATH_LOSS = FOLDER+"output/e1_net_train_loss.npy"
+    iterations_per_decay = 1000
 
     for epoch in range(iterations):
         optimizer.zero_grad() # to make the gradients zero
@@ -529,6 +526,11 @@ def train_e1_net(e1_net, optimizer, scheduler, mse_cost_function, p_net, max_abs
         # Loss based on residual
         t = (torch.rand(batch_size, 1, requires_grad=True) * (T_end - t0) + t0).to(device)
         x = (torch.rand(len(t), 1, requires_grad=True) * (x_hig - x_low) + x_low).to(device)
+        # apply adaptive residual
+        # t_more = (torch.rand(batch_size, 1, requires_grad=True) * (6.0 - 3.0) + 3.0).to(device)
+        # x_more = (torch.rand(len(t_more), 1, requires_grad=True) * (x_hig - x_low) + x_low).to(device)
+        # t = torch.cat((t, t_more), dim=0)
+        # x = torch.cat((x, x_more), dim=0)
         all_zeros = torch.zeros((len(t),1), dtype=torch.float32, requires_grad=False).to(device)
         res_out = e1_res_func(x, t, e1_net, p_net)/max_abs_e1_x_0
         mse_res = mse_cost_function(res_out, all_zeros)
@@ -560,10 +562,11 @@ def train_e1_net(e1_net, optimizer, scheduler, mse_cost_function, p_net, max_abs
         loss_history.append(loss.data)
         loss.backward() 
         optimizer.step()
+        # scheduler2.step()
 
         # Exponential learning rate decay
         if (epoch + 1) % iterations_per_decay == 0:
-            scheduler.step()
+            scheduler1.step()
         with torch.autograd.no_grad():
             if (epoch%1000 == 0):
                 print(epoch,"Traning Loss:",loss.data)
@@ -608,6 +611,7 @@ def show_e1_net_results(p_net, e1_net):
     e1_list = []
     e1_hat_list = []
     alpha_1_list = []
+    r2_list = []
     for t1 in t1s:
         p_monte = np.load(DATA_FOLDER + "psim_t" + str(t1) + ".npy").reshape(-1, 1)
         p_monte_list.append(p_monte)
@@ -624,6 +628,8 @@ def show_e1_net_results(p_net, e1_net):
         e1_hat_list.append(e1_hat)
         alpha_1 = max(abs(e1 - e1_hat)) / max(abs(e1_hat))
         alpha_1_list.append(alpha_1)
+        r2 = e1_res_func(pt_x, pt_t1, e1_net, p_net).data.cpu().numpy()
+        r2_list.append(r2)
 
     fig, axs = plt.subplots(6, 1, figsize=(6, 8))
     for i, (t1, ax1, e1, e1_hat, alpha_1) in enumerate(zip(t1s, axs, e1_list, e1_hat_list, alpha_1_list)):
@@ -652,7 +658,7 @@ def show_e1_net_results(p_net, e1_net):
             ax1.plot(x, p_hat, "red", linestyle="--", label=r"$\hat{p}$")
             # ax1.plot(x, e1_hat, "red", linestyle="--", label=r"$\hat{e}_1$")
             ax1.fill_between(x.reshape(-1), y1=p_hat.reshape(-1)+error_bound, y2=p_hat.reshape(-1)-error_bound, color="green", alpha=0.3, label="Error Bound(t)")
-            # ax1.legend(loc="upper right")
+            ax1.legend(loc="upper right")
         else:
             ax1.plot(x, p, "blue")
             ax1.plot(x, p_hat, "red", linestyle="--")
@@ -660,11 +666,22 @@ def show_e1_net_results(p_net, e1_net):
             ax1.fill_between(x.reshape(-1), y1=p_hat.reshape(-1)+error_bound, y2=p_hat.reshape(-1)-error_bound, color="green", alpha=0.3, label="Error Bound(t)")
         ax1.grid(True, which='both', linestyle='-', linewidth=0.5)  # Add thin grid lines
         # Add text to the left top corner
-        ax1.text(0.01, 0.98, "t="+str(t1)+", "+r"$\alpha_1=$"+str(np.round(alpha_1,2)), transform=ax1.transAxes, verticalalignment='top', fontsize=8)
+        ax1.text(0.01, 0.98, "t="+str(t1)+", "+r"$\alpha_1=$"+str(np.round(alpha_1,2))+"\n"+r"$B_e=$"+str(np.round(error_bound,2)), transform=ax1.transAxes, verticalalignment='top', fontsize=8)
     plt.tight_layout()
     plt.savefig(FOLDER+"figs/uni_error_bound.png")
     plt.close()
 
+    fig, axs = plt.subplots(6, 1, figsize=(6, 8))
+    for i, (t1, ax1, r2) in enumerate(zip(t1s, axs, r2_list)):
+        if i == 0:
+            ax1.plot(x, r2, "r--", label=r"$r_2$")
+            ax1.legend(loc="upper right")
+        else:
+            ax1.plot(x, r2, "r--")
+        ax1.grid(True, which='both', linestyle='-', linewidth=0.5)  # Add thin grid lines
+    plt.tight_layout()
+    plt.savefig(FOLDER+"figs/e1net_residual.png")
+    plt.close()
 
 
 def show_uniform_bound(p_net, e1_net, max_abs_e1_x_0):
@@ -782,16 +799,18 @@ def main():
     optimizer = torch.optim.Adam(p_net.parameters())
     # optimizer = torch.optim.Adamax(p_net.parameters(), lr=1e-3)
     scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.9)
-    # train_p_net(p_net, optimizer, scheduler, mse_cost_function, max_pi, iterations=80000); print("[p_net train complete]")
+    train_p_net(p_net, optimizer, scheduler, mse_cost_function, max_pi, iterations=100000); print("[p_net train complete]")
     p_net = pos_p_net_train(p_net, PATH=FOLDER+"output/p_net.pt", PATH_LOSS=FOLDER+"output/p_net_train_loss.npy"); p_net.eval()
     max_abs_e1_ti = show_p_net_results(p_net)
     print("max abs e1(x,0):", max_abs_e1_ti)
 
     e1_net = E1Net(scale=max_abs_e1_ti).to(device)
+    e1_net.apply(init_weights)
     optimizer = torch.optim.Adam(e1_net.parameters(), lr=1e-3)
-    # # optimizer = torch.optim.Adamax(e1_net.parameters(), lr=1e-3)
-    scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.9)
-    train_e1_net(e1_net, optimizer, scheduler, mse_cost_function, p_net, max_abs_e1_ti, iterations=100000); print("[e1_net train complete]")
+    # optimizer = torch.optim.Adamax(e1_net.parameters(), lr=1e-3)
+    scheduler1 = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.9)
+    scheduler2 = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[40000, 70000], gamma=0.1)
+    train_e1_net(e1_net, optimizer, scheduler1, scheduler2, mse_cost_function, p_net, max_abs_e1_ti, iterations=100000); print("[e1_net train complete]")
     e1_net = pos_e1_net_train(e1_net, PATH=FOLDER+"output/e1_net.pt", PATH_LOSS=FOLDER+"output/e1_net_train_loss.npy"); e1_net.eval()
     show_e1_net_results(p_net, e1_net)
 

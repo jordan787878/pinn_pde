@@ -192,9 +192,15 @@ e: 73065 ,loss: tensor(0.0004) ,ic loss: tensor(0.0001) ,res: tensor(0.0002)
 <1-mse-resgrad>
 e: 68350 ,loss: tensor(4.2505e-05) ,ic loss: tensor(7.1625e-06) ,res: tensor(3.5342e-05)
 
+#################################################
 ADD P NEURONS TO 100. ADD E1 NEURONS TO 150
 <2-mse-resgrad>
 p: 73992 , loss: tensor(0.0002) , ic: tensor(0.0001) , res: tensor(1.6101e-06) , res freq: tensor(3.7487e-05)
+#################################################
+
+SAME P FROM <0-mse-resgrad>. 100 NEURONS E1, BIAS INIT 0.01, SECOND SCHEDULER: scheduler2 = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[40000, 70000], gamma=0.1)
+<3-mse-resgrad>
+e: 83431 ,loss: tensor(4.4702e-05) ,ic loss: tensor(3.8425e-06) ,res: tensor(4.0859e-05)
 
 
 
