@@ -12,3 +12,7 @@ p: 26013 ,loss: tensor(6.9810e-06) ,ic: tensor(3.3387e-06) ,res: tensor(3.6423e-
 
 
 Multi-Head Parallel MLP Architecture
+
+
+<baseline>
+p: 38966 ,loss: tensor(0.0007) ,ic: tensor(0.0003) ,res: tensor(6.4493e-06) ,linf-ic: tensor(0.0825) ,norm. linf-res: tensor(0.0405) ,res_freq: tensor(0.0004)

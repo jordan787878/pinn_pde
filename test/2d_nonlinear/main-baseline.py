@@ -19,7 +19,7 @@ import torch.nn.functional as F
 #     device = torch.device("mps")
 # else:
 #     device = torch.device("cpu")
-FOLDER = "exp/tmp/"
+FOLDER = "exp/baseline/"
 device = "cpu"
 print(device)
 pi = np.pi
@@ -180,28 +180,6 @@ def init_weights(m):
 
 
 # p_net
-# class Net(nn.Module):
-#     def __init__(self, scale=1.0): 
-#         neurons = 32
-#         self.scale = scale
-#         super(Net, self).__init__()
-#         self.hidden_layer1 = (nn.Linear(n_d+1,neurons))
-#         self.hidden_layer2 = (nn.Linear(neurons,neurons))
-#         self.hidden_layer3 = (nn.Linear(neurons,neurons))
-#         self.hidden_layer4 = (nn.Linear(neurons,neurons))
-#         self.hidden_layer5 = (nn.Linear(neurons,neurons))
-#         self.output_layer =  (nn.Linear(neurons,1))
-#     def forward(self, x, t):
-#         inputs = torch.cat([x,t],axis=1)
-#         layer1_out = F.softplus((self.hidden_layer1(inputs)))
-#         layer2_out = F.softplus((self.hidden_layer2(layer1_out)))
-#         layer3_out = F.softplus((self.hidden_layer3(layer2_out)))
-#         layer4_out = F.softplus((self.hidden_layer4(layer3_out)))
-#         layer5_out = F.softplus((self.hidden_layer5(layer4_out)))
-#         output = F.softplus( self.output_layer(layer5_out) )
-#         return output
-    
-# p_net with residual connection
 class Net(nn.Module):
     def __init__(self, scale=1.0): 
         neurons = 32
@@ -212,28 +190,45 @@ class Net(nn.Module):
         self.hidden_layer3 = (nn.Linear(neurons,neurons))
         self.hidden_layer4 = (nn.Linear(neurons,neurons))
         self.hidden_layer5 = (nn.Linear(neurons,neurons))
-        self.hidden_layer6 = (nn.Linear(neurons,neurons))
-        self.hidden_layer7 = (nn.Linear(neurons,neurons))
-        self.hidden_layer8 = (nn.Linear(neurons,neurons))
-        self.hidden_layer9 = (nn.Linear(neurons,neurons))
-        self.hidden_layer10 = (nn.Linear(neurons,neurons))
         self.output_layer =  (nn.Linear(neurons,1))
     def forward(self, x, t):
         inputs = torch.cat([x,t],axis=1)
         layer1_out = F.softplus((self.hidden_layer1(inputs)))
         layer2_out = F.softplus((self.hidden_layer2(layer1_out)))
-        # layer2_out += layer1_out
         layer3_out = F.softplus((self.hidden_layer3(layer2_out)))
         layer4_out = F.softplus((self.hidden_layer4(layer3_out)))
-        # layer4_out += layer3_out
         layer5_out = F.softplus((self.hidden_layer5(layer4_out)))
-        layer6_out = F.softplus((self.hidden_layer6(layer5_out)))
-        layer7_out = F.softplus((self.hidden_layer7(layer6_out)))
-        layer8_out = F.softplus((self.hidden_layer8(layer7_out)))
-        layer9_out = F.softplus((self.hidden_layer9(layer8_out)))
-        layer10_out = F.softplus((self.hidden_layer10(layer9_out)))
-        output = F.softplus(self.output_layer(layer10_out))
+        output = F.softplus( self.output_layer(layer5_out) )
         return output
+    
+# p_net with batch_norm and residual connection
+# class Net(nn.Module):
+#     def __init__(self, scale=1.0): 
+#         neurons = 32
+#         self.scale = scale
+#         super(Net, self).__init__()
+#         self.hidden_layer1 = (nn.Linear(n_d+1,neurons))
+#         self.batch_norm1 = nn.BatchNorm1d(neurons)
+#         self.hidden_layer2 = (nn.Linear(neurons,neurons))
+#         self.batch_norm2 = nn.BatchNorm1d(neurons)
+#         self.hidden_layer3 = (nn.Linear(neurons,neurons))
+#         self.batch_norm3 = nn.BatchNorm1d(neurons)
+#         self.hidden_layer4 = (nn.Linear(neurons,neurons))
+#         self.batch_norm4 = nn.BatchNorm1d(neurons)
+#         self.hidden_layer5 = (nn.Linear(neurons,neurons))
+#         self.batch_norm5 = nn.BatchNorm1d(neurons)
+#         self.output_layer =  (nn.Linear(neurons,1))
+#     def forward(self, x, t):
+#         inputs = torch.cat([x,t],axis=1)
+#         layer1_out = F.softplus((self.hidden_layer1(inputs)))
+#         layer2_out = F.softplus((self.hidden_layer2(layer1_out)))
+#         layer2_out += layer1_out
+#         layer3_out = F.softplus((self.hidden_layer3(layer2_out)))
+#         layer4_out = F.softplus((self.hidden_layer4(layer3_out)))
+#         layer4_out += layer3_out
+#         layer5_out = F.softplus((self.hidden_layer5(layer4_out)))
+#         output = F.softplus(self.output_layer(layer5_out))
+#         return output
                 
 
 # Custom L-infinity loss function
@@ -318,18 +313,17 @@ def train_p_net(p_net, optimizer, scheduler, mse_cost_function, max_abs_p_ti, it
         res_input = torch.cat([res_x, res_t], axis=1)
         norm_res_input = torch.norm(res_input/max_abs_p_ti, dim=1).view(-1,1)
         mse_norm_res_input = mse_cost_function(norm_res_input, all_zeros)
-        linf_norm_res_input = linf_loss(norm_res_input, all_zeros)
 
         # Loss Function
         loss = mse_u + mse_res + mse_norm_res_input
-        # loss = linf_u + 1e-2*(linf_res+ linf_norm_res_input)
+        # loss = (1.0-0.5)*linf_u + 0.5*linf_res
 
         loss_history.append(loss.data)
         # Save the min loss model
         if(loss.data < min_loss):
             print("save epoch:", epoch, ",loss:", loss.data, ",ic:", mse_u.data, ",res:", mse_res.data,
                   ",linf-ic:", linf_u.data, ",norm. linf-res:", linf_res.data, 
-                  ",res_freq:", mse_norm_res_input.data, linf_norm_res_input.data # , linf_res_t.data #res_cross_zero_metric.data, metric.data
+                  ",res_freq:", mse_norm_res_input.data # , linf_res_t.data #res_cross_zero_metric.data, metric.data
                   # "FFT: ", largest_frequency_output.data)
                   )
             torch.save({
@@ -345,11 +339,10 @@ def train_p_net(p_net, optimizer, scheduler, mse_cost_function, max_abs_p_ti, it
         with torch.autograd.no_grad():
             if (epoch%1000 == 0):
                 print(epoch,"Traning Loss:",loss.data)
-                np.save(FOLDER+"output/p_net_train_loss.npy", np.array(loss_history))
         # Exponential learning rate decay
         if (epoch + 1) % iterations_per_decay == 0:
             scheduler.step()
-
+    np.save(FOLDER+"output/p_net_train_loss.npy", np.array(loss_history))
 
 
 def pos_p_net_train(p_net, PATH, PATH_LOSS):
@@ -427,6 +420,7 @@ def show_p_net_results(p_net):
             #     Line2D([0], [0], color='red', lw=2, linestyle='--', label=r"$\hat{p}$")
             # ]
             # axp.legend(handles=legend_elements)
+            
         axp.set_title("t="+str(t1))
         j = j + 1
     plt.tight_layout()
@@ -725,7 +719,7 @@ def main():
     optimizer = torch.optim.Adam(p_net.parameters(), lr=1e-3)
     # optimizer = torch.optim.Adamax(p_net.parameters(), lr=1e-3)
     scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.95)
-    train_p_net(p_net, optimizer, scheduler, mse_cost_function, max_pi, iterations=10000); print("p_net train complete")
+    # train_p_net(p_net, optimizer, scheduler, mse_cost_function, max_pi, iterations=40000); print("p_net train complete")
     p_net = pos_p_net_train(p_net, PATH=FOLDER+"output/p_net.pth", PATH_LOSS=FOLDER+"output/p_net_train_loss.npy"); p_net.eval()
     max_abe_e1_ti = show_p_net_results(p_net)
     print("max abs e1(x,ti):", max_abe_e1_ti)
