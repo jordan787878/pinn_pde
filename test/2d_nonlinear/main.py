@@ -12,6 +12,8 @@ from scipy.linalg import expm
 from matplotlib.lines import Line2D
 import torch.nn.functional as F
 
+### Try Fixed Sampling? ###
+
 
 # global variable
 # Check if MPS (Apple's Metal Performance Shaders) is available
@@ -19,14 +21,14 @@ import torch.nn.functional as F
 #     device = torch.device("mps")
 # else:
 #     device = torch.device("cpu")
-FOLDER = "exp/tmp/"
+FOLDER = "exp1/tmp/"
 device = "cpu"
 print(device)
 pi = np.pi
 n_d = 2
 mu_0 = np.array([pi*(0.5), 0.0]).reshape(2,)
 cov_0 = np.array([[0.5, 0.0], [0.0, 0.5]])
-# A = np.array([[0.0, 1.0],[0.0, 0.0]])
+B = np.array([[0.5, 0.0],[0.0, 0.5]])
 x_low = -3.0*pi
 x_hig =  3.0*pi
 ti = 0.0
@@ -82,8 +84,10 @@ def p_sol_monte(t1=ti, linespace_num=50, stat_sample=50000):
     for i in range(0, stat_sample):
         x = np.random.multivariate_normal(mean, cov).T
         for t in t_span:
-            # w = np.random.normal(0, np.sqrt(dtt))
-            x = x + f_sde(x)*dtt #+ e*w
+            w1 = np.random.normal(0, np.sqrt(dtt))
+            w2 = np.random.normal(0, np.sqrt(dtt))
+            w = np.array([w1, w2]).reshape(2,)
+            x = x + f_sde(x)*dtt + np.matmul(B, w)
         X[:,i] = x
     x1 = X[0,:]
     x2 = X[1,:]
@@ -149,13 +153,23 @@ def test_p_init():
 def res_func(x, t, p_net, verbose=False):
     # f1 = x2
     # f2 = -g*sin(x1)/l
+    B_torch = torch.tensor(B, dtype=torch.float32, requires_grad=True)
     p = p_net(x,t)
     p_x = torch.autograd.grad(p, x, grad_outputs=torch.ones_like(p), create_graph=True)[0]
     p_t = torch.autograd.grad(p, t, grad_outputs=torch.ones_like(p), create_graph=True)[0]
-    p_x1 = torch.reshape(p_x[:,0], (-1,1))
-    p_x2 = torch.reshape(p_x[:,1], (-1,1))
-    x1 = x[:,0]
-    x2 = x[:,1]
+    p_x1 = p_x[:,0].view(-1,1)
+    p_x2 = p_x[:,1].view(-1,1)
+    x1 = x[:,0].view(-1, 1)
+    x2 = x[:,1].view(-1, 1)
+
+    # Compute the second derivative (Hessian) of p with respect to x
+    hessian = []
+    for i in range(p_x.size(1)):
+        grad2 = torch.autograd.grad(p_x[:, i], x, grad_outputs=torch.ones_like(p_x[:, i]), create_graph=True)[0]
+        hessian.append(grad2)
+    p_xx = torch.stack(hessian, dim=-1)
+    p_x1x1 = p_xx[:, 0, 0].view(-1, 1)
+    p_x2x2 = p_xx[:, 1, 1].view(-1, 1)
 
     f1 = torch.reshape(x2, (-1,1))
     f2 = torch.reshape(-g*torch.sin(x1)/l, (-1,1))
@@ -165,7 +179,7 @@ def res_func(x, t, p_net, verbose=False):
     f1_x1 = (0.0*x1).view(-1,1)
     f2_x2 = (0.0*x2).view(-1,1)
 
-    Lp = p_x1*f1 + p*f1_x1 + p_x2*f2 + p*f2_x2
+    Lp = p_x1*f1 + p*f1_x1 + p_x2*f2 + p*f2_x2 - 0.5*(B_torch[0,0]*B_torch[0,0]*p_x1x1 + B_torch[1,1]*B_torch[1,1]*p_x2x2)
     residual = p_t + Lp
     if(verbose):
       print(f1_x1.shape)
@@ -180,28 +194,6 @@ def init_weights(m):
 
 
 # p_net
-# class Net(nn.Module):
-#     def __init__(self, scale=1.0): 
-#         neurons = 32
-#         self.scale = scale
-#         super(Net, self).__init__()
-#         self.hidden_layer1 = (nn.Linear(n_d+1,neurons))
-#         self.hidden_layer2 = (nn.Linear(neurons,neurons))
-#         self.hidden_layer3 = (nn.Linear(neurons,neurons))
-#         self.hidden_layer4 = (nn.Linear(neurons,neurons))
-#         self.hidden_layer5 = (nn.Linear(neurons,neurons))
-#         self.output_layer =  (nn.Linear(neurons,1))
-#     def forward(self, x, t):
-#         inputs = torch.cat([x,t],axis=1)
-#         layer1_out = F.softplus((self.hidden_layer1(inputs)))
-#         layer2_out = F.softplus((self.hidden_layer2(layer1_out)))
-#         layer3_out = F.softplus((self.hidden_layer3(layer2_out)))
-#         layer4_out = F.softplus((self.hidden_layer4(layer3_out)))
-#         layer5_out = F.softplus((self.hidden_layer5(layer4_out)))
-#         output = F.softplus( self.output_layer(layer5_out) )
-#         return output
-    
-# p_net with residual connection
 class Net(nn.Module):
     def __init__(self, scale=1.0): 
         neurons = 32
@@ -212,28 +204,50 @@ class Net(nn.Module):
         self.hidden_layer3 = (nn.Linear(neurons,neurons))
         self.hidden_layer4 = (nn.Linear(neurons,neurons))
         self.hidden_layer5 = (nn.Linear(neurons,neurons))
-        self.hidden_layer6 = (nn.Linear(neurons,neurons))
-        self.hidden_layer7 = (nn.Linear(neurons,neurons))
-        self.hidden_layer8 = (nn.Linear(neurons,neurons))
-        self.hidden_layer9 = (nn.Linear(neurons,neurons))
-        self.hidden_layer10 = (nn.Linear(neurons,neurons))
         self.output_layer =  (nn.Linear(neurons,1))
     def forward(self, x, t):
         inputs = torch.cat([x,t],axis=1)
         layer1_out = F.softplus((self.hidden_layer1(inputs)))
         layer2_out = F.softplus((self.hidden_layer2(layer1_out)))
-        # layer2_out += layer1_out
         layer3_out = F.softplus((self.hidden_layer3(layer2_out)))
         layer4_out = F.softplus((self.hidden_layer4(layer3_out)))
-        # layer4_out += layer3_out
         layer5_out = F.softplus((self.hidden_layer5(layer4_out)))
-        layer6_out = F.softplus((self.hidden_layer6(layer5_out)))
-        layer7_out = F.softplus((self.hidden_layer7(layer6_out)))
-        layer8_out = F.softplus((self.hidden_layer8(layer7_out)))
-        layer9_out = F.softplus((self.hidden_layer9(layer8_out)))
-        layer10_out = F.softplus((self.hidden_layer10(layer9_out)))
-        output = F.softplus(self.output_layer(layer10_out))
+        output = F.softplus( self.output_layer(layer5_out) )
         return output
+    
+# p_net with residual connection
+# class Net(nn.Module):
+#     def __init__(self, scale=1.0): 
+#         neurons = 32
+#         self.scale = scale
+#         super(Net, self).__init__()
+#         self.hidden_layer1 = (nn.Linear(n_d+1,neurons))
+#         self.hidden_layer2 = (nn.Linear(neurons,neurons))
+#         self.hidden_layer3 = (nn.Linear(neurons,neurons))
+#         self.hidden_layer4 = (nn.Linear(neurons,neurons))
+#         self.hidden_layer5 = (nn.Linear(neurons,neurons))
+#         self.hidden_layer6 = (nn.Linear(neurons,neurons))
+#         self.hidden_layer7 = (nn.Linear(neurons,neurons))
+#         self.hidden_layer8 = (nn.Linear(neurons,neurons))
+#         self.hidden_layer9 = (nn.Linear(neurons,neurons))
+#         self.hidden_layer10 = (nn.Linear(neurons,neurons))
+#         self.output_layer =  (nn.Linear(neurons,1))
+#     def forward(self, x, t):
+#         inputs = torch.cat([x,t],axis=1)
+#         layer1_out = F.softplus((self.hidden_layer1(inputs)))
+#         layer2_out = F.softplus((self.hidden_layer2(layer1_out)))
+#         # layer2_out += layer1_out
+#         layer3_out = F.softplus((self.hidden_layer3(layer2_out)))
+#         layer4_out = F.softplus((self.hidden_layer4(layer3_out)))
+#         # layer4_out += layer3_out
+#         layer5_out = F.softplus((self.hidden_layer5(layer4_out)))
+#         layer6_out = F.softplus((self.hidden_layer6(layer5_out)))
+#         layer7_out = F.softplus((self.hidden_layer7(layer6_out)))
+#         layer8_out = F.softplus((self.hidden_layer8(layer7_out)))
+#         layer9_out = F.softplus((self.hidden_layer9(layer8_out)))
+#         layer10_out = F.softplus((self.hidden_layer10(layer9_out)))
+#         output = F.softplus(self.output_layer(layer10_out))
+#         return output
                 
 
 # Custom L-infinity loss function
@@ -284,31 +298,41 @@ def train_p_net(p_net, optimizer, scheduler, mse_cost_function, max_abs_p_ti, it
     loss_history = []
     x_mar = 0.0
 
+    # Set a fixed seed for reproducibility
+    torch.manual_seed(0)
+    np.random.seed(0)
+
     # Define the mean and covariance matrix
     mean = torch.tensor([pi*(0.5), 0.0])
     covariance_matrix = torch.tensor([[0.5, 0.0], [0.0, 0.5]])
     mvn = torch.distributions.MultivariateNormal(mean, covariance_matrix)
+    # space-time points for BC
+    x_bc = (torch.rand(batch_size, n_d) * (x_hig - x_low) + x_low).to(device); #print(min(x_bc[:,0]), max(x_bc[:,0]), min(x_bc[:,1]), max(x_bc[:,1]))
+    x_bc_normal = mvn.sample((batch_size,))
+    x_bc = torch.cat((x_bc, x_bc_normal), dim=0)
+    t_bc = (torch.ones(len(x_bc), 1) * ti).to(device)
+    
+    # space-time points for RES
+    x = (torch.rand(2500, n_d, requires_grad=True) * (x_hig - x_low + 2*x_mar) + x_low-x_mar).to(device)
+    t = (torch.rand(2500, 1, requires_grad=True) *   (tf - ti) + ti).to(device)
 
+    # RAR
+    S = 100000
+    
     PATH = FOLDER+"output/p_net.pth"
+
     for epoch in range(iterations):
-        optimizer.zero_grad() # to make the gradients zero
+        optimizer.zero_grad()
 
         # Loss based on boundary conditions
-        x_bc = (torch.rand(batch_size, n_d) * (x_hig - x_low) + x_low).to(device); #print(min(x_bc[:,0]), max(x_bc[:,0]), min(x_bc[:,1]), max(x_bc[:,1]))
-        x_bc_normal = mvn.sample((batch_size,))
-        x_bc = torch.cat((x_bc, x_bc_normal), dim=0)
-        t_bc = (torch.ones(len(x_bc), 1) * ti).to(device)
         u_bc = p_init_torch(x_bc)
         net_bc_out = p_net(x_bc, t_bc).to(device)
         mse_u = mse_cost_function(net_bc_out/max_abs_p_ti, u_bc/max_abs_p_ti)
         linf_u = linf_loss(net_bc_out/max_abs_p_ti, u_bc/max_abs_p_ti)
 
         # Loss based on PDE
-        x = (torch.rand(len(x_bc), n_d, requires_grad=True) * (x_hig - x_low + 2*x_mar) + x_low-x_mar).to(device)
-        # x_normal = mvn.sample((batch_size,)); x = torch.cat((x, x_normal), dim=0)
-        t = (torch.rand(len(x), 1, requires_grad=True) *   (tf - ti) + ti).to(device)
-        all_zeros = torch.zeros((len(t),1), dtype=torch.float32, requires_grad=False).to(device)
         res_out = res_func(x, t, p_net)/max_abs_p_ti
+        all_zeros = torch.zeros((len(t),1), dtype=torch.float32, requires_grad=False).to(device)
         mse_res = mse_cost_function(res_out, all_zeros)
         linf_res = linf_loss(res_out, all_zeros)
 
@@ -324,14 +348,47 @@ def train_p_net(p_net, optimizer, scheduler, mse_cost_function, max_abs_p_ti, it
         loss = mse_u + mse_res + mse_norm_res_input
         # loss = linf_u + 1e-2*(linf_res+ linf_norm_res_input)
 
+        # RAR
+        if (epoch%500 == 0):
+            x_RAR = (torch.rand(S, n_d, requires_grad=True) * (x_hig - x_low + 2*x_mar) + x_low-x_mar).to(device)
+            t_RAR = (torch.rand(S, 1, requires_grad=True) *   (tf - ti) + ti).to(device)
+            res_RAR = res_func(x_RAR, t_RAR, p_net)/max_abs_p_ti
+            mean_res_RAR = torch.mean(res_RAR**2)
+            print("mean res RAR:", mean_res_RAR.data)
+            if(mean_res_RAR > 0.0):
+                # Find the index of the maximum absolute value in res_RAR
+                max_abs_res, max_index = torch.max(torch.abs(res_RAR), dim=0)
+                # Get the corresponding x_RAR and t_RAR vectors
+                x_max = x_RAR[max_index]
+                t_max = t_RAR[max_index]
+                # Append x_max and t_max to x and t
+                x = torch.cat((x, x_max), dim=0)
+                t = torch.cat((t, t_max), dim=0)
+                print("... add [x,t]:", x_max.data, t_max.data, max_abs_res.data)
+            res_x_RAR = torch.autograd.grad(res_RAR, x_RAR, grad_outputs=torch.ones_like(res_RAR), create_graph=True)[0]
+            res_t_RAR = torch.autograd.grad(res_RAR, t_RAR, grad_outputs=torch.ones_like(res_RAR), create_graph=True)[0]
+            res_input_RAR = torch.cat([res_x_RAR, res_t_RAR], axis=1)
+            norm_res_input_RAR = torch.norm(res_input_RAR/max_abs_p_ti, dim=1).view(-1,1)
+            if(torch.mean(norm_res_input) > 0.0):
+                max_abs_res_input, max_index = torch.max(norm_res_input_RAR, dim=0)
+                # Get the corresponding x_RAR and t_RAR vectors
+                x_max = x_RAR[max_index]
+                t_max = t_RAR[max_index]
+                # Append x_max and t_max to x and t
+                x = torch.cat((x, x_max), dim=0)
+                t = torch.cat((t, t_max), dim=0)
+                print("... add [x,t]:", x_max.data, t_max.data, max_abs_res_input.data)
+
+
         loss_history.append(loss.data)
+        
         # Save the min loss model
-        if(loss.data < min_loss):
+        if(loss.data < 0.8*min_loss):
             print("save epoch:", epoch, ",loss:", loss.data, ",ic:", mse_u.data, ",res:", mse_res.data,
-                  ",linf-ic:", linf_u.data, ",norm. linf-res:", linf_res.data, 
-                  ",res_freq:", mse_norm_res_input.data, linf_norm_res_input.data # , linf_res_t.data #res_cross_zero_metric.data, metric.data
-                  # "FFT: ", largest_frequency_output.data)
-                  )
+                   ",linf-ic:", linf_u.data, ",norm. linf-res:", linf_res.data, 
+                   ",res_freq:", mse_norm_res_input.data, linf_norm_res_input.data # , linf_res_t.data #res_cross_zero_metric.data, metric.data
+            #       # "FFT: ", largest_frequency_output.data)
+                   )
             torch.save({
                     'epoch': epoch,
                     'model_state_dict': p_net.state_dict(),
@@ -340,12 +397,14 @@ def train_p_net(p_net, optimizer, scheduler, mse_cost_function, max_abs_p_ti, it
                     }, PATH)
             min_loss = loss.data
 
-        loss.backward() # This is for computing gradients using backward propagation
+        loss.backward(retain_graph=True) # This is for computing gradients using backward propagation
         optimizer.step() # This is equivalent to : theta_new = theta_old - alpha * derivative of J w.r.t theta
+
         with torch.autograd.no_grad():
             if (epoch%1000 == 0):
                 print(epoch,"Traning Loss:",loss.data)
                 np.save(FOLDER+"output/p_net_train_loss.npy", np.array(loss_history))
+
         # Exponential learning rate decay
         if (epoch + 1) % iterations_per_decay == 0:
             scheduler.step()
@@ -457,7 +516,7 @@ def show_p_net_results(p_net):
 
 class E1Net(nn.Module):
     def __init__(self, scale=1.0): 
-        neurons = 100
+        neurons = 32
         self.scale = scale
         super(E1Net, self).__init__()
         self.hidden_layer1 = (nn.Linear(n_d+1,neurons))
@@ -725,7 +784,7 @@ def main():
     optimizer = torch.optim.Adam(p_net.parameters(), lr=1e-3)
     # optimizer = torch.optim.Adamax(p_net.parameters(), lr=1e-3)
     scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.95)
-    train_p_net(p_net, optimizer, scheduler, mse_cost_function, max_pi, iterations=10000); print("p_net train complete")
+    # train_p_net(p_net, optimizer, scheduler, mse_cost_function, max_pi, iterations=80000); print("p_net train complete")
     p_net = pos_p_net_train(p_net, PATH=FOLDER+"output/p_net.pth", PATH_LOSS=FOLDER+"output/p_net_train_loss.npy"); p_net.eval()
     max_abe_e1_ti = show_p_net_results(p_net)
     print("max abs e1(x,ti):", max_abe_e1_ti)
