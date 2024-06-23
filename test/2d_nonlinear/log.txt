@@ -1,3 +1,7 @@
+e: 78797 , loss: tensor(1.6046e-05) ,ic: tensor(2.8176e-06) ,res: tensor(1.3228e-05)
+
+
+
 <32/5p-baseline>
 p: 35800 ,loss: tensor(3.2237e-06) ,ic: tensor(1.1048e-06) ,res: tensor(2.1190e-06) ,linf-ic: tensor(0.0094) ,norm. linf-res: tensor(0.0142) ,res_freq: tensor(0.0011)
 
