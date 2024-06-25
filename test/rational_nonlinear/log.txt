@@ -207,3 +207,8 @@ e: 83431 ,loss: tensor(4.4702e-05) ,ic loss: tensor(3.8425e-06) ,res: tensor(4.0
 
 ADD RESFREQ LOSS FOR E1 train
 
+<base>
+p: 97984 , loss: tensor(4.0355e-06) , ic: tensor(2.2724e-06) , res: tensor(1.5733e-07) , res freq: tensor(1.6058e-06)
+
+<tmp>
+p: 39648 , loss: tensor(0.0003) , ic: tensor(0.0002) , res: tensor(1.8439e-06) , res freq: tensor(6.4493e-05)
