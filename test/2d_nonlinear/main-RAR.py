@@ -470,27 +470,21 @@ def show_p_net_results(p_net):
     e1 = p0 - p_hat
     max_abe_e1_ti = max(abs(e1))[0]
 
-    fig, axs = plt.subplots(2, 6, figsize=(18, 6))
+    fig, axs = plt.subplots(1, 6, figsize=(18, 6))
     j = 0
     for t1 in t1s:
         p = np.load(FOLDER_DATA+"p_sim_grid"+str(t1)+".npy")
-        axp = axs[0, j]
+        axp = axs[j]
         if(j == 0):
             p0_monte = p
-            ax1 = axs[1, 0]
-            ax2 = axs[1, 1]
             print("[DEBUG] Monte Sim Error:", max(abs(p0 - p.reshape(-1,1))) )
             p0 = p0.reshape(sample_size,sample_size)
             e1i = p0 - p
             cp = axp.imshow(p, extent=[x_low, x_hig, x_low, x_hig], cmap='viridis', aspect='equal', origin='lower')
-            fig.colorbar(cp, ax=axp)
-            cp = ax1.imshow(p0, extent=[x_low, x_hig, x_low, x_hig], cmap='viridis', aspect='equal', origin='lower')
-            fig.colorbar(cp, ax=ax1)
-            cp = ax2.imshow(e1i, extent=[x_low, x_hig, x_low, x_hig], cmap='viridis', aspect='equal', origin='lower')
-            fig.colorbar(cp, ax=ax2)
+            fig.colorbar(cp, ax=axp, orientation='horizontal')
         else:
             cp = axp.imshow(p, extent=[x_low, x_hig, x_low, x_hig], cmap='viridis', aspect='equal', origin='lower')
-            fig.colorbar(cp, ax=axp)
+            fig.colorbar(cp, ax=axp, orientation='horizontal')
             axp.set_xlabel(r"$\theta$")
             axp.set_ylabel(r"$\omega$")
             axp.set_title("t="+str(t1))
@@ -527,7 +521,7 @@ def show_p_net_results(p_net):
         # wire2.set_linestyle("--")
         # cp = axp.imshow(p, extent=[x_low, x_hig, x_low, x_hig], cmap='viridis', aspect='equal', origin='lower')
         # cphat = axphat.imshow(p_hat, extent=[x_low, x_hig, x_low, x_hig], cmap='viridis', aspect='equal', origin='lower')
-        fig.colorbar(cp, ax=axp)
+        fig.colorbar(cp, ax=axp, orientation='horizontal')
         axp.set_xlabel(r"$\theta$")
         axp.set_ylabel(r"$\omega$")
         # fig.colorbar(cphat, ax=axphat)
@@ -561,7 +555,7 @@ def show_p_net_results(p_net):
         e1 = p - p_hat_numpy
         axp = axs[j]
         cp = axp.imshow(e1, extent=[x_low, x_hig, x_low, x_hig], cmap='viridis', aspect='equal', origin='lower')
-        fig.colorbar(cp, ax=axp)
+        fig.colorbar(cp, ax=axp, orientation='horizontal')
         axp.set_xlabel(r"$\theta$")
         axp.set_ylabel(r"$\omega$")
         axp.set_title("t="+str(t1))
@@ -869,7 +863,7 @@ def show_e1_net_results(p_net, e1_net):
         e1_hat = e1_net(pt_x, pt_t1).data.cpu().numpy().reshape((sample_size, sample_size))
         ax1 = axs[j]
         cp = ax1.imshow(e1_hat, extent=[x_low, x_hig, x_low, x_hig], cmap='viridis', aspect='equal', origin='lower')
-        fig.colorbar(cp, ax=ax1)
+        fig.colorbar(cp, ax=ax1, orientation='horizontal')
         ax1.set_xlabel(r"$\theta$")
         ax1.set_ylabel(r"$\omega$")
         ax1.set_title("t="+str(t1))
@@ -880,6 +874,33 @@ def show_e1_net_results(p_net, e1_net):
         j = j + 1
     plt.tight_layout()
     plt.savefig(FOLDER+"figs/e1_result.png")
+    plt.close()
+
+    fig, axs = plt.subplots(1, 6, figsize=(18, 6), subplot_kw={'projection': '3d'})
+    j = 0
+    for t1 in t1s:
+        if(j == 0):
+            print("use exact p for t="+str(t1))
+            p = p0
+            # print("use Monte p for t="+str(t1))
+            # p = np.load(FOLDER_DATA+"p_sim_grid"+str(t1)+".npy")
+        else:
+            # From Monte Carlo
+            print("use Monte p for t="+str(t1))
+            p = np.load(FOLDER_DATA+"p_sim_grid"+str(t1)+".npy")
+        pt_t1 = Variable(torch.from_numpy(x[:,0]*0+t1).float(), requires_grad=True).view(-1,1).to(device)
+        p_hat = p_net(pt_x, pt_t1).data.cpu().numpy().reshape((sample_size, sample_size))
+        e1 = p - p_hat
+        e1_hat = e1_net(pt_x, pt_t1).data.cpu().numpy().reshape((sample_size, sample_size))
+        error_bound = max(abs(e1_hat.reshape(-1,1)))*2
+        ax1 = axs[j]
+        ax1.plot_surface(x1, x2, abs(e1_hat), cmap='viridis')
+        ax1.plot_surface(x1, x2, e1_hat*0+error_bound, color="green", alpha=0.5)
+        ax1.set_xlabel(r"$\theta$")
+        ax1.set_ylabel(r"$\omega$")
+        ax1.set_title("t="+str(t1)+"\n"+r"$B_e=$"+str(np.round(error_bound,2)))
+        j = j + 1
+    plt.savefig(FOLDER+"figs/uni_error_bound.png")
     plt.close()
 
     # fig, axs = plt.subplots(1, 6, figsize=(18, 6))
