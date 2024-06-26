@@ -29,16 +29,15 @@ n_d = 1
 mu = -2
 std = 1
 a = -0.1
-b = 0.1
-c = 0.0
+b = 0.4
+c = 0.5
 d = 1
-e = 2
-x_low = -8
-x_hig = 8
+e = 3
+x_low = -10
+x_hig = 10
 
 t0 = 0
 T_end = 5
-# dt = 0.1
 t1s = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]
 
 
@@ -204,14 +203,15 @@ def train_p_net(p_net, optimizer, scheduler, mse_cost_function, max_abs_p_ti, it
         res_x = torch.autograd.grad(res_out, x, grad_outputs=torch.ones_like(res_out), create_graph=True)[0]
         res_t = torch.autograd.grad(res_out, t, grad_outputs=torch.ones_like(res_out), create_graph=True)[0]
         res_input = torch.cat([res_x, res_t], axis=1)
-        norm_res_input = torch.norm(res_input/max_abs_p_ti, dim=1).view(-1,1)
+        # norm_res_input = torch.norm(res_input/max_abs_p_ti, dim=1).view(-1,1)
+        norm_res_input = torch.norm(res_input, dim=1).view(-1,1)
         mse_norm_res_input = mse_cost_function(norm_res_input, all_zeros)
 
         # <Baseline>
         loss = mse_u + mse_res + mse_norm_res_input
 
         # Save the min loss model
-        if(loss.data < min_loss):
+        if(loss.data < 0.95*min_loss):
             print("save epoch:", epoch, ", loss:", loss.data, ", ic:",mse_u.data, ", res:",mse_res.data, 
                   ", res freq:", mse_norm_res_input.data,
                   #",l-inf ic:", linf_u.data, ",l-inf res:",linf_res.data, ",D res:", linf_res_x.data, linf_res_t.data, mse_res_x.data, mse_res_t.data,
@@ -229,7 +229,7 @@ def train_p_net(p_net, optimizer, scheduler, mse_cost_function, max_abs_p_ti, it
         loss_history.append(loss.data)
 
         # RAR
-        if (epoch%500 == 0 and FLAG):
+        if (epoch%1000 == 0 and FLAG):
             x_RAR = (torch.rand(S, n_d, requires_grad=True) * (x_hig - x_low) + x_low).to(device)
             t_RAR = (torch.rand(S, 1, requires_grad=True) *   (T_end - t0) + t0).to(device)
             # t0_RAR = 0.0*t_RAR + t0
@@ -259,19 +259,19 @@ def train_p_net(p_net, optimizer, scheduler, mse_cost_function, max_abs_p_ti, it
                 print("... RES add [x,t]:", x_max.data, t_max.data, ". max res value: ", max_abs_res.data)
                 FLAG = False
 
-            res_x_RAR = torch.autograd.grad(res_RAR, x_RAR, grad_outputs=torch.ones_like(res_RAR), create_graph=True)[0]
-            res_t_RAR = torch.autograd.grad(res_RAR, t_RAR, grad_outputs=torch.ones_like(res_RAR), create_graph=True)[0]
-            res_input_RAR = torch.cat([res_x_RAR, res_t_RAR], axis=1)
-            norm_res_input_RAR = torch.norm(res_input_RAR/max_abs_p_ti, dim=1).view(-1,1)
-            mean_res_input_error = torch.mean(norm_res_input)
-            print("RAR mean res input: ", mean_res_input_error.data)
-            if(mean_res_input_error > 5e-3):
-                max_abs_res_input, max_index = torch.max(norm_res_input_RAR, dim=0)
-                x_max = x_RAR[max_index]
-                t_max = t_RAR[max_index]
-                x = torch.cat((x, x_max), dim=0)
-                t = torch.cat((t, t_max), dim=0)
-                print("... RES_INPUT add [x,t]:", x_max.data, t_max.data, ". max res value: ", max_abs_res_input.data)
+            # res_x_RAR = torch.autograd.grad(res_RAR, x_RAR, grad_outputs=torch.ones_like(res_RAR), create_graph=True)[0]
+            # res_t_RAR = torch.autograd.grad(res_RAR, t_RAR, grad_outputs=torch.ones_like(res_RAR), create_graph=True)[0]
+            # res_input_RAR = torch.cat([res_x_RAR, res_t_RAR], axis=1)
+            # norm_res_input_RAR = torch.norm(res_input_RAR/max_abs_p_ti, dim=1).view(-1,1)
+            # mean_res_input_error = torch.mean(norm_res_input)
+            # print("RAR mean res input: ", mean_res_input_error.data)
+            # if(mean_res_input_error > 5e-3):
+            #    max_abs_res_input, max_index = torch.max(norm_res_input_RAR, dim=0)
+            #    x_max = x_RAR[max_index]
+            #    t_max = t_RAR[max_index]
+            #    x = torch.cat((x, x_max), dim=0)
+            #    t = torch.cat((t, t_max), dim=0)
+            #    print("... RES_INPUT add [x,t]:", x_max.data, t_max.data, ". max res value: ", max_abs_res_input.data)
 
         # Exponential learning rate decay
         if (epoch + 1) % iterations_per_decay == 0:
@@ -698,16 +698,14 @@ def plot_p_monte():
 
 def main():
 
-    FLAG_GENERATE_DATA = True
+    FLAG_GENERATE_DATA = False
     if(FLAG_GENERATE_DATA):
         for t1 in t1s:
-            x_sim, p_sim = p_sol_monte(t1=t1, linespace_num=100, stat_sample=1000000)
+            x_sim, p_sim = p_sol_monte(t1=t1, linespace_num=100, stat_sample=100000)
             np.save(DATA_FOLDER+"psim_t"+str(t1)+".npy", p_sim)
             np.save(DATA_FOLDER+"xsim.npy", x_sim)
     # Plot generated data
     plot_p_monte()
-
-    return
 
     max_pi = test_p_init()
     mse_cost_function = torch.nn.MSELoss() # Mean squared error
@@ -716,7 +714,7 @@ def main():
     p_net.apply(init_weights)
     optimizer = torch.optim.Adam(p_net.parameters())
     scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=1.0)
-    # train_p_net(p_net, optimizer, scheduler, mse_cost_function, max_pi, iterations=40000); print("[p_net train complete]")
+    # train_p_net(p_net, optimizer, scheduler, mse_cost_function, max_pi, iterations=200000); print("[p_net train complete]")
     p_net = pos_p_net_train(p_net, PATH=FOLDER+"output/p_net.pt", PATH_LOSS=FOLDER+"output/p_net_train_loss.npy"); p_net.eval()
     max_abs_e1_ti = show_p_net_results(p_net)
     print("max abs e1(x,0):", max_abs_e1_ti)
@@ -725,7 +723,7 @@ def main():
     e1_net.apply(init_weights)
     optimizer = torch.optim.Adam(e1_net.parameters(), lr=1e-3)
     scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=1.0)
-    # train_e1_net(e1_net, optimizer, scheduler, mse_cost_function, p_net, max_abs_e1_ti, iterations=200000); print("[e1_net train complete]")
+    train_e1_net(e1_net, optimizer, scheduler, mse_cost_function, p_net, max_abs_e1_ti, iterations=200000); print("[e1_net train complete]")
     e1_net = pos_e1_net_train(e1_net, PATH=FOLDER+"output/e1_net.pt", PATH_LOSS=FOLDER+"output/e1_net_train_loss.npy"); e1_net.eval()
     show_e1_net_results(p_net, e1_net)
 
