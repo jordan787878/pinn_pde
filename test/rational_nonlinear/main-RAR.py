@@ -61,21 +61,20 @@ def p_sol_monte(t1=T_end, linespace_num=100, stat_sample=10000):
     dtt = 0.01
     t_span = np.arange(t0, t1, dtt)
     num_steps = len(t_span)
-    # Initializing the array for X
-    X = np.zeros((stat_sample, num_steps + 1))
-    # Initializing x with initial samples
-    X[:, 0] = np.random.normal(mu, std, stat_sample)
-    # Vectorized computation for the SDE
+    
+     # Initialize arrays
+    X_last = np.random.normal(mu, std, stat_sample)
+    bins_x1 = np.linspace(x_low, x_hig, num=linespace_num)
+
+    # Vectorized simulation of the SDE
     for step in tqdm(range(1, num_steps + 1), desc="Simulating samples"):
-        w = np.random.normal(0, np.sqrt(dtt), stat_sample)
-        X[:, step] = X[:, step - 1] + f_sde(X[:, step - 1]) * dtt + e * w
-    # Taking only the last column as the final result
-    final_X = X[:, -1].reshape(1, -1)
-    X = final_X
+        dW = np.random.normal(0, np.sqrt(dtt), stat_sample)
+        X_new = X_last + f_sde(X_last) * dtt + e * dW
+        X_last = X_new
 
     bins_x1 = np.linspace(x_low, x_hig, num=linespace_num)
     # Digitize v to find which bin each value falls into for both dimensions
-    bin_indices_x1 = np.digitize(X[0, :], bins_x1) - 1
+    bin_indices_x1 = np.digitize(X_last, bins_x1) - 1
     # Initialize the frequency array
     frequency = np.zeros((len(bins_x1) - 1, 1))
 
@@ -692,7 +691,8 @@ def plot_p_monte():
         plt.plot(x_sim, p_sim, label="t="+str(t1))
     plt.grid()
     plt.legend()
-    plt.show()
+    plt.savefig(FOLDER+"figs/p_sol_monte.png")
+    plt.close()
         
 
 
@@ -701,11 +701,11 @@ def main():
     FLAG_GENERATE_DATA = False
     if(FLAG_GENERATE_DATA):
         for t1 in t1s:
-            x_sim, p_sim = p_sol_monte(t1=t1, linespace_num=100, stat_sample=10000000)
+            x_sim, p_sim = p_sol_monte(t1=t1, linespace_num=100, stat_sample=100000000)
             np.save(DATA_FOLDER+"psim_t"+str(t1)+".npy", p_sim)
             np.save(DATA_FOLDER+"xsim.npy", x_sim)
-        # Plot generated data
-        plot_p_monte()
+    # Plot generated data
+    plot_p_monte()
 
     max_pi = test_p_init()
     mse_cost_function = torch.nn.MSELoss() # Mean squared error
@@ -723,7 +723,7 @@ def main():
     e1_net.apply(init_weights)
     optimizer = torch.optim.Adam(e1_net.parameters(), lr=1e-3)
     scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=1.0)
-    train_e1_net(e1_net, optimizer, scheduler, mse_cost_function, p_net, max_abs_e1_ti, iterations=200000); print("[e1_net train complete]")
+    # train_e1_net(e1_net, optimizer, scheduler, mse_cost_function, p_net, max_abs_e1_ti, iterations=200000); print("[e1_net train complete]")
     e1_net = pos_e1_net_train(e1_net, PATH=FOLDER+"output/e1_net.pt", PATH_LOSS=FOLDER+"output/e1_net_train_loss.npy"); e1_net.eval()
     show_e1_net_results(p_net, e1_net)
 
