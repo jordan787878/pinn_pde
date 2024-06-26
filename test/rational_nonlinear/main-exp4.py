@@ -701,7 +701,7 @@ def main():
     FLAG_GENERATE_DATA = True
     if(FLAG_GENERATE_DATA):
         for t1 in t1s:
-            x_sim, p_sim = p_sol_monte(t1=t1, linespace_num=100, stat_sample=1000)
+            x_sim, p_sim = p_sol_monte(t1=t1, linespace_num=100, stat_sample=10000)
             np.save(DATA_FOLDER+"psim_t"+str(t1)+".npy", p_sim)
             np.save(DATA_FOLDER+"xsim.npy", x_sim)
     # Plot generated data
