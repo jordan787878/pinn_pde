@@ -10,6 +10,7 @@ from matplotlib import cm
 from matplotlib.ticker import LinearLocator, FormatStrFormatter
 import random
 from tqdm import tqdm
+import warnings
 
 # global variable
 # Check if MPS (Apple's Metal Performance Shaders) is available
@@ -17,7 +18,7 @@ from tqdm import tqdm
 #     device = torch.device("mps")
 # else:
 #     device = torch.device("cpu")
-FOLDER = "exp4/run-1/"
+FOLDER = "exp4/tmp/"
 DATA_FOLDER = "data/exp4/"
 device = "cpu"
 print(device)
@@ -27,14 +28,14 @@ np.random.seed(0)
 
 n_d = 1
 mu = -2
-std = 1
+std = 0.5
 a = -0.1
-b = 0.4
+b = 0.1
 c = 0.5
-d = 1
-e = 3
-x_low = -10
-x_hig = 10
+d = 0.5
+e = 0.8
+x_low = -6
+x_hig = 6
 
 t0 = 0
 T_end = 5
@@ -42,7 +43,14 @@ t1s = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]
 
 
 def f_sde(x):
-  return a*(x**3) + b*(x**2) + c*x + d
+    with warnings.catch_warnings():
+        warnings.filterwarnings('error')
+        try:
+            result = a*np.power(x, 3) + b*np.power(x, 2) + c*x + d
+        except RuntimeWarning as e:
+            print(f"Warning occurred at x = {x}: {e}")
+            result = np.nan  # or handle the error in another way
+    return result
 
 
 def p_init(x):
@@ -150,26 +158,6 @@ class Net(nn.Module):
         return output
 
 
-def count_approx_zero_elements(tensor, epsilon=1e-3):
-    """
-    Approximate the count of elements in the tensor that are close to zero within epsilon distance.
-
-    Args:
-        tensor (torch.Tensor): Input tensor of shape (N, 1).
-        epsilon (float): Distance from zero to consider.
-
-    Returns:
-        torch.Tensor: A tensor containing a single value which is the approximate count.
-    """
-    # Calculate the distance of each element from zero
-    distances = torch.abs(tensor)
-    # Apply a smooth indicator function (sigmoid)
-    soft_indicators = torch.sigmoid((epsilon - distances) * 10000)  # scale factor 100000 to make transition sharp
-    # Sum the soft indicators to get the approximate count
-    approx_count = torch.sum(soft_indicators)
-    return approx_count
-
-
 def train_p_net(p_net, optimizer, scheduler, mse_cost_function, max_abs_p_ti, iterations=40000):
     min_loss = np.inf
     loss_history = []
@@ -177,10 +165,18 @@ def train_p_net(p_net, optimizer, scheduler, mse_cost_function, max_abs_p_ti, it
     PATH_LOSS = FOLDER+"output/p_net_train_loss.npy"
     iterations_per_decay = 1000
 
-    x_bc = (torch.rand(1200, 1) * (x_hig - x_low) + x_low).to(device)
+    # Define the mean and covariance matrix
+    _mean = torch.tensor([-2.0])
+    _covariance_matrix = torch.tensor([[0.5]])
+    mvn = torch.distributions.MultivariateNormal(_mean, _covariance_matrix)
+
+    # space-time points for BC
+    x_bc = (torch.rand(250, 1) * (x_hig - x_low) + x_low).to(device)
+    x_bc_normal = mvn.sample((250,))
+    x_bc = torch.cat((x_bc, x_bc_normal), dim=0)
     t_bc = (torch.ones(len(x_bc), 1) * t0).to(device)
 
-    t = (torch.rand(2500, 1, requires_grad=True) * (T_end - t0) + t0).to(device)
+    t = (torch.rand(1000, 1, requires_grad=True) * (T_end - t0) + t0).to(device)
     x = (torch.rand(len(t), 1, requires_grad=True) * (x_hig - x_low) + x_low).to(device)
 
     S = 100000
@@ -211,7 +207,7 @@ def train_p_net(p_net, optimizer, scheduler, mse_cost_function, max_abs_p_ti, it
         loss = mse_u + mse_res + mse_norm_res_input
 
         # Save the min loss model
-        if(loss.data < 0.95*min_loss):
+        if(loss.data < min_loss):
             print("save epoch:", epoch, ", loss:", loss.data, ", ic:",mse_u.data, ", res:",mse_res.data, 
                   ", res freq:", mse_norm_res_input.data,
                   #",l-inf ic:", linf_u.data, ",l-inf res:",linf_res.data, ",D res:", linf_res_x.data, linf_res_t.data, mse_res_x.data, mse_res_t.data,
@@ -249,7 +245,7 @@ def train_p_net(p_net, optimizer, scheduler, mse_cost_function, max_abs_p_ti, it
 
             res_RAR = res_func(x_RAR, t_RAR, p_net)/max_abs_p_ti
             mean_res_error = torch.mean(torch.abs(res_RAR))
-            print("RAR mean res: ", mean_res_error.data)
+            print("... RAR mean res: ", mean_res_error.data)
             if(mean_res_error > 5e-3):
                 max_abs_res, max_index = torch.max(torch.abs(res_RAR), dim=0)
                 x_max = x_RAR[max_index]
@@ -258,11 +254,10 @@ def train_p_net(p_net, optimizer, scheduler, mse_cost_function, max_abs_p_ti, it
                 t = torch.cat((t, t_max), dim=0)
                 print("... RES add [x,t]:", x_max.data, t_max.data, ". max res value: ", max_abs_res.data)
                 FLAG = False
-
             # res_x_RAR = torch.autograd.grad(res_RAR, x_RAR, grad_outputs=torch.ones_like(res_RAR), create_graph=True)[0]
             # res_t_RAR = torch.autograd.grad(res_RAR, t_RAR, grad_outputs=torch.ones_like(res_RAR), create_graph=True)[0]
             # res_input_RAR = torch.cat([res_x_RAR, res_t_RAR], axis=1)
-            # norm_res_input_RAR = torch.norm(res_input_RAR/max_abs_p_ti, dim=1).view(-1,1)
+            # norm_res_input_RAR = torch.norm(res_input_RAR, dim=1).view(-1,1)
             # mean_res_input_error = torch.mean(norm_res_input)
             # print("RAR mean res input: ", mean_res_input_error.data)
             # if(mean_res_input_error > 5e-3):
@@ -272,21 +267,21 @@ def train_p_net(p_net, optimizer, scheduler, mse_cost_function, max_abs_p_ti, it
             #    x = torch.cat((x, x_max), dim=0)
             #    t = torch.cat((t, t_max), dim=0)
             #    print("... RES_INPUT add [x,t]:", x_max.data, t_max.data, ". max res value: ", max_abs_res_input.data)
+            #    FLAG = False
+
+        if (epoch%1000 == 0):
+            print(epoch,"Traning Loss:",loss.data, 
+                #   ", Time domain:", min(t).data, ",", max(t).data,
+                #   ", X domain:", min(x[:,0]).data, ",", max(x[:,0]).data
+                    )
+            np.save(PATH_LOSS, np.array(loss_history))
+
+        loss.backward(retain_graph=True) # This is for computing gradients using backward propagation
+        optimizer.step() # This is equivalent to : theta_new = theta_old - alpha * derivative of J w.r.t theta
 
         # Exponential learning rate decay
         if (epoch + 1) % iterations_per_decay == 0:
             scheduler.step()
-
-        with torch.autograd.no_grad():
-            if (epoch%1000 == 0):
-                print(epoch,"Traning Loss:",loss.data, 
-                    #   ", Time domain:", min(t).data, ",", max(t).data,
-                    #   ", X domain:", min(x[:,0]).data, ",", max(x[:,0]).data
-                     )
-                np.save(PATH_LOSS, np.array(loss_history))
-
-        loss.backward(retain_graph=True) # This is for computing gradients using backward propagation
-        optimizer.step() # This is equivalent to : theta_new = theta_old - alpha * derivative of J w.r.t theta
 
 
 
@@ -454,10 +449,18 @@ def train_e1_net(e1_net, optimizer, scheduler1, mse_cost_function, p_net, max_ab
     PATH_LOSS = FOLDER+"output/e1_net_train_loss.npy"
     iterations_per_decay = 1000
 
-    x_bc = (torch.rand(1200, 1) * (x_hig - x_low) + x_low).to(device)
+    # Define the mean and covariance matrix
+    _mean = torch.tensor([-2.0])
+    _covariance_matrix = torch.tensor([[0.5]])
+    mvn = torch.distributions.MultivariateNormal(_mean, _covariance_matrix)
+
+    # space-time points for BC
+    x_bc = (torch.rand(250, 1) * (x_hig - x_low) + x_low).to(device)
+    x_bc_normal = mvn.sample((250,))
+    x_bc = torch.cat((x_bc, x_bc_normal), dim=0)
     t_bc = (torch.ones(len(x_bc), 1) * t0).to(device)
 
-    t = (torch.rand(2500, 1, requires_grad=True) * (T_end - t0) + t0).to(device)
+    t = (torch.rand(1000, 1, requires_grad=True) * (T_end - t0) + t0).to(device)
     x = (torch.rand(len(t), 1, requires_grad=True) * (x_hig - x_low) + x_low).to(device)
 
     S = 100000
@@ -489,9 +492,9 @@ def train_e1_net(e1_net, optimizer, scheduler1, mse_cost_function, p_net, max_ab
         loss = mse_u + mse_res + mse_norm_res_input
 
         # Save the min loss model
-        if(loss.data < 0.95*min_loss):
+        if(loss.data < min_loss):
             print("e1net epoch:", epoch, ",loss:", loss.data, ",ic loss:", mse_u.data, ",res:", mse_res.data,
-                  ",res freq:", mse_norm_res_input.data
+                  # ",res freq:", mse_norm_res_input.data
                   # , l_inf_res.data,# quotient_max.data,
                   # ",a1(t0):", alpha1_t0.data, "error(t0):",error1_t0.data)
                 )
@@ -506,29 +509,40 @@ def train_e1_net(e1_net, optimizer, scheduler1, mse_cost_function, p_net, max_ab
 
         loss_history.append(loss.data)
 
+        if (epoch%1000 == 0):
+            print(epoch,"Traning Loss:",loss.data)
+            np.save(PATH_LOSS, np.array(loss_history))
+
+        loss.backward(retain_graph=True) 
+        optimizer.step()
+
+        # Exponential learning rate decay
+        if (epoch + 1) % iterations_per_decay == 0:
+            scheduler1.step()
+
         # RAR
         if (epoch%1000 == 0 and FLAG):
             x_RAR = (torch.rand(S, n_d, requires_grad=True) * (x_hig - x_low) + x_low).to(device)
             t_RAR = (torch.rand(S, 1, requires_grad=True) *   (T_end - t0) + t0).to(device)
-            t0_RAR = 0.0*t_RAR + t0
-            ic_hat_RAR = e1_net(x_RAR, t0_RAR)/max_abs_e1_x_0
-            p_bc_RAR = p_init(x_RAR.detach().numpy())
-            p_bc_RAR = Variable(torch.from_numpy(p_bc_RAR).float(), requires_grad=False).to(device)
-            phat_bc_RAR = p_net(x_RAR, t0_RAR)
-            ic_RAR = (p_bc_RAR - phat_bc_RAR)/max_abs_e1_x_0
-            mean_ic_error = torch.mean(torch.abs(ic_RAR - ic_hat_RAR))
-            print("RAR mean IC: ", mean_ic_error.data)
-            if(mean_ic_error > 5e-3):
-                max_abs_ic, max_index = torch.max(torch.abs(ic_RAR - ic_hat_RAR), dim=0)
-                x_max = x_RAR[max_index]
-                t_max = t0_RAR[max_index]
-                x_bc = torch.cat((x_bc, x_max), dim=0)
-                t_bc = torch.cat((t_bc, t_max), dim=0)
-                print("... IC add [x,t]:", x_max.data, t_max.data, ". max ic value: ", max_abs_ic.data)
-                FLAG = False
+            # t0_RAR = 0.0*t_RAR + t0
+            # ic_hat_RAR = e1_net(x_RAR, t0_RAR)/max_abs_e1_x_0
+            # p_bc_RAR = p_init(x_RAR.detach().numpy())
+            # p_bc_RAR = Variable(torch.from_numpy(p_bc_RAR).float(), requires_grad=False).to(device)
+            # phat_bc_RAR = p_net(x_RAR, t0_RAR)
+            # ic_RAR = (p_bc_RAR - phat_bc_RAR)/max_abs_e1_x_0
+            # mean_ic_error = torch.mean(torch.abs(ic_RAR - ic_hat_RAR))
+            # print("RAR mean IC: ", mean_ic_error.data)
+            # if(mean_ic_error > 5e-3):
+            #    max_abs_ic, max_index = torch.max(torch.abs(ic_RAR - ic_hat_RAR), dim=0)
+            #    x_max = x_RAR[max_index]
+            #    t_max = t0_RAR[max_index]
+            #    x_bc = torch.cat((x_bc, x_max), dim=0)
+            #    t_bc = torch.cat((t_bc, t_max), dim=0)
+            #    print("... IC add [x,t]:", x_max.data, t_max.data, ". max ic value: ", max_abs_ic.data)
+            #    FLAG = False
             res_RAR = e1_res_func(x_RAR, t_RAR, e1_net, p_net)/max_abs_e1_x_0
             mean_res_error = torch.mean(torch.abs(res_RAR))
-            print("RAR mean res: ", mean_res_error.data)
+            print("... RAR mean res: ", mean_res_error.data)
             if(mean_res_error > 5e-3):
                 max_abs_res, max_index = torch.max(torch.abs(res_RAR), dim=0)
                 x_max = x_RAR[max_index]
@@ -550,15 +564,6 @@ def train_e1_net(e1_net, optimizer, scheduler1, mse_cost_function, p_net, max_ab
             #     x = torch.cat((x, x_max), dim=0)
             #     t = torch.cat((t, t_max), dim=0)
             #     print("... RES_INPUT add [x,t]:", x_max.data, t_max.data, ". max res value: ", max_abs_res_input.data)
-
-        # Exponential learning rate decay
-        if (epoch + 1) % iterations_per_decay == 0:
-            scheduler1.step()
-        if (epoch%1000 == 0):
-            print(epoch,"Traning Loss:",loss.data)
-            np.save(PATH_LOSS, np.array(loss_history))
-        loss.backward(retain_graph=True) 
-        optimizer.step()
 
 
 def pos_e1_net_train(e1_net, PATH, PATH_LOSS):
@@ -692,6 +697,7 @@ def plot_p_monte():
     plt.grid()
     plt.legend()
     plt.savefig(FOLDER+"figs/p_sol_monte.png")
+    print("save fig to "+FOLDER+"figs/p_sol_monte.png")
     plt.close()
         
 
@@ -701,11 +707,12 @@ def main():
     FLAG_GENERATE_DATA = False
     if(FLAG_GENERATE_DATA):
         for t1 in t1s:
-            x_sim, p_sim = p_sol_monte(t1=t1, linespace_num=100, stat_sample=100000000)
+            x_sim, p_sim = p_sol_monte(t1=t1, linespace_num=100, stat_sample=100000)
             np.save(DATA_FOLDER+"psim_t"+str(t1)+".npy", p_sim)
             np.save(DATA_FOLDER+"xsim.npy", x_sim)
     # Plot generated data
     plot_p_monte()
+    return
 
     max_pi = test_p_init()
     mse_cost_function = torch.nn.MSELoss() # Mean squared error
@@ -713,8 +720,8 @@ def main():
     p_net = Net().to(device)
     p_net.apply(init_weights)
     optimizer = torch.optim.Adam(p_net.parameters())
-    scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=1.0)
-    # train_p_net(p_net, optimizer, scheduler, mse_cost_function, max_pi, iterations=50000); print("[p_net train complete]")
+    scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.95)
+    train_p_net(p_net, optimizer, scheduler, mse_cost_function, max_pi, iterations=50000); print("[p_net train complete]")
     p_net = pos_p_net_train(p_net, PATH=FOLDER+"output/p_net.pt", PATH_LOSS=FOLDER+"output/p_net_train_loss.npy"); p_net.eval()
     max_abs_e1_ti = show_p_net_results(p_net)
     print("max abs e1(x,0):", max_abs_e1_ti)
@@ -722,8 +729,8 @@ def main():
     e1_net = E1Net(scale=max_abs_e1_ti).to(device)
     e1_net.apply(init_weights)
     optimizer = torch.optim.Adam(e1_net.parameters(), lr=1e-3)
-    scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=1.0)
-    # train_e1_net(e1_net, optimizer, scheduler, mse_cost_function, p_net, max_abs_e1_ti, iterations=100000); print("[e1_net train complete]")
+    scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.95)
+    train_e1_net(e1_net, optimizer, scheduler, mse_cost_function, p_net, max_abs_e1_ti, iterations=100000); print("[e1_net train complete]")
     e1_net = pos_e1_net_train(e1_net, PATH=FOLDER+"output/e1_net.pt", PATH_LOSS=FOLDER+"output/e1_net_train_loss.npy"); e1_net.eval()
     show_e1_net_results(p_net, e1_net)
 
