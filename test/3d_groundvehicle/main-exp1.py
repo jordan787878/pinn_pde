@@ -88,7 +88,7 @@ def test_dynamics():
     for t in t_span:
         if(_t_sim % 0.5 == 0):
             axs.scatter(x[0], x[1], x[2]*180.0/pi)
-            print(_t_sim)
+            print(_t_sim, x[0], x[1], x[2])
 
         # Generate Brownian motion increments
         w = np.random.normal(0, np.sqrt(dtt), size=n_d)
@@ -220,15 +220,21 @@ def plot_p_sol_Monte():
             ))
 
             # Change camera view for a better view of the sides, XZ plane
+            name = 'eye = (x:0., y:0., z:2.5)'
+            camera = dict(
+                        eye=dict(x=0., y=0., z=2.5)
+                        )
+
+            fig.update_layout(scene_camera=camera, title="p Monte")
             # (see https://plotly.com/python/v3/3d-camera-controls/)
-            fig.update_layout(
-                scene_camera = dict(
-                up=dict(x=0, y=0, z=1),
-                center=dict(x=0, y=0, z=0),
-                eye=dict(x=0.1, y=2.5, z=0.1)
-                ),
-                title="p Monte"
-            )
+            # fig.update_layout(
+            #    scene_camera = dict(
+            #    up=dict(x=0, y=0, z=1),
+            #    center=dict(x=0, y=0, z=0),
+            #    eye=dict(x=0.1, y=2.5, z=0.1)
+            #    ),
+            #    title="p Monte"
+            #)
             # fig.show()
             fig.write_image(FOLDER+"figs/p_sol_monte_t"+str(t1)+".png")
         
@@ -529,14 +535,17 @@ def show_p_net_results(p_net):
             ))
             # Change camera view for a better view of the sides, XZ plane
             # (see https://plotly.com/python/v3/3d-camera-controls/)
-            fig.update_layout(
-                scene_camera = dict(
-                up=dict(x=0, y=0, z=1),
-                center=dict(x=0, y=0, z=0),
-                eye=dict(x=0.1, y=2.5, z=0.1)
-                ),
-                title="p NN"
-            )
+            name = 'eye = (x:0., y:0., z:2.5)'
+            camera = dict(eye=dict(x=0., y=0., z=2.5))
+            fig.update_layout(scene_camera=camera, title="p NN")
+            # fig.update_layout(
+            #    scene_camera = dict(
+            #    up=dict(x=0, y=0, z=1),
+            #    center=dict(x=0, y=0, z=0),
+            #    eye=dict(x=0.1, y=2.5, z=0.1)
+            #    ),
+            #    title="p NN"
+            # )
             # fig.show()
             fig.write_image(FOLDER+"figs/p_hat_t"+str(t1)+".png")
 
