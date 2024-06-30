@@ -99,9 +99,8 @@ def test_dynamics():
     axs.set_xlabel('x')
     axs.set_ylabel('y')
     axs.set_zlabel(r'$\theta$')
-
-    plt.show()
-
+    plt.savefig(FOLDER+"figs/test_dynamics.png")
+    plt.close()
 
 
 def p_init(x):
@@ -945,8 +944,8 @@ def show_e1_net_results(p_net, e1_net):
 
 
 def main():
-    # test_dynamics()
-    # test_p_sol_monte(linspace_num=100, stat_sample=10000)
+    test_dynamics()
+    test_p_sol_monte(linspace_num=100, stat_sample=10000)
     plot_p_sol_Monte()
 
     max_pi = test_p_init()
