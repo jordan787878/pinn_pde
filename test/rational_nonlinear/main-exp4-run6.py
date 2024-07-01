@@ -18,7 +18,8 @@ import warnings
 #     device = torch.device("mps")
 # else:
 #     device = torch.device("cpu")
-FOLDER = "exp4/run-4/"
+FOLDER = "exp4/run-6/"
+
 DATA_FOLDER = "data/exp4/"
 device = "cpu"
 print(device)
@@ -422,7 +423,10 @@ class E1Net(nn.Module):
         self.output_layer =  (nn.Linear(neurons,1))
         self.activation = nn.Tanh()
     def forward(self, x, t):
-        inputs = torch.cat([x,t],axis=1)
+        _x = (x-x_low)/(x_hig-x_low)
+        _t = (t-t0)/(T_end-t0)
+        inputs = torch.cat([_x, _t],axis=1)
+        # inputs = torch.cat([x,t],axis=1)
         layer1_out = self.activation((self.hidden_layer1(inputs)))
         layer2_out = self.activation((self.hidden_layer2(layer1_out)))
         layer3_out = self.activation((self.hidden_layer3(layer2_out)))

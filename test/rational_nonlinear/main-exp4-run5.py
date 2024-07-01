@@ -18,7 +18,8 @@ import warnings
 #     device = torch.device("mps")
 # else:
 #     device = torch.device("cpu")
-FOLDER = "exp4/tmp/"
+FOLDER = "exp4/run-5/"
+
 DATA_FOLDER = "data/exp4/"
 device = "cpu"
 print(device)

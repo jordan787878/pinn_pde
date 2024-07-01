@@ -217,4 +217,18 @@ p: 39648 , loss: tensor(0.0003) , ic: tensor(0.0002) , res: tensor(1.8439e-06) ,
 ### exp4 ###
 
 <run-4>
+0 Traning Loss: tensor(2.7894)
+... RAR mean res:  tensor(0.3259)
+... RES add [x,t]: tensor([[-5.6303]]) tensor([[4.9847]]) . max res value:  tensor([2.8846])
+e1net epoch: 1 ,loss: tensor(1.9681) ,ic loss: tensor(0.0588) ,res: tensor(0.2501) ,res freq: tensor(1.6592)
+e1net epoch: 5 ,loss: tensor(1.8434) ,ic loss: tensor(0.0559) ,res: tensor(0.2004) ,res freq: tensor(1.5871)
+e1net epoch: 6 ,loss: tensor(1.7148) ,ic loss: tensor(0.0566) ,res: tensor(0.0991) ,res freq: tensor(1.5591)
+e1net epoch: 26 ,loss: tensor(1.6288) ,ic loss: tensor(0.0547) ,res: tensor(0.0358) ,res freq: tensor(1.5383)
 e1_net: 60000 epochs: 57362 ,loss: tensor(0.0010) ,ic loss: tensor(0.0002) ,res: tensor(5.5449e-05) ,res freq: tensor(0.0007)
+
+<run-5>
+testing residual connection ---> does't improve
+
+<run-6>
+testing normalizng inputs domain to [0,1] ---> doesn't improve
+58514 ,loss: tensor(0.0031) ,ic loss: tensor(0.0001) ,res: tensor(0.0002) ,res freq: tensor(0.0028)
