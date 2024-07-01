@@ -207,7 +207,8 @@ def plot_p_sol_Monte():
     # axs = [fig.add_subplot(1, len(t1s), i+1, projection='3d') for i in range(len(t1s))]
     # j = 0
     for t1 in t1s:
-        if(t1 <= 2.0):
+        if(t1 <= 10):
+            print("plot p monte",t1)
             p = np.load(FOLDER_DATA+"p_sim_grid"+str(t1)+".npy")
             fig = go.Figure(data=go.Volume(
             x=x1.flatten(), y=x2.flatten(), z=x3.flatten(),
@@ -955,8 +956,8 @@ def show_e1_net_results(p_net, e1_net):
 
 
 def main():
-    test_dynamics()
-    # test_p_sol_monte(linspace_num=100, stat_sample=10000)
+    # test_dynamics()
+    # test_p_sol_monte(linspace_num=100, stat_sample=10000000)
     plot_p_sol_Monte()
 
     max_pi = test_p_init()
@@ -968,7 +969,7 @@ def main():
     optimizer = torch.optim.Adam(p_net.parameters(), lr=1e-3)
     # optimizer = torch.optim.Adamax(p_net.parameters(), lr=1e-3)
     scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.95)
-    # train_p_net(p_net, optimizer, scheduler, mse_cost_function, max_pi, iterations=50000); print("p_net train complete")
+    # train_p_net(p_net, optimizer, scheduler, mse_cost_function, max_pi, iterations=100000); print("p_net train complete")
     p_net = pos_p_net_train(p_net, PATH=FOLDER+"output/p_net.pth", PATH_LOSS=FOLDER+"output/p_net_train_loss.npy"); p_net.eval()
     max_abe_e1_ti = show_p_net_results(p_net)
     print("max abs e1(x,ti):", max_abe_e1_ti)
