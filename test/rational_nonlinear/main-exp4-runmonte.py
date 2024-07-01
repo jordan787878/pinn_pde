@@ -738,13 +738,14 @@ def plot_p_monte():
 def main():
 
     FLAG_GENERATE_DATA = True
-    N = 2.0
+    N = 1.0
     if(FLAG_GENERATE_DATA):
         for t1 in t1s:
             x_sim, _ = p_sol_monte(t1=t1, linespace_num=100, stat_sample=1)
             p_sim = 0.0*(x_sim.reshape(-1,1))
-            for i in range(2):
-                _ , _p_sim = p_sol_monte(t1=t1, linespace_num=100, stat_sample=100000)
+            for i in range(1):
+                print("generate ", t1, " batch ",i)
+                _ , _p_sim = p_sol_monte(t1=t1, linespace_num=100, stat_sample=1000000)
             p_sim = p_sim + (_p_sim/N)
             # _x_sim, _p_sim = p_sol_monte(t1=t1, linespace_num=100, stat_sample=1000000000)
             # p_sim = 0.5*(p_sim + _p_sim)
