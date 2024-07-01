@@ -447,8 +447,8 @@ class E1Net(nn.Module):
         self.hidden_layer4 = (nn.Linear(neurons,neurons))
         self.hidden_layer5 = (nn.Linear(neurons,neurons))
         self.hidden_layer6 = (nn.Linear(neurons,neurons))
-        self.hidden_layer7 = (nn.Linear(neurons,2))
-        self.hidden_layer8 = (nn.Linear(2,neurons))
+        self.hidden_layer7 = (nn.Linear(neurons,neurons))
+        self.hidden_layer8 = (nn.Linear(neurons,neurons))
         self.output_layer =  (nn.Linear(neurons,1))
         self.activation = nn.Tanh()
     def forward(self, x, t):
@@ -461,8 +461,8 @@ class E1Net(nn.Module):
         layer5_out = self.activation((self.hidden_layer5(layer4_out)))
         layer6_out = self.activation((self.hidden_layer6(layer5_out)))
         layer7_out = self.activation((self.hidden_layer7(layer6_out)))
-        # print(layer7_out.shape)
-        layer8_out = self.activation((self.hidden_layer8(layer7_out+inputs)))
+        inputs_res = inputs.repeat(1, 15)
+        layer8_out = self.activation((self.hidden_layer8(layer7_out+inputs_res)))
         output = self.output_layer(layer8_out)
         output = self.scale * output
         return output
@@ -763,10 +763,10 @@ def plot_p_monte():
 
 def main():
 
-    FLAG_GENERATE_DATA = False
+    FLAG_GENERATE_DATA = True
     if(FLAG_GENERATE_DATA):
         for t1 in t1s:
-            x_sim, p_sim = p_sol_monte(t1=t1, linespace_num=100, stat_sample=100000)
+            x_sim, p_sim = p_sol_monte(t1=t1, linespace_num=100, stat_sample=100000000)
             np.save(DATA_FOLDER+"psim_t"+str(t1)+".npy", p_sim)
             np.save(DATA_FOLDER+"xsim.npy", x_sim)
     # Plot generated data
@@ -788,7 +788,7 @@ def main():
     e1_net.apply(init_weights)
     optimizer = torch.optim.Adam(e1_net.parameters())
     scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.95)
-    train_e1_net(e1_net, optimizer, scheduler, mse_cost_function, p_net, max_abs_e1_ti, iterations=60000); print("[e1_net train complete]")
+    # train_e1_net(e1_net, optimizer, scheduler, mse_cost_function, p_net, max_abs_e1_ti, iterations=200000); print("[e1_net train complete]")
     e1_net = pos_e1_net_train(e1_net, PATH=FOLDER+"output/e1_net.pt", PATH_LOSS=FOLDER+"output/e1_net_train_loss.npy"); e1_net.eval()
     show_e1_net_results(p_net, e1_net)
 
