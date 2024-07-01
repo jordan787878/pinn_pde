@@ -138,7 +138,7 @@ def init_weights(m):
 # p_net
 class Net(nn.Module):
     def __init__(self, scale=1.0): 
-        neurons = 20
+        neurons = 30
         self.scale = scale
         super(Net, self).__init__()
         self.hidden_layer1 = (nn.Linear(n_d+1,neurons))
@@ -152,9 +152,10 @@ class Net(nn.Module):
         self.output_layer =  (nn.Linear(neurons,1))
     def forward(self, x, t):
         # normalization to [0-1]
-        _x = (x-x_low)/(x_hig-x_low)
-        _t = (t-t0)/(T_end-t0)
-        inputs = torch.cat([_x,_t],axis=1)
+        # _x = 2.0*(x-x_low)/(x_hig-x_low) - 1.0
+        # _t = 2.0*(t-t0)/(T_end-t0) - 1.0
+        # inputs = torch.cat([_x,_t],axis=1)
+        inputs = torch.cat([x, t],axis=1)
         layer1_out = F.softplus((self.hidden_layer1(inputs)))
         layer2_out = F.softplus((self.hidden_layer2(layer1_out)))
         layer3_out = F.softplus((self.hidden_layer3(layer2_out)))
@@ -187,8 +188,10 @@ def train_p_net(p_net, optimizer, scheduler, mse_cost_function, max_abs_p_ti, it
     x_bc = torch.cat((x_bc, x_bc_normal), dim=0)
     t_bc = (torch.ones(len(x_bc), 1) * t0).to(device)
 
-    x = (torch.rand(1000, 1, requires_grad=True)*(x_hig-x_low)+x_low).to(device)
     t = (torch.rand(1000, 1, requires_grad=True)*(T_end-t0)   +t0).to(device)
+    t_init = (torch.ones(100, 1, requires_grad=True) * t0).to(device)
+    t = torch.cat((t, t_init), dim=0)
+    x = (torch.rand(len(t), 1, requires_grad=True)*(x_hig-x_low)+x_low).to(device)
 
     S = 100000
     FLAG = False
@@ -237,8 +240,10 @@ def train_p_net(p_net, optimizer, scheduler, mse_cost_function, max_abs_p_ti, it
 
         # RAR
         if (epoch%1000 == 0 and FLAG):
-            x_RAR = (torch.rand(S, n_d, requires_grad=True)*(x_hig-x_low)+x_low).to(device)
             t_RAR = (torch.rand(S, 1, requires_grad=True)  *(T_end-t0)   +t0).to(device)
+            _t_init = (torch.ones(100, 1, requires_grad=True) * t0).to(device)
+            t_RAR = torch.cat((t, _t_init), dim=0)
+            x_RAR = (torch.rand(len(t_RAR), n_d, requires_grad=True)*(x_hig-x_low)+x_low).to(device)
             # t0_RAR = 0.0*t_RAR + t0
             # ic_hat_RAR = p_net(x_RAR, t0_RAR)
             # p_bc_RAR = p_init(x_RAR.detach().numpy())
@@ -253,7 +258,6 @@ def train_p_net(p_net, optimizer, scheduler, mse_cost_function, max_abs_p_ti, it
             #     t_bc = torch.cat((t_bc, t_max), dim=0)
             #     print("... IC add [x,t]:", x_max.data, t_max.data, ". max ic value: ", max_abs_ic.data)
             #     FLAG = False
-
             res_RAR = res_func(x_RAR, t_RAR, p_net)/max_abs_p_ti
             mean_res_error = torch.mean(torch.abs(res_RAR))
             print("... RAR mean res: ", mean_res_error.data)
@@ -404,7 +408,7 @@ def show_p_net_results(p_net):
 
 class E1Net(nn.Module):
     def __init__(self, scale=1.0): 
-        neurons = 32
+        neurons = 30
         self.scale = scale
         super(E1Net, self).__init__()
         self.hidden_layer1 = (nn.Linear(n_d+1,neurons))
@@ -412,6 +416,9 @@ class E1Net(nn.Module):
         self.hidden_layer3 = (nn.Linear(neurons,neurons))
         self.hidden_layer4 = (nn.Linear(neurons,neurons))
         self.hidden_layer5 = (nn.Linear(neurons,neurons))
+        self.hidden_layer6 = (nn.Linear(neurons,neurons))
+        self.hidden_layer7 = (nn.Linear(neurons,neurons))
+        self.hidden_layer8 = (nn.Linear(neurons,neurons))
         self.output_layer =  (nn.Linear(neurons,1))
         self.activation = nn.Tanh()
     def forward(self, x, t):
@@ -421,7 +428,10 @@ class E1Net(nn.Module):
         layer3_out = self.activation((self.hidden_layer3(layer2_out)))
         layer4_out = self.activation((self.hidden_layer4(layer3_out)))
         layer5_out = self.activation((self.hidden_layer5(layer4_out)))
-        output = self.output_layer(layer5_out)
+        layer6_out = self.activation((self.hidden_layer6(layer5_out)))
+        layer7_out = self.activation((self.hidden_layer7(layer6_out)))
+        layer8_out = self.activation((self.hidden_layer8(layer7_out)))
+        output = self.output_layer(layer8_out)
         output = self.scale * output
         return output
     
@@ -465,14 +475,18 @@ def train_e1_net(e1_net, optimizer, scheduler1, mse_cost_function, p_net, max_ab
     _covariance_matrix = torch.tensor([[0.5]])
     mvn = torch.distributions.MultivariateNormal(_mean, _covariance_matrix)
 
+    # Normalized space-time points
     # space-time points for BC
-    x_bc = (torch.rand(250, 1) * (x_hig - x_low) + x_low).to(device)
-    x_bc_normal = mvn.sample((250,))
+    x_bc = (torch.rand(250, 1)*(x_hig-x_low)+x_low).to(device)
+    x_bc_normal = mvn.sample((250,)).to(device)
+    x_bc_normal = torch.clamp(x_bc_normal, min=x_low, max=x_hig)
     x_bc = torch.cat((x_bc, x_bc_normal), dim=0)
     t_bc = (torch.ones(len(x_bc), 1) * t0).to(device)
 
-    t = (torch.rand(1000, 1, requires_grad=True) * (T_end - t0) + t0).to(device)
-    x = (torch.rand(len(t), 1, requires_grad=True) * (x_hig - x_low) + x_low).to(device)
+    t = (torch.rand(1000, 1, requires_grad=True)*(T_end-t0)   +t0).to(device)
+    t_init = (torch.ones(100, 1, requires_grad=True) * t0).to(device)
+    t = torch.cat((t, t_init), dim=0)
+    x = (torch.rand(len(t), 1, requires_grad=True)*(x_hig-x_low)+x_low).to(device)
 
     S = 100000
     FLAG = False
@@ -503,9 +517,9 @@ def train_e1_net(e1_net, optimizer, scheduler1, mse_cost_function, p_net, max_ab
         loss = mse_u + mse_res + mse_norm_res_input
 
         # Save the min loss model
-        if(loss.data < min_loss):
+        if(loss.data < 0.95*min_loss):
             print("e1net epoch:", epoch, ",loss:", loss.data, ",ic loss:", mse_u.data, ",res:", mse_res.data,
-                  # ",res freq:", mse_norm_res_input.data
+                  ",res freq:", mse_norm_res_input.data
                   # , l_inf_res.data,# quotient_max.data,
                   # ",a1(t0):", alpha1_t0.data, "error(t0):",error1_t0.data)
                 )
@@ -533,8 +547,10 @@ def train_e1_net(e1_net, optimizer, scheduler1, mse_cost_function, p_net, max_ab
 
         # RAR
         if (epoch%1000 == 0 and FLAG):
-            x_RAR = (torch.rand(S, n_d, requires_grad=True) * (x_hig - x_low) + x_low).to(device)
-            t_RAR = (torch.rand(S, 1, requires_grad=True) *   (T_end - t0) + t0).to(device)
+            t_RAR = (torch.rand(S, 1, requires_grad=True)  *(T_end-t0)   +t0).to(device)
+            _t_init = (torch.ones(100, 1, requires_grad=True) * t0).to(device)
+            t_RAR = torch.cat((t, _t_init), dim=0)
+            x_RAR = (torch.rand(len(t_RAR), n_d, requires_grad=True)*(x_hig-x_low)+x_low).to(device)
             # t0_RAR = 0.0*t_RAR + t0
             # ic_hat_RAR = e1_net(x_RAR, t0_RAR)/max_abs_e1_x_0
             # p_bc_RAR = p_init(x_RAR.detach().numpy())
@@ -554,7 +570,7 @@ def train_e1_net(e1_net, optimizer, scheduler1, mse_cost_function, p_net, max_ab
             res_RAR = e1_res_func(x_RAR, t_RAR, e1_net, p_net)/max_abs_e1_x_0
             mean_res_error = torch.mean(torch.abs(res_RAR))
             print("... RAR mean res: ", mean_res_error.data)
-            if(mean_res_error > 5e-3):
+            if(mean_res_error > 0.0):
                 max_abs_res, max_index = torch.max(torch.abs(res_RAR), dim=0)
                 x_max = x_RAR[max_index]
                 t_max = t_RAR[max_index]
@@ -731,18 +747,16 @@ def main():
     p_net.apply(init_weights)
     optimizer = torch.optim.Adam(p_net.parameters())
     scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.95)
-    train_p_net(p_net, optimizer, scheduler, mse_cost_function, max_pi, iterations=10000); print("[p_net train complete]")
+    # train_p_net(p_net, optimizer, scheduler, mse_cost_function, max_pi, iterations=30000); print("[p_net train complete]")
     p_net = pos_p_net_train(p_net, PATH=FOLDER+"output/p_net.pt", PATH_LOSS=FOLDER+"output/p_net_train_loss.npy"); p_net.eval()
     max_abs_e1_ti = show_p_net_results(p_net)
     print("max abs e1(x,0):", max_abs_e1_ti)
 
-    return
-
     e1_net = E1Net(scale=max_abs_e1_ti).to(device)
     e1_net.apply(init_weights)
-    optimizer = torch.optim.Adam(e1_net.parameters(), lr=1e-3)
+    optimizer = torch.optim.Adam(e1_net.parameters())
     scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.95)
-    train_e1_net(e1_net, optimizer, scheduler, mse_cost_function, p_net, max_abs_e1_ti, iterations=100000); print("[e1_net train complete]")
+    train_e1_net(e1_net, optimizer, scheduler, mse_cost_function, p_net, max_abs_e1_ti, iterations=60000); print("[e1_net train complete]")
     e1_net = pos_e1_net_train(e1_net, PATH=FOLDER+"output/e1_net.pt", PATH_LOSS=FOLDER+"output/e1_net_train_loss.npy"); e1_net.eval()
     show_e1_net_results(p_net, e1_net)
 
