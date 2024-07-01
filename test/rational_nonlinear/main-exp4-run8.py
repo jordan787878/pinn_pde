@@ -12,14 +12,16 @@ import random
 from tqdm import tqdm
 import warnings
 
+FOLDER = "exp4/run-8/"
+
+DATA_FOLDER = "data/exp4/"
+
 # global variable
 # Check if MPS (Apple's Metal Performance Shaders) is available
 # if torch.backends.mps.is_available():
 #     device = torch.device("mps")
 # else:
 #     device = torch.device("cpu")
-FOLDER = "exp4/run-7/"
-DATA_FOLDER = "data/exp4/"
 device = "cpu"
 print(device)
 # Set a fixed seed for reproducibility
@@ -411,7 +413,7 @@ class E1Net(nn.Module):
         neurons = 30
         self.scale = scale
         super(E1Net, self).__init__()
-        self.hidden_layer1 = (nn.Linear(n_d+1,neurons))
+        self.hidden_layer1 = (nn.Linear(8,neurons))
         self.hidden_layer2 = (nn.Linear(neurons,neurons))
         self.hidden_layer3 = (nn.Linear(neurons,neurons))
         self.hidden_layer4 = (nn.Linear(neurons,neurons))
@@ -425,7 +427,25 @@ class E1Net(nn.Module):
         self.output_layer =  (nn.Linear(neurons,1))
         self.activation = nn.Tanh()
     def forward(self, x, t):
-        inputs = torch.cat([x,t],axis=1)
+        ### Transformer position encodint ###
+        # position embedding d=4, n=100
+        # 0 <= i < d/2
+        w1 = (1/pow(100, 2*0/4)) # power(n, (2*i)/d)
+        w2 = (1/pow(100, 2*1/4)) # power(n, (2*(i+1))/d)
+
+        x_p1 = torch.sin(w1*x)
+        x_p2 = torch.cos(w1*x)
+        x_p3 = torch.sin(w2*x)
+        x_p4 = torch.cos(w2*x)
+
+        t_p1 = torch.sin(w1*t)
+        t_p2 = torch.cos(w1*t)
+        t_p3 = torch.sin(w2*t)
+        t_p4 = torch.cos(w2*t)
+        inputs = torch.cat([x_p1, x_p2, x_p3, x_p4, 
+                            t_p1, t_p2, t_p3, t_p4],axis=1)
+        # inputs = torch.cat([x,t],axis=1)
+
         layer1_out = self.activation((self.hidden_layer1(inputs)))
         layer2_out = self.activation((self.hidden_layer2(layer1_out)))
         layer3_out = self.activation((self.hidden_layer3(layer2_out)))
@@ -764,7 +784,7 @@ def main():
     e1_net.apply(init_weights)
     optimizer = torch.optim.Adam(e1_net.parameters())
     scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.95)
-    # train_e1_net(e1_net, optimizer, scheduler, mse_cost_function, p_net, max_abs_e1_ti, iterations=100000); print("[e1_net train complete]")
+    train_e1_net(e1_net, optimizer, scheduler, mse_cost_function, p_net, max_abs_e1_ti, iterations=100000); print("[e1_net train complete]")
     e1_net = pos_e1_net_train(e1_net, PATH=FOLDER+"output/e1_net.pt", PATH_LOSS=FOLDER+"output/e1_net_train_loss.npy"); e1_net.eval()
     show_e1_net_results(p_net, e1_net)
 

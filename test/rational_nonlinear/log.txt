@@ -232,3 +232,16 @@ testing residual connection ---> does't improve
 <run-6>
 testing normalizng inputs domain to [0,1] ---> doesn't improve
 58514 ,loss: tensor(0.0031) ,ic loss: tensor(0.0001) ,res: tensor(0.0002) ,res freq: tensor(0.0028)
+
+#####################
+<run-7>
+11 hidden layers of e1_net
+early termination due to my time limit.
+e1net epoch: 82276 ,loss: tensor(0.0008) ,ic loss: tensor(7.2462e-05) ,res: tensor(4.5551e-05) ,res freq: tensor(0.0007)
+need to re-run for complete 200k epochs
+
+<run-8>
+11 hidden layers of e1_net with position encoding
+
+<run-9>
+derived from run-4 without mse_res_freq loss
