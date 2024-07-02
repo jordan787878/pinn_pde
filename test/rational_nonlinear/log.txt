@@ -242,6 +242,22 @@ need to re-run for complete 200k epochs
 
 <run-8>
 11 hidden layers of e1_net with position encoding
+116792 ,loss: tensor(0.0009) ,ic loss: tensor(0.0002) ,res: tensor(5.0864e-05) ,res freq: tensor(0.0007)
+t1= 0.0 , a1= [0.03037031]
+t1= 0.0 , a1 [Monte]= [0.43328971]
+t1= 1.0 , a1 [Monte]= [2.49824227]
+t1= 2.0 , a1 [Monte]= [1.24911009]
+t1= 3.0 , a1 [Monte]= [1.53982275]
+t1= 4.0 , a1 [Monte]= [1.37903835]
+t1= 5.0 , a1 [Monte]= [2.38725305]
 
 <run-9>
 derived from run-4 without mse_res_freq loss
+117147 ,loss: tensor(1.3374e-05) ,ic loss: tensor(3.1108e-07) ,res: tensor(1.3063e-05) ,res freq: tensor(1.2912)
+t1= 0.0 , a1= [0.00209594]
+t1= 0.0 , a1 [Monte]= [0.43395948]
+t1= 1.0 , a1 [Monte]= [2.78244953]
+t1= 2.0 , a1 [Monte]= [1.19218301]
+t1= 3.0 , a1 [Monte]= [0.69998749]
+t1= 4.0 , a1 [Monte]= [0.56635684]
+t1= 5.0 , a1 [Monte]= [1.17710221]
