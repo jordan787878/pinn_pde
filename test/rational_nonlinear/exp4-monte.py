@@ -20,12 +20,12 @@ import warnings
 #     device = torch.device("cpu")
 FOLDER = "exp4/run-8.1/"
 
-DATA_FOLDER = "data/exp4/backup_2.5/"
-device = "cpu"
-print(device)
+DATA_FOLDER = "data/exp4/backup_2.61/"
+device = "cpu"; print(device)
+
 # Set a fixed seed for reproducibility
-torch.manual_seed(0)
-np.random.seed(0)
+torch.manual_seed(1)
+np.random.seed(1)
 
 n_d = 1
 mu = -2
@@ -65,11 +65,11 @@ def test_p_init():
     return max(abs(p))[0]
 
 
-def p_sol_monte(linespace_num=50, stat_sample=10000):
-    dtt = 0.001
-    dt_save = 1.0
+def p_sol_monte(linespace_num=200, stat_sample=100000000):
+    dtt = 0.0005
+    dt_save = 0.5
     step_save = int(dt_save/dtt)
-    t_span = np.arange(t0, 1.0, dtt)
+    t_span = np.arange(t0, T_end, dtt)
     num_steps = len(t_span)
     
     # Initialize arrays
@@ -802,9 +802,11 @@ def plot_p_monte():
 
 def show_p_net_results_detail(p_net, e1_net):
 
-    t1 = 1.0
-    datas = ["backup_1/","backup_2.0/","backup_2.1/","backup_2.2/","backup_2.3/","backup_2.4/"]
-    labels = ["og","dx100,dt-2,S+7", "dx100,dt-3,S+7", "dx200,dt-3,S+7", "dx200,dt-3,S+8", "dx400,dt-3,S+8"]
+    t1 = 0.0
+    datas = ["backup_1/","backup_2.0/","backup_2.1/","backup_2.2/","backup_2.3/","backup_2.4/","backup_2.5/"]
+    datas = ["backup_1/","backup_2.0/","backup_2.5/","backup_2.3/","backup_2.6/"]
+    labels = ["og","dx100,dt-2,S+7", "dx100,dt-3,S+7", "dx200,dt-3,S+7", "dx200,dt-3,S+8", "dx400,dt-3,S+8","dx100,dt-3,S+8"]
+    labels = ["og","dx100,dt-2,S+7","dx100,dt-3,S+8","dx200,dt-3,S+8","dx200,dt5-3,S+8"]
 
     fig, axs = plt.subplots(1,1, figsize=(8,6))
     for k in range(len(datas)):
@@ -814,7 +816,10 @@ def show_p_net_results_detail(p_net, e1_net):
         pt_t1 = Variable(torch.from_numpy(x*0+t1).float(), requires_grad=True).to(device)
         p_t1_hat = p_net(pt_x, pt_t1).data.cpu().numpy()
         e1_monte = p_t1_monte - p_t1_hat
+        e1_hat = e1_net(pt_x, pt_t1).data.cpu().numpy()
+        print( max(abs(e1_monte-e1_hat))/max(abs(e1_hat)))
         axs.plot(x, e1_monte, linewidth=1.0, label=datas[k]+labels[k])
+
     
     # plot exact if t1 = ti
     if(t1 == 0.0):
@@ -823,10 +828,10 @@ def show_p_net_results_detail(p_net, e1_net):
         axs.plot(x, p_ti-p_ti_hat, linewidth=1.0, label="e1_true")
 
     # e1_hat plot
-    e1_hat = e1_net(pt_x, pt_t1).data.cpu().numpy()
     axs.plot(x, e1_hat, linestyle="--", linewidth=1.0, label="e1_hat")
 
     plt.legend()
+    plt.grid()
     plt.show()
 
     # x_monte1 = np.load("data/exp4/backup_2/" + "xsim.npy").reshape(-1,1)
@@ -879,7 +884,7 @@ def main():
 
     FLAG_GENERATE_DATA = True
     if(FLAG_GENERATE_DATA):
-        p_sol_monte(linespace_num=100, stat_sample=100000000)
+        p_sol_monte(linespace_num=200, stat_sample=100000000)
         # for t1 in t1s:
         #     x_sim, p_sim = p_sol_monte(t1=t1, linespace_num=100, stat_sample=100000000)
         #     _x_sim, _p_sim = p_sol_monte(t1=t1, linespace_num=100, stat_sample=100000000)

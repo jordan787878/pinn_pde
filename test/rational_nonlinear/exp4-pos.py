@@ -12,18 +12,17 @@ import random
 from tqdm import tqdm
 import warnings
 
-FOLDER = "exp4/run-8.1/"
-
-DATA_FOLDER = "data/exp4/backup_2.6/"
-
 # global variable
 # Check if MPS (Apple's Metal Performance Shaders) is available
 # if torch.backends.mps.is_available():
 #     device = torch.device("mps")
 # else:
 #     device = torch.device("cpu")
-device = "cpu"
-print(device)
+FOLDER = "exp4/run-8.1/"
+
+DATA_FOLDER = "data/exp4/backup_2.6/"
+device = "cpu"; print(device)
+
 # Set a fixed seed for reproducibility
 torch.manual_seed(0)
 np.random.seed(0)
@@ -42,6 +41,7 @@ x_hig = 6
 t0 = 0
 T_end = 5
 t1s = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]
+# t1s = [0.0, 1.0, 2.0, 3.0]
 
 
 def f_sde(x):
@@ -65,15 +65,32 @@ def test_p_init():
     return max(abs(p))[0]
 
 
-def p_sol_monte(t1=T_end, linespace_num=100, stat_sample=10000):
-    n_d = 1
-    dtt = 0.01
-    t_span = np.arange(t0, t1, dtt)
+def p_sol_monte(linespace_num=200, stat_sample=100000000):
+    dtt = 0.0005
+    dt_save = 0.5
+    step_save = int(dt_save/dtt)
+    t_span = np.arange(t0, T_end, dtt)
     num_steps = len(t_span)
     
-     # Initialize arrays
+    # Initialize arrays
     X_last = np.random.normal(mu, std, stat_sample)
     bins_x1 = np.linspace(x_low, x_hig, num=linespace_num)
+    midpoints_x1 = (bins_x1[:-1] + bins_x1[1:]) / 2
+
+    # Digitize v to find which bin each value falls into for both dimensions
+    bin_indices_x1 = np.digitize(X_last, bins_x1) - 1
+    # Initialize the frequency array
+    frequency = np.zeros((len(bins_x1) - 1, 1))
+    # Count the occurrences in each 2D bin
+    for i in range(stat_sample):
+        if 0 <= bin_indices_x1[i] < frequency.shape[0]:
+            frequency[bin_indices_x1[i], :] += 1
+    # Normalize the frequency to get the proportion
+    frequency = frequency / stat_sample
+    dx = bins_x1[1]-bins_x1[0]
+    frequency = frequency/(dx**n_d)
+    np.save(DATA_FOLDER+"psim_t"+str(0.0)+".npy", frequency)
+    np.save(DATA_FOLDER+"xsim.npy", midpoints_x1)
 
     # Vectorized simulation of the SDE
     for step in tqdm(range(1, num_steps + 1), desc="Simulating samples"):
@@ -81,40 +98,26 @@ def p_sol_monte(t1=T_end, linespace_num=100, stat_sample=10000):
         X_new = X_last + f_sde(X_last) * dtt + e * dW
         X_last = X_new
 
-    bins_x1 = np.linspace(x_low, x_hig, num=linespace_num)
-    # Digitize v to find which bin each value falls into for both dimensions
-    bin_indices_x1 = np.digitize(X_last, bins_x1) - 1
-    # Initialize the frequency array
-    frequency = np.zeros((len(bins_x1) - 1, 1))
+        if(step % step_save == 0):
+            t_k = np.round(step*dtt,2)
+            print(t_k)
 
-    # Count the occurrences in each 2D bin
-    for i in tqdm(range(stat_sample), desc="Counting samples"):
-        if 0 <= bin_indices_x1[i] < frequency.shape[0]:
-            frequency[bin_indices_x1[i], :] += 1
+            # Digitize v to find which bin each value falls into for both dimensions
+            bin_indices_x1 = np.digitize(X_last, bins_x1) - 1
 
-    # Normalize the frequency to get the proportion
-    frequency = frequency / stat_sample
-    dx = bins_x1[1]-bins_x1[0]
-    frequency = frequency/(dx**n_d)
+            # Initialize the frequency array
+            frequency = np.zeros((len(bins_x1) - 1, 1))
 
-    # Calculate the midpoints for bins
-    midpoints_x1 = (bins_x1[:-1] + bins_x1[1:]) / 2
+            # Count the occurrences in each 2D bin
+            for i in range(stat_sample):
+                if 0 <= bin_indices_x1[i] < frequency.shape[0]:
+                    frequency[bin_indices_x1[i], :] += 1
 
-    return midpoints_x1, frequency
-
-    # x1 = X[0,:]
-    # dx_size = 101
-    # x_points = np.linspace(x_low, x_hig, num=dx_size)
-    # dx = x_points[1]-x_points[0]
-    # bins_1D = 0.5 * (x_points[:-1] + x_points[1:]).reshape(-1)
-    # grid = 0*bins_1D
-    # inds1 = np.digitize(x1, bins_1D)
-    # for i in range(len(inds1)):
-    #     if(x1[i]<= x_hig and x1[i]>= x_low and inds1[i] > 0):
-    #         grid[inds1[i]-1] += (1.0/stat_sample)
-    # # convert to pdf
-    # grid = grid/(dx**n_d)
-    # return bins_1D, grid, dx
+            # Normalize the frequency to get the proportion
+            frequency = frequency / stat_sample
+            dx = bins_x1[1]-bins_x1[0]
+            frequency = frequency/(dx**n_d)
+            np.save(DATA_FOLDER+"psim_t"+str(t_k)+".npy", frequency)
 
 
 def res_func(x,t, net, verbose=False):
@@ -307,22 +310,22 @@ def pos_p_net_train(p_net, PATH, PATH_LOSS):
     p_net.load_state_dict(checkpoint['model_state_dict'])
     epoch = checkpoint['epoch']
     loss = checkpoint['loss']
-    print("pnet best epoch: ", epoch, ", loss:", loss.data)
-    # see training result
-    keys = p_net.state_dict().keys()
-    for k in keys:
-        l2_norm = torch.norm(p_net.state_dict()[k], p=2)
-        print(f"L2 norm of {k} : {l2_norm.item()}")
-    # plot loss history
-    loss_history = np.load(PATH_LOSS)
-    min_loss = min(loss_history)
-    plt.figure()
-    plt.plot(np.arange(len(loss_history)), loss_history)
-    plt.ylim([min_loss, 10*min_loss])
-    plt.xlabel("epoch")
-    plt.ylabel("loss")
-    plt.savefig(FOLDER+"figs/pnet_loss_history.png")
-    plt.close()
+    # print("pnet best epoch: ", epoch, ", loss:", loss.data)
+    # # see training result
+    # keys = p_net.state_dict().keys()
+    # for k in keys:
+    #     l2_norm = torch.norm(p_net.state_dict()[k], p=2)
+    #     print(f"L2 norm of {k} : {l2_norm.item()}")
+    # # plot loss history
+    # loss_history = np.load(PATH_LOSS)
+    # min_loss = min(loss_history)
+    # plt.figure()
+    # plt.plot(np.arange(len(loss_history)), loss_history)
+    # plt.ylim([min_loss, 10*min_loss])
+    # plt.xlabel("epoch")
+    # plt.ylabel("loss")
+    # plt.savefig(FOLDER+"figs/pnet_loss_history.png")
+    # plt.close()
     return p_net
 
 
@@ -335,79 +338,107 @@ def show_p_net_results(p_net):
     p_hat = p_net(pt_x, pt_ti).data.cpu().numpy()
     e1 = p - p_hat
     max_abs_e1_ti = max(abs(e1))[0]
+    # fig, axs = plt.subplots(6, 1, figsize=(6, 8))
+    # # Determine global min and max for y-axis limits
+    # global_min = float('inf')
+    # global_max = float('-inf')
+    # p_monte_list = []
+    # p_hat_list = []
+    # e1_list = []
+    # limit_margin = 0.1
+    # for t1 in t1s:
+    #     p_monte = np.load(DATA_FOLDER + "psim_t" + str(t1) + ".npy").reshape(-1, 1)
+    #     p_monte_list.append(p_monte)
+    #     current_min = p_monte.min()
+    #     current_max = p_monte.max()
+    #     global_min = min(global_min, current_min)
+    #     global_max = max(global_max, current_max)
+    #     pt_t1 = Variable(torch.from_numpy(x*0+t1).float(), requires_grad=True).to(device)
+    #     p_hat = p_net(pt_x, pt_t1).data.cpu().numpy()
+    #     p_hat_list.append(p_hat)
+    #     e1 = p_monte - p_hat
+    #     e1_list.append(e1)
+    # for i, (ax1, p_monte, p_hat) in enumerate(zip(axs, p_monte_list, p_hat_list)):
+    #     if i == 0:
+    #         ax1.plot(x_monte, p_monte, "blue", label=r"$p$")
+    #         ax1.plot(x, p_hat, "red", linestyle="--", label=r"$\hat{p}$")
+    #         ax1.legend()  # Add legend only to the first subplot
+    #     else:
+    #         ax1.plot(x_monte, p_monte, "blue")
+    #         ax1.plot(x, p_hat, "red", linestyle="--")
+    #     ax1.set_ylim(global_min-limit_margin, global_max+limit_margin)
+    #     ax1.grid(True, which='both', linestyle='-', linewidth=0.5)
+    # plt.tight_layout()
+    # plt.savefig(FOLDER+"figs/pnet_result.png")
+    # plt.close()
 
-    fig, axs = plt.subplots(6, 1, figsize=(6, 8))
-    # Determine global min and max for y-axis limits
-    global_min = float('inf')
-    global_max = float('-inf')
-    p_monte_list = []
-    p_hat_list = []
-    e1_list = []
-    limit_margin = 0.1
-    for t1 in t1s:
-        p_monte = np.load(DATA_FOLDER + "psim_t" + str(t1) + ".npy").reshape(-1, 1)
-        p_monte_list.append(p_monte)
-        current_min = p_monte.min()
-        current_max = p_monte.max()
-        global_min = min(global_min, current_min)
-        global_max = max(global_max, current_max)
-        pt_t1 = Variable(torch.from_numpy(x*0+t1).float(), requires_grad=True).to(device)
-        p_hat = p_net(pt_x, pt_t1).data.cpu().numpy()
-        p_hat_list.append(p_hat)
-        e1 = p_monte - p_hat
-        e1_list.append(e1)
-    for i, (ax1, p_monte, p_hat) in enumerate(zip(axs, p_monte_list, p_hat_list)):
-        if i == 0:
-            ax1.plot(x_monte, p_monte, "blue", label=r"$p$")
-            ax1.plot(x, p_hat, "red", linestyle="--", label=r"$\hat{p}$")
-            ax1.legend()  # Add legend only to the first subplot
-        else:
-            ax1.plot(x_monte, p_monte, "blue")
-            ax1.plot(x, p_hat, "red", linestyle="--")
-        ax1.set_ylim(global_min-limit_margin, global_max+limit_margin)
-        ax1.grid(True, which='both', linestyle='-', linewidth=0.5)
-    plt.tight_layout()
-    plt.savefig(FOLDER+"figs/pnet_result.png")
-    plt.close()
+    # fig, axs = plt.subplots(6, 1, figsize=(6, 8))
+    # global_min = float('inf')
+    # global_max = float('-inf')
+    # res_list = []
+    # for t1 in t1s:
+    #     pt_t1 = Variable(torch.from_numpy(x*0+t1).float(), requires_grad=True).to(device)
+    #     res = res_func(pt_x, pt_t1, p_net).data.cpu().numpy()
+    #     current_min = res.min()
+    #     current_max = res.max()
+    #     global_min = min(global_min, current_min)
+    #     global_max = max(global_max, current_max)
+    #     res_list.append(res)
+    # for i, (ax1, res) in enumerate(zip(axs, res_list)):
+    #     if i == 0:
+    #         ax1.plot(x, res, "red", linestyle="--", label=r"$r_1$")
+    #         ax1.legend()
+    #     else:
+    #         ax1.plot(x, res, "red", linestyle="--")
+    #     ax1.grid(True, which='both', linestyle='-', linewidth=0.5)  # Add thin grid lines
+    # plt.tight_layout()
+    # plt.savefig(FOLDER+"figs/pnet_residual.png")
+    # plt.close()
 
-    fig, axs = plt.subplots(6, 1, figsize=(6, 8))
-    global_min = float('inf')
-    global_max = float('-inf')
-    res_list = []
-    for t1 in t1s:
-        pt_t1 = Variable(torch.from_numpy(x*0+t1).float(), requires_grad=True).to(device)
-        res = res_func(pt_x, pt_t1, p_net).data.cpu().numpy()
-        current_min = res.min()
-        current_max = res.max()
-        global_min = min(global_min, current_min)
-        global_max = max(global_max, current_max)
-        res_list.append(res)
-    for i, (ax1, res) in enumerate(zip(axs, res_list)):
-        if i == 0:
-            ax1.plot(x, res, "red", linestyle="--", label=r"$r_1$")
-            ax1.legend()
-        else:
-            ax1.plot(x, res, "red", linestyle="--")
-        ax1.grid(True, which='both', linestyle='-', linewidth=0.5)  # Add thin grid lines
-    plt.tight_layout()
-    plt.savefig(FOLDER+"figs/pnet_residual.png")
-    plt.close()
-
-    fig, axs = plt.subplots(6, 1, figsize=(6, 8))
-    for i, (ax1, e1) in enumerate(zip(axs, e1_list)):
-        if i == 0:
-            ax1.plot(x, e1, "blue", linestyle="-", label=r"$e_1$")
-            ax1.legend()
-        else:
-            ax1.plot(x, e1, "blue", linestyle="-")
-        ax1.grid(True, which='both', linestyle='-', linewidth=0.5)  # Add thin grid lines
-    plt.tight_layout()
-    plt.savefig(FOLDER+"figs/pnet_error.png")
-    plt.close()
+    # fig, axs = plt.subplots(6, 1, figsize=(6, 8))
+    # for i, (ax1, e1) in enumerate(zip(axs, e1_list)):
+    #     if i == 0:
+    #         ax1.plot(x, e1, "blue", linestyle="-", label=r"$e_1$")
+    #         ax1.legend()
+    #     else:
+    #         ax1.plot(x, e1, "blue", linestyle="-")
+    #     ax1.grid(True, which='both', linestyle='-', linewidth=0.5)  # Add thin grid lines
+    # plt.tight_layout()
+    # plt.savefig(FOLDER+"figs/pnet_error.png")
+    # plt.close()
 
     return max_abs_e1_ti
     
 
+# class E1Net(nn.Module):
+#     def __init__(self, scale=1.0): 
+#         neurons = 30
+#         self.scale = scale
+#         super(E1Net, self).__init__()
+#         self.hidden_layer1 = (nn.Linear(n_d+1,neurons))
+#         self.hidden_layer2 = (nn.Linear(neurons,neurons))
+#         self.hidden_layer3 = (nn.Linear(neurons,neurons))
+#         self.hidden_layer4 = (nn.Linear(neurons,neurons))
+#         self.hidden_layer5 = (nn.Linear(neurons,neurons))
+#         self.hidden_layer6 = (nn.Linear(neurons,neurons))
+#         self.hidden_layer7 = (nn.Linear(neurons,neurons))
+#         self.hidden_layer8 = (nn.Linear(neurons,neurons))
+#         self.output_layer =  (nn.Linear(neurons,1))
+#         self.activation = nn.Tanh()
+#     def forward(self, x, t):
+#         inputs = torch.cat([x,t],axis=1)
+#         layer1_out = self.activation((self.hidden_layer1(inputs)))
+#         layer2_out = self.activation((self.hidden_layer2(layer1_out)))
+#         layer3_out = self.activation((self.hidden_layer3(layer2_out)))
+#         layer4_out = self.activation((self.hidden_layer4(layer3_out)))
+#         layer5_out = self.activation((self.hidden_layer5(layer4_out)))
+#         layer6_out = self.activation((self.hidden_layer6(layer5_out)))
+#         layer7_out = self.activation((self.hidden_layer7(layer6_out)))
+#         layer8_out = self.activation((self.hidden_layer8(layer7_out)))
+#         output = self.output_layer(layer8_out)
+#         output = self.scale * output
+#         return output
+    
 class E1Net(nn.Module):
     def __init__(self, scale=1.0): 
         neurons = 30
@@ -484,23 +515,6 @@ def e1_res_func(x, t, e1_net, p_net, verbose=False):
     return residual
 
 
-# def test_e1_res(e1_net, p_net):
-#     batch_size = 5
-#     x_collocation = np.random.uniform(low=1.0, high=3.0, size=(batch_size,1))
-#     t_collocation = T_end*np.ones((batch_size,1))
-#     all_zeros = np.zeros((batch_size,1))
-#     pt_x_collocation = Variable(torch.from_numpy(x_collocation).float(), requires_grad=True).to(device)
-#     pt_t_collocation = Variable(torch.from_numpy(t_collocation).float(), requires_grad=True).to(device)
-#     f_out = e1_res_func(pt_x_collocation, pt_t_collocation, e1_net, p_net, verbose=True) # output of f(x,t)
-# def augment_tensors(x_tensor, t_tensor):
-#     # Get the size of the input tensors
-#     M = x_tensor.size(0)
-#     N = t_tensor.size(0)
-#     augmented_x_tensor = x_tensor.repeat(N, 1).view(N*M, 1)
-#     augmented_t_tensor = t_tensor.repeat_interleave(M).view(N*M, 1)
-#     return augmented_x_tensor, augmented_t_tensor
-
-
 def train_e1_net(e1_net, optimizer, scheduler1, mse_cost_function, p_net, max_abs_e1_x_0, iterations=40000):
     min_loss = np.inf
     loss_history = []
@@ -555,7 +569,7 @@ def train_e1_net(e1_net, optimizer, scheduler1, mse_cost_function, p_net, max_ab
         loss = mse_u + mse_res + mse_norm_res_input
 
         # Save the min loss model
-        if(loss.data < 0.9*min_loss):
+        if(loss.data < 0.95*min_loss):
             print("e1net epoch:", epoch, ",loss:", loss.data, ",ic loss:", mse_u.data, ",res:", mse_res.data,
                   ",res freq:", mse_norm_res_input.data
                   # , l_inf_res.data,# quotient_max.data,
@@ -608,7 +622,7 @@ def train_e1_net(e1_net, optimizer, scheduler1, mse_cost_function, p_net, max_ab
             res_RAR = e1_res_func(x_RAR, t_RAR, e1_net, p_net)/max_abs_e1_x_0
             mean_res_error = torch.mean(torch.abs(res_RAR))
             print("... RAR mean res: ", mean_res_error.data)
-            if(mean_res_error > 5e-3):
+            if(mean_res_error > 0.0):
                 max_abs_res, max_index = torch.max(torch.abs(res_RAR), dim=0)
                 x_max = x_RAR[max_index]
                 t_max = t_RAR[max_index]
@@ -636,22 +650,22 @@ def pos_e1_net_train(e1_net, PATH, PATH_LOSS):
     e1_net.load_state_dict(checkpoint['model_state_dict'])
     epoch = checkpoint['epoch']
     loss = checkpoint['loss']
-    print("best epoch: ", epoch, ", loss:", loss.data)
-    # see training result
-    keys = e1_net.state_dict().keys()
-    for k in keys:
-        l2_norm = torch.norm(e1_net.state_dict()[k], p=2)
-        print(f"L2 norm of {k} : {l2_norm.item()}")
-    # plot loss history
-    loss_history = np.load(PATH_LOSS)
-    min_loss = min(loss_history)
-    plt.figure()
-    plt.plot(np.arange(len(loss_history)), loss_history)
-    plt.ylim([min_loss, 5*min_loss])
-    plt.xlabel("epoch")
-    plt.ylabel("loss")
-    plt.savefig(FOLDER+"figs/e1net_loss_history.png")
-    plt.close()
+    # print("best epoch: ", epoch, ", loss:", loss.data)
+    # # see training result
+    # keys = e1_net.state_dict().keys()
+    # for k in keys:
+    #     l2_norm = torch.norm(e1_net.state_dict()[k], p=2)
+    #     print(f"L2 norm of {k} : {l2_norm.item()}")
+    # # plot loss history
+    # loss_history = np.load(PATH_LOSS)
+    # min_loss = min(loss_history)
+    # plt.figure()
+    # plt.plot(np.arange(len(loss_history)), loss_history)
+    # plt.ylim([min_loss, 5*min_loss])
+    # plt.xlabel("epoch")
+    # plt.ylabel("loss")
+    # plt.savefig(FOLDER+"figs/e1net_loss_history.png")
+    # plt.close()
     return e1_net
 
 
@@ -754,8 +768,11 @@ def show_e1_net_results(p_net, e1_net):
     
 
 def plot_p_monte():
+    # p_sim = np.load(DATA_FOLDER+"psim_t"+str(0.5)+".npy")
     plt.figure()
-    for t1 in t1s:
+    t_ks = np.arange(0.0, 1.0+1.0, 1.0)
+    print(t_ks)
+    for t1 in t_ks:
         x_sim = np.load(DATA_FOLDER+"xsim.npy")
         p_sim = np.load(DATA_FOLDER+"psim_t"+str(t1)+".npy")
         plt.plot(x_sim, p_sim, label="t="+str(t1))
@@ -764,25 +781,112 @@ def plot_p_monte():
     plt.savefig(FOLDER+"figs/p_sol_monte.png")
     print("save fig to "+FOLDER+"figs/p_sol_monte.png")
     plt.close()
-        
+
+
+def show_p_net_results_detail(p_net, e1_net):
+    t1 = 1.0
+
+    datas = ["backup_1/","backup_2.0/","backup_2.1/","backup_2.2/","backup_2.3/","backup_2.4/","backup_2.5/"]
+    labels = ["og","dx100,dt-2,S+7", "dx100,dt-3,S+7", "dx200,dt-3,S+7", "dx200,dt-3,S+8", "dx400,dt-3,S+8","dx100,dt-3,S+8"]
+    
+    datas = ["backup_2.3/","backup_2.31/","backup_2.32/","backup_2.33/","backup_2.34/","backup_2.35/",
+             "backup_2.36/","backup_2.37/","backup_2.38/","backup_2.39/"]
+    labels = ["","","","","","","","","",""]
+
+    datas = ["backup_2.6/", "backup_2.61/"]
+    labels = ["", ""]
+    
+    # datas = ["backup/", "backup_1/","backup_2.0/","backup_2.31/","backup_2.6/"]
+    # labels = ["og","og","","",""]
+
+    fig, axs = plt.subplots(1,1, figsize=(8,6))
+    for k in range(len(datas)):
+        x = np.load("data/exp4/"+datas[k]+"xsim.npy").reshape(-1,1)
+        p_t1_monte = np.load("data/exp4/"+datas[k]+"psim_t" + str(t1) + ".npy").reshape(-1, 1)
+        pt_x = Variable(torch.from_numpy(x).float(), requires_grad=True).to(device)
+        pt_t1 = Variable(torch.from_numpy(x*0+t1).float(), requires_grad=True).to(device)
+        p_t1_hat = p_net(pt_x, pt_t1).data.cpu().numpy()
+        e1_monte = p_t1_monte - p_t1_hat
+        e1_hat = e1_net(pt_x, pt_t1).data.cpu().numpy()
+        print( max(abs(e1_monte-e1_hat))/max(abs(e1_hat)))
+        axs.plot(x, e1_monte, "blue", linewidth=0.5, alpha=0.2, label=datas[k]+labels[k])
+
+    # sum of monte
+    x = np.load("data/exp4/"+datas[0]+"xsim.npy").reshape(-1,1)
+    p_t1_monte_sum = 0.0*x
+    for k in range(len(datas)):
+        p_t1_monte = np.load("data/exp4/"+datas[k]+"psim_t" + str(t1) + ".npy").reshape(-1, 1)
+        p_t1_monte_sum = p_t1_monte_sum + (1/len(datas))*p_t1_monte
+    e1_monte_sum = p_t1_monte_sum - p_t1_hat
+    axs.plot(x, e1_monte_sum, "black", label="monte sum")
+    print( max(abs(e1_monte_sum-e1_hat))/max(abs(e1_hat)))
+    
+    # plot exact if t1 = ti
+    if(t1 == 0.0):
+        p_ti = p_init(x).reshape(-1,1)
+        p_ti_hat = p_net(pt_x, pt_t1).data.cpu().numpy()
+        axs.plot(x, p_ti-p_ti_hat, linewidth=1.0, label="e1_true")
+
+    # e1_hat plot
+    axs.plot(x, e1_hat, "black", linestyle="--", linewidth=2.0, label="e1_hat")
+
+    # reference plot
+    axs.plot(x, x*0.0, "black", linestyle=":", linewidth=0.5)
+
+    plt.legend()
+    plt.grid()
+    plt.show()
+
+    # x_monte1 = np.load("data/exp4/backup_2/" + "xsim.npy").reshape(-1,1)
+    # pt_x_monte1 = Variable(torch.from_numpy(x_monte1).float(), requires_grad=True).to(device)
+    # x_monte2 = np.load("data/exp4/backup_2.1/" + "xsim.npy").reshape(-1,1)
+    # pt_x_monte2 = Variable(torch.from_numpy(x_monte2).float(), requires_grad=True).to(device)
+    # x_monte3 = np.load("data/exp4/backup_2.2/" + "xsim.npy").reshape(-1,1)
+    # pt_x_monte3 = Variable(torch.from_numpy(x_monte3).float(), requires_grad=True).to(device)
+    # x_monte4 = np.load("data/exp4/backup_2.3/" + "xsim.npy").reshape(-1,1)
+    # pt_x_monte4 = Variable(torch.from_numpy(x_monte4).float(), requires_grad=True).to(device)
+    # pt_t1_monte1 = Variable(torch.from_numpy(x_monte1*0+t1).float(), requires_grad=True).to(device)
+    # pt_t1_monte2 = Variable(torch.from_numpy(x_monte2*0+t1).float(), requires_grad=True).to(device)
+    # pt_t1_monte3 = Variable(torch.from_numpy(x_monte3*0+t1).float(), requires_grad=True).to(device)
+    # pt_t1_monte4 = Variable(torch.from_numpy(x_monte4*0+t1).float(), requires_grad=True).to(device)
+    # p_t1_monte1 = np.load("data/exp4/backup_2/" + "psim_t" + str(t1) + ".npy").reshape(-1, 1)
+    # p_t1_monte2 = np.load("data/exp4/backup_2.1/" + "psim_t" + str(t1) + ".npy").reshape(-1, 1)
+    # p_t1_monte3 = np.load("data/exp4/backup_2.2/" + "psim_t" + str(t1) + ".npy").reshape(-1, 1)
+    # p_t1_monte4 = np.load("data/exp4/backup_2.3/" + "psim_t" + str(t1) + ".npy").reshape(-1, 1)
+    # p_t1_hat_monte1 = p_net(pt_x_monte1, pt_t1_monte1).data.cpu().numpy()
+    # p_t1_hat_monte2 = p_net(pt_x_monte2, pt_t1_monte2).data.cpu().numpy()
+    # p_t1_hat_monte3 = p_net(pt_x_monte3, pt_t1_monte3).data.cpu().numpy()
+    # p_t1_hat_monte4 = p_net(pt_x_monte4, pt_t1_monte4).data.cpu().numpy()
+    # e1_monte1 = p_t1_monte1 - p_t1_hat_monte1
+    # e1_monte2 = p_t1_monte2 - p_t1_hat_monte2
+    # e1_monte3 = p_t1_monte3 - p_t1_hat_monte3
+    # e1_monte4 = p_t1_monte4 - p_t1_hat_monte4
+    # e1_hat = e1_net(pt_x_monte4, pt_t1_monte4).data.cpu().numpy()
+    # fig, axs = plt.subplots(1,1, figsize=(8,6))
+    # if(t1 == 0.0):
+    #     axs.plot(x_monte4, p_ti - p_t1_hat_monte4, "cyan", linewidth=1.0, label="p0")
+    # axs.plot(x_monte1, e1_monte1, "red", linewidth=1.0, label="backup_2, dx=100,dt=0.01,S=1e+7")
+    # axs.plot(x_monte2, e1_monte2, "blue", linewidth=1.0, label="backup_2.1, dx=100,dt=0.001,S=1e+7")
+    # axs.plot(x_monte3, e1_monte3, "green", linewidth=1.0, label="backup_2.1, dx=200,dt=0.001,S=1e+7")
+    # axs.plot(x_monte4, e1_monte4, "black", linewidth=1.0, label="backup_2.3, dx=200,dt=0.001,S=1e+8")
+    # axs.plot(x_monte4, e1_hat, "black", linestyle=":", label="e1_hat")
+    # plt.legend()
+    # plt.show()
+    # fig, axs = plt.subplots(1,1, figsize=(8,6))
+    # if(t1 == 0.0):
+    #     axs.plot(x_monte4, p_ti, "cyan", linewidth=1.0, label="p0")
+    # axs.plot(x_monte1, p_t1_monte1, "red", linewidth=1.0, label="backup_2, dx=100,dt=0.01,S=1e+7")
+    # axs.plot(x_monte2, p_t1_monte2, "blue", linewidth=1.0, label="backup_2.1, dx=100,dt=0.001,S=1e+7")
+    # axs.plot(x_monte3, p_t1_monte3, "green", linewidth=1.0, label="backup_2.1, dx=200,dt=0.001,S=1e+7")
+    # axs.plot(x_monte4, p_t1_monte4, "black", linewidth=1.0, label="backup_2.3, dx=200,dt=0.001,S=1e+8")
+    # plt.legend()
+    # plt.show()
 
 
 def main():
 
-    # FLAG_GENERATE_DATA = False
-    # if(FLAG_GENERATE_DATA):
-    #     for t1 in t1s:
-    #         x_sim, p_sim = p_sol_monte(t1=t1, linespace_num=100, stat_sample=100000000)
-    #         _x_sim, _p_sim = p_sol_monte(t1=t1, linespace_num=100, stat_sample=100000000)
-    #         p_sim = 0.5*(p_sim + _p_sim)
-    #         np.save(DATA_FOLDER+"psim_t"+str(t1)+".npy", p_sim)
-    #         np.save(DATA_FOLDER+"xsim.npy", x_sim)
-    
     # Plot generated data
-    plot_p_monte()
-
-    max_pi = test_p_init()
-    mse_cost_function = torch.nn.MSELoss() # Mean squared error
+    # plot_p_monte()
 
     p_net = Net().to(device)
     p_net.apply(init_weights)
@@ -790,18 +894,18 @@ def main():
     scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.95)
     # train_p_net(p_net, optimizer, scheduler, mse_cost_function, max_pi, iterations=30000); print("[p_net train complete]")
     p_net = pos_p_net_train(p_net, PATH=FOLDER+"output/p_net.pt", PATH_LOSS=FOLDER+"output/p_net_train_loss.npy"); p_net.eval()
+    
     max_abs_e1_ti = show_p_net_results(p_net)
     print("max abs e1(x,0):", max_abs_e1_ti)
-
     e1_net = E1Net(scale=max_abs_e1_ti).to(device)
     e1_net.apply(init_weights)
-    optimizer = torch.optim.Adam(e1_net.parameters())
-    scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.95)
-    # train_e1_net(e1_net, optimizer, scheduler, mse_cost_function, p_net, max_abs_e1_ti, iterations=200000); print("[e1_net train complete]")
+    # optimizer = torch.optim.Adam(e1_net.parameters())
+    # scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.95)
+    # #train_e1_net(e1_net, optimizer, scheduler, mse_cost_function, p_net, max_abs_e1_ti, iterations=200000); print("[e1_net train complete]")
     e1_net = pos_e1_net_train(e1_net, PATH=FOLDER+"output/e1_net.pt", PATH_LOSS=FOLDER+"output/e1_net_train_loss.npy"); e1_net.eval()
-    show_e1_net_results(p_net, e1_net)
+    # show_e1_net_results(p_net, e1_net)
 
-    print("[complete rational nonlinear]")
+    show_p_net_results_detail(p_net, e1_net)
 
 
 if __name__ == "__main__":
