@@ -447,14 +447,14 @@ def plot_tight_error_bounds(p_net, e1_net):
         print(eB, eL)
         axs[i].plot(x, e1, color=colors[i], linestyle="-", linewidth=1.0, label=r"$e_1$")
         axs[i].plot(x, e1_hat, linestyle="--", color = colors[i], linewidth=1.0, label=r"$\hat{e}_1$")
-        axs[i].plot(x, x*0+eL, linestyle=":", color = colors[i], linewidth=1.0, label=r"$e_L$")
-        axs[i].plot(x, x*0-eL, linestyle=":", color = colors[i], linewidth=1.0)
+        axs[i].plot(x, x*0+eL, linestyle=":", color = colors[i], linewidth=2.0, label=r"$e_L$")
+        axs[i].plot(x, x*0-eL, linestyle=":", color = colors[i], linewidth=2.0)
         axs[i].fill_between(x.reshape(-1), y1=0*phat.reshape(-1)+eB, y2=0*phat.reshape(-1)-eB, color=colors[i], alpha=0.1, label=r"$e_B$")
         # axs[i].fill_between(x.reshape(-1), y1=0*phat.reshape(-1)+eL, y2=0*phat.reshape(-1)-eL, color=colors[i], alpha=0.3, label=r"$e_L$")
         axs[i].grid(linewidth=0.5)
         axs[i].legend(loc="upper right")
         # Add text to the left top corner
-        axs[i].text(0.01, 0.95, "t="+str(t1)+", "+r"$e_B=$"+str(eB[0])+", "+r"$e_L=$"+str(eL[0]), transform=axs[i].transAxes, verticalalignment='top', fontsize=8)
+        axs[i].text(0.01, 0.92, "t="+str(t1)+", "+r"$e_B=$"+str(eB[0])+", "+r"$e_L=$"+str(eL[0]), transform=axs[i].transAxes, verticalalignment='top', fontsize=8)
     plt.tight_layout()
     plt.savefig(FOLDER+"figs/e1hat_result.png")
     plt.close()
@@ -510,6 +510,30 @@ def plot_alphas(p_net, e1_net):
     plt.show()
 
 
+def plot_train_loss(path_1, path_2):
+    loss_history_1 = np.load(path_1)
+    min_loss_1 = min(loss_history_1)
+
+    loss_history_2 = np.load(path_2)
+    min_loss_2 = min(loss_history_2)
+
+    fig, axs = plt.subplots(2, 1, figsize=(8, 6))
+    axs[0].plot(np.arange(len(loss_history_1)), loss_history_1, "black")
+    axs[1].plot(np.arange(len(loss_history_2)), loss_history_2, "blue")
+    axs[0].grid(linewidth=0.5)
+    axs[1].grid(linewidth=0.5)
+    axs[1].set_label("epochs")
+    axs[0].set_ylabel("train loss: "+r"$\hat{p}$")
+    axs[1].set_ylabel("train loss: "+r"$\hat{e}_1$")
+    plt.savefig(FOLDER+"figs/train_loss.png")
+    plt.close()
+    # plt.ylim([min_loss, 10*min_loss])
+    # plt.xlabel("epoch")
+    # plt.ylabel("loss")
+    # plt.savefig(FOLDER+"figs/pnet_loss_history.png")
+    # plt.close()
+
+
 
 def main():
     # create p_net
@@ -530,7 +554,8 @@ def main():
     e1_net = pos_e1_net_train(e1_net, PATH=FOLDER+"output/e1_net.pt", PATH_LOSS=FOLDER+"output/e1_net_train_loss.npy")
 
     plot_tight_error_bounds(p_net, e1_net)
-    plot_alphas(p_net, e1_net)
+    plot_train_loss(FOLDER+"output/p_net_train_loss.npy", FOLDER+"output/e1_net_train_loss.npy")
+    # plot_alphas(p_net, e1_net)
 
 
 
