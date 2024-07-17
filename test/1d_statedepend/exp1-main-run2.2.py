@@ -12,7 +12,7 @@ import random
 from tqdm import tqdm
 import warnings
 
-FOLDER = "exp1/run-2.1/"
+FOLDER = "exp1/run-2.2/"
 
 DATA_FOLDER = "exp1/data/monte2/"
 
@@ -438,11 +438,11 @@ class E1Net(nn.Module):
         self.hidden_layer3 = (nn.Linear(neurons,neurons))
         self.hidden_layer4 = (nn.Linear(neurons,neurons))
         self.hidden_layer5 = (nn.Linear(neurons,neurons))
-        # self.hidden_layer6 = (nn.Linear(neurons,neurons))
-        # self.hidden_layer7 = (nn.Linear(neurons,neurons))
-        # self.hidden_layer8 = (nn.Linear(neurons,neurons))
-        # self.hidden_layer9 = (nn.Linear(neurons,neurons))
-        # self.hidden_layer10 = (nn.Linear(neurons,neurons))
+        self.hidden_layer6 = (nn.Linear(neurons,neurons))
+        self.hidden_layer7 = (nn.Linear(neurons,neurons))
+        self.hidden_layer8 = (nn.Linear(neurons,neurons))
+        self.hidden_layer9 = (nn.Linear(neurons,neurons))
+        self.hidden_layer10 = (nn.Linear(neurons,neurons))
         # self.hidden_layer11 = (nn.Linear(neurons,neurons))
         self.output_layer =  (nn.Linear(neurons,1))
         self.activation = nn.Tanh()
@@ -483,13 +483,13 @@ class E1Net(nn.Module):
         layer3_out = self.activation((self.hidden_layer3(layer2_out)))
         layer4_out = self.activation((self.hidden_layer4(layer3_out)))
         layer5_out = self.activation((self.hidden_layer5(layer4_out)))
-        # layer6_out = self.activation((self.hidden_layer6(layer5_out)))
-        # layer7_out = self.activation((self.hidden_layer7(layer6_out)))
-        # layer8_out = self.activation((self.hidden_layer8(layer7_out)))
-        # layer9_out = self.activation((self.hidden_layer9(layer8_out)))
-        # layer10_out = self.activation((self.hidden_layer10(layer9_out)))
+        layer6_out = self.activation((self.hidden_layer6(layer5_out)))
+        layer7_out = self.activation((self.hidden_layer7(layer6_out)))
+        layer8_out = self.activation((self.hidden_layer8(layer7_out)))
+        layer9_out = self.activation((self.hidden_layer9(layer8_out)))
+        layer10_out = self.activation((self.hidden_layer10(layer9_out)))
         # layer11_out = self.activation((self.hidden_layer11(layer10_out)))
-        output = self.output_layer(layer5_out)
+        output = self.output_layer(layer10_out)
         output = self.scale * output
         return output
     
@@ -787,7 +787,7 @@ def main():
     e1_net.apply(init_weights)
     optimizer = torch.optim.Adam(e1_net.parameters())
     scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.95)
-    train_e1_net(e1_net, optimizer, scheduler, mse_cost_function, p_net, max_abs_e1_ti, iterations=100000); print("[e1_net train complete]")
+    train_e1_net(e1_net, optimizer, scheduler, mse_cost_function, p_net, max_abs_e1_ti, iterations=300000); print("[e1_net train complete]")
     e1_net = pos_e1_net_train(e1_net, PATH=FOLDER+"output/e1_net.pt", PATH_LOSS=FOLDER+"output/e1_net_train_loss.npy"); e1_net.eval()
     show_e1_net_results(p_net, e1_net)
 
