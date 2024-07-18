@@ -192,12 +192,131 @@ e: 73065 ,loss: tensor(0.0004) ,ic loss: tensor(0.0001) ,res: tensor(0.0002)
 <1-mse-resgrad>
 e: 68350 ,loss: tensor(4.2505e-05) ,ic loss: tensor(7.1625e-06) ,res: tensor(3.5342e-05)
 
+#################################################
 ADD P NEURONS TO 100. ADD E1 NEURONS TO 150
 <2-mse-resgrad>
 p: 73992 , loss: tensor(0.0002) , ic: tensor(0.0001) , res: tensor(1.6101e-06) , res freq: tensor(3.7487e-05)
+#################################################
+
+SAME P FROM <0-mse-resgrad>. 100 NEURONS E1, BIAS INIT 0.01, SECOND SCHEDULER: scheduler2 = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[40000, 70000], gamma=0.1)
+<3-mse-resgrad>
+e: 83431 ,loss: tensor(4.4702e-05) ,ic loss: tensor(3.8425e-06) ,res: tensor(4.0859e-05)
 
 
 
 
 ADD RESFREQ LOSS FOR E1 train
 
+<base>
+p: 97984 , loss: tensor(4.0355e-06) , ic: tensor(2.2724e-06) , res: tensor(1.5733e-07) , res freq: tensor(1.6058e-06)
+
+<tmp>
+p: 39648 , loss: tensor(0.0003) , ic: tensor(0.0002) , res: tensor(1.8439e-06) , res freq: tensor(6.4493e-05)
+
+
+### exp4 ###
+
+<run-4>
+0 Traning Loss: tensor(2.7894)
+... RAR mean res:  tensor(0.3259)
+... RES add [x,t]: tensor([[-5.6303]]) tensor([[4.9847]]) . max res value:  tensor([2.8846])
+e1net epoch: 1 ,loss: tensor(1.9681) ,ic loss: tensor(0.0588) ,res: tensor(0.2501) ,res freq: tensor(1.6592)
+e1net epoch: 5 ,loss: tensor(1.8434) ,ic loss: tensor(0.0559) ,res: tensor(0.2004) ,res freq: tensor(1.5871)
+e1net epoch: 6 ,loss: tensor(1.7148) ,ic loss: tensor(0.0566) ,res: tensor(0.0991) ,res freq: tensor(1.5591)
+e1net epoch: 26 ,loss: tensor(1.6288) ,ic loss: tensor(0.0547) ,res: tensor(0.0358) ,res freq: tensor(1.5383)
+e1_net: 60000 epochs: 57362 ,loss: tensor(0.0010) ,ic loss: tensor(0.0002) ,res: tensor(5.5449e-05) ,res freq: tensor(0.0007)
+
+<run-5>
+testing residual connection ---> does't improve
+
+<run-6>
+testing normalizng inputs domain to [0,1] ---> doesn't improve
+58514 ,loss: tensor(0.0031) ,ic loss: tensor(0.0001) ,res: tensor(0.0002) ,res freq: tensor(0.0028)
+
+#####################
+<run-4>
+0 Traning Loss: tensor(2.7894)
+... RAR mean res:  tensor(0.3259)
+... RES add [x,t]: tensor([[-5.6303]]) tensor([[4.9847]]) . max res value:  tensor([2.8846])
+e1net epoch: 1 ,loss: tensor(1.9681) ,ic loss: tensor(0.0588) ,res: tensor(0.2501) ,res freq: tensor(1.6592)
+e1net epoch: 5 ,loss: tensor(1.8434) ,ic loss: tensor(0.0559) ,res: tensor(0.2004) ,res freq: tensor(1.5871)
+e1net epoch: 6 ,loss: tensor(1.7148) ,ic loss: tensor(0.0566) ,res: tensor(0.0991) ,res freq: tensor(1.5591)
+e1net epoch: 26 ,loss: tensor(1.6288) ,ic loss: tensor(0.0547) ,res: tensor(0.0358) ,res freq: tensor(1.5383)
+e1_net: 60000 epochs: 57362 ,loss: tensor(0.0010) ,ic loss: tensor(0.0002) ,res: tensor(5.5449e-05) ,res freq: tensor(0.0007)
+t1= 0.0 , a1= [0.05768572]
+t1= 0.0 , a1 [Monte]= [0.45061532]
+t1= 1.0 , a1 [Monte]= [1.28623102]
+t1= 2.0 , a1 [Monte]= [0.77845035]
+t1= 3.0 , a1 [Monte]= [0.62515362]
+t1= 4.0 , a1 [Monte]= [0.94570609]
+t1= 5.0 , a1 [Monte]= [1.13496412]
+
+e1net epoch: 117644 ,loss: tensor(0.0004) ,ic loss: tensor(0.0001) ,res: tensor(2.1034e-05) ,res freq: tensor(0.0003)
+t1= 0.0 , a1= [0.04467904]
+t1= 0.0 , a1 [Monte]= [0.44162298]
+t1= 1.0 , a1 [Monte]= [1.32572151]
+t1= 2.0 , a1 [Monte]= [0.80178267]
+t1= 3.0 , a1 [Monte]= [0.67627921]
+t1= 4.0 , a1 [Monte]= [0.79183673]
+t1= 5.0 , a1 [Monte]= [0.91890261]
+
+e1net epoch: 194051 ,loss: tensor(0.0003) ,ic loss: tensor(7.2247e-05) ,res: tensor(1.4181e-05) ,res freq: tensor(0.0002)
+t1= 0.0 , a1= [0.0332346]
+t1= 0.0 , a1 [Monte]= [0.43753166]
+t1= 1.0 , a1 [Monte]= [1.3610307]
+t1= 2.0 , a1 [Monte]= [0.80967929]
+t1= 3.0 , a1 [Monte]= [0.68924528]
+t1= 4.0 , a1 [Monte]= [0.7650637]
+t1= 5.0 , a1 [Monte]= [0.86973534]
+
+<run-4.1>
+learning rate = 0.99, epochs = 180k
+does not work
+
+<run-4.2>
+e1 net neurons to 68
+does not work
+
+<run-4.3>
+add res_input points
+does not work
+e1net epoch: 193828 ,loss: tensor(0.0009) ,ic loss: tensor(2.5978e-05) ,res: tensor(3.3466e-05) ,res freq: tensor(0.0009)
+t1= 0.0 , a1= [0.01543572]
+t1= 0.0 , a1 [Monte]= [0.43562596]
+t1= 1.0 , a1 [Monte]= [1.20943366]
+t1= 2.0 , a1 [Monte]= [1.31617403]
+t1= 3.0 , a1 [Monte]= [1.20844908]
+t1= 4.0 , a1 [Monte]= [1.15760067]
+t1= 5.0 , a1 [Monte]= [1.16595685]
+
+<run-4.4>
+e1 net neurons to 15
+
+
+<run-7>
+11 hidden layers of e1_net
+early termination due to my time limit.
+e1net epoch: 82276 ,loss: tensor(0.0008) ,ic loss: tensor(7.2462e-05) ,res: tensor(4.5551e-05) ,res freq: tensor(0.0007)
+need to re-run for complete 200k epochs
+
+<run-8>
+11 hidden layers of e1_net with position encoding
+116792 ,loss: tensor(0.0009) ,ic loss: tensor(0.0002) ,res: tensor(5.0864e-05) ,res freq: tensor(0.0007)
+t1= 0.0 , a1= [0.03037031]
+t1= 0.0 , a1 [Monte]= [0.43328971]
+t1= 1.0 , a1 [Monte]= [2.49824227]
+t1= 2.0 , a1 [Monte]= [1.24911009]
+t1= 3.0 , a1 [Monte]= [1.53982275]
+t1= 4.0 , a1 [Monte]= [1.37903835]
+t1= 5.0 , a1 [Monte]= [2.38725305]
+
+<run-9>
+derived from run-4 without mse_res_freq loss
+117147 ,loss: tensor(1.3374e-05) ,ic loss: tensor(3.1108e-07) ,res: tensor(1.3063e-05) ,res freq: tensor(1.2912)
+t1= 0.0 , a1= [0.00209594]
+t1= 0.0 , a1 [Monte]= [0.43395948]
+t1= 1.0 , a1 [Monte]= [2.78244953]
+t1= 2.0 , a1 [Monte]= [1.19218301]
+t1= 3.0 , a1 [Monte]= [0.69998749]
+t1= 4.0 , a1 [Monte]= [0.56635684]
+t1= 5.0 , a1 [Monte]= [1.17710221]
