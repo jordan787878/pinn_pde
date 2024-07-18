@@ -276,7 +276,7 @@ def e1_res_func(x, t, e1_net, p_net, verbose=False):
 def train_e1_net(e1_net, optimizer, mse_cost_function, p_net, max_abs_e1_x_0):
     global x_low, x_hig, t0, T_end
     batch_size = 500
-    iterations = 2000
+    iterations = 1000
     # iterations = 20000
     min_loss = np.inf
     loss_history = []
@@ -377,7 +377,7 @@ def plot_tight_error_bounds(p_net, e1_net):
     colors = ["black","blue","green"]
 
     e2_hat_mag = 1e-3
-    e2_hat_freq = 10
+    e2_hat_freq = 5
 
     fig, axs = plt.subplots(3, 1, figsize=(8, 6))
     for i in range(3):
@@ -447,14 +447,16 @@ def plot_tight_error_bounds(p_net, e1_net):
         print(eB, eL)
         axs[i].plot(x, e1, color=colors[i], linestyle="-", linewidth=1.0, label=r"$e_1$")
         axs[i].plot(x, e1_hat, linestyle="--", color = colors[i], linewidth=1.0, label=r"$\hat{e}_1$")
-        axs[i].plot(x, x*0+eL, linestyle=":", color = colors[i], linewidth=2.0, label=r"$e_L$")
-        axs[i].plot(x, x*0-eL, linestyle=":", color = colors[i], linewidth=2.0)
-        axs[i].fill_between(x.reshape(-1), y1=0*phat.reshape(-1)+eB, y2=0*phat.reshape(-1)-eB, color=colors[i], alpha=0.1, label=r"$e_B$")
+        axs[i].plot(x, x*0+eB, linestyle=":", color = colors[i], linewidth=2.0, label=r"$e_B$")
+        axs[i].plot(x, x*0-eB, linestyle=":", color = colors[i], linewidth=2.0)
+        axs[i].fill_between(x.reshape(-1), y1=0*phat.reshape(-1)+eL, y2=0*phat.reshape(-1)-eL, color=colors[i], alpha=0.1, label=r"$e_L$")
         # axs[i].fill_between(x.reshape(-1), y1=0*phat.reshape(-1)+eL, y2=0*phat.reshape(-1)-eL, color=colors[i], alpha=0.3, label=r"$e_L$")
         axs[i].grid(linewidth=0.5)
         axs[i].legend(loc="upper right")
         # Add text to the left top corner
-        axs[i].text(0.01, 0.92, "t="+str(t1)+", "+r"$e_B=$"+str(eB[0])+", "+r"$e_L=$"+str(eL[0]), transform=axs[i].transAxes, verticalalignment='top', fontsize=8)
+        axs[i].text(0.01, 0.95, "t="+str(t1)+", "+r"$e_B=$"+str(eB[0])+", "+r"$e_L=$"+str(eL[0]),
+                    transform=axs[i].transAxes, verticalalignment='top', fontsize=8,
+                    bbox=dict(facecolor='white', edgecolor='black', boxstyle='round,pad=0.2'))
     plt.tight_layout()
     plt.savefig(FOLDER+"figs/e1hat_result.png")
     plt.close()
@@ -463,13 +465,15 @@ def plot_tight_error_bounds(p_net, e1_net):
 def plot_alphas(p_net, e1_net):
     x = np.arange(x_low, x_hig+0.005, 0.005).reshape(-1,1)
     pt_x = Variable(torch.from_numpy(x).float(), requires_grad=True).to(device)
-    t1s = np.arange(1.0, 3.0+0.05, 0.05)
+    t1s = np.arange(1.0, 3.0+0.01, 0.01)
 
     a1_list = []
     a2_list = []
+    e1_list = []
+    eB_list = []
 
     e2_hat_mag = 1e-3
-    e2_hat_freq = 10
+    e2_hat_freq = 5
 
     for i in range(len(t1s)):
         t1 = t1s[i]
@@ -477,9 +481,14 @@ def plot_alphas(p_net, e1_net):
         p = p_exact(x, x*0+t1)
         phat = p_net(pt_x, pt_t1).data.cpu().numpy()
         e1 = p - phat
+        e1_list.append(max(abs(e1))[0])
         e1_hat = e1_net(pt_x, pt_t1).data.cpu().numpy()
         e2 = e1 - e1_hat
         e2_hat = e2 + e2_hat_mag*max(abs(e2))*np.sin(e2_hat_freq*x)
+        r_21 = max(abs(e2_hat))/ max(abs(e1_hat))
+        eB = max(abs(e1_hat))*(1/(1-r_21))
+        eB = np.round(eB,3)
+        eB_list.append(eB)
         a1 = max(abs(e1-e1_hat))/max(abs(e1_hat))
         a2 = max(abs(e2-e2_hat))/max(abs(e2_hat))
         a1_list.append(a1[0])
@@ -494,20 +503,38 @@ def plot_alphas(p_net, e1_net):
     cond_2 = a1_list**2
     y_2 = a2_list*(1+a2_list)
 
-    fig, axs = plt.subplots(2, 1, figsize=(8, 6))
-    axs[0].plot(t1s, cond_1, color="black", linestyle=":", label=r"$1-\alpha_1$")
-    axs[0].plot(t1s, y_1, color="black", linestyle="-", label=r"$\alpha_2$")
-    axs[0].set_xlabel('t')
-    axs[0].legend()
+    # fig, axs = plt.subplots(1, 1, figsize=(8, 6))
+    # axs.plot(t1s, eL_list, color="black", linestyle=":", label=r"$e_L$")
+    # axs.plot(t1s, e1_list, color="black", linestyle="-", label=r"$\max|e|$")
+    # axs.set_xlabel('t')
+    # axs.legend()
+    # axs.grid(linewidth=0.5)
+    # plt.show()
+
+    fig, axs = plt.subplots(3, 1, figsize=(8, 6))
+    axs[0].plot(t1s, eB_list, color="black", linestyle=":", label=r"$e_B$")
+    axs[0].plot(t1s, e1_list, color="black", linestyle="-", label=r"$\max|e|$")
+    axs[0].legend(loc="upper right")
     axs[0].grid(linewidth=0.5)
-
-    axs[1].plot(t1s, cond_2, color="black", linestyle=":", label=r"$\alpha_1^2$")
-    axs[1].plot(t1s, y_2, color="black", linestyle="-", label=r"$\alpha_2(1+\alpha_2)$")
-    axs[1].set_xlabel('t')
-    axs[1].legend()
+    
+    axs[1].plot(t1s, cond_1, color="black", linestyle=":", label=r"$1-\alpha_1$")
+    axs[1].plot(t1s, y_1, color="black", linestyle="-", label=r"$\alpha_2$")
+    axs[1].legend(loc="upper right")
     axs[1].grid(linewidth=0.5)
+    axs[1].text(0.01, 0.98, "condition: "+r"$\alpha_2 < 1-\alpha_1$", transform=axs[1].transAxes, verticalalignment='top', fontsize=8,
+                bbox=dict(facecolor='white', edgecolor='black', boxstyle='round,pad=0.2'))
 
-    plt.show()
+    axs[2].plot(t1s, cond_2, color="black", linestyle=":", label=r"$\alpha_1^2$")
+    axs[2].plot(t1s, y_2, color="black", linestyle="-", label=r"$\alpha_2(1+\alpha_2)$")
+    axs[2].set_xlabel('t')
+    axs[2].legend(loc="upper right")
+    axs[2].grid(linewidth=0.5)
+    axs[2].text(0.01, 0.98, "condition: "+r"$\alpha_2(1+\alpha_2) \leq \alpha_1^2$", transform=axs[2].transAxes, verticalalignment='top', fontsize=8,
+                bbox=dict(facecolor='white', edgecolor='black', boxstyle='round,pad=0.2'))
+    plt.tight_layout()
+    plt.savefig(FOLDER+"figs/error_and_conditions.png")
+    plt.close()
+    # plt.show()
 
 
 def plot_train_loss(path_1, path_2):
@@ -525,6 +552,7 @@ def plot_train_loss(path_1, path_2):
     axs[1].set_label("epochs")
     axs[0].set_ylabel("train loss: "+r"$\hat{p}$")
     axs[1].set_ylabel("train loss: "+r"$\hat{e}_1$")
+    plt.tight_layout()
     plt.savefig(FOLDER+"figs/train_loss.png")
     plt.close()
     # plt.ylim([min_loss, 10*min_loss])
@@ -544,7 +572,7 @@ def main():
     # train_p_net(p_net, optimizer, mse_cost_function); print("p_net train complete")
     p_net = pos_p_net_train(p_net, PATH=FOLDER+"output/p_net.pt", PATH_LOSS=FOLDER+"output/p_net_train_loss.npy")
     max_abs_e1_x_0 = show_p_net_results(p_net)
-    plot_p_net_results(p_net)
+    # plot_p_net_results(p_net)
 
     # create e1_net
     e1_net = E1Net(scale=max_abs_e1_x_0)
@@ -555,7 +583,7 @@ def main():
 
     plot_tight_error_bounds(p_net, e1_net)
     plot_train_loss(FOLDER+"output/p_net_train_loss.npy", FOLDER+"output/e1_net_train_loss.npy")
-    # plot_alphas(p_net, e1_net)
+    plot_alphas(p_net, e1_net)
 
 
 
