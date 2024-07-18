@@ -12,6 +12,8 @@ import random
 from tqdm import tqdm
 import warnings
 
+# complex NN + RAR and grad(r1) loss
+
 FOLDER = "exp1/run-8.1/"
 DATA_FOLDER = "exp1/data/"
 
