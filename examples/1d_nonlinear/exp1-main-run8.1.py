@@ -11,6 +11,7 @@ from matplotlib.ticker import LinearLocator, FormatStrFormatter
 import random
 from tqdm import tqdm
 import warnings
+import time
 
 # complex NN + RAR and grad(r1) loss
 
@@ -532,6 +533,19 @@ def train_e1_net(e1_net, optimizer, scheduler1, mse_cost_function, p_net, max_ab
                     }, PATH)
             min_loss = loss.data 
             FLAG = True
+        if(loss.data < 6.5e-5):
+            print("e1net epoch:", epoch, ",loss:", loss.data, ",ic loss:", mse_u.data, ",res:", mse_res.data,
+                  ",res freq:", mse_norm_res_input.data
+                  # , l_inf_res.data,# quotient_max.data,
+                  # ",a1(t0):", alpha1_t0.data, "error(t0):",error1_t0.data)
+                )
+            torch.save({
+                    'epoch': epoch,
+                    'model_state_dict': e1_net.state_dict(),
+                    'optimizer_state_dict': optimizer.state_dict(),
+                    'loss': loss.data,
+                    }, PATH)
+            return
 
         loss_history.append(loss.data)
 
@@ -788,8 +802,14 @@ def main():
     p_net = Net().to(device)
     p_net.apply(init_weights)
     optimizer = torch.optim.Adam(p_net.parameters())
+
     scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.95)
-    # train_p_net(p_net, optimizer, scheduler, mse_cost_function, max_pi, iterations=30000); print("[p_net train complete]")
+
+    start_time = time.time()
+    # train_p_net(p_net, optimizer, scheduler, mse_cost_function, max_pi, iterations=15700); print("[p_net train complete]")
+    end_time = time.time()
+    time_train_pnet = end_time - start_time
+
     p_net = pos_p_net_train(p_net, PATH=FOLDER+"output/p_net.pt", PATH_LOSS=FOLDER+"output/p_net_train_loss.npy"); p_net.eval()
     max_abs_e1_ti = show_p_net_results(p_net)
     print("max abs e1(x,0):", max_abs_e1_ti)
@@ -798,11 +818,17 @@ def main():
     e1_net.apply(init_weights)
     optimizer = torch.optim.Adam(e1_net.parameters())
     scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.95)
-    # train_e1_net(e1_net, optimizer, scheduler, mse_cost_function, p_net, max_abs_e1_ti, iterations=200000); print("[e1_net train complete]")
+
+    start_time = time.time()
+    train_e1_net(e1_net, optimizer, scheduler, mse_cost_function, p_net, max_abs_e1_ti, iterations=200000); print("[e1_net train complete]")
+    end_time = time.time()
+    time_train_e1net = end_time - start_time
+
     e1_net = pos_e1_net_train(e1_net, PATH=FOLDER+"output/e1_net.pt", PATH_LOSS=FOLDER+"output/e1_net_train_loss.npy"); e1_net.eval()
     show_e1_net_results(p_net, e1_net)
 
-    print("[complete rational nonlinear]")
+    print(f"train pnet time: {time_train_pnet:.4f} seconds")
+    print(f"train e1net time: {time_train_e1net:.4f} seconds")
 
 
 if __name__ == "__main__":

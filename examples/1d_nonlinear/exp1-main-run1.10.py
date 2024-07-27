@@ -14,7 +14,7 @@ import warnings
 
 # complex NN
 
-FOLDER = "exp1/run-1.1/"
+FOLDER = "exp1/run-1.10/"
 DATA_FOLDER = "exp1/data/"
 
 device = "cpu"
@@ -127,7 +127,7 @@ class Net(nn.Module):
         neurons = 30
         self.scale = scale
         super(Net, self).__init__()
-        self.hidden_layer1 = (nn.Linear(n_d+1,neurons))
+        self.hidden_layer1 = (nn.Linear(18,neurons))
         self.hidden_layer2 = (nn.Linear(neurons,neurons))
         self.hidden_layer3 = (nn.Linear(neurons,neurons))
         self.hidden_layer4 = (nn.Linear(neurons,neurons))
@@ -137,7 +137,32 @@ class Net(nn.Module):
         self.hidden_layer8 = (nn.Linear(neurons,neurons))
         self.output_layer =  (nn.Linear(neurons,1))
     def forward(self, x, t):
-        inputs = torch.cat([x, t],axis=1)
+        w1 = (1/pow(100, 2*0/8)) # power(n, (2*i)/d)
+        w2 = (1/pow(100, 2*1/8)) # power(n, (2*(i+1))/d)
+        w3 = (1/pow(100, 2*2/8))
+        w4 = (1/pow(100, 2*3/8))
+
+        x_p1 = torch.sin(w1*x)
+        x_p2 = torch.cos(w1*x)
+        x_p3 = torch.sin(w2*x)
+        x_p4 = torch.cos(w2*x)
+        x_p5 = torch.sin(w3*x)
+        x_p6 = torch.cos(w3*x)
+        x_p7 = torch.sin(w4*x)
+        x_p8 = torch.cos(w4*x)
+
+        t_p1 = torch.sin(w1*t)
+        t_p2 = torch.cos(w1*t)
+        t_p3 = torch.sin(w2*t)
+        t_p4 = torch.cos(w2*t)
+        t_p5 = torch.sin(w3*t)
+        t_p6 = torch.cos(w3*t)
+        t_p7 = torch.sin(w4*t)
+        t_p8 = torch.cos(w4*t)
+
+        inputs = torch.cat([x, t, 
+                            x_p1, x_p2, x_p3, x_p4, x_p5, x_p6, x_p7, x_p8, 
+                            t_p1, t_p2, t_p3, t_p4, t_p5, t_p6, t_p7, t_p8],axis=1)
         layer1_out = F.softplus((self.hidden_layer1(inputs)))
         layer2_out = F.softplus((self.hidden_layer2(layer1_out)))
         layer3_out = F.softplus((self.hidden_layer3(layer2_out)))
@@ -183,7 +208,7 @@ def train_p_net(p_net, optimizer, scheduler, mse_cost_function, max_abs_p_ti, it
         mse_norm_res_input = mse_cost_function(norm_res_input, all_zeros)
 
         # <Baseline>
-        loss = mse_u + mse_res # + mse_norm_res_input
+        loss = mse_u + mse_res #+ mse_norm_res_input
 
         # Save the min loss model
         if(loss.data < min_loss):
@@ -653,8 +678,8 @@ def main():
     p_net = Net().to(device)
     p_net.apply(init_weights)
     optimizer = torch.optim.Adam(p_net.parameters())
-    scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=1.0)
-    # train_p_net(p_net, optimizer, scheduler, mse_cost_function, max_pi, iterations=10000); print("[p_net train complete]")
+    scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.99)
+    train_p_net(p_net, optimizer, scheduler, mse_cost_function, max_pi, iterations=20000); print("[p_net train complete]")
     p_net = pos_p_net_train(p_net, PATH=FOLDER+"output/p_net.pt", PATH_LOSS=FOLDER+"output/p_net_train_loss.npy"); p_net.eval()
     max_abs_e1_ti = show_p_net_results(p_net)
     print("max abs e1(x,0):", max_abs_e1_ti)
@@ -662,8 +687,8 @@ def main():
     e1_net = E1Net(scale=max_abs_e1_ti).to(device)
     e1_net.apply(init_weights)
     optimizer = torch.optim.Adam(e1_net.parameters())
-    scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=1.0)
-    train_e1_net(e1_net, optimizer, scheduler, mse_cost_function, p_net, max_abs_e1_ti, iterations=20000); print("[e1_net train complete]")
+    scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.99)
+    train_e1_net(e1_net, optimizer, scheduler, mse_cost_function, p_net, max_abs_e1_ti, iterations=40000); print("[e1_net train complete]")
     e1_net = pos_e1_net_train(e1_net, PATH=FOLDER+"output/e1_net.pt", PATH_LOSS=FOLDER+"output/e1_net_train_loss.npy"); e1_net.eval()
     show_e1_net_results(p_net, e1_net)
 
