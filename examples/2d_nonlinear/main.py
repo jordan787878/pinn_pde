@@ -14,7 +14,7 @@ from matplotlib.lines import Line2D
 import torch.nn.functional as F
 
 
-FOLDER = "exp1/run-1.0/"
+FOLDER = "exp1/main/"
 FOLDER_DATA = "exp1/data/"
 device = "cpu"
 print(device)
@@ -612,8 +612,8 @@ def train_e1_net(e1_net, optimizer, scheduler, mse_cost_function, p_net, max_abs
             print("RAR mean IC: ", mean_ic_error.data)
             if(mean_ic_error > 5e-3):
                 max_abs_ic, max_index = torch.max(torch.abs(ic_RAR - ic_hat_RAR), dim=0)
-                x_max = x_RAR[max_index]
-                t_max = t0_RAR[max_index]
+                x_max = x_RAR[max_index].clone().detach()
+                t_max = t0_RAR[max_index].clone().detach()
                 x_bc = torch.cat((x_bc, x_max), dim=0)
                 t_bc = torch.cat((t_bc, t_max), dim=0)
                 print("... IC add [x,t]:", x_max.data, t_max.data, ". max ic value: ", max_abs_ic.data)
