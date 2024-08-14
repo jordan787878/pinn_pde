@@ -13,7 +13,7 @@ from tqdm import tqdm
 import warnings
 import time
 
-FOLDER = "exp1/exp1-PENN_p-RG/"
+FOLDER = "exp1/main/"
 DATA_FOLDER = "exp1/data/"
 
 device = "cpu"; print(device)
@@ -38,8 +38,9 @@ T_end = 5.0
 t1s = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]
 
 datas = ["data1/"]
+S = 10000
 pnet_terminate = 1e-4
-enet_terminate = 1e-4
+enet_terminate = 5e-4
 
 
 def p_init(x):
@@ -91,8 +92,6 @@ class PNet(nn.Module):
         self.hidden_layer4 = (nn.Linear(neurons,neurons))
         self.hidden_layer5 = (nn.Linear(neurons,neurons))
         self.hidden_layer6 = (nn.Linear(neurons,neurons))
-        self.hidden_layer7 = (nn.Linear(neurons,neurons))
-        self.hidden_layer8 = (nn.Linear(neurons,neurons))
         self.output_layer =  (nn.Linear(neurons,1))
     def forward(self, x, t):
         inputs = torch.cat([x,t],axis=1)
@@ -102,9 +101,7 @@ class PNet(nn.Module):
         layer4_out = F.softplus((self.hidden_layer4(layer3_out)))
         layer5_out = F.softplus((self.hidden_layer5(layer4_out)))
         layer6_out = F.softplus((self.hidden_layer6(layer5_out)))
-        layer7_out = F.softplus((self.hidden_layer7(layer6_out)))
-        layer8_out = F.softplus((self.hidden_layer8(layer7_out)))
-        output = F.softplus( self.output_layer(layer8_out) )
+        output = F.softplus( self.output_layer(layer6_out) )
         return output
 
 
@@ -120,8 +117,6 @@ class ENet(nn.Module):
         self.hidden_layer5 = (nn.Linear(neurons,neurons))
         self.hidden_layer6 = (nn.Linear(neurons,neurons))
         self.hidden_layer7 = (nn.Linear(neurons,neurons))
-        self.hidden_layer8 = (nn.Linear(neurons,neurons))
-        self.hidden_layer9 = (nn.Linear(neurons,neurons))
         self.output_layer =  (nn.Linear(neurons,1))
         self.activation = nn.Tanh()
     def forward(self, x, t):
@@ -133,9 +128,7 @@ class ENet(nn.Module):
         layer5_out = self.activation((self.hidden_layer5(layer4_out)))
         layer6_out = self.activation((self.hidden_layer6(layer5_out)))
         layer7_out = self.activation((self.hidden_layer7(layer6_out)))
-        layer8_out = self.activation((self.hidden_layer8(layer7_out)))
-        layer9_out = self.activation((self.hidden_layer9(layer8_out)))
-        output = self.output_layer(layer9_out)
+        output = self.output_layer(layer7_out)
         output = self.scale * output
         return output
     
@@ -182,6 +175,7 @@ def train_pnet_model(p_net, optimizer, scheduler, mse_cost_function, iterations=
     # RAR
     S = 100000
     FLAG = False
+    w_regular = 1.0 #0.5
     
     PATH = FOLDER+"output/p_net.pth"
 
@@ -207,7 +201,7 @@ def train_pnet_model(p_net, optimizer, scheduler, mse_cost_function, iterations=
         mse_norm_res_input = mse_cost_function(norm_res_input, all_zeros)
 
         # Loss Function
-        loss = mse_u + mse_res + mse_norm_res_input
+        loss = mse_u + mse_res + w_regular*mse_norm_res_input
 
         # RAR
         if (epoch%500 == 0 and FLAG):
@@ -226,20 +220,21 @@ def train_pnet_model(p_net, optimizer, scheduler, mse_cost_function, iterations=
                 x = torch.cat((x, x_max), dim=0)
                 t = torch.cat((t, t_max), dim=0)
                 print("... add [x,t]:", x_max.data, t_max.data, max_abs_res.data)
-            res_x_RAR = torch.autograd.grad(res_RAR, x_RAR, grad_outputs=torch.ones_like(res_RAR), create_graph=True)[0]
-            res_t_RAR = torch.autograd.grad(res_RAR, t_RAR, grad_outputs=torch.ones_like(res_RAR), create_graph=True)[0]
-            res_input_RAR = torch.cat([res_x_RAR, res_t_RAR], axis=1)
-            norm_res_input_RAR = torch.norm(res_input_RAR, dim=1).view(-1,1)
-            if(torch.mean(norm_res_input) > 0.0):
-                max_abs_res_input, max_index = torch.max(norm_res_input_RAR, dim=0)
-                # Get the corresponding x_RAR and t_RAR vectors
-                x_max = x_RAR[max_index]
-                t_max = t_RAR[max_index]
-                # Append x_max and t_max to x and t
-                x = torch.cat((x, x_max), dim=0)
-                t = torch.cat((t, t_max), dim=0)
-                print("... add [x,t]:", x_max.data, t_max.data, max_abs_res_input.data)
-            FLAG = False
+                FLAG = False
+            # res_x_RAR = torch.autograd.grad(res_RAR, x_RAR, grad_outputs=torch.ones_like(res_RAR), create_graph=True)[0]
+            # res_t_RAR = torch.autograd.grad(res_RAR, t_RAR, grad_outputs=torch.ones_like(res_RAR), create_graph=True)[0]
+            # res_input_RAR = torch.cat([res_x_RAR, res_t_RAR], axis=1)
+            # norm_res_input_RAR = torch.norm(res_input_RAR, dim=1).view(-1,1)
+            # if(torch.mean(norm_res_input) > 0.0):
+            #     max_abs_res_input, max_index = torch.max(norm_res_input_RAR, dim=0)
+            #     # Get the corresponding x_RAR and t_RAR vectors
+            #     x_max = x_RAR[max_index]
+            #     t_max = t_RAR[max_index]
+            #     # Append x_max and t_max to x and t
+            #     x = torch.cat((x, x_max), dim=0)
+            #     t = torch.cat((t, t_max), dim=0)
+            #     print("... add [x,t]:", x_max.data, t_max.data, max_abs_res_input.data)
+            # FLAG = False
 
         loss_history.append(loss.data)
         
@@ -313,6 +308,7 @@ def train_enet_model(p_net, e1_net, optimizer, scheduler, mse_cost_function, ite
     FLAG = False
     S = 100000
     max_abs_e1_ti = e1_net.scale
+    # w_regular = 1e-2
 
     for epoch in range(iterations):
         optimizer.zero_grad() # to make the gradients zero
@@ -359,6 +355,22 @@ def train_enet_model(p_net, e1_net, optimizer, scheduler, mse_cost_function, ite
                     }, PATH)
             min_loss = loss.data 
             FLAG = True
+
+        # Terminaion
+        if(loss.data < enet_terminate):
+            print("e1net best epoch:", epoch, ", loss:", loss.data, 
+                  ",ic:", mse_u.data, 
+                  ",res:", mse_res.data,
+                  #",res freq:", mse_norm_res_input.data
+                  )
+            torch.save({
+                    'epoch': epoch,
+                    'model_state_dict': e1_net.state_dict(),
+                    'optimizer_state_dict': optimizer.state_dict(),
+                    'loss': loss.data,
+                    'label': "e1_net",
+                    }, PATH)
+            return
 
         # RAR
         if (epoch%1000 == 0 and FLAG):
@@ -615,7 +627,7 @@ def plot_p_monte():
         
 
 def main():
-    plot_p_monte()
+    # plot_p_monte()
     mse_cost_function = torch.nn.MSELoss()
     
     p_model = PNet().to(device)
@@ -629,7 +641,7 @@ def main():
     
     p_model.normalize = get_p_normalize()
     start_time = time.time()
-    # train_pnet_model(p_model, optimizer_p_model, scheduler_p_model, mse_cost_function, iterations=40000); print("[p_net train complete]")
+    train_pnet_model(p_model, optimizer_p_model, scheduler_p_model, mse_cost_function, iterations=50000); print("[p_net train complete]")
     end_time = time.time()
     time_train_p = end_time - start_time
     p_model = load_trained_model(p_model, PATH=FOLDER+"output/p_net.pth", PATH_LOSS=FOLDER+"output/p_net_train_loss.npy")
@@ -638,7 +650,7 @@ def main():
     e_model.scale = get_e1_normalize(p_model)
     print("enet scale: ", e_model.scale)
     start_time = time.time()
-    train_enet_model(p_model, e_model, optimizer_e_model, scheduler_e_model, mse_cost_function, iterations=100000); print("[e1_net train complete]")
+    train_enet_model(p_model, e_model, optimizer_e_model, scheduler_e_model, mse_cost_function, iterations=1000000); print("[e1_net train complete]")
     end_time = time.time()
     time_train_e = end_time - start_time
     e_model = load_trained_model(e_model, PATH=FOLDER+"output/e1_net.pth", PATH_LOSS=FOLDER+"output/e1_net_train_loss.npy")
@@ -651,230 +663,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
-
-# Log
-
-### PENN Softplus ENet ###
-# (venv) chko1829@UCB-X1Q6HY3GQC 1d_nonlinear % python exp1-PENN_p-RG.py
-# cpu
-# save fig to exp1/exp1-PENN_p-RG/figs/p_sol_monte.png
-# epoch: 0 ,loss: tensor(76.2332) ,ic: tensor(2.0900) ,res: tensor(62.2887) ,res g: tensor(11.8545)
-# epoch: 1 ,loss: tensor(60.6372) ,ic: tensor(1.6696) ,res: tensor(49.5199) ,res g: tensor(9.4478)
-# epoch: 2 ,loss: tensor(47.6442) ,ic: tensor(1.3190) ,res: tensor(38.8828) ,res g: tensor(7.4424)
-# epoch: 3 ,loss: tensor(36.9818) ,ic: tensor(1.0312) ,res: tensor(30.1554) ,res g: tensor(5.7953)
-# epoch: 4 ,loss: tensor(28.3594) ,ic: tensor(0.7982) ,res: tensor(23.1002) ,res g: tensor(4.4610)
-# epoch: 5 ,loss: tensor(21.4946) ,ic: tensor(0.6127) ,res: tensor(17.4861) ,res g: tensor(3.3958)
-# epoch: 6 ,loss: tensor(16.1175) ,ic: tensor(0.4672) ,res: tensor(13.0919) ,res g: tensor(2.5584)
-# epoch: 7 ,loss: tensor(11.9740) ,ic: tensor(0.3549) ,res: tensor(9.7086) ,res g: tensor(1.9105)
-# epoch: 8 ,loss: tensor(8.8306) ,ic: tensor(0.2696) ,res: tensor(7.1444) ,res g: tensor(1.4166)
-# epoch: 9 ,loss: tensor(6.4799) ,ic: tensor(0.2058) ,res: tensor(5.2288) ,res g: tensor(1.0453)
-# [pnet train complete]
-# pnet best epoch:  19719 , loss: tensor(3.9051e-05)
-# enet scale:  0.016813713809397668
-# epoch: 0 ,loss: tensor(8.2147) ,ic: tensor(0.2951) ,res: tensor(6.5774) ,res g: tensor(1.3422)
-# epoch: 1 ,loss: tensor(3.3424) ,ic: tensor(0.1701) ,res: tensor(2.5958) ,res g: tensor(0.5766)
-# epoch: 2 ,loss: tensor(0.7596) ,ic: tensor(0.1114) ,res: tensor(0.4818) ,res g: tensor(0.1664)
-# epoch: 3 ,loss: tensor(0.2453) ,ic: tensor(0.1114) ,res: tensor(0.0557) ,res g: tensor(0.0782)
-# epoch: 11 ,loss: tensor(0.1907) ,ic: tensor(0.1064) ,res: tensor(0.0153) ,res g: tensor(0.0690)
-# epoch: 49 ,loss: tensor(0.1711) ,ic: tensor(0.1052) ,res: tensor(0.0062) ,res g: tensor(0.0597)
-# enet best epoch:  26508 , loss: tensor(0.0041)
-# eL:  0.021 	 alpha:  0.165
-# eL:  0.021 	 alpha:  0.274
-# eL:  0.019 	 alpha:  0.323
-# eL:  0.016 	 alpha:  0.269
-# eL:  0.013 	 alpha:  0.315
-# eL:  0.01 	 alpha:  0.79
-# train pnet time: 0.0000 seconds
-# train enet time: 0.0000 seconds
-# (venv) chko1829@UCB-X1Q6HY3GQC 1d_nonlinear % python qv.py
-# cpu
-# save fig to exp1/exp1-PENN_p-RG/figs/p_sol_monte.png
-# pnet best epoch:  19719 , loss: tensor(3.9051e-05)
-# eL:  1.024 	 alpha:  1.0
-# eL:  1.022 	 alpha:  1.0
-# eL:  1.048 	 alpha:  1.001
-# eL:  1.084 	 alpha:  1.002
-# eL:  1.106 	 alpha:  1.002
-# eL:  1.111 	 alpha:  0.999
-# enet scale:  0.016813713809397668
-# enet best epoch:  60993 , loss: tensor(0.0030)
-# eL:  0.021 	 alpha:  0.169
-# eL:  0.021 	 alpha:  0.271
-# eL:  0.018 	 alpha:  0.284
-# eL:  0.015 	 alpha:  0.222
-# eL:  0.011 	 alpha:  0.541
-# eL:  0.008 	 alpha:  1.453
-
-### NN Tanh ENet ### ---> ENet threshold = 1e-4 (with IC and Res Loss only)
-# (pre-trained) pnet: pnet best epoch:  19719 , loss: tensor(3.9051e-05), stored as pre-pnet.pt
-# enet best epoch:  31239 , loss: tensor(0.0002)
-# eL:  0.02 	 alpha:  0.061
-# eL:  0.018 	 alpha:  0.053
-# eL:  0.013 	 alpha:  0.137
-# eL:  0.011 	 alpha:  0.28
-# eL:  0.01 	 alpha:  0.359
-# eL:  0.009 	 alpha:  0.444
-#
-# enet best epoch:  35906 , loss: tensor(0.0002)
-# eL:  0.02 	 alpha:  0.07
-# eL:  0.018 	 alpha:  0.059
-# eL:  0.013 	 alpha:  0.135
-# eL:  0.011 	 alpha:  0.268
-# eL:  0.011 	 alpha:  0.26
-# eL:  0.01 	 alpha:  0.324
-#
-# enet best epoch:  40149 , loss: tensor(0.0001)
-# eL:  0.02 	 alpha:  0.071
-# eL:  0.018 	 alpha:  0.066
-# eL:  0.013 	 alpha:  0.134
-# eL:  0.012 	 alpha:  0.262
-# eL:  0.011 	 alpha:  0.23
-# eL:  0.01 	 alpha:  0.26
-#
-# enet best epoch:  48472 , loss: tensor(0.0001)
-# eL:  0.019 	 alpha:  0.075
-# eL:  0.017 	 alpha:  0.054
-# eL:  0.013 	 alpha:  0.14
-# eL:  0.012 	 alpha:  0.264
-# eL:  0.011 	 alpha:  0.219
-# eL:  0.011 	 alpha:  0.14
-#
-# enet best epoch:  54271 , loss: tensor(0.0001)
-# eL:  0.019 	 alpha:  0.075
-# eL:  0.017 	 alpha:  0.058
-# eL:  0.013 	 alpha:  0.14
-# eL:  0.012 	 alpha:  0.261
-# eL:  0.012 	 alpha:  0.209
-# eL:  0.012 	 alpha:  0.097
-#
-# enet best epoch:  82053 , loss: tensor(0.0001)
-# eL:  0.019 	 alpha:  0.072
-# eL:  0.017 	 alpha:  0.052
-# eL:  0.013 	 alpha:  0.163
-# eL:  0.012 	 alpha:  0.248
-# eL:  0.014 	 alpha:  0.175
-# eL:  0.015 	 alpha:  0.178
-#
-# enet best epoch:  94124 , loss: tensor(9.7544e-05)
-# eL:  0.019 	 alpha:  0.071
-# eL:  0.017 	 alpha:  0.052
-# eL:  0.013 	 alpha:  0.167
-# eL:  0.012 	 alpha:  0.249
-# eL:  0.014 	 alpha:  0.171
-# eL:  0.015 	 alpha:  0.213
-
-### PENN+Softplus Pnet & NN+Tanh ENet (seed 0) ###
-# pnet best epoch:  12777 , loss: tensor(4.0000e-05)
-# enet best epoch:  92383 , loss: tensor(0.0001)
-# eL:  0.035 	 alpha:  0.033
-# eL:  0.018 	 alpha:  0.076
-# eL:  0.016 	 alpha:  0.137
-# eL:  0.02 	 alpha:  0.192
-# eL:  0.026 	 alpha:  0.255
-# eL:  0.025 	 alpha:  0.441
-# train pnet time: 659.7231 seconds
-# train enet time: 1300.6258 seconds
-
-### PENN+Softplus Pnet & NN+Tanh ENet (seed 1) ### FAIL ---> rerun this with enet terminate to 4e-5, epoch to 300k
-# ---> did not work, so use the pre-trained pnet (seed 1), and train the enet (seed 1) as baseline.
-# pnet best epoch:  11322 , loss: tensor(3.9956e-05)
-# enet best epoch:  83829 , loss: tensor(1.0000e-04)
-# eL:  0.037 	 alpha:  0.032
-# eL:  0.008 	 alpha:  0.236
-# eL:  0.008 	 alpha:  0.597
-# eL:  0.006 	 alpha:  1.097
-# eL:  0.007 	 alpha:  1.133
-# eL:  0.01 	 alpha:  1.086
-# train pnet time: 593.1258 seconds
-# train enet time: 1049.3910 seconds
-
-### PENN+Softplus Pnet & NN+Tanh ENet (seed 1) FAIL Baseline ###
-# pnet best epoch:  11322 , loss: tensor(3.9956e-05)
-# enet best epoch:  154394 , loss: tensor(0.0001)
-# eL:  0.037 	 alpha:  0.031
-# eL:  0.008 	 alpha:  0.135
-# eL:  0.007 	 alpha:  0.503
-# eL:  0.004 	 alpha:  0.918
-# eL:  0.003 	 alpha:  1.17
-# eL:  0.003 	 alpha:  1.455
-# train pnet time: 0.0000 seconds
-# train enet time: 4210.3268 seconds
-
-### PENN+Softplus (pre-trained by seed 1) & PENN+Tanh ENet ###
-# ---> Fail
-# enet best epoch:  84819 , loss: tensor(3.9998e-05)
-# eL:  0.037 	 alpha:  0.03
-# eL:  0.008 	 alpha:  0.166
-# eL:  0.007 	 alpha:  0.461
-# eL:  0.004 	 alpha:  1.037
-# eL:  0.004 	 alpha:  0.845
-# eL:  0.002 	 alpha:  1.378
-# train pnet time: 0.0000 seconds
-# train enet time: 2007.6325 seconds
-
-### PENN+Softplus (pre-trained by seed 1) & PENN+Softplus ENet ###
-# --> Fail
-# enet best epoch:  101957 , loss: tensor(5.4436e-05)
-# eL:  0.015 	 alpha:  0.091
-# eL:  0.008 	 alpha:  0.169
-# eL:  0.008 	 alpha:  0.73
-# eL:  0.01 	 alpha:  1.164
-# eL:  0.013 	 alpha:  1.127
-# eL:  0.015 	 alpha:  1.046
-
-### PENN+Softplus (pre-trained by seed 1) & PENN+Tanh ENet, with weight_res x10 ###
-# --> Fail
-
-### PENN+Softplus (pre-trained by seed 1) & PENN+Tanh ENet, with res_grad los ###
-# --> Hard to Converge
-# enet best epoch:  27446 , loss: tensor(0.0026)
-# eL:  0.015 	 alpha:  0.205
-# eL:  0.007 	 alpha:  1.03
-# eL:  0.01 	 alpha:  1.175
-# eL:  0.018 	 alpha:  0.909
-# eL:  0.023 	 alpha:  0.915
-# eL:  0.026 	 alpha:  0.98
-
-### Rerun seed 1 Pnet with 1e-4 termination & PENN+Tanh 100 neurons Enet ###
-# pnet best epoch:  6907 , loss: tensor(9.9811e-05)
-
-### seed 1, PENN+Softplus 30 neurons Pnet & PENN+Softplus 100 neurons Enet ###
-### N_ic=500, N_r=2000, p_terminate=5e-5, e_terminate=4e-5 ###
-# --> Success
-# enet best epoch:  42537 , loss: tensor(0.0002)
-# eL:  0.022 	 alpha:  0.152
-# eL:  0.021 	 alpha:  0.333
-# eL:  0.019 	 alpha:  0.6
-# eL:  0.017 	 alpha:  0.721
-# eL:  0.018 	 alpha:  0.761
-# eL:  0.018 	 alpha:  0.77
-# enet best epoch:  53853 , loss: tensor(0.0001)
-# eL:  0.022 	 alpha:  0.153
-# eL:  0.021 	 alpha:  0.34
-# eL:  0.018 	 alpha:  0.624
-# eL:  0.017 	 alpha:  0.73
-# eL:  0.018 	 alpha:  0.718
-# eL:  0.019 	 alpha:  0.671
-
-### Test if NN+Tanh ENet, with only IC and Res Loss works? (with more data, N_r=2000) ###
-# --> Fail, stuck at loss=4.4336e-05
-# enet best epoch:  166192 , loss: tensor(4.4336e-05)
-# eL:  0.023 	 alpha:  0.055
-# eL:  0.027 	 alpha:  0.046
-# eL:  0.028 	 alpha:  0.152
-# eL:  0.024 	 alpha:  0.371
-# eL:  0.02 	 alpha:  0.819
-# eL:  0.014 	 alpha:  1.614
-
-### Test if PENN+Tanh ENet, with only IC and Res Loss works? (with more data, N_r=2000) ###
-# --> Success
-# enet best epoch:  29662 , loss: tensor(3.9968e-05)
-# eL:  0.06 	 alpha:  0.019
-# eL:  0.024 	 alpha:  0.149
-# eL:  0.024 	 alpha:  0.225
-# eL:  0.024 	 alpha:  0.334
-# eL:  0.025 	 alpha:  0.479
-# eL:  0.023 	 alpha:  0.466
-# train enet time: 1370.8514 seconds

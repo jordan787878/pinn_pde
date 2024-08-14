@@ -12,6 +12,7 @@ import random
 from tqdm import tqdm
 import warnings
 import time
+from matplotlib.ticker import ScalarFormatter
 
 FOLDER = "exp1/exp1-PENN_p-RG/"
 DATA_FOLDER = "exp1/data/"
@@ -35,7 +36,7 @@ x_hig = 6
 
 t0 = 0.0
 T_end = 5.0
-t1s = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]
+t1s = [0.5, 1.0, 2.0, 3.0, 4.0, 5.0]
 
 datas = ["data1/"]
 batch_size = 1000
@@ -122,8 +123,6 @@ class ENet(nn.Module):
         self.hidden_layer7 = (nn.Linear(neurons,neurons))
         self.hidden_layer8 = (nn.Linear(neurons,neurons))
         self.hidden_layer9 = (nn.Linear(neurons,neurons))
-        self.hidden_layer10 = (nn.Linear(neurons,neurons))
-        self.hidden_layer11 = (nn.Linear(neurons,neurons))
         self.output_layer =  (nn.Linear(neurons,1))
         self.activation = nn.Tanh()
     def forward(self, x, t):
@@ -137,12 +136,9 @@ class ENet(nn.Module):
         layer7_out = self.activation((self.hidden_layer7(layer6_out)))
         layer8_out = self.activation((self.hidden_layer8(layer7_out)))
         layer9_out = self.activation((self.hidden_layer9(layer8_out)))
-        layer10_out = self.activation((self.hidden_layer10(layer9_out)))
-        layer11_out = self.activation((self.hidden_layer11(layer10_out)))
-        output = self.output_layer(layer11_out)
+        output = self.output_layer(layer9_out)
         output = self.scale * output
         return output
-  
  
 
 def get_e1_normalize(pnet):
@@ -394,7 +390,6 @@ def show_results(pnet, enet):
     e1_hat_list = []
     p_res_list = []
     e_res_list = []
-
     for t1 in t1s:
         p_monte = np.load(DATA_FOLDER + datas[0] + "psim_t" + str(t1) + ".npy").reshape(-1, 1)
         # if(t1 == 0.0): p_monte = p_init(x)
@@ -418,122 +413,151 @@ def show_results(pnet, enet):
     for i, (phat) in enumerate(zip(p_hat_list)):
         max_value = np.max(np.abs(phat))
         global_max = max(global_max, max_value)
-    fig, axs = plt.subplots(3, 2, figsize=(8, 6))
+    fig, axs = plt.subplots(3, 2, figsize=(6, 6))
     for i, (p_monte, p_hat, e1_hat) in enumerate(zip(p_monte_list, p_hat_list, e1_hat_list)):
         if i == 0:
             ax1 = axs[0,0]
+            ax1.set_ylabel("PDF")
         if i == 1:
             ax1 = axs[1,0]
+            ax1.set_ylabel("PDF")
         if i == 2:
             ax1 = axs[2,0]
+            ax1.set_xlabel("x")
+            ax1.set_ylabel("PDF")
         if i == 3:
             ax1 = axs[0,1]
         if i == 4:
             ax1 = axs[1,1]
         if i == 5:
             ax1 = axs[2,1]
-        eL = 2.0 * np.max(np.abs(e1_hat))
-        ax1.plot(x, p_monte, "blue", label=r"$p$")
-        ax1.plot(x, p_hat, "red", linestyle="--", label=r"$\hat{p}$")
-        ax1.fill_between(x.reshape(-1), y1=p_hat.reshape(-1)+eL, y2=p_hat.reshape(-1)-eL, color="green", alpha=0.2)
+            ax1.set_xlabel("x")
+        eL = 2.0 * np.max(np.abs(e1_hat)); eL = np.round(eL, 3)
+
+        ax1.plot(x, p_monte, "black", linewidth = 1.0, label=r"$p$")
+        ax1.plot(x, p_hat, "red", linewidth = 1.0, linestyle="--", label=r"$\hat{p}$")
+        ax1.fill_between(x.reshape(-1), y1=p_hat.reshape(-1)+eL, y2=p_hat.reshape(-1)-eL, 
+                            color="green", alpha=0.3, label=r"$e_S$")
+        if i == 0:
+            ax1.legend(loc="upper right")
+
+        ax1.set_xlim([-4.5, 4.5])
         ax1.set_ylim(0.0, global_max+limit_margin)
         ax1.grid(True, which='both', linestyle='-', linewidth=0.5)
+        ax1.text(0.01, 0.98, r"$t:$ "+str(t1s[i]) + r", $e_S:$ "+str(eL), 
+                  transform=ax1.transAxes, verticalalignment='top', fontsize=8,
+                  bbox=dict(facecolor='white', edgecolor='black', boxstyle='round,pad=0.2'))
     plt.tight_layout()
-    plt.savefig(FOLDER+"figs/pnet_result.png")
+    fig.savefig(FOLDER+'figs/phat_eS.pdf', format='pdf', dpi=300)
     plt.close()
 
+    # global_max = float('-inf')
+    # for i, (pres) in enumerate(zip(p_res_list)):
+    #     max_value = np.max(np.abs(pres))
+    #     global_max = max(global_max, max_value)
+    # fig, axs = plt.subplots(3, 2, figsize=(8, 6))
+    # for i in range(0,6):
+    #     pres = p_res_list[i]
+    #     if i == 0:
+    #         ax1 = axs[0,0]
+    #     if i == 1:
+    #         ax1 = axs[1,0]
+    #     if i == 2:
+    #         ax1 = axs[2,0]
+    #     if i == 3:
+    #         ax1 = axs[0,1]
+    #     if i == 4:
+    #         ax1 = axs[1,1]
+    #     if i == 5:
+    #         ax1 = axs[2,1]
+    #     if i == 0:
+    #         ax1.plot(x, pres, "red", linestyle="--", label=r"$r_1$")
+    #         ax1.legend()  # Add legend only to the first subplot
+    #     else:
+    #         ax1.plot(x, pres, "red", linestyle="--")
+    #     ax1.set_ylim([-global_max, global_max])
+    #     ax1.grid(True, which='both', linestyle='-', linewidth=0.5)
+    # plt.tight_layout()
+    # plt.savefig(FOLDER+"figs/pnet_res.png")
+    # plt.close()
+
     global_max = float('-inf')
-    for i, (pres) in enumerate(zip(p_res_list)):
-        max_value = np.max(np.abs(pres))
+    for i, (e1_true, e1_hat) in enumerate(zip(e1_list, e1_hat_list)):
+        max_value = max(np.max(np.abs(e1_true)), np.max(np.abs(e1_hat)))
         global_max = max(global_max, max_value)
-    fig, axs = plt.subplots(3, 2, figsize=(8, 6))
-    for i in range(0,6):
-        pres = p_res_list[i]
+    fig, axs = plt.subplots(3, 2, figsize=(6, 6))
+    for i, (e1_true, e1_hat) in enumerate(zip(e1_list, e1_hat_list)):
         if i == 0:
             ax1 = axs[0,0]
+            ax1.set_ylabel("Error")
         if i == 1:
             ax1 = axs[1,0]
+            ax1.set_ylabel("Error")
         if i == 2:
             ax1 = axs[2,0]
+            ax1.set_xlabel("x")
+            ax1.set_ylabel("Error")
         if i == 3:
             ax1 = axs[0,1]
         if i == 4:
             ax1 = axs[1,1]
         if i == 5:
             ax1 = axs[2,1]
-        if i == 0:
-            ax1.plot(x, pres, "red", linestyle="--", label=r"$r_1$")
-            ax1.legend()  # Add legend only to the first subplot
-        else:
-            ax1.plot(x, pres, "red", linestyle="--")
-        ax1.set_ylim([-global_max, global_max])
-        ax1.grid(True, which='both', linestyle='-', linewidth=0.5)
-    plt.tight_layout()
-    plt.savefig(FOLDER+"figs/pnet_res.png")
-    plt.close()
-
-    global_max = float('-inf')
-    for i, (e1_true, e1_hat) in enumerate(zip(e1_list, e1_hat_list)):
-        max_value = max(np.max(np.abs(e1_true)), 0.0)
-        global_max = max(global_max, max_value)
-    fig, axs = plt.subplots(3, 2, figsize=(8, 6))
-    for i, (e1_true, e1_hat) in enumerate(zip(e1_list, e1_hat_list)):
-        if i == 0:
-            ax1 = axs[0,0]
-        if i == 1:
-            ax1 = axs[1,0]
-        if i == 2:
-            ax1 = axs[2,0]
-        if i == 3:
-            ax1 = axs[0,1]
-        if i == 4:
-            ax1 = axs[1,1]
-        if i == 5:
-            ax1 = axs[2,1]
+            ax1.set_xlabel("x")
         eL = 2.0 * np.max(np.abs(e1_hat))
+        eL = np.round(eL, 3)
         alpha = np.max(np.abs(e1_true-e1_hat))/ np.max(np.abs(e1_hat))
+        alpha = np.round(alpha, 3)
         print("eL: ", np.round(eL, 3), "\t alpha: ", np.round(alpha,3))
-        ax1.plot(x, e1_true, "blue", label=r"$e_1$")
-        ax1.plot(x, e1_hat, "red", linestyle="--", label=r"$\hat{e}_1$")
-        ax1.fill_between(x.reshape(-1), y1=0.0*p_hat.reshape(-1)+eL, y2=0.0*p_hat.reshape(-1)-eL, color="green", alpha=0.2)
-        ax1.set_ylim(-(global_max+limit_margin), global_max+limit_margin)
-        ax1.grid(True, which='both', linestyle='-', linewidth=0.5)
-    plt.tight_layout()
-    plt.savefig(FOLDER+"figs/enet_result.png")
-    plt.close()
 
-    global_max = float('-inf')
-    for i, (e1hat, eres, pres) in enumerate(zip(e1_hat_list, e_res_list, p_res_list)):
-        max_value = max(np.max(np.abs(pres)), 0.0)
-        global_max = max(global_max, max_value)
-    fig, axs = plt.subplots(3, 2, figsize=(8, 6))
-    for i in range(0,6):
-        pres = p_res_list[i]
-        eres = e_res_list[i]
+        ax1.plot(x, e1_true, "black", linewidth=1.0, label=r"$e_1$")
+        ax1.plot(x, e1_hat,  "red", linewidth=1.0, linestyle="--", label=r"$\hat{e}_1$")
+        ax1.fill_between(x.reshape(-1), y1=0.0*p_hat.reshape(-1)+eL, y2=0.0*p_hat.reshape(-1)-eL, 
+                         color="green", alpha=0.3, label=r"$e_S$")
         if i == 0:
-            ax1 = axs[0,0]
-        if i == 1:
-            ax1 = axs[1,0]
-        if i == 2:
-            ax1 = axs[2,0]
-        if i == 3:
-            ax1 = axs[0,1]
-        if i == 4:
-            ax1 = axs[1,1]
-        if i == 5:
-            ax1 = axs[2,1]
-        if i == 0:
-            ax1.plot(x, eres-pres, "red", linestyle="--", label=r"$r_2$")
-            ax1.plot(x, -pres, "blue", linestyle="-")
-            ax1.legend()  # Add legend only to the first subplot
-        else:
-            ax1.plot(x, eres-pres, "red", linestyle="--")
-            ax1.plot(x, -pres, "blue", linestyle="-")
-        ax1.set_ylim([-global_max, global_max])
+            ax1.legend(loc="upper right")
+
+        ax1.set_xlim([-4.5, 4.5])
+        ax1.set_ylim(-(1.5*eL), 1.5*eL)
         ax1.grid(True, which='both', linestyle='-', linewidth=0.5)
+        ax1.text(0.01, 0.98, r"$t:$ "+str(t1s[i]) + r", $\alpha_1:$ "+str(alpha), 
+                  transform=ax1.transAxes, verticalalignment='top', fontsize=8,
+                  bbox=dict(facecolor='white', edgecolor='black', boxstyle='round,pad=0.2'))
     plt.tight_layout()
-    plt.savefig(FOLDER+"figs/enet_res.png")
+    fig.savefig(FOLDER+'figs/e1hat_eS.pdf', format='pdf', dpi=300)
     plt.close()
+    # global_max = float('-inf')
+    # for i, (e1hat, eres, pres) in enumerate(zip(e1_hat_list, e_res_list, p_res_list)):
+    #     max_value = max(np.max(np.abs(pres)), 0.0)
+    #     global_max = max(global_max, max_value)
+    # fig, axs = plt.subplots(3, 2, figsize=(8, 6))
+    # for i in range(0,6):
+    #     pres = p_res_list[i]
+    #     eres = e_res_list[i]
+    #     if i == 0:
+    #         ax1 = axs[0,0]
+    #     if i == 1:
+    #         ax1 = axs[1,0]
+    #     if i == 2:
+    #         ax1 = axs[2,0]
+    #     if i == 3:
+    #         ax1 = axs[0,1]
+    #     if i == 4:
+    #         ax1 = axs[1,1]
+    #     if i == 5:
+    #         ax1 = axs[2,1]
+    #     if i == 0:
+    #         ax1.plot(x, eres-pres, "red", linestyle="--", label=r"$r_2$")
+    #         ax1.plot(x, -pres, "blue", linestyle="-")
+    #         ax1.legend()  # Add legend only to the first subplot
+    #     else:
+    #         ax1.plot(x, eres-pres, "red", linestyle="--")
+    #         ax1.plot(x, -pres, "blue", linestyle="-")
+    #     ax1.set_ylim([-global_max, global_max])
+    #     ax1.grid(True, which='both', linestyle='-', linewidth=0.5)
+    # plt.tight_layout()
+    # plt.savefig(FOLDER+"figs/enet_res.png")
+    # plt.close()
 
 
 def plot_p_monte():
@@ -558,6 +582,95 @@ def plot_p_monte():
     plt.close()
         
 
+def plot_p_surface(p_net, num=100):
+    # x_samples = np.load(FOLDER+"output/p_xsamples.npy")
+    # t_samples = np.load(FOLDER+"output/p_tsamples.npy")
+    x = np.linspace(x_low, x_hig, num=num)
+    t = np.linspace(t0, T_end, num=num)
+    x_mesh, t_mesh = np.meshgrid(x,t)
+    pt_x = Variable(torch.from_numpy(x_mesh.reshape(-1,1)).float(), requires_grad=True).to(device)
+    pt_t = Variable(torch.from_numpy(t_mesh.reshape(-1,1)).float(), requires_grad=True).to(device)
+    phat = p_net(pt_x, pt_t).data.cpu().numpy().reshape(num, -1)
+
+    p_list = []
+    x_monte = np.load(DATA_FOLDER + datas[0] + "xsim.npy").reshape(-1,1)
+    pt_x_monte = Variable(torch.from_numpy(x_monte).float(), requires_grad=True).to(device)
+    for t1 in t1s:
+        p_monte = np.load(DATA_FOLDER + datas[0] + "psim_t" + str(t1) + ".npy").reshape(-1, 1)
+        p_list.append(p_monte)
+
+    fig = plt.figure(figsize=(6,6))
+    ax = fig.add_subplot(111, projection='3d')
+    ax.plot_surface(x_mesh, t_mesh, phat, cmap='viridis', alpha=0.8, label=r"$\hat{p}$")
+    # z_max = 1.5*np.max(np.abs(phat))
+    # ax.scatter(x_samples, t_samples, t_samples*0+z_max, marker="x", color="black", s=0.02, label='Data Points')
+    for i in range(len(t1s)):
+        t1 = t1s[i]
+        t1_monte = x_monte*0 + t1
+        if i == 0:
+            ax.plot(x_monte, t1_monte, p_list[i], color="black", label=r"$p_s$")
+        else:
+            ax.plot(x_monte, t1_monte, p_list[i], color="black")
+
+    ax.set_xlabel("x")
+    ax.set_ylabel("t"); 
+    ax.set_zlabel('PDF')
+    ax.legend()
+    ax.view_init(20, -60)
+    # y_ticks = np.array([1, 2, 3])  # Example y-tick positions
+    # ax.set_yticks(y_ticks)  # Set the positions of the y-ticks
+    # Adjust layout manually
+    plt.subplots_adjust(left=0.08, right=0.92, top=0.92, bottom=0.08)
+    fig.savefig(FOLDER+'figs/phat_surface_plot.pdf', format='pdf', dpi=300)
+
+
+def plot_e1_surface(p_net, e1_net, num=100):
+    # x_samples = np.load(FOLDER+"output/e1_xsamples.npy")
+    # t_samples = np.load(FOLDER+"output/e1_tsamples.npy")
+    x = np.linspace(x_low, x_hig, num=num)
+    t = np.linspace(t0, T_end, num=num)
+    x_mesh, t_mesh = np.meshgrid(x,t)
+    pt_x = Variable(torch.from_numpy(x_mesh.reshape(-1,1)).float(), requires_grad=True).to(device)
+    pt_t = Variable(torch.from_numpy(t_mesh.reshape(-1,1)).float(), requires_grad=True).to(device)
+    e1hat = e1_net(pt_x, pt_t).data.cpu().numpy().reshape(num, -1)
+    
+    e1_list = []
+    x_monte = np.load(DATA_FOLDER + datas[0] + "xsim.npy").reshape(-1,1)
+    pt_x_monte = Variable(torch.from_numpy(x_monte).float(), requires_grad=True).to(device)
+    for t1 in t1s:
+        p_monte = np.load(DATA_FOLDER + datas[0] + "psim_t" + str(t1) + ".npy").reshape(-1, 1)
+        pt_t1_monte = Variable(torch.from_numpy(x_monte*0+t1).float(), requires_grad=True).to(device)
+        p_hat = p_net(pt_x_monte, pt_t1_monte).data.cpu().numpy()
+        e1 = p_monte - p_hat
+        e1_list.append(e1)
+
+    fig = plt.figure(figsize=(6,6))
+    ax = fig.add_subplot(111, projection='3d')
+    ax.plot_surface(x_mesh, t_mesh, e1hat, cmap='viridis', alpha=0.6, label=r"$\hat{e}_1$")
+    # z_max = 1.2*np.max(np.abs(e1hat))
+    # ax.scatter(x_samples, t_samples, t_samples*0+z_max, marker="x", color="black", s=0.02, label='Data Points')
+    for i in range(len(t1s)):
+        t1 = t1s[i]
+        t1_monte = x_monte*0 + t1
+        if(i == 0):
+            ax.plot(x_monte, t1_monte, e1_list[i], color="black", label=r"$e_1$")
+        else:
+            ax.plot(x_monte, t1_monte, e1_list[i], color="black")
+
+    # Set z-ticks to scientific notation
+    ax.zaxis.set_major_formatter(ScalarFormatter(useMathText=True))
+    ax.zaxis.get_major_formatter().set_powerlimits((-2, 2))  # Use scientific notation if value is outside this range
+
+    # ax.set_zlim([-z_max, z_max])
+    ax.legend()
+    ax.set_xlabel("x")
+    ax.set_ylabel("t")
+    ax.set_zlabel("Error")
+    ax.view_init(20, -60)
+    plt.subplots_adjust(left=0.08, right=0.92, top=0.92, bottom=0.08)
+    fig.savefig(FOLDER+'figs/e1hat_surface_plot.pdf', format='pdf', dpi=300)
+
+
 def main():
     mse_cost_function = torch.nn.MSELoss()
     
@@ -577,7 +690,10 @@ def main():
     print("enet scale: ", e_model.scale)
     e_model = load_trained_model(e_model, PATH=FOLDER+"output/e1_net.pth", PATH_LOSS=FOLDER+"output/e1_net_train_loss.npy")
     e_model.eval()
+
     show_results(p_model, e_model)
+    # plot_p_surface(p_model)
+    # plot_e1_surface(p_model, e_model)
 
 
 if __name__ == "__main__":
