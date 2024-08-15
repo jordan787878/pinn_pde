@@ -36,6 +36,9 @@ t1s = [1.0, 2.0, 3.0, 4.0, 5.0]
 torch.manual_seed(0)
 np.random.seed(0)
 
+#RAR
+S = 20000
+
 # x1: theta
 # x2: d(theta)/dt
 def f_sde(x):
@@ -226,9 +229,6 @@ def train_p_net(p_net, optimizer, scheduler, mse_cost_function, max_abs_p_ti, it
     x = (torch.rand(2500, n_d, requires_grad=True) * (x_hig - x_low + 2*x_mar) + x_low-x_mar).to(device)
     t = (torch.rand(2500, 1, requires_grad=True) *   (tf - ti) + ti).to(device)
 
-    # RAR
-    S = 100000
-    
     PATH = FOLDER+"output/p_net.pth"
 
     for epoch in range(iterations):
@@ -553,7 +553,6 @@ def train_e1_net(e1_net, optimizer, scheduler, mse_cost_function, p_net, max_abs
     x = (torch.rand(2500, n_d, requires_grad=True) * (x_hig - x_low + 2*x_mar) + x_low-x_mar).to(device)
     t = (torch.rand(2500, 1, requires_grad=True) *   (tf - ti) + ti).to(device)
     FLAG = False
-    S = 100000
 
     for epoch in range(iterations):
         optimizer.zero_grad() # to make the gradients zero
@@ -757,6 +756,7 @@ def show_e1_net_results(p_net, e1_net):
                             vmin=vmin, vmax=vmax)
             alpha = max(abs(e1.reshape(-1,1) - e1_hat.reshape(-1,1))) / max(abs(e1_hat.reshape(-1,1)))
             alpha = alpha[0]
+            print(alpha)
             ax.set_xlabel(r"$\theta$")
             ax.set_title(r"$\alpha_1=$"+str(np.round(alpha,2)))
             if(i == 5):
