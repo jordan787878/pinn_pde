@@ -45,6 +45,7 @@ def f_sde(x):
     dx2dt = -g*np.sin(x1)/l
     return np.array([dx1dt, dx2dt]).reshape(2,)
 
+
 def p_init(x):
     pdf_func = multivariate_normal(mean=mu_0, cov=cov_0)
     pdf_eval = pdf_func.pdf(x).reshape(-1,1)

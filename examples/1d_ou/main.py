@@ -9,8 +9,10 @@ from matplotlib import cm
 from matplotlib.ticker import LinearLocator, FormatStrFormatter
 import random
 import torch.nn.functional as F
+from matplotlib.ticker import ScalarFormatter
+import time
 
-FOLDER = "exp1.0/"
+FOLDER = ""
 
 device = "cpu"
 print(device)
@@ -221,8 +223,8 @@ class E1Net(nn.Module):
         self.output_layer =  (nn.Linear(neurons,1))
     def forward(self, x,t):
         inputs = torch.cat([x,t],axis=1)
-        layer1_out = F.softplus((self.hidden_layer1(inputs)))
-        layer2_out = F.softplus((self.hidden_layer2(layer1_out)))
+        layer1_out = F.tanh((self.hidden_layer1(inputs)))
+        layer2_out = F.tanh((self.hidden_layer2(layer1_out)))
         output = self.scale * self.output_layer(layer2_out)
         return output
 
@@ -241,7 +243,7 @@ def e1_res_func(x, t, e1_net, p_net, verbose=False):
 def train_e1_net(e1_net, optimizer, mse_cost_function, p_net, max_abs_e1_x_0, scheduler):
     global x_low, x_hig, t0, T_end
     batch_size = 500
-    iterations = 10000
+    iterations = 2000
     min_loss = np.inf
     loss_history = []
     PATH = FOLDER+"output/e1_net.pt"
@@ -322,8 +324,9 @@ def pos_e1_net_train(e1_net, PATH, PATH_LOSS):
     return e1_net
 
 # construct artificial e2hat 
-e2_hat_mag = 1e-3
+e2_hat_mag = 5e-3
 e2_hat_freq = 5
+e2_hat_drift = 1e-5
 
 def plot_tight_error_bounds(p_net, e1_net):
     x = np.arange(x_low, x_hig+0.005, 0.005).reshape(-1,1)
@@ -331,29 +334,7 @@ def plot_tight_error_bounds(p_net, e1_net):
     t1s = [1.5, 2.0, 3.0]
     colors = ["black","black","black"]
 
-    # fig, axs = plt.subplots(3, 1, figsize=(8, 6))
-    # for i in range(3):
-    #     t1 = t1s[i]
-    #     pt_t1 = Variable(torch.from_numpy(0*x+t1).float(), requires_grad=True).to(device)
-    #     p = p_exact(x, x*0+t1)
-    #     phat = p_net(pt_x, pt_t1).data.cpu().numpy()
-    #     e1 = p - phat
-    #     e1_hat = e1_net(pt_x, pt_t1).data.cpu().numpy()
-    #     e2 = e1 - e1_hat
-    #     e2_hat = e2 + e2_hat_mag*max(abs(e2))*np.sin(e2_hat_freq*x)
-    #     a1 = max(abs(e1-e1_hat))/max(abs(e1_hat))
-    #     a2 = max(abs(e2-e2_hat))/max(abs(e2_hat))
-    #     axs[i].plot(x, e2, color=colors[i], linestyle="-", linewidth=1.0, label=r"$e_2$")
-    #     axs[i].plot(x, e2_hat, linestyle="--", color = colors[i], linewidth=1.0, label=r"$\hat{e}_2$")
-    #     axs[i].grid(linewidth=0.5)
-    #     axs[i].legend(loc="upper right")
-    #     # Add text to the left top corner
-    #     axs[i].text(0.01, 0.98, "t="+str(t1), transform=axs[i].transAxes, verticalalignment='top', fontsize=8)
-    # plt.tight_layout()
-    # plt.savefig(FOLDER+"figs/e2hat_result.png")
-    # plt.close()
-    
-    fig, axs = plt.subplots(3, 1, figsize=(6, 5))
+    fig, axs = plt.subplots(3, 1, figsize=(7, 6))
     for i in range(3):
         t1 = t1s[i]
         pt_t1 = Variable(torch.from_numpy(0*x+t1).float(), requires_grad=True).to(device)
@@ -362,7 +343,29 @@ def plot_tight_error_bounds(p_net, e1_net):
         e1 = p - phat
         e1_hat = e1_net(pt_x, pt_t1).data.cpu().numpy()
         e2 = e1 - e1_hat
-        e2_hat = e2 + e2_hat_mag*max(abs(e2))*np.sin(e2_hat_freq*x)
+        e2_hat = e2 + e2_hat_mag*max(abs(e2))*np.sin(e2_hat_freq*x) + e2_hat_drift
+        a1 = max(abs(e1-e1_hat))/max(abs(e1_hat))
+        a2 = max(abs(e2-e2_hat))/max(abs(e2_hat))
+        axs[i].plot(x, e2, color=colors[i], linestyle="-", linewidth=1.0, label=r"$e_2$")
+        axs[i].plot(x, e2_hat, linestyle="--", color = colors[i], linewidth=1.0, label=r"$\hat{e}_2$")
+        axs[i].grid(linewidth=0.5)
+        axs[i].legend(loc="upper right")
+        # Add text to the left top corner
+        axs[i].text(0.01, 0.98, "t="+str(t1), transform=axs[i].transAxes, verticalalignment='top', fontsize=8)
+    plt.tight_layout()
+    fig.savefig(FOLDER+'figs/e2hat_result.pdf', format='pdf', dpi=300)
+    plt.close()
+    
+    fig, axs = plt.subplots(3, 1, figsize=(5, 5))
+    for i in range(3):
+        t1 = t1s[i]
+        pt_t1 = Variable(torch.from_numpy(0*x+t1).float(), requires_grad=True).to(device)
+        p = p_exact(x, x*0+t1)
+        phat = p_net(pt_x, pt_t1).data.cpu().numpy()
+        e1 = p - phat
+        e1_hat = e1_net(pt_x, pt_t1).data.cpu().numpy()
+        e2 = e1 - e1_hat
+        e2_hat = e2 + e2_hat_mag*max(abs(e2))*np.sin(e2_hat_freq*x) + e2_hat_drift
         r_21 = max(abs(e2_hat))/ max(abs(e1_hat))
         eB = max(abs(e1_hat))*(1/(1-r_21))
         eB = np.round(eB, 4)
@@ -384,10 +387,10 @@ def plot_tight_error_bounds(p_net, e1_net):
         axs[i].set_ylabel("PDF")
     axs[2].set_xlabel("x")
     plt.tight_layout()
-    fig.savefig(FOLDER+'figs/error_bounds_result.pdf', format='pdf', dpi=300, bbox_inches='tight')
+    fig.savefig(FOLDER+'figs/error_bounds_result.pdf', format='pdf', dpi=300)
     plt.close()
 
-    fig, axs = plt.subplots(3, 1, figsize=(6, 5))
+    fig, axs = plt.subplots(3, 1, figsize=(5, 5))
     for i in range(3):
         t1 = t1s[i]
         pt_t1 = Variable(torch.from_numpy(0*x+t1).float(), requires_grad=True).to(device)
@@ -396,7 +399,7 @@ def plot_tight_error_bounds(p_net, e1_net):
         e1 = p - phat
         e1_hat = e1_net(pt_x, pt_t1).data.cpu().numpy()
         e2 = e1 - e1_hat
-        e2_hat = e2 + e2_hat_mag*max(abs(e2))*np.sin(e2_hat_freq*x)
+        e2_hat = e2 + e2_hat_mag*max(abs(e2))*np.sin(e2_hat_freq*x) + e2_hat_drift
         r_21 = max(abs(e2_hat))/ max(abs(e1_hat))
         eB = max(abs(e1_hat))*(1/(1-r_21))
         eB = np.round(eB,3)
@@ -422,8 +425,9 @@ def plot_tight_error_bounds(p_net, e1_net):
                     bbox=dict(facecolor='white', edgecolor='black', boxstyle='round,pad=0.2'))
         axs[i].set_xlim([-3,3])
         axs[i].set_ylim([-2*eL, 2*eL])
+    axs[2].set_xlabel('x')
     plt.tight_layout()
-    fig.savefig(FOLDER+'figs/e1hat_result.pdf', format='pdf', dpi=300, bbox_inches='tight')
+    fig.savefig(FOLDER+'figs/e1hat_result.pdf', format='pdf', dpi=300)
     plt.close()
 
 
@@ -435,6 +439,7 @@ def plot_alphas(p_net, e1_net):
     a1_list = []
     a2_list = []
     e1_list = []
+    eS_list = []
     eB_list = []
 
     for i in range(len(t1s)):
@@ -446,11 +451,14 @@ def plot_alphas(p_net, e1_net):
         e1_list.append(max(abs(e1))[0])
         e1_hat = e1_net(pt_x, pt_t1).data.cpu().numpy()
         e2 = e1 - e1_hat
-        e2_hat = e2 + e2_hat_mag*max(abs(e2))*np.sin(e2_hat_freq*x)
+        e2_hat = e2 + e2_hat_mag*max(abs(e2))*np.sin(e2_hat_freq*x) + e2_hat_drift
         r_21 = max(abs(e2_hat))/ max(abs(e1_hat))
         eB = max(abs(e1_hat))*(1/(1-r_21))
         eB = np.round(eB,3)
         eB_list.append(eB)
+        eS = max(abs(e1_hat))*2
+        eS = np.round(eS,3)
+        eS_list.append(eS)
         a1 = max(abs(e1-e1_hat))/max(abs(e1_hat))
         a2 = max(abs(e2-e2_hat))/max(abs(e2_hat))
         a1_list.append(a1[0])
@@ -465,22 +473,23 @@ def plot_alphas(p_net, e1_net):
     cond_2 = a1_list**2
     y_2 = a2_list*(1+a2_list)
 
-    fig, axs = plt.subplots(2, 2, figsize=(8, 6))
-    axs[0,0].plot(t1s, eB_list, color="black", linestyle=":", label=r"$e_B$")
-    axs[0,0].plot(t1s, e1_list, color="black", linestyle="-", label=r"$\max|e|$")
+    fig, axs = plt.subplots(2, 2, figsize=(7, 6))
+    axs[0,0].plot(t1s, eB_list, color="black", linestyle="-", linewidth=1.0, label=r"$e_B$")
+    axs[0,0].plot(t1s, eS_list, color="black", linestyle=":", linewidth=1.0, label=r"$e_S$")
+    axs[0,0].plot(t1s, e1_list, color="black", linestyle="--", linewidth=1.0, label=r"$\max|e|$")
     axs[0,0].legend(loc="upper right")
     axs[0,0].grid(linewidth=0.5)
 
-    axs[0,1].plot(t1s, a1_list, color="black", linestyle=":", label=r"$\alpha_1$")
-    axs[0,1].plot(t1s, t1s*0+1.0, color="black", linestyle="-")
+    axs[0,1].plot(t1s, a1_list, color="black", linestyle="--", linewidth=1.0, label=r"$\alpha_1$")
+    axs[0,1].plot(t1s, t1s*0+1.0, color="black", linestyle="-", linewidth=1.0,)
     axs[0,1].legend(loc="lower right")
     axs[0,1].grid(linewidth=0.5)
     axs[0,1].text(0.01, 0.98, "condition: " + r"$\alpha_1(t)<1$", 
                   transform=axs[0,1].transAxes, verticalalignment='top', fontsize=8,
                   bbox=dict(facecolor='white', edgecolor='black', boxstyle='round,pad=0.2'))
     
-    axs[1,0].plot(t1s, cond_1, color="black", linestyle=":", label=r"$1-\alpha_1$")
-    axs[1,0].plot(t1s, y_1, color="black", linestyle="-", label=r"$\alpha_2$")
+    axs[1,0].plot(t1s, cond_1, color="black", linewidth=1.0, linestyle="-", label=r"$1-\alpha_1$")
+    axs[1,0].plot(t1s, y_1, color="black", linewidth=1.0, linestyle="--", label=r"$\alpha_2$")
     axs[1,0].set_xlabel('t')
     axs[1,0].legend(loc="lower right")
     axs[1,0].grid(linewidth=0.5)
@@ -488,12 +497,12 @@ def plot_alphas(p_net, e1_net):
                   transform=axs[1,0].transAxes, verticalalignment='top', fontsize=8,
                   bbox=dict(facecolor='white', edgecolor='black', boxstyle='round,pad=0.2'))
 
-    axs[1,1].plot(t1s, cond_2, color="black", linestyle=":", label=r"$\alpha_1^2$")
-    axs[1,1].plot(t1s, y_2, color="black", linestyle="-", label=r"$\alpha_2(1+\alpha_2)$")
+    axs[1,1].plot(t1s, cond_2, color="black", linewidth=1.0, linestyle="-", label=r"$\alpha_1^2$")
+    axs[1,1].plot(t1s, y_2, color="black", linewidth=1.0, linestyle="--", label=r"$\alpha_2(1+\alpha_2)$")
     axs[1,1].set_xlabel('t')
     axs[1,1].legend(loc="lower right")
     axs[1,1].grid(linewidth=0.5)
-    axs[1,1].text(0.01, 0.98, "condition: "+r"$\alpha_2(1+\alpha_2) \leq \alpha_1^2$", 
+    axs[1,1].text(0.01, 0.98, "condition: "+r"$\alpha_2(1+\alpha_2) <\alpha_1^2$", 
                   transform=axs[1,1].transAxes, verticalalignment='top', fontsize=8,
                   bbox=dict(facecolor='white', edgecolor='black', boxstyle='round,pad=0.2'))
     
@@ -508,9 +517,11 @@ def plot_train_loss(path_1, path_2):
     min_loss_1 = min(loss_history_1)
     loss_history_2 = np.load(path_2)
     min_loss_2 = min(loss_history_2)
-    fig, axs = plt.subplots(2, 1, figsize=(6, 5))
-    axs[0].plot(np.arange(len(loss_history_1)), loss_history_1, "black")
-    axs[1].plot(np.arange(len(loss_history_2)), loss_history_2, "black")
+    fig, axs = plt.subplots(2, 1, figsize=(7, 6))
+    axs[0].plot(np.arange(len(loss_history_1)), loss_history_1, "black", linewidth=1.0)
+    axs[0].set_ylim([min_loss_1, 10*min_loss_1])
+    axs[1].plot(np.arange(len(loss_history_2)), loss_history_2, "black", linewidth=1.0)
+    axs[1].set_ylim([min_loss_2, 10*min_loss_2])
     axs[0].grid(linewidth=0.5)
     axs[1].grid(linewidth=0.5)
     axs[1].set_xlabel("epochs")
@@ -535,9 +546,9 @@ def plot_p_surface(p_net, num=100):
         p_true = p_exact(x, x*0+t1)
         p_list.append(p_true)
 
-    fig = plt.figure(figsize=(8,6))
+    fig = plt.figure(figsize=(6,6))
     ax = fig.add_subplot(111, projection='3d')
-    ax.plot_surface(x_mesh, t_mesh, phat, cmap='viridis', alpha=0.8, label=r"$\hat{p}$")
+    ax.plot_surface(x_mesh, t_mesh, phat, cmap='viridis', alpha=0.7, label=r"$\hat{p}$")
     z_max = 1.5*np.max(np.abs(phat))
     for i in range(len(t1s)):
         t1 = t1s[i]
@@ -549,12 +560,56 @@ def plot_p_surface(p_net, num=100):
 
     ax.set_xlabel("x"); ax.set_ylabel("t"); ax.set_zlabel("PDF")
     ax.legend()
-    ax.view_init(20, -60)
     y_ticks = np.array([1, 2, 3])  # Example y-tick positions
     ax.set_yticks(y_ticks)  # Set the positions of the y-ticks
     ax.view_init(20, -50)
-    plt.tight_layout()
-    fig.savefig(FOLDER+'figs/phat_surface_plot.pdf', format='pdf', dpi=300, bbox_inches='tight')
+    plt.subplots_adjust(left=0.05, right=0.90, top=0.92, bottom=0.08)
+    fig.savefig(FOLDER+'figs/phat_surface_plot.pdf', format='pdf', dpi=300)
+
+
+def plot_e1_surface(p_net, e1_net, num=100):
+    t1s = [1.0, 2.0, 3.0]
+    x = np.linspace(x_low, x_hig, num=num)
+    t = np.linspace(t0, T_end, num=num)
+    x_mesh, t_mesh = np.meshgrid(x,t)
+    pt_x = Variable(torch.from_numpy(x_mesh.reshape(-1,1)).float(), requires_grad=True).to(device)
+    pt_t = Variable(torch.from_numpy(t_mesh.reshape(-1,1)).float(), requires_grad=True).to(device)
+    e1hat = e1_net(pt_x, pt_t).data.cpu().numpy().reshape(num, -1)
+    
+    e1_list = []
+    x_monte = x.reshape(-1,1)
+    pt_x_monte = Variable(torch.from_numpy(x_monte).float(), requires_grad=True).to(device)
+    for t1 in t1s:
+        p_monte = p_exact(x, x*0+t1).reshape(-1, 1)
+        pt_t1_monte = Variable(torch.from_numpy(x_monte*0+t1).float(), requires_grad=True).to(device)
+        p_hat = p_net(pt_x_monte, pt_t1_monte).data.cpu().numpy()
+        e1 = p_monte - p_hat
+        e1_list.append(e1)
+
+    fig = plt.figure(figsize=(6,6))
+    ax = fig.add_subplot(111, projection='3d')
+    ax.plot_surface(x_mesh, t_mesh, e1hat, cmap='viridis', alpha=0.7, label=r"$\hat{e}_1$")
+    # z_max = 1.2*np.max(np.abs(e1hat))
+    # ax.scatter(x_samples, t_samples, t_samples*0+z_max, marker="x", color="black", s=0.02, label='Data Points')
+    for i in range(len(t1s)):
+        t1 = t1s[i]
+        t1_monte = x_monte*0 + t1
+        if(i == 0):
+            ax.plot(x_monte, t1_monte, e1_list[i], color="black", label=r"$e_1$")
+        else:
+            ax.plot(x_monte, t1_monte, e1_list[i], color="black")
+    # Set z-ticks to scientific notation
+    ax.zaxis.set_major_formatter(ScalarFormatter(useMathText=True))
+    ax.zaxis.get_major_formatter().set_powerlimits((-2, 2))  # Use scientific notation if value is outside this range
+    y_ticks = np.array([1, 2, 3])  # Example y-tick positions
+    ax.set_yticks(y_ticks)  # Set the positions of the y-ticks
+    ax.legend()
+    ax.set_xlabel("x")
+    ax.set_ylabel("t")
+    ax.set_zlabel("Error")
+    ax.view_init(20, -50)
+    plt.subplots_adjust(left=0.05, right=0.9, top=0.92, bottom=0.08)
+    fig.savefig(FOLDER+'figs/e1hat_surface_plot.pdf', format='pdf', dpi=300)
 
 
 def main():
@@ -565,7 +620,9 @@ def main():
     mse_cost_function = torch.nn.MSELoss() # Mean squared error
     optimizer = torch.optim.Adam(p_net.parameters())
     scheduler_p_model = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.95)
+    start_time = time.time()
     # train_p_net(p_net, optimizer, mse_cost_function, scheduler_p_model); print("p_net train complete")
+    time_train_p = time.time() - start_time
     p_net = pos_p_net_train(p_net, PATH=FOLDER+"output/p_net.pt", PATH_LOSS=FOLDER+"output/p_net_train_loss.npy")
     max_abs_e1_x_0 = get_e1_normalize(p_net)
 
@@ -574,16 +631,26 @@ def main():
     e1_net = e1_net.to(device)
     optimizer = torch.optim.Adam(e1_net.parameters())
     scheduler_e1_model = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.95)
+    start_time = time.time()
     # train_e1_net(e1_net, optimizer, mse_cost_function, p_net, max_abs_e1_x_0, scheduler_e1_model); print("e1_net train complete")
+    time_train_e = time.time() - start_time
     e1_net = pos_e1_net_train(e1_net, PATH=FOLDER+"output/e1_net.pt", PATH_LOSS=FOLDER+"output/e1_net_train_loss.npy")
 
     plot_tight_error_bounds(p_net, e1_net)
     plot_train_loss(FOLDER+"output/p_net_train_loss.npy", FOLDER+"output/e1_net_train_loss.npy")
     plot_alphas(p_net, e1_net)
     plot_p_surface(p_net)
+    plot_e1_surface(p_net, e1_net)
 
     print("[complete 1d OU]")
+    print(f"train pnet time: {time_train_p:.4f} seconds")
+    print(f"train enet time: {time_train_e:.4f} seconds")
 
 
 if __name__ == "__main__":
     main()
+
+
+# Log
+# train pnet time: 6.5799 seconds
+# train enet time: 8.9959 seconds
