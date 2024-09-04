@@ -343,6 +343,7 @@ def train_enet_model(p_net, e1_net, optimizer, scheduler, mse_cost_function, ite
     _t_end =  (torch.ones(500, 1, requires_grad=True) * tf).to(device)
     t = torch.cat((t, _t_init, _t_end), dim=0)
     
+    weight_reg = 0.01
     FLAG = False
     S = 10000
     normalize = e1_net.scale
@@ -383,7 +384,7 @@ def train_enet_model(p_net, e1_net, optimizer, scheduler, mse_cost_function, ite
         mse_res_grad = torch.mean(res_x**2+res_t**2)
     
         # Combining the loss functions
-        loss = mse_e1_ic + mse_e1_res + 0.1*mse_res_grad
+        loss = mse_e1_ic + mse_e1_res + weight_reg*mse_res_grad
 
         # RAR
         if (epoch%500 == 0 and FLAG):
@@ -456,8 +457,8 @@ def train_enet_model(p_net, e1_net, optimizer, scheduler, mse_cost_function, ite
             np.save(FOLDER+"output/e1_net_train_loss.npy", np.array(loss_history))
             # Store alpha data (calculate data)
             Nsample_i = x_bc.shape[0] + x.shape[0]
-            Loss_1_i    = (mse_e1_ic*12.0 + mse_e1_res*60.0).data.cpu().numpy().item()
-            Loss_2_i    = (mse_res_grad*60.0).data.cpu().numpy().item() ###
+            Loss_1_i    = (mse_e1_ic + mse_e1_res).data.cpu().numpy().item()
+            Loss_2_i    = (mse_res_grad*weight_reg).data.cpu().numpy().item() ###
             alpha_over_time = []
             for i in range(len(t1s)):
                 t1 = t1s[i]
@@ -496,8 +497,8 @@ def train_enet_model(p_net, e1_net, optimizer, scheduler, mse_cost_function, ite
             np.save(FOLDER+"output/e1_net_train_loss.npy", np.array(loss_history))
             # Store alpha data (calculate data)
             Nsample_i = x_bc.shape[0] + x.shape[0]
-            Loss_1_i    = (mse_e1_ic*12.0 + mse_e1_res*60.0).data.cpu().numpy().item()
-            Loss_2_i    = (mse_res_grad*60.0).data.cpu().numpy().item() ###
+            Loss_1_i    = (mse_e1_ic + mse_e1_res).data.cpu().numpy().item()
+            Loss_2_i    = (mse_res_grad*weight_reg).data.cpu().numpy().item() ###
             alpha_over_time = []
             for i in range(len(t1s)):
                 t1 = t1s[i]
@@ -1056,7 +1057,7 @@ def main():
     e_model.eval()
     show_results(p_model, e_model)
 
-    plot_alpha_data()
+    # plot_alpha_data()
     # plot_p_surface(p_model)
     # plot_e1_surface(p_model, e_model)
     # plot_train_loss(FOLDER+"output/p_net_train_loss.npy", 

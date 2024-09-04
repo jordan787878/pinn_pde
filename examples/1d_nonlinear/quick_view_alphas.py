@@ -943,7 +943,7 @@ def plot_e1res_surface(p_net, e1_net, num=200):
     ax.set_ylabel("t"); 
     ax.set_zlabel('r')
     ax.legend()
-    ax.view_init(20, -60)
+    ax.view_init(30, -60)
     # y_ticks = np.array([1, 2, 3])  # Example y-tick positions
     # ax.set_yticks(y_ticks)  # Set the positions of the y-ticks
     plt.subplots_adjust(left=0.08, right=0.92, top=0.92, bottom=0.08)
@@ -986,8 +986,8 @@ def plot_alpha_data():
     Y = []
     X1 = []
     X2 = []
-    for i in range(0,5):
-        data_folder_seedi = data_folder + "seed" + str(i) + "/"
+    for i in range(0,1):
+        data_folder_seedi = FOLDER #data_folder  + "seed" + str(i) + "/"
         # print(data_folder_seedi)
         Nsample_array = np.load(data_folder_seedi+"output/e1_Nsample_list.npy")
         Loss_1_array = np.load(data_folder_seedi+"output/e1_Loss_1_list.npy")
@@ -1066,7 +1066,7 @@ def main():
     e_model.eval()
     show_results(p_model, e_model)
 
-    # plot_alpha_data()
+    plot_alpha_data()
     plot_training_loss_data()
     # plot_p_surface(p_model)
     # plot_e1_surface(p_model, e_model)
