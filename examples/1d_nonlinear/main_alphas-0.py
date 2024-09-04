@@ -42,7 +42,7 @@ t1s = [0.5, 1.0, 2.0, 3.0, 4.0, 5.0]
 datas = ["data1/"]
 pnet_terminate = 5e-5
 enet_terminate = 5e-5
-MAX_EPOCHS = 5
+MAX_EPOCHS = 50000
 
 
 def p_init(x):
