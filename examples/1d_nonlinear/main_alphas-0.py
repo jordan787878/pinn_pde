@@ -14,7 +14,6 @@ import warnings
 import time
 from matplotlib.ticker import ScalarFormatter
 from scipy.optimize import curve_fit
-
 import argparse
 
 # Set a fixed seed for reproducibility

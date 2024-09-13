@@ -15,7 +15,7 @@ import time
 from matplotlib.ticker import ScalarFormatter
 from scipy.optimize import curve_fit
 
-FOLDER = "exp1/main_alphas/seed4-test/"
+FOLDER = "exp1/main_alphas/seed-test/"
 DATA_FOLDER = "exp1/data/"
 
 device = "cpu"; print(device)
@@ -91,7 +91,7 @@ def init_weights(m):
 
 class PNet(nn.Module):
     def __init__(self, scale=1.0): 
-        neurons = 32
+        neurons = 50
         self.scale = scale
         super(PNet, self).__init__()
         self.hidden_layer1 = (nn.Linear(n_d+1,neurons))
@@ -100,6 +100,8 @@ class PNet(nn.Module):
         self.hidden_layer4 = (nn.Linear(neurons,neurons))
         self.hidden_layer5 = (nn.Linear(neurons,neurons))
         self.hidden_layer6 = (nn.Linear(neurons,neurons))
+        self.hidden_layer7 = (nn.Linear(neurons,neurons))
+        self.hidden_layer8 = (nn.Linear(neurons,neurons))
         self.output_layer =  (nn.Linear(neurons,1))
     def forward(self, x, t):
         inputs = torch.cat([x,t],axis=1)
@@ -109,7 +111,9 @@ class PNet(nn.Module):
         layer4_out = F.softplus((self.hidden_layer4(layer3_out)))
         layer5_out = F.softplus((self.hidden_layer5(layer4_out)))
         layer6_out = F.softplus((self.hidden_layer6(layer5_out)))
-        output = F.softplus( self.output_layer(layer6_out) )
+        layer7_out = F.softplus((self.hidden_layer7(layer6_out)))
+        layer8_out = F.softplus((self.hidden_layer8(layer7_out)))
+        output = F.softplus(self.output_layer(layer8_out))
         return output
 
 
@@ -125,21 +129,23 @@ class ENet(nn.Module):
         self.hidden_layer5 = (nn.Linear(neurons,neurons))
         self.hidden_layer6 = (nn.Linear(neurons,neurons))
         self.hidden_layer7 = (nn.Linear(neurons,neurons))
+        self.hidden_layer8 = (nn.Linear(neurons,neurons))
+        self.hidden_layer9 = (nn.Linear(neurons,neurons))
         self.output_layer =  (nn.Linear(neurons,1))
-        self.activation = nn.Softplus()
     def forward(self, x, t):
         inputs = torch.cat([x,t], axis=1)
-        layer1_out = self.activation((self.hidden_layer1(inputs)))
-        layer2_out = self.activation((self.hidden_layer2(layer1_out)))
-        layer3_out = self.activation((self.hidden_layer3(layer2_out)))
-        layer4_out = self.activation((self.hidden_layer4(layer3_out)))
-        layer5_out = self.activation((self.hidden_layer5(layer4_out)))
-        layer6_out = self.activation((self.hidden_layer6(layer5_out)))
-        layer7_out = self.activation((self.hidden_layer7(layer6_out)))
-        output = self.output_layer(layer7_out)
-        output = self.scale * output
+        layer1_out = F.softplus((self.hidden_layer1(inputs)))
+        layer2_out = F.softplus((self.hidden_layer2(layer1_out)))
+        layer3_out = F.softplus((self.hidden_layer3(layer2_out)))
+        layer4_out = F.softplus((self.hidden_layer4(layer3_out)))
+        layer5_out = F.softplus((self.hidden_layer5(layer4_out)))
+        layer6_out = F.softplus((self.hidden_layer6(layer5_out)))
+        layer7_out = F.softplus((self.hidden_layer7(layer6_out)))
+        layer8_out = F.softplus((self.hidden_layer8(layer7_out)))
+        layer9_out = F.softplus((self.hidden_layer9(layer8_out)))
+        output = self.scale * (self.output_layer(layer9_out))
         return output
-      
+ 
 
 def get_p_normalize():
     x = np.linspace(x_low, x_hig, num=200, endpoint=True)
@@ -674,7 +680,7 @@ def show_results(pnet, enet):
 
     global_max = float('-inf')
     for i, (e1hat, eres, pres) in enumerate(zip(e1_hat_list, e_res_list, p_res_list)):
-        max_value = max(np.max(np.abs(eres/enet.scale)), 0.0)
+        max_value = max(np.max(np.abs(eres/enet.scale)), 0.0)**2
         global_max = max(global_max, max_value)
     fig, axs = plt.subplots(3, 2, figsize=(7, 6))
     for i in range(0,6):
@@ -698,13 +704,13 @@ def show_results(pnet, enet):
             ax1 = axs[2,1]
             ax1.set_xlabel("x")
         if i == 0:
-            ax1.plot(x, eres, "red", linewidth=1.0, linestyle="--", label=r"$D[\hat{e}_1]$")
+            ax1.plot(x, eres**2, "red", linewidth=1.0, linestyle="--", label=r"$r_2^2$")
             #ax1.plot(x, -pres, "black", linewidth=1.0, linestyle="-", label=r"$-D[\hat{p}]$")
             ax1.legend()  # Add legend only to the first subplot
         else:
-            ax1.plot(x, eres, "red", linewidth=1.0, linestyle="--")
+            ax1.plot(x, eres**2, "red", linewidth=1.0, linestyle="--")
             #ax1.plot(x, -pres, "black", linewidth=1.0, linestyle="-")
-        ax1.set_ylim([-global_max, global_max])
+        ax1.set_ylim([0, global_max])
         ax1.grid(True, which='both', linestyle='-', linewidth=0.5)
     plt.tight_layout()
     # plt.savefig(FOLDER+"figs/enet_res.png")
@@ -903,21 +909,21 @@ def plot_pres_surface(p_net, num=100):
 
     fig = plt.figure(figsize=(6,6))
     ax = fig.add_subplot(111, projection='3d')
-    ax.plot_surface(x_mesh, t_mesh, pres, cmap='viridis', alpha=0.8, label=r"$\hat{p}$")
+    ax.plot_surface(x_mesh, t_mesh, pres**2, cmap='viridis', alpha=0.8, label=r"$r_1^2$")
     ax.set_xlabel("x")
     ax.set_ylabel("t"); 
     ax.set_zlabel('r')
     ax.legend()
-    ax.view_init(20, -60)
+    ax.view_init(40, -60)
     # y_ticks = np.array([1, 2, 3])  # Example y-tick positions
     # ax.set_yticks(y_ticks)  # Set the positions of the y-ticks
     plt.subplots_adjust(left=0.08, right=0.92, top=0.92, bottom=0.08)
     fig.savefig(FOLDER+'figs/pres_surface_plot.pdf', format='pdf', dpi=300)
 
 
-def plot_e1res_surface(p_net, e1_net, num=200):
-    x = np.linspace(x_low, x_hig, num=num)
-    t = np.linspace(t0, T_end, num=num)
+def plot_e1res_surface(p_net, e1_net, num=100):
+    x = np.linspace(x_low, x_hig, num=num, endpoint=True)
+    t = np.linspace(t0, T_end, num=num, endpoint=True)
     x_mesh, t_mesh = np.meshgrid(x,t)
     pt_x = Variable(torch.from_numpy(x_mesh.reshape(-1,1)).float(), requires_grad=True).to(device)
     pt_t = Variable(torch.from_numpy(t_mesh.reshape(-1,1)).float(), requires_grad=True).to(device)
@@ -938,12 +944,12 @@ def plot_e1res_surface(p_net, e1_net, num=200):
 
     fig = plt.figure(figsize=(6,6))
     ax = fig.add_subplot(111, projection='3d')
-    ax.plot_surface(x_mesh, t_mesh, e1res, cmap='viridis', alpha=0.8, label=r"$r_2$")
+    ax.plot_surface(x_mesh, t_mesh, e1res**2, cmap='viridis', alpha=0.8, label=r"$r_2^2$")
     ax.set_xlabel("x")
     ax.set_ylabel("t"); 
     ax.set_zlabel('r')
     ax.legend()
-    ax.view_init(30, -60)
+    ax.view_init(40, -60)
     # y_ticks = np.array([1, 2, 3])  # Example y-tick positions
     # ax.set_yticks(y_ticks)  # Set the positions of the y-ticks
     plt.subplots_adjust(left=0.08, right=0.92, top=0.92, bottom=0.08)
@@ -977,8 +983,8 @@ def fit_function(x, C1, C2):
 
 def plot_alpha_data():
     data_folder = "exp1/main_alphas/"
-    max_alpha_to_fit = 2.0
-    max_total_loss_to_fit = 10.0
+    max_alpha_to_fit = 4.0
+    max_total_loss_to_fit = 0.1
     num_runs = 2
 
     plt.figure()
@@ -995,13 +1001,14 @@ def plot_alpha_data():
         Alpha_array = np.load(data_folder_seedi+"output/e1_Alpha_mean_list.npy")
 
         mask_1 = Alpha_array < max_alpha_to_fit
-        mask_2 = (Loss_1_array+1.0*Loss_2_array) < max_total_loss_to_fit
+        mask_2 = (Loss_1_array+Loss_2_array) < max_total_loss_to_fit
         mask = mask_1 & mask_2
 
         Loss_1_array = Loss_1_array[mask]
         Loss_2_array = Loss_2_array[mask]
         Alpha_array = Alpha_array[mask]
-        x_data = Loss_1_array + 1.0*Loss_2_array
+        x_data = Loss_1_array + Loss_2_array
+        print(np.min(x_data))
         y_data = Alpha_array
         plt.plot(x_data, y_data, marker='o', linestyle='None', markersize=2, label="run seed"+str(i))
         X.append(x_data)
@@ -1031,7 +1038,7 @@ def plot_alpha_data():
 def plot_training_loss_data():
     data_folder = "exp1/main_alphas/"
     plt.figure()
-    for i in range(0,5):
+    for i in range(0,1):
         data_folder_seedi = data_folder + "seed" + str(i) + "/"
         loss_data = np.load(data_folder_seedi+"output/e1_net_train_loss.npy")
         plt.plot(np.arange(len(loss_data)), loss_data, linewidth=0.5, label="run seed"+str(i))
@@ -1066,13 +1073,13 @@ def main():
     e_model.eval()
     show_results(p_model, e_model)
 
-    plot_alpha_data()
     plot_training_loss_data()
-    # plot_p_surface(p_model)
-    # plot_e1_surface(p_model, e_model)
+    plot_p_surface(p_model)
+    plot_pres_surface(p_model)
     plot_e1res_surface(p_model, e_model)
     # plot_train_loss(FOLDER+"output/p_net_train_loss.npy", 
     #                 FOLDER+"output/e1_net_train_loss.npy")
+    plot_alpha_data()
 
 
 if __name__ == "__main__":

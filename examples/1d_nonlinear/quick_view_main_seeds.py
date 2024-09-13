@@ -14,7 +14,7 @@ import warnings
 import time
 from matplotlib.ticker import ScalarFormatter
 
-FOLDER = "exp1/main_seeds/seed2/"
+FOLDER = "exp1/main_seeds/seed3/"
 DATA_FOLDER = "exp1/data/"
 
 device = "cpu"; print(device)
@@ -304,7 +304,6 @@ def train_pnet_model(p_net, optimizer, scheduler, mse_cost_function, iterations=
         # Exponential learning rate decay
         if (epoch + 1) % iterations_per_decay == 0:
             scheduler.step()
-
 
 
 # 1. Test with _t_init samples
