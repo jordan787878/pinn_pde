@@ -14,17 +14,15 @@ import warnings
 import time
 from matplotlib.ticker import ScalarFormatter
 from scipy.optimize import curve_fit
+import argparse
 
 FOLDER = "exp1/main_alphas/seed-test/"
 DATA_FOLDER = "exp1/data/"
 
-device = "cpu"; print(device)
+device = "cpu"
 
 # Set a fixed seed for reproducibility
-torch.manual_seed(1)
-np.random.seed(1)
-
-# Test if All softplus work: reason? softplus is not bounded
+seed = 0
 
 n_d = 1
 mu = -2.0
@@ -42,8 +40,7 @@ T_end = 5.0
 t1s = [0.5, 1.0, 2.0, 3.0, 4.0, 5.0]
 
 datas = ["data1/"]
-pnet_terminate = 5e-5
-enet_terminate = 5e-4
+enet_terminate = 5e-5
 MAX_EPOCHS = 100000
 
 
@@ -103,89 +100,128 @@ def Diff_e_func(x, t, e_net, verbose=False):
     return residual
 
 
-# og
-def init_weights_og(m):
+def init_weights(m):
     if isinstance(m, nn.Linear):
-        init.xavier_uniform_(m.weight)
-        m.bias.data.fill_(0.0)
-
-# good for ReLU
-def init_weights_He(m):
-    if isinstance(m, nn.Linear):
-        init.kaiming_normal_(m.weight)
+        # print("init")
+        nn.init.kaiming_uniform_(m.weight)
+        # nn.init.normal_(m.weight, std=0.01)
+        # print(m.weight)
         m.bias.data.fill_(0.01)
+# def init_weights_He(model):
+#     """Initialize weights of the model using He initialization."""
+#     for layer in model.modules():
+#         if isinstance(layer, nn.Linear):
+#             # He initialization: Uniform distribution
+#             nn.init.normal_(layer.weight, std=0.01)
 
 
-# good for Tanh
-def init_weights_Xavier(m):
-    if isinstance(m, nn.Linear):
-        init.xavier_normal_(m.weight)
-        m.bias.data.fill_(0.0)
-
-
-def init_weights_orth(m):
-    if isinstance(m, nn.Linear):
-        init.orthogonal_(m.weight)
-        m.bias.data.fill_(0.0)
-
-
+# class PNet(nn.Module):
+#     def __init__(self, scale=1.0):
+#         super(PNet, self).__init__()
+#         self.scale = scale
+#         num_hidden_layers=20
+#         neurons=20
+#         # List to hold layers
+#         layers = []
+#         # Input layer
+#         layers.append(nn.Linear(2, neurons))
+#         # Hidden layers
+#         for _ in range(num_hidden_layers):
+#             layers.append(nn.Linear(neurons, neurons))
+#         # Output layer
+#         layers.append(nn.Linear(neurons, 1))
+#         # Register all layers
+#         self.layers = nn.ModuleList(layers)
+#     def forward(self, x, t):
+#         inputs = torch.cat([x, t], dim=1)
+#         out = inputs
+#         for layer in self.layers[:-1]:  # Apply hidden layers
+#             out = F.softplus(layer(out))
+#         out = self.layers[-1](out)  # Apply output layer
+#         return F.softplus(out)
+ 
 class PNet(nn.Module):
-    def __init__(self, scale=1.0): 
-        neurons = 50
-        self.scale = scale
+    def __init__(self, scale=1.0):
         super(PNet, self).__init__()
-        self.hidden_layer1 = (nn.Linear(n_d+1,neurons))
-        self.hidden_layer2 = (nn.Linear(neurons,neurons))
-        self.hidden_layer3 = (nn.Linear(neurons,neurons))
-        self.hidden_layer4 = (nn.Linear(neurons,neurons))
-        self.hidden_layer5 = (nn.Linear(neurons,neurons))
-        self.hidden_layer6 = (nn.Linear(neurons,neurons))
-        self.hidden_layer7 = (nn.Linear(neurons,neurons))
-        self.hidden_layer8 = (nn.Linear(neurons,neurons))
-        self.output_layer =  (nn.Linear(neurons,1))
+        self.scale = scale
+        num_hidden_layers=20
+        neurons=20
+        # List to hold layers
+        layers = []
+        # Input layer
+        layers.append(nn.Linear(2, neurons))
+        # Hidden layers
+        for _ in range(num_hidden_layers):
+            layers.append(nn.Linear(neurons, neurons))
+        # Output layer
+        layers.append(nn.Linear(neurons, 1))
+        # Register all layers
+        self.layers = nn.ModuleList(layers)
     def forward(self, x, t):
-        inputs = torch.cat([x,t],axis=1)
-        layer1_out = F.softplus((self.hidden_layer1(inputs)))
-        layer2_out = F.softplus((self.hidden_layer2(layer1_out)))
-        layer3_out = F.softplus((self.hidden_layer3(layer2_out)))
-        layer4_out = F.softplus((self.hidden_layer4(layer3_out)))
-        layer5_out = F.softplus((self.hidden_layer5(layer4_out)))
-        layer6_out = F.softplus((self.hidden_layer6(layer5_out)))
-        layer7_out = F.softplus((self.hidden_layer7(layer6_out)))
-        layer8_out = F.softplus((self.hidden_layer8(layer7_out)))
-        output = F.softplus(self.output_layer(layer8_out))
-        return output
+        inputs = torch.cat([x, t], dim=1)
+        out = inputs
+        for layer in self.layers[:-1]:  # Apply hidden layers
+            out = F.softplus(layer(out))
+        out = self.layers[-1](out)  # Apply output layer
+        return F.softplus(out)
+
+
+
+# class ENet(nn.Module):
+#     def __init__(self, scale=1.0): 
+#         neurons = 50
+#         self.scale = scale
+#         super(ENet, self).__init__()
+#         self.hidden_layer1 = (nn.Linear(2,neurons))
+#         self.hidden_layer2 = (nn.Linear(neurons,neurons))
+#         self.hidden_layer3 = (nn.Linear(neurons,neurons))
+#         self.hidden_layer4 = (nn.Linear(neurons,neurons))
+#         self.hidden_layer5 = (nn.Linear(neurons,neurons))
+#         self.hidden_layer6 = (nn.Linear(neurons,neurons))
+#         self.hidden_layer7 = (nn.Linear(neurons,neurons))
+#         self.hidden_layer8 = (nn.Linear(neurons,neurons))
+#         self.hidden_layer9 = (nn.Linear(neurons,neurons))
+#         self.output_layer =  (nn.Linear(neurons,1))
+#     def forward(self, x, t):
+#         inputs = torch.cat([x,t], axis=1)
+#         layer1_out = F.softplus((self.hidden_layer1(inputs)))
+#         layer2_out = F.softplus((self.hidden_layer2(layer1_out)))
+#         layer3_out = F.softplus((self.hidden_layer3(layer2_out)))
+#         layer4_out = F.softplus((self.hidden_layer4(layer3_out)))
+#         layer5_out = F.softplus((self.hidden_layer5(layer4_out)))
+#         layer6_out = F.softplus((self.hidden_layer6(layer5_out)))
+#         layer7_out = F.softplus((self.hidden_layer7(layer6_out)))
+#         layer8_out = F.softplus((self.hidden_layer8(layer7_out)))
+#         layer9_out = F.softplus((self.hidden_layer9(layer8_out)))
+#         output = self.scale * (self.output_layer(layer9_out))
+#         return output
 
 
 class ENet(nn.Module):
-    def __init__(self, scale=1.0): 
-        neurons = 50
-        self.scale = scale
+    def __init__(self, scale=1.0):
         super(ENet, self).__init__()
-        self.hidden_layer1 = (nn.Linear(2,neurons))
-        self.hidden_layer2 = (nn.Linear(neurons,neurons))
-        self.hidden_layer3 = (nn.Linear(neurons,neurons))
-        self.hidden_layer4 = (nn.Linear(neurons,neurons))
-        self.hidden_layer5 = (nn.Linear(neurons,neurons))
-        self.hidden_layer6 = (nn.Linear(neurons,neurons))
-        self.hidden_layer7 = (nn.Linear(neurons,neurons))
-        self.hidden_layer8 = (nn.Linear(neurons,neurons))
-        self.hidden_layer9 = (nn.Linear(neurons,neurons))
-        self.output_layer =  (nn.Linear(neurons,1))
+        self.scale = scale
+        num_hidden_layers=30
+        neurons=40
+        # Define a list to hold the layers
+        layers = []
+        # Input layer
+        layers.append(nn.Linear(2, neurons))
+        # Hidden layers
+        for _ in range(num_hidden_layers):
+            layers.append(nn.Linear(neurons, neurons))
+        # Output layer
+        layers.append(nn.Linear(neurons, 1))
+        # Register all layers as a ModuleList
+        self.layers = nn.ModuleList(layers)
     def forward(self, x, t):
-        inputs = torch.cat([x,t], axis=1)
-        layer1_out = F.softplus((self.hidden_layer1(inputs)))
-        layer2_out = F.softplus((self.hidden_layer2(layer1_out)))
-        layer3_out = F.softplus((self.hidden_layer3(layer2_out)))
-        layer4_out = F.softplus((self.hidden_layer4(layer3_out)))
-        layer5_out = F.softplus((self.hidden_layer5(layer4_out)))
-        layer6_out = F.softplus((self.hidden_layer6(layer5_out)))
-        layer7_out = F.softplus((self.hidden_layer7(layer6_out)))
-        layer8_out = F.softplus((self.hidden_layer8(layer7_out)))
-        layer9_out = F.softplus((self.hidden_layer9(layer8_out)))
-        output = self.scale * (self.output_layer(layer9_out))
-        return output
-    
+        inputs = torch.cat([x, t], dim=1)
+        out = inputs
+        for layer in self.layers[:-1]:  # Apply hidden layers
+            out = F.softplus(layer(out))
+        out = self.layers[-1](out)  # Apply output layer
+        return self.scale * out 
+
 
 def get_p_normalize():
     x = np.linspace(x_low, x_hig, num=200, endpoint=True)
@@ -395,6 +431,10 @@ def train_enet_model(p_net, e1_net, optimizer, scheduler, mse_cost_function, ite
     _xx, _tt = np.meshgrid(_x, _t)
     x = Variable(torch.from_numpy(_xx.reshape(-1,1)).float(), requires_grad=True).to(device)
     t = Variable(torch.from_numpy(_tt.reshape(-1,1)).float(), requires_grad=True).to(device)
+    x_rand = (torch.rand(1000, n_d, requires_grad=True) * (x_hig - x_low) + x_low).to(device)
+    t_rand = (torch.rand(1000, 1  , requires_grad=True) * (tf - ti) + ti).to(device)
+    x = torch.cat((x, x_rand), dim=0)
+    t = torch.cat((t, t_rand), dim=0)
     
     weight_reg = 1.0
     FLAG = False
@@ -439,13 +479,13 @@ def train_enet_model(p_net, e1_net, optimizer, scheduler, mse_cost_function, ite
         # e1_res_out = e_res_func(x, t, e1_net, p_net)/normalize
         # mse_e1_res = mse_cost_function(e1_res_out, all_zeros)
 
-        e1_res_out = e_res_func(x, t, e1_net, p_net)/normalize
-        res_x = torch.autograd.grad(e1_res_out, x, grad_outputs=torch.ones_like(e1_res_out), create_graph=True)[0]
-        res_t = torch.autograd.grad(e1_res_out, t, grad_outputs=torch.ones_like(e1_res_out), create_graph=True)[0]
-        mse_res_grad = torch.mean(res_x**2+res_t**2)
+        # e1_res_out = e_res_func(x, t, e1_net, p_net)/normalize
+        # res_x = torch.autograd.grad(e1_res_out, x, grad_outputs=torch.ones_like(e1_res_out), create_graph=True)[0]
+        # res_t = torch.autograd.grad(e1_res_out, t, grad_outputs=torch.ones_like(e1_res_out), create_graph=True)[0]
+        # mse_res_grad = torch.mean(res_x**2+res_t**2)
     
         # Combining the loss functions
-        loss = mse_e1_ic + mse_e1_res + weight_reg*mse_res_grad
+        loss = mse_e1_ic + mse_e1_res #+ weight_reg*mse_res_grad
 
         # RAR
         if (epoch%100 == 0 and FLAG):
@@ -465,9 +505,8 @@ def train_enet_model(p_net, e1_net, optimizer, scheduler, mse_cost_function, ite
             x_RAR = torch.cat((x_RAR, x_quad), dim=0)
             # x_RAR = torch.clamp(x_RAR, min=x_low, max=x_hig)
 
-            t0_RAR = 0.0*t_RAR.clone() + t0
-            x0_RAR = x_RAR.clone()
-
+            # t0_RAR = 0.0*t_RAR.clone() + t0
+            # x0_RAR = x_RAR.clone()
             # p0_RAR = p_init_torch(x0_RAR)
             # p0_hat_RAR = p_net(x0_RAR, t0_RAR)
             # e10_RAR = p0_RAR - p0_hat_RAR
@@ -506,6 +545,8 @@ def train_enet_model(p_net, e1_net, optimizer, scheduler, mse_cost_function, ite
 
             FLAG = False
 
+        loss_history.append(loss.data)
+
         # Save the min loss model
         if(loss.data < 0.95*min_loss):
             min_loss = loss.data
@@ -514,7 +555,7 @@ def train_enet_model(p_net, e1_net, optimizer, scheduler, mse_cost_function, ite
             print("e1net best epoch:", epoch, ", loss:", loss.data, 
                   "ic:", mse_e1_ic.data,
                   "res:", mse_e1_res.data,
-                  "grad:", mse_res_grad.data,
+                #   "grad:", mse_res_grad.data,
                   )
             torch.save({
                     'epoch': epoch,
@@ -592,7 +633,6 @@ def train_enet_model(p_net, e1_net, optimizer, scheduler, mse_cost_function, ite
             np.save(FOLDER+"output/e1_Alpha_mean_list.npy", np.array(Alpha_mean_list))
             return
 
-        loss_history.append(loss.data)
         loss.backward(retain_graph=True) 
         optimizer.step()
         if (epoch + 1) % iterations_per_decay == 0:
@@ -1103,12 +1143,19 @@ def plot_alpha_data():
 
 
 def main():
+    global seed
+    global FOLDER
+    print("seed: ", seed, ", folder:", FOLDER)
+    torch.manual_seed(seed)
+    np.random.seed(seed)
+    random.seed(seed)
+
     # plot_p_monte()
     mse_cost_function = torch.nn.MSELoss()
     
     p_model = PNet().to(device)
     e_model = ENet().to(device) 
-    e_model.apply(init_weights_He)
+    e_model.apply(init_weights)
     optimizer_e_model = torch.optim.Adam(e_model.parameters())
     scheduler_e_model = torch.optim.lr_scheduler.ExponentialLR(optimizer_e_model, gamma=0.95)
     
@@ -1130,4 +1177,11 @@ def main():
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Pass seed as a command-line argument")
+    parser.add_argument("--seed", type=int, required=True, help="Seed value")
+    args = parser.parse_args()
+    
+    # Modify the global variable
+    seed = args.seed
+
     main()

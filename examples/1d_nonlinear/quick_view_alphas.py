@@ -15,10 +15,13 @@ import time
 from matplotlib.ticker import ScalarFormatter
 from scipy.optimize import curve_fit
 
+from main_train_pnet import PNet
+from main_train_enet import ENet
+
 FOLDER = "exp1/main_alphas/seed-test/"
 DATA_FOLDER = "exp1/data/"
 
-device = "cpu"; print(device)
+device = "cpu"
 
 n_d = 1
 mu = -2.0
@@ -89,62 +92,62 @@ def init_weights(m):
         m.bias.data.fill_(0.01)
 
 
-class PNet(nn.Module):
-    def __init__(self, scale=1.0): 
-        neurons = 50
-        self.scale = scale
-        super(PNet, self).__init__()
-        self.hidden_layer1 = (nn.Linear(n_d+1,neurons))
-        self.hidden_layer2 = (nn.Linear(neurons,neurons))
-        self.hidden_layer3 = (nn.Linear(neurons,neurons))
-        self.hidden_layer4 = (nn.Linear(neurons,neurons))
-        self.hidden_layer5 = (nn.Linear(neurons,neurons))
-        self.hidden_layer6 = (nn.Linear(neurons,neurons))
-        self.hidden_layer7 = (nn.Linear(neurons,neurons))
-        self.hidden_layer8 = (nn.Linear(neurons,neurons))
-        self.output_layer =  (nn.Linear(neurons,1))
-    def forward(self, x, t):
-        inputs = torch.cat([x,t],axis=1)
-        layer1_out = F.softplus((self.hidden_layer1(inputs)))
-        layer2_out = F.softplus((self.hidden_layer2(layer1_out)))
-        layer3_out = F.softplus((self.hidden_layer3(layer2_out)))
-        layer4_out = F.softplus((self.hidden_layer4(layer3_out)))
-        layer5_out = F.softplus((self.hidden_layer5(layer4_out)))
-        layer6_out = F.softplus((self.hidden_layer6(layer5_out)))
-        layer7_out = F.softplus((self.hidden_layer7(layer6_out)))
-        layer8_out = F.softplus((self.hidden_layer8(layer7_out)))
-        output = F.softplus(self.output_layer(layer8_out))
-        return output
+# class PNet(nn.Module):
+#     def __init__(self, scale=1.0): 
+#         neurons = 50
+#         self.scale = scale
+#         super(PNet, self).__init__()
+#         self.hidden_layer1 = (nn.Linear(n_d+1,neurons))
+#         self.hidden_layer2 = (nn.Linear(neurons,neurons))
+#         self.hidden_layer3 = (nn.Linear(neurons,neurons))
+#         self.hidden_layer4 = (nn.Linear(neurons,neurons))
+#         self.hidden_layer5 = (nn.Linear(neurons,neurons))
+#         self.hidden_layer6 = (nn.Linear(neurons,neurons))
+#         self.hidden_layer7 = (nn.Linear(neurons,neurons))
+#         self.hidden_layer8 = (nn.Linear(neurons,neurons))
+#         self.output_layer =  (nn.Linear(neurons,1))
+#     def forward(self, x, t):
+#         inputs = torch.cat([x,t],axis=1)
+#         layer1_out = F.softplus((self.hidden_layer1(inputs)))
+#         layer2_out = F.softplus((self.hidden_layer2(layer1_out)))
+#         layer3_out = F.softplus((self.hidden_layer3(layer2_out)))
+#         layer4_out = F.softplus((self.hidden_layer4(layer3_out)))
+#         layer5_out = F.softplus((self.hidden_layer5(layer4_out)))
+#         layer6_out = F.softplus((self.hidden_layer6(layer5_out)))
+#         layer7_out = F.softplus((self.hidden_layer7(layer6_out)))
+#         layer8_out = F.softplus((self.hidden_layer8(layer7_out)))
+#         output = F.softplus(self.output_layer(layer8_out))
+#         return output
 
 
-class ENet(nn.Module):
-    def __init__(self, scale=1.0): 
-        neurons = 50
-        self.scale = scale
-        super(ENet, self).__init__()
-        self.hidden_layer1 = (nn.Linear(2,neurons))
-        self.hidden_layer2 = (nn.Linear(neurons,neurons))
-        self.hidden_layer3 = (nn.Linear(neurons,neurons))
-        self.hidden_layer4 = (nn.Linear(neurons,neurons))
-        self.hidden_layer5 = (nn.Linear(neurons,neurons))
-        self.hidden_layer6 = (nn.Linear(neurons,neurons))
-        self.hidden_layer7 = (nn.Linear(neurons,neurons))
-        self.hidden_layer8 = (nn.Linear(neurons,neurons))
-        self.hidden_layer9 = (nn.Linear(neurons,neurons))
-        self.output_layer =  (nn.Linear(neurons,1))
-    def forward(self, x, t):
-        inputs = torch.cat([x,t], axis=1)
-        layer1_out = F.softplus((self.hidden_layer1(inputs)))
-        layer2_out = F.softplus((self.hidden_layer2(layer1_out)))
-        layer3_out = F.softplus((self.hidden_layer3(layer2_out)))
-        layer4_out = F.softplus((self.hidden_layer4(layer3_out)))
-        layer5_out = F.softplus((self.hidden_layer5(layer4_out)))
-        layer6_out = F.softplus((self.hidden_layer6(layer5_out)))
-        layer7_out = F.softplus((self.hidden_layer7(layer6_out)))
-        layer8_out = F.softplus((self.hidden_layer8(layer7_out)))
-        layer9_out = F.softplus((self.hidden_layer9(layer8_out)))
-        output = self.scale * (self.output_layer(layer9_out))
-        return output
+# class ENet(nn.Module):
+#     def __init__(self, scale=1.0): 
+#         neurons = 50
+#         self.scale = scale
+#         super(ENet, self).__init__()
+#         self.hidden_layer1 = (nn.Linear(2,neurons))
+#         self.hidden_layer2 = (nn.Linear(neurons,neurons))
+#         self.hidden_layer3 = (nn.Linear(neurons,neurons))
+#         self.hidden_layer4 = (nn.Linear(neurons,neurons))
+#         self.hidden_layer5 = (nn.Linear(neurons,neurons))
+#         self.hidden_layer6 = (nn.Linear(neurons,neurons))
+#         self.hidden_layer7 = (nn.Linear(neurons,neurons))
+#         self.hidden_layer8 = (nn.Linear(neurons,neurons))
+#         self.hidden_layer9 = (nn.Linear(neurons,neurons))
+#         self.output_layer =  (nn.Linear(neurons,1))
+#     def forward(self, x, t):
+#         inputs = torch.cat([x,t], axis=1)
+#         layer1_out = F.softplus((self.hidden_layer1(inputs)))
+#         layer2_out = F.softplus((self.hidden_layer2(layer1_out)))
+#         layer3_out = F.softplus((self.hidden_layer3(layer2_out)))
+#         layer4_out = F.softplus((self.hidden_layer4(layer3_out)))
+#         layer5_out = F.softplus((self.hidden_layer5(layer4_out)))
+#         layer6_out = F.softplus((self.hidden_layer6(layer5_out)))
+#         layer7_out = F.softplus((self.hidden_layer7(layer6_out)))
+#         layer8_out = F.softplus((self.hidden_layer8(layer7_out)))
+#         layer9_out = F.softplus((self.hidden_layer9(layer8_out)))
+#         output = self.scale * (self.output_layer(layer9_out))
+#         return output
  
 
 def get_p_normalize():
@@ -983,8 +986,8 @@ def fit_function(x, C1, C2):
 
 def plot_alpha_data():
     data_folder = "exp1/main_alphas/"
-    max_alpha_to_fit = 4.0
-    max_total_loss_to_fit = 0.1
+    max_alpha_to_fit = 2.0
+    max_total_loss_to_fit = 1e-3
     num_runs = 2
 
     plt.figure()
@@ -1073,7 +1076,7 @@ def main():
     e_model.eval()
     show_results(p_model, e_model)
 
-    plot_training_loss_data()
+    # plot_training_loss_data()
     plot_p_surface(p_model)
     plot_pres_surface(p_model)
     plot_e1res_surface(p_model, e_model)
@@ -1084,3 +1087,66 @@ def main():
 
 if __name__ == "__main__":
     main()
+    
+
+# Log
+# seed 0:
+# p_net best epoch   :  26871 , loss: tensor(4.9806e-05)
+# p_net training time:  5821.863755941391
+# enet scale:  0.016309724460288444
+# e1_net best epoch   :  37600 , loss: tensor(4.9926e-05)
+# e1_net training time:  4989.488249063492
+# eL:  0.024 	 alpha:  0.08
+# eL:  0.022 	 alpha:  0.077
+# eL:  0.018 	 alpha:  0.144
+# eL:  0.015 	 alpha:  0.214
+# eL:  0.012 	 alpha:  0.243
+# eL:  0.01 	 alpha:  0.373
+# seed 1:
+# p_net best epoch   :  10212 , loss: tensor(4.9775e-05)
+# p_net training time:  2186.8904871940613
+# enet scale:  0.014084038567330537
+# e1_net best epoch   :  18336 , loss: tensor(4.8409e-05)
+# e1_net training time:  2456.1712930202484
+# eL:  0.025 	 alpha:  0.054
+# eL:  0.022 	 alpha:  0.039
+# eL:  0.016 	 alpha:  0.04
+# eL:  0.012 	 alpha:  0.049
+# eL:  0.01 	 alpha:  0.086
+# eL:  0.008 	 alpha:  0.26
+# seed 2:
+# p_net best epoch   :  8012 , loss: tensor(4.9920e-05)
+# p_net training time:  1753.1701729297638
+# enet scale:  0.01716732518079578
+# e1_net best epoch   :  20039 , loss: tensor(4.8637e-05)
+# e1_net training time:  2680.4655091762543
+# eL:  0.026 	 alpha:  0.059
+# eL:  0.022 	 alpha:  0.128
+# eL:  0.016 	 alpha:  0.275
+# eL:  0.012 	 alpha:  0.371
+# eL:  0.01 	 alpha:  0.446
+# eL:  0.007 	 alpha:  0.713
+# seed 3:
+# p_net best epoch   :  9829 , loss: tensor(4.8863e-05)
+# p_net training time:  2091.676687002182
+# enet scale:  0.014130058625465014
+# e1_net best epoch   :  12051 , loss: tensor(4.9878e-05)
+# e1_net training time:  1611.511799812317
+# eL:  0.035 	 alpha:  0.15
+# eL:  0.034 	 alpha:  0.236
+# eL:  0.028 	 alpha:  0.3
+# eL:  0.025 	 alpha:  0.266
+# eL:  0.023 	 alpha:  0.227
+# eL:  0.022 	 alpha:  0.192
+# seed 4:
+# p_net best epoch   :  99233 , loss: tensor(0.0001)
+# p_net training time:  21701.780370235443
+# enet scale:  0.022112098709025682
+# e1_net best epoch   :  48242 , loss: tensor(4.9634e-05)
+# e1_net training time:  6401.431030988693
+# eL:  0.017 	 alpha:  0.089
+# eL:  0.016 	 alpha:  0.107
+# eL:  0.01 	 alpha:  0.447
+# eL:  0.01 	 alpha:  0.953
+# eL:  0.024 	 alpha:  0.605
+# eL:  0.065 	 alpha:  0.816
