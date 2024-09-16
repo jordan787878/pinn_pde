@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Define the random seed
-i=4
+i=0
 
 # Construct the script name
 script="main_train_pnet.py"

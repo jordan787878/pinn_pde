@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Define the number of scripts to run
-N=5
+N=9
 
 # Loop through each script from python1.py to pythonN.py
 for i in $(seq 0 $N)
