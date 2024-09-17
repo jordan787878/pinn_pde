@@ -7,12 +7,11 @@ import torch.nn.utils.spectral_norm as spectral_norm
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib import cm
-from matplotlib.ticker import LinearLocator, FormatStrFormatter
+from matplotlib.ticker import LinearLocator, FormatStrFormatter, FuncFormatter, ScalarFormatter
 import random
 from tqdm import tqdm
 import warnings
 import time
-from matplotlib.ticker import ScalarFormatter
 from scipy.optimize import curve_fit
 
 from main_train_pnet import PNet
@@ -36,7 +35,7 @@ x_hig = 6
 
 t0 = 0.0
 T_end = 5.0
-t1s = [0.5, 1.0, 2.0, 3.0, 4.0, 5.0]
+t1s = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]
 
 datas = ["data1/"]
 pnet_terminate = 5e-5
@@ -118,7 +117,6 @@ def init_weights(m):
 #         layer8_out = F.softplus((self.hidden_layer8(layer7_out)))
 #         output = F.softplus(self.output_layer(layer8_out))
 #         return output
-
 
 # class ENet(nn.Module):
 #     def __init__(self, scale=1.0): 
@@ -513,10 +511,19 @@ def load_trained_model(net, PATH, PATH_LOSS):
     return net
 
 
+class ScalarFormatterClass(ScalarFormatter):
+   def _set_format(self):
+      self.format = "%1.1f"
+
+
 def show_results(pnet, enet):
     x = np.load(DATA_FOLDER + datas[0] + "xsim.npy").reshape(-1,1)
     pt_x = Variable(torch.from_numpy(x).float(), requires_grad=True).to(device)
     limit_margin = 0.0
+
+    # Create a ScalarFormatter object
+    formatter = ScalarFormatter()
+    formatter.set_scientific(True)
 
     p_monte_list = []
     p_hat_list = []
@@ -639,6 +646,10 @@ def show_results(pnet, enet):
         ax1.text(0.01, 0.98, r"$t:$ "+str(t1s[i]) + r", $\alpha_1:$ "+str(alpha), 
                   transform=ax1.transAxes, verticalalignment='top', fontsize=8,
                   bbox=dict(facecolor='white', edgecolor='black', boxstyle='round,pad=0.2'))
+        # Set y-axis to scientific notation
+        yScalarFormatter = ScalarFormatterClass(useMathText=True)
+        yScalarFormatter.set_powerlimits((0,0))
+        ax1.yaxis.set_major_formatter(yScalarFormatter)
     plt.tight_layout()
     fig.savefig(FOLDER+'figs/e1hat_eS.pdf', format='pdf', dpi=300)
     plt.close()
@@ -713,75 +724,12 @@ def show_results(pnet, enet):
         else:
             ax1.plot(x, eres**2, "red", linewidth=1.0, linestyle="--")
             #ax1.plot(x, -pres, "black", linewidth=1.0, linestyle="-")
-        ax1.set_ylim([0, global_max])
+        # ax1.set_ylim([0, global_max])
         ax1.grid(True, which='both', linestyle='-', linewidth=0.5)
     plt.tight_layout()
     # plt.savefig(FOLDER+"figs/enet_res.png")
     fig.savefig(FOLDER+'figs/e1_res.pdf', format='pdf', dpi=300)
     plt.close()
-
-    # fig, axs = plt.subplots(3, 2, figsize=(6, 6))
-    # for i, (e2_true, e2_hat) in enumerate(zip(e2_list, e2_hat_list)):
-    #     if i == 0:
-    #         ax1 = axs[0,0]
-    #         ax1.set_ylabel("Error")
-    #     if i == 1:
-    #         ax1 = axs[1,0]
-    #         ax1.set_ylabel("Error")
-    #     if i == 2:
-    #         ax1 = axs[2,0]
-    #         ax1.set_xlabel("x")
-    #         ax1.set_ylabel("Error")
-    #     if i == 3:
-    #         ax1 = axs[0,1]
-    #     if i == 4:
-    #         ax1 = axs[1,1]
-    #     if i == 5:
-    #         ax1 = axs[2,1]
-    #         ax1.set_xlabel("x")
-    #     ax1.plot(x, e2_true, "black", linewidth=1.0, label=r"$e_2$")
-    #     ax1.plot(x, e2_hat,  "red", linewidth=1.0, linestyle="--", label=r"$\hat{e}_2$")
-    #     if i == 0:
-    #         ax1.legend(loc="upper right")
-    #     ax1.set_xlim([-4.5, 4.5])
-    #     ax1.grid(True, which='both', linestyle='-', linewidth=0.5)
-    # plt.tight_layout()
-    # fig.savefig(FOLDER+'figs/e2hat.pdf', format='pdf', dpi=300)
-    # plt.close()
-
-    # fig, axs = plt.subplots(3, 2, figsize=(7, 6))
-    # for i in range(0,6):
-    #     e2res = e2_res_list[i]
-    #     if i == 0:
-    #         ax1 = axs[0,0]
-    #         ax1.set_ylabel("Error")
-    #     if i == 1:
-    #         ax1 = axs[1,0]
-    #         ax1.set_ylabel("Error")
-    #     if i == 2:
-    #         ax1 = axs[2,0]
-    #         ax1.set_xlabel("x")
-    #         ax1.set_ylabel("Error")
-    #     if i == 3:
-    #         ax1 = axs[0,1]
-    #     if i == 4:
-    #         ax1 = axs[1,1]
-    #     if i == 5:
-    #         ax1 = axs[2,1]
-    #         ax1.set_xlabel("x")
-    #     if i == 0:
-    #         ax1.plot(x, e2res, "red", linewidth=1.0, linestyle="--", label=r"$r_3$")
-    #         # ax1.plot(x, -eres, "black", linewidth=1.0, linestyle="-", label=r"$-D[\hat{p}]$")
-    #         ax1.legend()  # Add legend only to the first subplot
-    #     else:
-    #         ax1.plot(x, e2res, "red", linewidth=1.0, linestyle="--")
-    #         # ax1.plot(x, -eres, "black", linewidth=1.0, linestyle="-")
-    #     ax1.set_ylim([-global_max, global_max])
-    #     ax1.grid(True, which='both', linestyle='-', linewidth=0.5)
-    # plt.tight_layout()
-    # # plt.savefig(FOLDER+"figs/enet_res.png")
-    # fig.savefig(FOLDER+'figs/e2_res.pdf', format='pdf', dpi=300)
-    # plt.close()
 
 
 def plot_p_monte():
@@ -948,13 +896,18 @@ def plot_e1res_surface(p_net, e1_net, num=100):
     fig = plt.figure(figsize=(6,6))
     ax = fig.add_subplot(111, projection='3d')
     ax.plot_surface(x_mesh, t_mesh, e1res**2, cmap='viridis', alpha=0.8, label=r"$r_2^2$")
+    x_samples = np.load(FOLDER+"output/e1_xsamples.npy")
+    t_samples = np.load(FOLDER+"output/e1_tsamples.npy")
+    z_max = 1.0*np.max(e1res**2)
+    ax.scatter(x_samples, t_samples, t_samples*0+z_max, marker="x", color="black", s=0.02, label='Data Points')
     ax.set_xlabel("x")
     ax.set_ylabel("t"); 
     ax.set_zlabel('r')
     ax.legend()
-    ax.view_init(40, -60)
-    # y_ticks = np.array([1, 2, 3])  # Example y-tick positions
-    # ax.set_yticks(y_ticks)  # Set the positions of the y-ticks
+    ax.view_init(25, -60)
+    zScalarFormatter = ScalarFormatterClass(useMathText=True)
+    zScalarFormatter.set_powerlimits((0,0))
+    ax.zaxis.set_major_formatter(zScalarFormatter)
     plt.subplots_adjust(left=0.08, right=0.92, top=0.92, bottom=0.08)
     fig.savefig(FOLDER+'figs/e1res_surface_plot.pdf', format='pdf', dpi=300)
 
@@ -986,22 +939,22 @@ def fit_function(x, C1, C2):
 
 def plot_alpha_data():
     data_folder = "exp1/main_alphas/"
-    max_alpha_to_fit = 2.0
-    max_total_loss_to_fit = 1e-3
-    num_runs = 2
+    max_alpha_to_fit = 3.0
+    max_total_loss_to_fit = 0.2
+    num_runs = 5
 
     plt.figure()
     X = []
     Y = []
     X1 = []
     X2 = []
-    for i in range(0,1):
-        data_folder_seedi = FOLDER #data_folder  + "seed" + str(i) + "/"
-        # print(data_folder_seedi)
+    for i in range(0, num_runs):
+        data_folder_seedi = data_folder  + "seed" + str(i) + "/"
+        data_folder_seedi = FOLDER
         Nsample_array = np.load(data_folder_seedi+"output/e1_Nsample_list.npy")
         Loss_1_array = np.load(data_folder_seedi+"output/e1_Loss_1_list.npy")
         Loss_2_array = np.load(data_folder_seedi+"output/e1_Loss_2_list.npy")
-        Alpha_array = np.load(data_folder_seedi+"output/e1_Alpha_mean_list.npy")
+        Alpha_array = np.load(data_folder_seedi+"output/e1_Alpha_list.npy")
 
         mask_1 = Alpha_array < max_alpha_to_fit
         mask_2 = (Loss_1_array+Loss_2_array) < max_total_loss_to_fit
@@ -1011,7 +964,6 @@ def plot_alpha_data():
         Loss_2_array = Loss_2_array[mask]
         Alpha_array = Alpha_array[mask]
         x_data = Loss_1_array + Loss_2_array
-        print(np.min(x_data))
         y_data = Alpha_array
         plt.plot(x_data, y_data, marker='o', linestyle='None', markersize=2, label="run seed"+str(i))
         X.append(x_data)
@@ -1030,9 +982,9 @@ def plot_alpha_data():
     plt.plot(xs, ys, color="black", linewidth=0.5, linestyle="--", label="fit line")
 
     plt.grid(linewidth=0.5)
-    plt.xlabel("num. integral training loss")
-    plt.ylabel(r"mean $\alpha_1$")
-    plt.legend()
+    plt.xlabel("training loss")
+    plt.ylabel(r"max $\alpha_1(t)$")
+    plt.legend(loc="upper left")
     plt.tight_layout()
     plt.savefig(FOLDER+'figs/alpha_vs_loss.pdf', format='pdf', dpi=300)
     plt.close()
@@ -1053,28 +1005,44 @@ def plot_training_loss_data():
     plt.close()
 
 
+def plot_position_encoding():
+    x = np.linspace(x_low, x_hig, num=100)
+    d = 128
+    n = 100
+    plt.figure()
+    for i in range(int(d/2)):
+        w_i = (1/pow(n, 2*i/d))
+        x_sin_i = np.sin(w_i*x)
+        plt.plot(x, x_sin_i, label=str(i))
+    plt.legend()
+    plt.show()
+
+
+def debug(p_net, e_net):
+    x = torch.ones(1, 1, requires_grad=True)*(-6.0)
+    t = torch.ones(1, 1, requires_grad=True)*(0.0)
+    e_res = e_res_func(x, t, p_net, e_net)/e_net.scale
+    print("debug: ", x.data, t.data, e_res.data)
+
+
 def main():
+    # plot_position_encoding()
     # plot_p_monte()
-    mse_cost_function = torch.nn.MSELoss()
     
     p_model = PNet().to(device)
     e_model = ENet().to(device) 
-    optimizer_p_model = torch.optim.Adam(p_model.parameters())
-    optimizer_e_model = torch.optim.Adam(e_model.parameters())
-    scheduler_p_model = torch.optim.lr_scheduler.ExponentialLR(optimizer_p_model, gamma=0.95)
-    scheduler_e_model = torch.optim.lr_scheduler.ExponentialLR(optimizer_e_model, gamma=0.95)
     
     p_model.normalize = get_p_normalize()
-    # train_pnet_model(p_model, optimizer_p_model, scheduler_p_model, mse_cost_function, iterations=50000); print("[p_net train complete]")
     p_model = load_trained_model(p_model, PATH=FOLDER+"output/p_net.pth", PATH_LOSS=FOLDER+"output/p_net_train_loss.npy")
     p_model.eval()
 
     e_model.scale = get_e1_normalize(p_model)
     print("enet scale: ", e_model.scale)
-    # train_enet_model(p_model, e_model, optimizer_e_model, scheduler_e_model, mse_cost_function, iterations=50000); print("[e1_net train complete]")
     e_model = load_trained_model(e_model, PATH=FOLDER+"output/e1_net.pth", PATH_LOSS=FOLDER+"output/e1_net_train_loss.npy")
     e_model.eval()
     show_results(p_model, e_model)
+
+    debug(p_model, e_model)
 
     # plot_training_loss_data()
     plot_p_surface(p_model)
