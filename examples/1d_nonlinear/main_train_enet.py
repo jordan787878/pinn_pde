@@ -19,7 +19,12 @@ import argparse
 FOLDER = "exp1/main_alphas/seed-test/"
 DATA_FOLDER = "exp1/data/"
 
-device = "cpu"
+# Check if CUDA is available
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+# Set default tensor type to CUDA tensors
+torch.set_default_tensor_type(torch.cuda.FloatTensor if torch.cuda.is_available() else torch.FloatTensor)
+# device = "cpu"
+print(device)
 
 # Set a fixed seed for reproducibility
 seed = 0
@@ -107,19 +112,13 @@ def init_weights(m):
         # nn.init.normal_(m.weight, std=0.01)
         # print(m.weight)
         m.bias.data.fill_(0.01)
-# def init_weights_He(model):
-#     """Initialize weights of the model using He initialization."""
-#     for layer in model.modules():
-#         if isinstance(layer, nn.Linear):
-#             # He initialization: Uniform distribution
-#             nn.init.normal_(layer.weight, std=0.01)
 
 
 class PNet(nn.Module):
     def __init__(self, scale=1.0):
         super(PNet, self).__init__()
         self.scale = scale
-        num_hidden_layers=8
+        num_hidden_layers=16
         neurons=32
         # List to hold layers
         layers = []
@@ -136,48 +135,18 @@ class PNet(nn.Module):
         inputs = torch.cat([x, t], dim=1)
         out = inputs
         out = F.softplus(self.layers[0](out)) # First hidden layer
-        out1 = out                            # Store the output of the first hidden layer
+        # out1 = out                            # Store the output of the first hidden layer
         for layer in self.layers[1:-1]:  # Apply hidden layers
             out = F.softplus(layer(out))
-        out = self.layers[-1](out+out1)  # Apply output layer (last + first hidden layers output)
+        out = self.layers[-1](out)  # Apply output layer (last + first hidden layers output)
         return F.softplus(out)
-
-
-# class ENet(nn.Module):
-#     def __init__(self, scale=1.0): 
-#         neurons = 50
-#         self.scale = scale
-#         super(ENet, self).__init__()
-#         self.hidden_layer1 = (nn.Linear(2,neurons))
-#         self.hidden_layer2 = (nn.Linear(neurons,neurons))
-#         self.hidden_layer3 = (nn.Linear(neurons,neurons))
-#         self.hidden_layer4 = (nn.Linear(neurons,neurons))
-#         self.hidden_layer5 = (nn.Linear(neurons,neurons))
-#         self.hidden_layer6 = (nn.Linear(neurons,neurons))
-#         self.hidden_layer7 = (nn.Linear(neurons,neurons))
-#         self.hidden_layer8 = (nn.Linear(neurons,neurons))
-#         self.hidden_layer9 = (nn.Linear(neurons,neurons))
-#         self.output_layer =  (nn.Linear(neurons,1))
-#     def forward(self, x, t):
-#         inputs = torch.cat([x,t], axis=1)
-#         layer1_out = F.softplus((self.hidden_layer1(inputs)))
-#         layer2_out = F.softplus((self.hidden_layer2(layer1_out)))
-#         layer3_out = F.softplus((self.hidden_layer3(layer2_out)))
-#         layer4_out = F.softplus((self.hidden_layer4(layer3_out)))
-#         layer5_out = F.softplus((self.hidden_layer5(layer4_out)))
-#         layer6_out = F.softplus((self.hidden_layer6(layer5_out)))
-#         layer7_out = F.softplus((self.hidden_layer7(layer6_out)))
-#         layer8_out = F.softplus((self.hidden_layer8(layer7_out)))
-#         layer9_out = F.softplus((self.hidden_layer9(layer8_out)))
-#         output = self.scale * (self.output_layer(layer9_out))
-#         return output
 
 class ENet(nn.Module):
     def __init__(self, scale=1.0):
         super(ENet, self).__init__()
         self.scale = scale
-        num_hidden_layers=4 #16 #30
-        neurons=64 #32 #40
+        num_hidden_layers= 16 #30
+        neurons=32 #40
         # Define a list to hold the layers
         layers = []
         # Input layer
@@ -204,11 +173,11 @@ class ENet(nn.Module):
         #     inputs = torch.cat([inputs, t_sin_i, t_cos_i], axis=1)
         # inputs = inputs[:, 2:]
         out = inputs
-        out = F.softplus(self.layers[0](out)) # First hidden layer
-        out1 = out                            # Store the output of the first hidden layer
+        out = F.gelu(self.layers[0](out)) # First hidden layer
+        # out1 = out                            # Store the output of the first hidden layer
         for layer in self.layers[1:-1]:  # Apply hidden layers
-            out = F.softplus(layer(out))
-        out = self.layers[-1](out+out1)  # Apply output layer (last + first hidden layers output)
+            out = F.gelu(layer(out))
+        out = self.layers[-1](out)  # Apply output layer (last + first hidden layers output)
         return self.scale * out 
 
 
@@ -233,7 +202,7 @@ def train_enet_model(p_net, e1_net, optimizer, scheduler, mse_cost_function, ite
     ti = t0; tf = T_end
     min_loss = np.inf
     loss_history = []
-    iterations_per_decay = 10000
+    iterations_per_decay = 1000
     PATH = FOLDER+"output/e1_net.pth"
     x_mar = 0.0
 
@@ -261,20 +230,20 @@ def train_enet_model(p_net, e1_net, optimizer, scheduler, mse_cost_function, ite
     normalize = e1_net.scale
 
     # Store alpha data (prepare)
-    Nsample_list = []
-    Alpha_list = []
-    Alpha_mean_list = []
-    Loss_1_list = []
-    Loss_2_list = []
-    E1_list = []
-    x_data = np.load(DATA_FOLDER + datas[0] + "xsim.npy").reshape(-1,1)
-    pt_x_data = Variable(torch.from_numpy(x_data).float(), requires_grad=False).to(device)
-    for t1 in t1s:
-        p_data = np.load(DATA_FOLDER + datas[0] + "psim_t" + str(t1) + ".npy").reshape(-1, 1)
-        pt_t_data = Variable(torch.from_numpy(x_data*0+t1).float(), requires_grad=True).to(device)
-        phat = p_net(pt_x_data, pt_t_data).data.cpu().numpy() # change tensor to numpy
-        e1 = p_data - phat
-        E1_list.append(e1)
+    # Nsample_list = []
+    # Alpha_list = []
+    # Alpha_mean_list = []
+    # Loss_1_list = []
+    # Loss_2_list = []
+    # E1_list = []
+    # x_data = np.load(DATA_FOLDER + datas[0] + "xsim.npy").reshape(-1,1)
+    # pt_x_data = Variable(torch.from_numpy(x_data).float(), requires_grad=False).to(device)
+    # for t1 in t1s:
+    #     p_data = np.load(DATA_FOLDER + datas[0] + "psim_t" + str(t1) + ".npy").reshape(-1, 1)
+    #     pt_t_data = Variable(torch.from_numpy(x_data*0+t1).float(), requires_grad=True).to(device)
+    #     phat = p_net(pt_x_data, pt_t_data).data.cpu().numpy() # change tensor to numpy
+    #     e1 = p_data - phat
+    #     E1_list.append(e1)
 
     start_time = time.time()
     for epoch in range(iterations):
@@ -283,15 +252,17 @@ def train_enet_model(p_net, e1_net, optimizer, scheduler, mse_cost_function, ite
         p0 = p_init_torch(x_bc)
         p0_hat  =  p_net(x_bc, t_bc)
         e10     = p0 - p0_hat
-        e10_target = e10.clone().detach().numpy()
-        e10_target = Variable(torch.from_numpy(e10_target).float(), requires_grad=False).to(device)
+        e10_target = e10.detach()
+        # e10_target = e10.clone().detach().numpy()
+        # e10_target = Variable(torch.from_numpy(e10_target).float(), requires_grad=False).to(device)
         e10_hat = e1_net(x_bc, t_bc)[:,0].view(-1,1)
-        mse_e1_ic = mse_cost_function(e10_hat/normalize, e10/normalize)
+        mse_e1_ic = mse_cost_function(e10_hat/normalize, e10_target/normalize)
         
         # using detached p_net
         diff_e = Diff_e_func(x, t, e1_net)
-        diff_e_target = -p_res_func(x, t, p_net).detach().numpy()
-        diff_e_target = Variable(torch.from_numpy(diff_e_target).float(), requires_grad=False).to(device)
+        diff_e_target = -p_res_func(x, t, p_net)
+        # diff_e_target = Variable(torch.from_numpy(diff_e_target).float(), requires_grad=False).to(device)
+        diff_e_target = diff_e_target.detach()
         mse_e1_res = mse_cost_function(diff_e/normalize, diff_e_target/normalize)
         # using no detached p_net
         # all_zeros = torch.zeros((len(t),1), dtype=torch.float32, requires_grad=False).to(device)
@@ -325,34 +296,35 @@ def train_enet_model(p_net, e1_net, optimizer, scheduler, mse_cost_function, ite
                     'label': "e1_net",
                     'train_time': training_time,
                     }, PATH)
-            np.save(FOLDER+"output/e1_net_train_loss.npy", np.array(loss_history))
+            # np.save(FOLDER+"output/e1_net_train_loss.npy", np.array(loss_history))
+
             # Store alpha data (calculate data)
-            Nsample_i = x_bc.shape[0] + x.shape[0]
-            Loss_1_i    = (loss).data.cpu().numpy().item()
-            Loss_2_i    = (0.0*loss).data.cpu().numpy().item() ###
-            alpha_over_time = []
-            for i in range(len(t1s)):
-                t1 = t1s[i]
-                pt_t_data = Variable(torch.from_numpy(x_data*0+t1).float(), requires_grad=True).to(device)
-                ehat = e1_net(pt_x_data, pt_t_data).data.cpu().numpy()
-                e1 = E1_list[i]
-                alpha = np.max(np.abs(e1-ehat))/ np.max(np.abs(ehat))
-                alpha = np.round(alpha, 3)
-                alpha_over_time.append(alpha)
-            max_alpha = np.max(alpha_over_time)
-            Nsample_list.append(Nsample_i)
-            Loss_1_list.append(Loss_1_i)
-            Loss_2_list.append(Loss_2_i)
-            Alpha_list.append(max_alpha)
-            Alpha_mean_list.append(np.mean(alpha_over_time))
-            # Store alpha data (write data)
-            np.save(FOLDER+"output/e1_Nsample_list.npy", np.array(Nsample_list))
-            np.save(FOLDER+"output/e1_Loss_1_list.npy", np.array(Loss_1_list))
-            np.save(FOLDER+"output/e1_Loss_2_list.npy", np.array(Loss_2_list))
-            np.save(FOLDER+"output/e1_Alpha_list.npy", np.array(Alpha_list))
-            np.save(FOLDER+"output/e1_Alpha_mean_list.npy", np.array(Alpha_mean_list))
-            np.save(FOLDER+"output/e1_xsamples.npy", np.array(x.clone().detach().numpy()))
-            np.save(FOLDER+"output/e1_tsamples.npy", np.array(t.clone().detach().numpy()))
+            # Nsample_i = x_bc.shape[0] + x.shape[0]
+            # Loss_1_i    = (loss).data.cpu().numpy().item()
+            # Loss_2_i    = (0.0*loss).data.cpu().numpy().item() ###
+            # alpha_over_time = []
+            # for i in range(len(t1s)):
+            #     t1 = t1s[i]
+            #     pt_t_data = Variable(torch.from_numpy(x_data*0+t1).float(), requires_grad=True).to(device)
+            #     ehat = e1_net(pt_x_data, pt_t_data).data.cpu().numpy()
+            #     e1 = E1_list[i]
+            #     alpha = np.max(np.abs(e1-ehat))/ np.max(np.abs(ehat))
+            #     alpha = np.round(alpha, 3)
+            #     alpha_over_time.append(alpha)
+            # max_alpha = np.max(alpha_over_time)
+            # Nsample_list.append(Nsample_i)
+            # Loss_1_list.append(Loss_1_i)
+            # Loss_2_list.append(Loss_2_i)
+            # Alpha_list.append(max_alpha)
+            # Alpha_mean_list.append(np.mean(alpha_over_time))
+            # # Store alpha data (write data)
+            # np.save(FOLDER+"output/e1_Nsample_list.npy", np.array(Nsample_list))
+            # np.save(FOLDER+"output/e1_Loss_1_list.npy", np.array(Loss_1_list))
+            # np.save(FOLDER+"output/e1_Loss_2_list.npy", np.array(Loss_2_list))
+            # np.save(FOLDER+"output/e1_Alpha_list.npy", np.array(Alpha_list))
+            # np.save(FOLDER+"output/e1_Alpha_mean_list.npy", np.array(Alpha_mean_list))
+            # np.save(FOLDER+"output/e1_xsamples.npy", np.array(x.clone().detach().numpy()))
+            # np.save(FOLDER+"output/e1_tsamples.npy", np.array(t.clone().detach().numpy()))
 
         # RAR
         if (epoch%100 == 0 and FLAG):
@@ -421,32 +393,33 @@ def train_enet_model(p_net, e1_net, optimizer, scheduler, mse_cost_function, ite
                     'label': "e1_net",
                     'train_time': training_time,
                     }, PATH)
-            np.save(FOLDER+"output/e1_net_train_loss.npy", np.array(loss_history))
+            #np.save(FOLDER+"output/e1_net_train_loss.npy", np.array(loss_history))
+            
             # Store alpha data (calculate data)
-            Nsample_i = x_bc.shape[0] + x.shape[0]
-            Loss_1_i    = (loss).data.cpu().numpy().item()
-            Loss_2_i    = (0.0*loss).data.cpu().numpy().item() ###
-            alpha_over_time = []
-            for i in range(len(t1s)):
-                t1 = t1s[i]
-                pt_t_data = Variable(torch.from_numpy(x_data*0+t1).float(), requires_grad=True).to(device)
-                ehat = e1_net(pt_x_data, pt_t_data).data.cpu().numpy()
-                e1 = E1_list[i]
-                alpha = np.max(np.abs(e1-ehat))/ np.max(np.abs(ehat))
-                alpha = np.round(alpha, 3)
-                alpha_over_time.append(alpha)
-            max_alpha = np.max(alpha_over_time)
-            Nsample_list.append(Nsample_i)
-            Loss_1_list.append(Loss_1_i)
-            Loss_2_list.append(Loss_2_i)
-            Alpha_list.append(max_alpha)
-            Alpha_mean_list.append(np.mean(alpha_over_time))
-            # Store alpha data (write data)
-            np.save(FOLDER+"output/e1_Nsample_list.npy", np.array(Nsample_list))
-            np.save(FOLDER+"output/e1_Loss_1_list.npy", np.array(Loss_1_list))
-            np.save(FOLDER+"output/e1_Loss_2_list.npy", np.array(Loss_2_list))
-            np.save(FOLDER+"output/e1_Alpha_list.npy", np.array(Alpha_list))
-            np.save(FOLDER+"output/e1_Alpha_mean_list.npy", np.array(Alpha_mean_list))
+            # Nsample_i = x_bc.shape[0] + x.shape[0]
+            # Loss_1_i    = (loss).data.cpu().numpy().item()
+            # Loss_2_i    = (0.0*loss).data.cpu().numpy().item() ###
+            # alpha_over_time = []
+            # for i in range(len(t1s)):
+            #     t1 = t1s[i]
+            #     pt_t_data = Variable(torch.from_numpy(x_data*0+t1).float(), requires_grad=True).to(device)
+            #     ehat = e1_net(pt_x_data, pt_t_data).data.cpu().numpy()
+            #     e1 = E1_list[i]
+            #     alpha = np.max(np.abs(e1-ehat))/ np.max(np.abs(ehat))
+            #     alpha = np.round(alpha, 3)
+            #     alpha_over_time.append(alpha)
+            # max_alpha = np.max(alpha_over_time)
+            # Nsample_list.append(Nsample_i)
+            # Loss_1_list.append(Loss_1_i)
+            # Loss_2_list.append(Loss_2_i)
+            # Alpha_list.append(max_alpha)
+            # Alpha_mean_list.append(np.mean(alpha_over_time))
+            # # Store alpha data (write data)
+            # np.save(FOLDER+"output/e1_Nsample_list.npy", np.array(Nsample_list))
+            # np.save(FOLDER+"output/e1_Loss_1_list.npy", np.array(Loss_1_list))
+            # np.save(FOLDER+"output/e1_Loss_2_list.npy", np.array(Loss_2_list))
+            # np.save(FOLDER+"output/e1_Alpha_list.npy", np.array(Alpha_list))
+            # np.save(FOLDER+"output/e1_Alpha_mean_list.npy", np.array(Alpha_mean_list))
             return
 
         if (epoch) % 1000 == 0:
