@@ -35,7 +35,7 @@ x_hig = 6
 
 t0 = 0.0
 T_end = 5.0
-t1s = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]
+t1s = [0.5, 1.0, 2.0, 3.0, 4.0, 5.0]
 
 datas = ["data1/"]
 pnet_terminate = 5e-5
@@ -84,69 +84,6 @@ def e_res_func(x, t, e_net, p_net, verbose=False):
         print(e_x.shape, e_t.shape, e_xx.shape, residual.shape)
     return residual
 
-
-def init_weights(m):
-    if isinstance(m, nn.Linear):
-        init.xavier_uniform_(m.weight)
-        m.bias.data.fill_(0.01)
-
-
-# class PNet(nn.Module):
-#     def __init__(self, scale=1.0): 
-#         neurons = 50
-#         self.scale = scale
-#         super(PNet, self).__init__()
-#         self.hidden_layer1 = (nn.Linear(n_d+1,neurons))
-#         self.hidden_layer2 = (nn.Linear(neurons,neurons))
-#         self.hidden_layer3 = (nn.Linear(neurons,neurons))
-#         self.hidden_layer4 = (nn.Linear(neurons,neurons))
-#         self.hidden_layer5 = (nn.Linear(neurons,neurons))
-#         self.hidden_layer6 = (nn.Linear(neurons,neurons))
-#         self.hidden_layer7 = (nn.Linear(neurons,neurons))
-#         self.hidden_layer8 = (nn.Linear(neurons,neurons))
-#         self.output_layer =  (nn.Linear(neurons,1))
-#     def forward(self, x, t):
-#         inputs = torch.cat([x,t],axis=1)
-#         layer1_out = F.softplus((self.hidden_layer1(inputs)))
-#         layer2_out = F.softplus((self.hidden_layer2(layer1_out)))
-#         layer3_out = F.softplus((self.hidden_layer3(layer2_out)))
-#         layer4_out = F.softplus((self.hidden_layer4(layer3_out)))
-#         layer5_out = F.softplus((self.hidden_layer5(layer4_out)))
-#         layer6_out = F.softplus((self.hidden_layer6(layer5_out)))
-#         layer7_out = F.softplus((self.hidden_layer7(layer6_out)))
-#         layer8_out = F.softplus((self.hidden_layer8(layer7_out)))
-#         output = F.softplus(self.output_layer(layer8_out))
-#         return output
-
-# class ENet(nn.Module):
-#     def __init__(self, scale=1.0): 
-#         neurons = 50
-#         self.scale = scale
-#         super(ENet, self).__init__()
-#         self.hidden_layer1 = (nn.Linear(2,neurons))
-#         self.hidden_layer2 = (nn.Linear(neurons,neurons))
-#         self.hidden_layer3 = (nn.Linear(neurons,neurons))
-#         self.hidden_layer4 = (nn.Linear(neurons,neurons))
-#         self.hidden_layer5 = (nn.Linear(neurons,neurons))
-#         self.hidden_layer6 = (nn.Linear(neurons,neurons))
-#         self.hidden_layer7 = (nn.Linear(neurons,neurons))
-#         self.hidden_layer8 = (nn.Linear(neurons,neurons))
-#         self.hidden_layer9 = (nn.Linear(neurons,neurons))
-#         self.output_layer =  (nn.Linear(neurons,1))
-#     def forward(self, x, t):
-#         inputs = torch.cat([x,t], axis=1)
-#         layer1_out = F.softplus((self.hidden_layer1(inputs)))
-#         layer2_out = F.softplus((self.hidden_layer2(layer1_out)))
-#         layer3_out = F.softplus((self.hidden_layer3(layer2_out)))
-#         layer4_out = F.softplus((self.hidden_layer4(layer3_out)))
-#         layer5_out = F.softplus((self.hidden_layer5(layer4_out)))
-#         layer6_out = F.softplus((self.hidden_layer6(layer5_out)))
-#         layer7_out = F.softplus((self.hidden_layer7(layer6_out)))
-#         layer8_out = F.softplus((self.hidden_layer8(layer7_out)))
-#         layer9_out = F.softplus((self.hidden_layer9(layer8_out)))
-#         output = self.scale * (self.output_layer(layer9_out))
-#         return output
- 
 
 def get_p_normalize():
     x = np.linspace(x_low, x_hig, num=200, endpoint=True)
@@ -849,25 +786,19 @@ def plot_pres_surface(p_net, num=100):
     x_mesh, t_mesh = np.meshgrid(x,t)
     pt_x = Variable(torch.from_numpy(x_mesh.reshape(-1,1)).float(), requires_grad=True).to(device)
     pt_t = Variable(torch.from_numpy(t_mesh.reshape(-1,1)).float(), requires_grad=True).to(device)
-    pres = p_res_func(pt_x, pt_t, p_net).data.cpu().numpy().reshape(num, -1)
-
-    p_list = []
-    x_monte = np.load(DATA_FOLDER + datas[0] + "xsim.npy").reshape(-1,1)
-    pt_x_monte = Variable(torch.from_numpy(x_monte).float(), requires_grad=True).to(device)
-    for t1 in t1s:
-        p_monte = np.load(DATA_FOLDER + datas[0] + "psim_t" + str(t1) + ".npy").reshape(-1, 1)
-        p_list.append(p_monte)
+    pres = p_res_func(pt_x, pt_t, p_net).data.cpu().numpy().reshape(num, -1)/p_net.scale
 
     fig = plt.figure(figsize=(6,6))
     ax = fig.add_subplot(111, projection='3d')
-    ax.plot_surface(x_mesh, t_mesh, pres**2, cmap='viridis', alpha=0.8, label=r"$r_1^2$")
+    ax.plot_surface(x_mesh, t_mesh, pres**2, cmap='Greys', alpha=0.8, label=r"$r_1^2$")
     ax.set_xlabel("x")
     ax.set_ylabel("t"); 
     ax.set_zlabel('r')
     ax.legend()
     ax.view_init(40, -60)
-    # y_ticks = np.array([1, 2, 3])  # Example y-tick positions
-    # ax.set_yticks(y_ticks)  # Set the positions of the y-ticks
+    zScalarFormatter = ScalarFormatterClass(useMathText=True)
+    zScalarFormatter.set_powerlimits((0,0))
+    ax.zaxis.set_major_formatter(zScalarFormatter)
     plt.subplots_adjust(left=0.08, right=0.92, top=0.92, bottom=0.08)
     fig.savefig(FOLDER+'figs/pres_surface_plot.pdf', format='pdf', dpi=300)
 
@@ -881,30 +812,19 @@ def plot_e1res_surface(p_net, e1_net, num=100):
     e1res = e_res_func(pt_x, pt_t, e1_net, p_net).data.cpu().numpy().reshape(num, -1)
     e1res = e1res/e1_net.scale
 
-    index = np.argmax(np.abs(e1res.flatten()))
-    max_e1_res = np.round(np.max(np.abs(e1res.flatten())),4)
-    x_max = np.round(x_mesh.flatten()[index],2)
-    t_max = np.round(t_mesh.flatten()[index],2)
-
-    p_list = []
-    x_monte = np.load(DATA_FOLDER + datas[0] + "xsim.npy").reshape(-1,1)
-    pt_x_monte = Variable(torch.from_numpy(x_monte).float(), requires_grad=True).to(device)
-    for t1 in t1s:
-        p_monte = np.load(DATA_FOLDER + datas[0] + "psim_t" + str(t1) + ".npy").reshape(-1, 1)
-        p_list.append(p_monte)
-
     fig = plt.figure(figsize=(6,6))
     ax = fig.add_subplot(111, projection='3d')
-    ax.plot_surface(x_mesh, t_mesh, e1res**2, cmap='viridis', alpha=0.8, label=r"$r_2^2$")
+    ax.plot_surface(x_mesh, t_mesh, e1res**2, cmap='Greys', alpha=0.8, label=r"$r_2^2$")
     x_samples = np.load(FOLDER+"output/e1_xsamples.npy")
     t_samples = np.load(FOLDER+"output/e1_tsamples.npy")
     z_max = 1.0*np.max(e1res**2)
-    ax.scatter(x_samples, t_samples, t_samples*0+z_max, marker="x", color="black", s=0.02, label='Data Points')
+    ax.scatter(x_samples, t_samples, t_samples*0+z_max, marker="o", color="black", s=2.0, alpha=0.05, label='Data Points')
+    ax.scatter(x_samples[-1], t_samples[-1], z_max, marker="x", color="red", s=10.0, label='Max Points')
     ax.set_xlabel("x")
     ax.set_ylabel("t"); 
     ax.set_zlabel('r')
     ax.legend()
-    ax.view_init(25, -60)
+    ax.view_init(40, -60)
     zScalarFormatter = ScalarFormatterClass(useMathText=True)
     zScalarFormatter.set_powerlimits((0,0))
     ax.zaxis.set_major_formatter(zScalarFormatter)
@@ -939,15 +859,13 @@ def fit_function(x, C1, C2):
 
 def plot_alpha_data():
     data_folder = "exp1/main_alphas/"
-    max_alpha_to_fit = 3.0
-    max_total_loss_to_fit = 0.2
+    max_alpha_to_fit = 2.0
+    max_total_loss_to_fit = 0.02
     num_runs = 5
 
     plt.figure()
     X = []
     Y = []
-    X1 = []
-    X2 = []
     for i in range(0, num_runs):
         data_folder_seedi = data_folder  + "seed" + str(i) + "/"
         data_folder_seedi = FOLDER
@@ -1040,6 +958,7 @@ def main():
     print("enet scale: ", e_model.scale)
     e_model = load_trained_model(e_model, PATH=FOLDER+"output/e1_net.pth", PATH_LOSS=FOLDER+"output/e1_net_train_loss.npy")
     e_model.eval()
+
     show_results(p_model, e_model)
 
     debug(p_model, e_model)

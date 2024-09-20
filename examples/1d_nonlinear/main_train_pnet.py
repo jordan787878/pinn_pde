@@ -105,46 +105,12 @@ def init_weights_He(m):
         m.bias.data.fill_(0.01)
 
 
-class PNet(nn.Module):
-    def __init__(self, scale=1.0):
-        super(PNet, self).__init__()
-        self.scale = scale
-        num_hidden_layers=4 #8
-        neurons=64 #32
-        # List to hold layers
-        layers = []
-        # Input layer
-        layers.append(nn.Linear(2, neurons))
-        # Hidden layers
-        for _ in range(num_hidden_layers):
-            layers.append(nn.Linear(neurons, neurons))
-        # Output layer
-        layers.append(nn.Linear(neurons, 1))
-        # Register all layers
-        self.layers = nn.ModuleList(layers)
-    # def forward(self, x, t):
-        # inputs = torch.cat([x, t], dim=1)
-        # out = inputs
-        # for layer in self.layers[:-1]:  # Apply hidden layers
-        #     out = F.softplus(layer(out))
-        # out = self.layers[-1](out)  # Apply output layer
-        # return F.softplus(out)
-    def forward(self, x, t):
-        inputs = torch.cat([x, t], dim=1)
-        out = inputs
-        out = F.softplus(self.layers[0](out)) # First hidden layer
-        out1 = out                            # Store the output of the first hidden layer
-        for layer in self.layers[1:-1]:  # Apply hidden layers
-            out = F.softplus(layer(out))
-        out = self.layers[-1](out+out1)  # Apply output layer (last + first hidden layers output)
-        return F.softplus(out)
-        # return out
 # class PNet(nn.Module):
 #     def __init__(self, scale=1.0):
 #         super(PNet, self).__init__()
 #         self.scale = scale
-#         num_hidden_layers=20
-#         neurons=20
+#         num_hidden_layers=8
+#         neurons=32
 #         # List to hold layers
 #         layers = []
 #         # Input layer
@@ -156,13 +122,46 @@ class PNet(nn.Module):
 #         layers.append(nn.Linear(neurons, 1))
 #         # Register all layers
 #         self.layers = nn.ModuleList(layers)
+#     # def forward(self, x, t):
+#         # inputs = torch.cat([x, t], dim=1)
+#         # out = inputs
+#         # for layer in self.layers[:-1]:  # Apply hidden layers
+#         #     out = F.softplus(layer(out))
+#         # out = self.layers[-1](out)  # Apply output layer
+#         # return F.softplus(out)
 #     def forward(self, x, t):
 #         inputs = torch.cat([x, t], dim=1)
 #         out = inputs
-#         for layer in self.layers[:-1]:  # Apply hidden layers
+#         out = F.softplus(self.layers[0](out)) # First hidden layer
+#         out1 = out                            # Store the output of the first hidden layer
+#         for layer in self.layers[1:-1]:  # Apply hidden layers
 #             out = F.softplus(layer(out))
-#         out = self.layers[-1](out)  # Apply output layer
+#         out = self.layers[-1](out+out1)  # Apply output layer (last + first hidden layers output)
 #         return F.softplus(out)
+class PNet(nn.Module):
+    def __init__(self, scale=1.0):
+        super(PNet, self).__init__()
+        self.scale = scale
+        num_hidden_layers=20
+        neurons=20
+        # List to hold layers
+        layers = []
+        # Input layer
+        layers.append(nn.Linear(2, neurons))
+        # Hidden layers
+        for _ in range(num_hidden_layers):
+            layers.append(nn.Linear(neurons, neurons))
+        # Output layer
+        layers.append(nn.Linear(neurons, 1))
+        # Register all layers
+        self.layers = nn.ModuleList(layers)
+    def forward(self, x, t):
+        inputs = torch.cat([x, t], dim=1)
+        out = inputs
+        for layer in self.layers[:-1]:  # Apply hidden layers
+            out = F.softplus(layer(out))
+        out = self.layers[-1](out)  # Apply output layer
+        return F.softplus(out)
   
 
 def get_p_normalize():
@@ -179,9 +178,15 @@ def train_pnet_model(p_net, optimizer, scheduler, mse_cost_function, iterations=
     iterations_per_decay = 1000
     loss_history = []
     x_mar = 0.0
+
+    _x = np.linspace(x_low, x_hig, num=30, endpoint=True)
+    _t = np.linspace(ti, tf, num=30, endpoint=True)
     
     # space-time points for BC
+    print(np.min(_x), np.max(_x))
+    x_bc_fix = Variable(torch.from_numpy(_x.reshape(-1,1)).float(), requires_grad=True).to(device)
     x_bc = (torch.rand(500, n_d, requires_grad=True) * (x_hig - x_low) + x_low).to(device)
+    x_bc = torch.cat((x_bc, x_bc_fix), dim=0)
     t_bc = (torch.ones(len(x_bc), 1, requires_grad=True) * ti).to(device)
     
     # space-time points for RES
@@ -190,8 +195,6 @@ def train_pnet_model(p_net, optimizer, scheduler, mse_cost_function, iterations=
     # _t_init = (torch.ones(500, 1, requires_grad=True) * ti).to(device)
     # _t_end =  (torch.ones(500, 1, requires_grad=True) * tf).to(device)
     # t = torch.cat((t, _t_init, _t_end), dim=0)
-    _x = np.linspace(x_low, x_hig, num=30, endpoint=True)
-    _t = np.linspace(ti, tf, num=30, endpoint=True)
     _xx, _tt = np.meshgrid(_x, _t)
     x = Variable(torch.from_numpy(_xx.reshape(-1,1)).float(), requires_grad=True).to(device)
     t = Variable(torch.from_numpy(_tt.reshape(-1,1)).float(), requires_grad=True).to(device)
@@ -205,7 +208,7 @@ def train_pnet_model(p_net, optimizer, scheduler, mse_cost_function, iterations=
     # RAR
     weight_regular = 1.0
     S = 10000
-    FLAG = False
+    FLAG = 0
 
     start_time = time.time()
     for epoch in range(iterations):
@@ -213,8 +216,9 @@ def train_pnet_model(p_net, optimizer, scheduler, mse_cost_function, iterations=
 
         # IC Loss
         p0 = p_init_torch(x_bc)
-        p0_target = p0.clone().detach().numpy()
-        p0_target = Variable(torch.from_numpy(p0_target).float(), requires_grad=False).to(device)
+        # p0_target = p0.clone().detach().numpy()
+        # p0_target = Variable(torch.from_numpy(p0_target).float(), requires_grad=False).to(device)
+        p0_target = p0.detach()
         p0_hat =  p_net(x_bc, t_bc)
         # e0     = p0 - p0_hat
         # e0_x = torch.autograd.grad(e0, x_bc, grad_outputs=torch.ones_like(e0), create_graph=True)[0]
@@ -239,7 +243,7 @@ def train_pnet_model(p_net, optimizer, scheduler, mse_cost_function, iterations=
         # Save the min loss model
         if(loss.data < 0.95*min_loss):
             min_loss = loss.data
-            FLAG = True
+            FLAG = FLAG + 1
             training_time = time.time() - start_time
             print("pnet saved epoch:", epoch, ",loss:", loss.data, 
                   ",ic:", mse_u.data, ",res:", mse_res.data,
@@ -254,63 +258,63 @@ def train_pnet_model(p_net, optimizer, scheduler, mse_cost_function, iterations=
                     'train_time': training_time,
                 }, PATH)
             np.save(FOLDER+"output/p_net_train_loss.npy", np.array(loss_history))
-
-        # RAR
-        if (epoch%100 == 0 and FLAG):
-            # t_RAR = (torch.rand(S, 1, requires_grad=True) *   (tf - ti) + ti).to(device)
-            # _t_init_RAR = (torch.ones(500, 1, requires_grad=True) * ti).to(device)
-            # _t_end_RAR = (torch.ones(500, 1, requires_grad=True) * tf).to(device)
-            # t_RAR = torch.cat((t_RAR, _t_init_RAR, _t_end_RAR), dim=0)
-            # x_RAR = (torch.rand(len(t_RAR), n_d, requires_grad=True) * (x_hig - x_low + 2*x_mar) + x_low-x_mar).to(device)
-            # x_RAR = torch.clamp(x_RAR, min=x_low, max=x_hig)
-            quad_number = random.randint(10,30)
-            _x = np.linspace(x_low, x_hig, num=quad_number, endpoint=True)
-            _t = np.linspace(ti, tf, num=quad_number, endpoint=True)
-            _xx, _tt = np.meshgrid(_x, _t)
-            x_quad = Variable(torch.from_numpy(_xx.reshape(-1,1)).float(), requires_grad=True).to(device)
-            t_quad = Variable(torch.from_numpy(_tt.reshape(-1,1)).float(), requires_grad=True).to(device)
-            t_RAR = (torch.rand(S, 1, requires_grad=True) *   (tf - ti) + ti).to(device)
-            x_RAR = (torch.rand(len(t_RAR), n_d, requires_grad=True) * (x_hig - x_low + 2*x_mar) + x_low-x_mar).to(device)
-            t_RAR = torch.cat((t_RAR, t_quad), dim=0)
-            x_RAR = torch.cat((x_RAR, x_quad), dim=0)
-            # t0_RAR = 0.0*t_RAR.clone() + t0
-            # x0_RAR = x_RAR.clone()
-            # p0_RAR = p_init_torch(x0_RAR)
-            # p0_hat_RAR = p_net(x0_RAR, t0_RAR)
-            # e0_RAR = p0_RAR - p0_hat_RAR
-            # mean_e0_RAR = torch.mean(torch.abs(e0_RAR))
-            # if(mean_e0_RAR > 0.0):
-            #     max_abs_e0, max_index = torch.max(torch.abs(e0_RAR), dim=0)
-            #     x_max = x0_RAR[max_index]
-            #     t_max = t0_RAR[max_index]
-            #     x_bc = torch.cat((x_bc, x_max), dim=0)
-            #     t_bc = torch.cat((t_bc, t_max), dim=0)
-            #     print("... Ic add [x,t]:", x_max.data, t_max.data, max_abs_e0.data)
-            res_RAR = p_res_func(x_RAR, t_RAR, p_net)
-            mean_res_RAR = torch.mean(torch.abs(res_RAR))
-            print("mean res RAR:", mean_res_RAR.data)
-            if(mean_res_RAR > 0.0):
-                # Find the index of the maximum absolute value in res_RAR
-                max_abs_res, max_index = torch.max((res_RAR)**2, dim=0)
-                # Get the corresponding x_RAR and t_RAR vectors
-                x_max = x_RAR[max_index]
-                t_max = t_RAR[max_index]
-                # Append x_max and t_max to x and t
-                x = torch.cat((x, x_max), dim=0)
-                t = torch.cat((t, t_max), dim=0)
-                print("... Res add [x,t]:", x_max.data, t_max.data, max_abs_res.data)
-            # res_x_RAR = torch.autograd.grad(res_RAR, x_RAR, grad_outputs=torch.ones_like(res_RAR), create_graph=True)[0]
-            # res_t_RAR = torch.autograd.grad(res_RAR, t_RAR, grad_outputs=torch.ones_like(res_RAR), create_graph=True)[0]
-            # mean_res_g_RAR = torch.mean(torch.abs(res_x_RAR)+torch.abs(res_t_RAR))
-            # print("RAR mean res input: ", mean_res_g_RAR.data)
-            # if(mean_res_g_RAR > 0.0):
-            #     max_abs_res_input, max_index = torch.max(res_x_RAR**2+ res_t_RAR**2, dim=0)
-            #     x_max = x_RAR[max_index]
-            #     t_max = t_RAR[max_index]
-            #     x = torch.cat((x, x_max), dim=0)
-            #     t = torch.cat((t, t_max), dim=0)
-            #     print("... Res Grad add [x,t]:", x_max.data, t_max.data, max_abs_res_input.data)
-            FLAG = False
+            
+            # RAR
+            if (FLAG == 3):
+                # t_RAR = (torch.rand(S, 1, requires_grad=True) *   (tf - ti) + ti).to(device)
+                # _t_init_RAR = (torch.ones(500, 1, requires_grad=True) * ti).to(device)
+                # _t_end_RAR = (torch.ones(500, 1, requires_grad=True) * tf).to(device)
+                # t_RAR = torch.cat((t_RAR, _t_init_RAR, _t_end_RAR), dim=0)
+                # x_RAR = (torch.rand(len(t_RAR), n_d, requires_grad=True) * (x_hig - x_low + 2*x_mar) + x_low-x_mar).to(device)
+                # x_RAR = torch.clamp(x_RAR, min=x_low, max=x_hig)
+                quad_number = random.randint(10,30)
+                _x = np.linspace(x_low, x_hig, num=quad_number, endpoint=True)
+                _t = np.linspace(ti, tf, num=quad_number, endpoint=True)
+                _xx, _tt = np.meshgrid(_x, _t)
+                x_quad = Variable(torch.from_numpy(_xx.reshape(-1,1)).float(), requires_grad=True).to(device)
+                t_quad = Variable(torch.from_numpy(_tt.reshape(-1,1)).float(), requires_grad=True).to(device)
+                t_RAR = (torch.rand(S, 1, requires_grad=True) *   (tf - ti) + ti).to(device)
+                x_RAR = (torch.rand(len(t_RAR), n_d, requires_grad=True) * (x_hig - x_low + 2*x_mar) + x_low-x_mar).to(device)
+                t_RAR = torch.cat((t_RAR, t_quad), dim=0)
+                x_RAR = torch.cat((x_RAR, x_quad), dim=0)
+                # t0_RAR = 0.0*t_RAR.clone() + t0
+                # x0_RAR = x_RAR.clone()
+                # p0_RAR = p_init_torch(x0_RAR)
+                # p0_hat_RAR = p_net(x0_RAR, t0_RAR)
+                # e0_RAR = p0_RAR - p0_hat_RAR
+                # mean_e0_RAR = torch.mean(torch.abs(e0_RAR))
+                # if(mean_e0_RAR > 0.0):
+                #     max_abs_e0, max_index = torch.max(torch.abs(e0_RAR), dim=0)
+                #     x_max = x0_RAR[max_index]
+                #     t_max = t0_RAR[max_index]
+                #     x_bc = torch.cat((x_bc, x_max), dim=0)
+                #     t_bc = torch.cat((t_bc, t_max), dim=0)
+                #     print("... Ic add [x,t]:", x_max.data, t_max.data, max_abs_e0.data)
+                res_RAR = p_res_func(x_RAR, t_RAR, p_net)
+                mean_res_RAR = torch.mean(torch.abs(res_RAR))
+                print("mean res RAR:", mean_res_RAR.data)
+                if(mean_res_RAR > 0.0):
+                    # Find the index of the maximum absolute value in res_RAR
+                    max_abs_res, max_index = torch.max((res_RAR)**2, dim=0)
+                    # Get the corresponding x_RAR and t_RAR vectors
+                    x_max = x_RAR[max_index]
+                    t_max = t_RAR[max_index]
+                    # Append x_max and t_max to x and t
+                    x = torch.cat((x, x_max), dim=0)
+                    t = torch.cat((t, t_max), dim=0)
+                    print("... Res add [x,t]:", x_max.data, t_max.data, max_abs_res.data)
+                # res_x_RAR = torch.autograd.grad(res_RAR, x_RAR, grad_outputs=torch.ones_like(res_RAR), create_graph=True)[0]
+                # res_t_RAR = torch.autograd.grad(res_RAR, t_RAR, grad_outputs=torch.ones_like(res_RAR), create_graph=True)[0]
+                # mean_res_g_RAR = torch.mean(torch.abs(res_x_RAR)+torch.abs(res_t_RAR))
+                # print("RAR mean res input: ", mean_res_g_RAR.data)
+                # if(mean_res_g_RAR > 0.0):
+                #     max_abs_res_input, max_index = torch.max(res_x_RAR**2+ res_t_RAR**2, dim=0)
+                #     x_max = x_RAR[max_index]
+                #     t_max = t_RAR[max_index]
+                #     x = torch.cat((x, x_max), dim=0)
+                #     t = torch.cat((t, t_max), dim=0)
+                #     print("... Res Grad add [x,t]:", x_max.data, t_max.data, max_abs_res_input.data)
+                FLAG = 0
 
         # Terminate training 
         if(loss.data < pnet_terminate):
