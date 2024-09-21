@@ -120,7 +120,7 @@ class ENet(nn.Module):
         super(ENet, self).__init__()
         self.scale = scale
         num_hidden_layers=20
-        neurons=100
+        neurons=50
         # Define a list to hold the layers
         layers = []
         # Input layer
@@ -237,13 +237,13 @@ def train_enet_model(p_net, e1_net, optimizer, scheduler, mse_cost_function, ite
         diff_e_target = diff_e_target.detach()
         mse_e1_res = mse_cost_function(diff_e/normalize, diff_e_target/normalize)
 
-        # e1_res_out = e_res_func(x, t, e1_net, p_net)/normalize
-        # res_x = torch.autograd.grad(e1_res_out, x, grad_outputs=torch.ones_like(e1_res_out), create_graph=True)[0]
-        # res_t = torch.autograd.grad(e1_res_out, t, grad_outputs=torch.ones_like(e1_res_out), create_graph=True)[0]
-        # mse_res_grad = torch.mean(res_x**2 + res_t**2)
+        e1_res_out = e_res_func(x, t, e1_net, p_net)/normalize
+        res_x = torch.autograd.grad(e1_res_out, x, grad_outputs=torch.ones_like(e1_res_out), create_graph=True)[0]
+        res_t = torch.autograd.grad(e1_res_out, t, grad_outputs=torch.ones_like(e1_res_out), create_graph=True)[0]
+        mse_res_grad = torch.mean(res_x**2 + res_t**2)
     
         # Combining the loss functions
-        loss = mse_e1_ic + mse_e1_res #+ weight_reg*mse_res_grad
+        loss = mse_e1_ic + mse_e1_res + weight_reg*mse_res_grad
         loss_history.append(loss.data)
 
         # Save the min loss model
@@ -254,7 +254,7 @@ def train_enet_model(p_net, e1_net, optimizer, scheduler, mse_cost_function, ite
             print("e1net best epoch:", epoch, ", loss:", loss.data, 
                   "ic:", mse_e1_ic.data,
                   "res:", mse_e1_res.data,
-                #   "grad:", mse_res_grad.data,
+                  "grad:", mse_res_grad.data,
                   )
             torch.save({
                     'epoch': epoch,
