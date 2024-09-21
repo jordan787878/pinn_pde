@@ -20,11 +20,7 @@ from main_train_enet import ENet
 FOLDER = "exp1/main_alphas/seed-test/"
 DATA_FOLDER = "exp1/data/"
 
-# Check if CUDA is available
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-# Set default tensor type to CUDA tensors
-torch.set_default_tensor_type(torch.cuda.FloatTensor if torch.cuda.is_available() else torch.FloatTensor)
-# device = "cpu"
+device = "cpu"
 print(device)
 
 n_d = 1
@@ -43,8 +39,6 @@ T_end = 5.0
 t1s = [0.5, 1.0, 2.0, 3.0, 4.0, 5.0]
 
 datas = ["data1/"]
-pnet_terminate = 5e-5
-enet_terminate = 5e-5
 
 
 def p_init(x):
@@ -88,69 +82,6 @@ def e_res_func(x, t, e_net, p_net, verbose=False):
     if(verbose):
         print(e_x.shape, e_t.shape, e_xx.shape, residual.shape)
     return residual
-
-
-def init_weights(m):
-    if isinstance(m, nn.Linear):
-        init.xavier_uniform_(m.weight)
-        m.bias.data.fill_(0.01)
-
-
-# class PNet(nn.Module):
-#     def __init__(self, scale=1.0): 
-#         neurons = 50
-#         self.scale = scale
-#         super(PNet, self).__init__()
-#         self.hidden_layer1 = (nn.Linear(n_d+1,neurons))
-#         self.hidden_layer2 = (nn.Linear(neurons,neurons))
-#         self.hidden_layer3 = (nn.Linear(neurons,neurons))
-#         self.hidden_layer4 = (nn.Linear(neurons,neurons))
-#         self.hidden_layer5 = (nn.Linear(neurons,neurons))
-#         self.hidden_layer6 = (nn.Linear(neurons,neurons))
-#         self.hidden_layer7 = (nn.Linear(neurons,neurons))
-#         self.hidden_layer8 = (nn.Linear(neurons,neurons))
-#         self.output_layer =  (nn.Linear(neurons,1))
-#     def forward(self, x, t):
-#         inputs = torch.cat([x,t],axis=1)
-#         layer1_out = F.softplus((self.hidden_layer1(inputs)))
-#         layer2_out = F.softplus((self.hidden_layer2(layer1_out)))
-#         layer3_out = F.softplus((self.hidden_layer3(layer2_out)))
-#         layer4_out = F.softplus((self.hidden_layer4(layer3_out)))
-#         layer5_out = F.softplus((self.hidden_layer5(layer4_out)))
-#         layer6_out = F.softplus((self.hidden_layer6(layer5_out)))
-#         layer7_out = F.softplus((self.hidden_layer7(layer6_out)))
-#         layer8_out = F.softplus((self.hidden_layer8(layer7_out)))
-#         output = F.softplus(self.output_layer(layer8_out))
-#         return output
-
-# class ENet(nn.Module):
-#     def __init__(self, scale=1.0): 
-#         neurons = 50
-#         self.scale = scale
-#         super(ENet, self).__init__()
-#         self.hidden_layer1 = (nn.Linear(2,neurons))
-#         self.hidden_layer2 = (nn.Linear(neurons,neurons))
-#         self.hidden_layer3 = (nn.Linear(neurons,neurons))
-#         self.hidden_layer4 = (nn.Linear(neurons,neurons))
-#         self.hidden_layer5 = (nn.Linear(neurons,neurons))
-#         self.hidden_layer6 = (nn.Linear(neurons,neurons))
-#         self.hidden_layer7 = (nn.Linear(neurons,neurons))
-#         self.hidden_layer8 = (nn.Linear(neurons,neurons))
-#         self.hidden_layer9 = (nn.Linear(neurons,neurons))
-#         self.output_layer =  (nn.Linear(neurons,1))
-#     def forward(self, x, t):
-#         inputs = torch.cat([x,t], axis=1)
-#         layer1_out = F.softplus((self.hidden_layer1(inputs)))
-#         layer2_out = F.softplus((self.hidden_layer2(layer1_out)))
-#         layer3_out = F.softplus((self.hidden_layer3(layer2_out)))
-#         layer4_out = F.softplus((self.hidden_layer4(layer3_out)))
-#         layer5_out = F.softplus((self.hidden_layer5(layer4_out)))
-#         layer6_out = F.softplus((self.hidden_layer6(layer5_out)))
-#         layer7_out = F.softplus((self.hidden_layer7(layer6_out)))
-#         layer8_out = F.softplus((self.hidden_layer8(layer7_out)))
-#         layer9_out = F.softplus((self.hidden_layer9(layer8_out)))
-#         output = self.scale * (self.output_layer(layer9_out))
-#         return output
  
 
 def get_p_normalize():
@@ -242,7 +173,7 @@ def show_results(pnet, enet):
     for i, (phat) in enumerate(zip(p_hat_list)):
         max_value = np.max(np.abs(phat))
         global_max = max(global_max, max_value)
-    fig, axs = plt.subplots(3, 2, figsize=(6, 6))
+    fig, axs = plt.subplots(3, 2, figsize=(7, 6))
     for i, (p_monte, p_hat, e1_hat) in enumerate(zip(p_monte_list, p_hat_list, e1_hat_list)):
         if i == 0:
             ax1 = axs[0,0]
@@ -284,7 +215,7 @@ def show_results(pnet, enet):
     for i, (e1_true, e1_hat) in enumerate(zip(e1_list, e1_hat_list)):
         max_value = max(np.max(np.abs(e1_true)), np.max(np.abs(0.0)))
         global_max = max(global_max, max_value)
-    fig, axs = plt.subplots(3, 2, figsize=(6, 6))
+    fig, axs = plt.subplots(3, 2, figsize=(7, 6))
     for i, (e1_true, e1_hat) in enumerate(zip(e1_list, e1_hat_list)):
         if i == 0:
             ax1 = axs[0,0]
@@ -317,8 +248,9 @@ def show_results(pnet, enet):
             ax1.legend(loc="upper right")
 
         ax1.set_xlim([x_low, x_hig])
+        ax1.set_xticks([-6, -4, -2, 0, 2, 4, 6])
         # ax1.set_ylim(-(1.5*eL), 1.5*eL)
-        ax1.set_ylim(-(global_max), global_max)
+        # ax1.set_ylim(-(global_max), global_max)
         ax1.grid(True, which='both', linestyle='-', linewidth=0.5)
         ax1.text(0.01, 0.98, r"$t:$ "+str(t1s[i]) + r", $\alpha_1:$ "+str(alpha), 
                   transform=ax1.transAxes, verticalalignment='top', fontsize=8,
@@ -363,6 +295,7 @@ def show_results(pnet, enet):
             ax1.plot(x, (pres/pnet.scale)**2, "red", linewidth=1.0, linestyle="--")
             #ax1.plot(x, -pres, "black", linewidth=1.0, linestyle="-")
         ax1.set_ylim([0, global_max])
+        ax1.set_xlim([x_low, x_hig])
         ax1.grid(True, which='both', linestyle='-', linewidth=0.5)
     plt.tight_layout()
     # plt.savefig(FOLDER+"figs/enet_res.png")
@@ -399,6 +332,8 @@ def show_results(pnet, enet):
             ax1.plot(x, eres**2, "red", linewidth=1.0, linestyle="--")
             #ax1.plot(x, -pres, "black", linewidth=1.0, linestyle="-")
         ax1.set_ylim([0, global_max])
+        ax1.set_xlim([x_low, x_hig])
+        ax1.set_xticks([-6, -4, -2, 0, 2, 4, 6])
         ax1.grid(True, which='both', linestyle='-', linewidth=0.5)
     plt.tight_layout()
     # plt.savefig(FOLDER+"figs/enet_res.png")
@@ -527,13 +462,13 @@ def plot_pres_surface(p_net, num=100):
 
     fig = plt.figure(figsize=(6,6))
     ax = fig.add_subplot(111, projection='3d')
-    ax.plot_surface(x_mesh, t_mesh, pres**2, cmap="cividis")
+    ax.plot_surface(x_mesh, t_mesh, pres**2, cmap="Greys")
     # ax.plot_surface(x_mesh, t_mesh, pres**2, cmap='viridis', alpha=0.8, label=r"$r_1^2$")
     ax.set_xlabel("x")
     ax.set_ylabel("t"); 
     ax.set_zlabel('r')
     # ax.legend()
-    ax.view_init(35, -120)
+    ax.view_init(40, -60)
     plt.subplots_adjust(left=0.08, right=0.92, top=0.92, bottom=0.08)
     fig.savefig(FOLDER+'figs/pres_surface_plot.pdf', format='pdf', dpi=300)
 
@@ -553,7 +488,7 @@ def plot_e1res_surface(p_net, e1_net, num=100):
 
     fig = plt.figure(figsize=(6,6))
     ax = fig.add_subplot(111, projection='3d')
-    ax.plot_surface(x_mesh, t_mesh, e1res**2, cmap="cividis")
+    ax.plot_surface(x_mesh, t_mesh, e1res**2, cmap="Greys")
     print(np.max(e1res**2))
     # x_samples = np.load(FOLDER+"output/e1_xsamples.npy")
     # t_samples = np.load(FOLDER+"output/e1_tsamples.npy")
@@ -563,7 +498,7 @@ def plot_e1res_surface(p_net, e1_net, num=100):
     ax.set_ylabel("t"); 
     ax.set_zlabel('r')
     # ax.legend()
-    ax.view_init(35, -120)
+    ax.view_init(40, -60)
     # zScalarFormatter = ScalarFormatterClass(useMathText=True)
     # zScalarFormatter.set_powerlimits((0,0))
     # ax.zaxis.set_major_formatter(zScalarFormatter)
@@ -598,7 +533,7 @@ def fit_function(x, C1, C2):
 
 def plot_alpha_data():
     data_folder = "exp1/main_alphas/"
-    max_alpha_to_fit = 3.0
+    max_alpha_to_fit = 2.5
     max_total_loss_to_fit = 0.2
     num_runs = 5
 
@@ -612,17 +547,15 @@ def plot_alpha_data():
         data_folder_seedi = FOLDER
         Nsample_array = np.load(data_folder_seedi+"output/e1_Nsample_list.npy")
         Loss_1_array = np.load(data_folder_seedi+"output/e1_Loss_1_list.npy")
-        Loss_2_array = np.load(data_folder_seedi+"output/e1_Loss_2_list.npy")
         Alpha_array = np.load(data_folder_seedi+"output/e1_Alpha_list.npy")
 
         mask_1 = Alpha_array < max_alpha_to_fit
-        mask_2 = (Loss_1_array+Loss_2_array) < max_total_loss_to_fit
+        mask_2 = (Loss_1_array) < max_total_loss_to_fit
         mask = mask_1 & mask_2
 
         Loss_1_array = Loss_1_array[mask]
-        Loss_2_array = Loss_2_array[mask]
         Alpha_array = Alpha_array[mask]
-        x_data = Loss_1_array + Loss_2_array
+        x_data = Loss_1_array
         y_data = Alpha_array
         plt.plot(x_data, y_data, marker='o', linestyle='None', markersize=2, label="run seed"+str(i))
         X.append(x_data)
@@ -709,7 +642,7 @@ def main():
     plot_e1res_surface(p_model, e_model)
     # # plot_train_loss(FOLDER+"output/p_net_train_loss.npy", 
     # #                 FOLDER+"output/e1_net_train_loss.npy")
-    # plot_alpha_data()
+    plot_alpha_data()
 
 
 if __name__ == "__main__":

@@ -16,6 +16,8 @@ from matplotlib.ticker import ScalarFormatter
 from scipy.optimize import curve_fit
 import argparse
 
+from main_train_pnet import PNet
+
 FOLDER = "exp1/main_alphas/seed-test/"
 DATA_FOLDER = "exp1/data/"
 
@@ -45,8 +47,8 @@ T_end = 5.0
 t1s = [0.5, 1.0, 2.0, 3.0, 4.0, 5.0]
 
 datas = ["data1/"]
-enet_terminate = 1e-7#5e-5
-MAX_EPOCHS = 200000#100000
+enet_terminate = 1e-5
+MAX_EPOCHS = 100000
 
 
 def p_init(x):
@@ -113,40 +115,12 @@ def init_weights(m):
         # print(m.weight)
         m.bias.data.fill_(0.01)
 
-
-class PNet(nn.Module):
-    def __init__(self, scale=1.0):
-        super(PNet, self).__init__()
-        self.scale = scale
-        num_hidden_layers=16
-        neurons=32
-        # List to hold layers
-        layers = []
-        # Input layer
-        layers.append(nn.Linear(2, neurons))
-        # Hidden layers
-        for _ in range(num_hidden_layers):
-            layers.append(nn.Linear(neurons, neurons))
-        # Output layer
-        layers.append(nn.Linear(neurons, 1))
-        # Register all layers
-        self.layers = nn.ModuleList(layers)
-    def forward(self, x, t):
-        inputs = torch.cat([x, t], dim=1)
-        out = inputs
-        out = F.softplus(self.layers[0](out)) # First hidden layer
-        # out1 = out                            # Store the output of the first hidden layer
-        for layer in self.layers[1:-1]:  # Apply hidden layers
-            out = F.softplus(layer(out))
-        out = self.layers[-1](out)  # Apply output layer (last + first hidden layers output)
-        return F.softplus(out)
-
 class ENet(nn.Module):
     def __init__(self, scale=1.0):
         super(ENet, self).__init__()
         self.scale = scale
-        num_hidden_layers= 16 #30
-        neurons=32 #40
+        num_hidden_layers=5
+        neurons=50
         # Define a list to hold the layers
         layers = []
         # Input layer
@@ -173,10 +147,11 @@ class ENet(nn.Module):
         #     inputs = torch.cat([inputs, t_sin_i, t_cos_i], axis=1)
         # inputs = inputs[:, 2:]
         out = inputs
-        out = F.gelu(self.layers[0](out)) # First hidden layer
-        # out1 = out                            # Store the output of the first hidden layer
+        out_1 = self.layers[0](out) # First hidden layer
+        out   = F.softplus(out_1)                      # Store the output of the first hidden layer
         for layer in self.layers[1:-1]:  # Apply hidden layers
-            out = F.gelu(layer(out))
+            out_l = layer(out)
+            out = F.softplus(out_l)
         out = self.layers[-1](out)  # Apply output layer (last + first hidden layers output)
         return self.scale * out 
 
@@ -206,23 +181,22 @@ def train_enet_model(p_net, e1_net, optimizer, scheduler, mse_cost_function, ite
     PATH = FOLDER+"output/e1_net.pth"
     x_mar = 0.0
 
-    x_bc = (torch.rand(500, n_d, requires_grad=True) * (x_hig - x_low) + x_low).to(device)
-    t_bc = (torch.ones(len(x_bc), 1, requires_grad=True) * ti).to(device)
+    _x = np.linspace(x_low, x_hig, num=20, endpoint=True)
+    _t = np.linspace(ti, tf, num=20, endpoint=True)
+
+    # space-time points for BC
+    x_bc = (torch.rand(200, n_d, requires_grad=True) * (x_hig - x_low) + x_low) 
+    x_bc_quad = Variable(torch.from_numpy(_x.reshape(-1,1)).float(), requires_grad=True).to(device) 
+    x_bc = torch.cat((x_bc, x_bc_quad), dim=0)
+    t_bc = (torch.ones(len(x_bc), 1, requires_grad=True) * ti) 
     
-    # x = (torch.rand(3500, n_d, requires_grad=True) * (x_hig - x_low + 2*x_mar) + x_low-x_mar).to(device)
-    # t = (torch.rand(2500, 1, requires_grad=True)   * (tf - ti) + ti).to(device)
-    # _t_init = (torch.ones(500, 1, requires_grad=True) * ti).to(device)
-    # _t_end =  (torch.ones(500, 1, requires_grad=True) * tf).to(device)
-    # t = torch.cat((t, _t_init, _t_end), dim=0)
-    _x = np.linspace(x_low, x_hig, num=30, endpoint=True)
-    _t = np.linspace(ti, tf, num=30, endpoint=True)
     _xx, _tt = np.meshgrid(_x, _t)
-    x = Variable(torch.from_numpy(_xx.reshape(-1,1)).float(), requires_grad=True).to(device)
-    t = Variable(torch.from_numpy(_tt.reshape(-1,1)).float(), requires_grad=True).to(device)
-    x_rand = (torch.rand(1000, n_d, requires_grad=True) * (x_hig - x_low) + x_low).to(device)
-    t_rand = (torch.rand(1000, 1  , requires_grad=True) * (tf - ti) + ti).to(device)
-    x = torch.cat((x, x_rand), dim=0)
-    t = torch.cat((t, t_rand), dim=0)
+    x = Variable(torch.from_numpy(_xx.reshape(-1,1)).float(), requires_grad=True).to(device) 
+    t = Variable(torch.from_numpy(_tt.reshape(-1,1)).float(), requires_grad=True).to(device) 
+    x_rand = (torch.rand(600, n_d, requires_grad=True) * (x_hig - x_low) + x_low).to(device) 
+    t_rand = (torch.rand(600, 1  , requires_grad=True) * (tf - ti) + ti).to(device) 
+    x = torch.cat((x, x_rand), dim=0).to(device)
+    t = torch.cat((t, t_rand), dim=0).to(device)
     
     weight_reg = 1.0
     FLAG = False
@@ -230,20 +204,19 @@ def train_enet_model(p_net, e1_net, optimizer, scheduler, mse_cost_function, ite
     normalize = e1_net.scale
 
     # Store alpha data (prepare)
-    # Nsample_list = []
-    # Alpha_list = []
-    # Alpha_mean_list = []
-    # Loss_1_list = []
-    # Loss_2_list = []
-    # E1_list = []
-    # x_data = np.load(DATA_FOLDER + datas[0] + "xsim.npy").reshape(-1,1)
-    # pt_x_data = Variable(torch.from_numpy(x_data).float(), requires_grad=False).to(device)
-    # for t1 in t1s:
-    #     p_data = np.load(DATA_FOLDER + datas[0] + "psim_t" + str(t1) + ".npy").reshape(-1, 1)
-    #     pt_t_data = Variable(torch.from_numpy(x_data*0+t1).float(), requires_grad=True).to(device)
-    #     phat = p_net(pt_x_data, pt_t_data).data.cpu().numpy() # change tensor to numpy
-    #     e1 = p_data - phat
-    #     E1_list.append(e1)
+    Nsample_list = []
+    Alpha_list = []
+    Alpha_mean_list = []
+    Loss_1_list = []
+    E1_list = []
+    x_data = np.load(DATA_FOLDER + datas[0] + "xsim.npy").reshape(-1,1)
+    pt_x_data = Variable(torch.from_numpy(x_data).float(), requires_grad=False).to(device)
+    for t1 in t1s:
+        p_data = np.load(DATA_FOLDER + datas[0] + "psim_t" + str(t1) + ".npy").reshape(-1, 1)
+        pt_t_data = Variable(torch.from_numpy(x_data*0+t1).float(), requires_grad=True).to(device)
+        phat = p_net(pt_x_data, pt_t_data).data.cpu().numpy() # change tensor to numpy
+        e1 = p_data - phat
+        E1_list.append(e1)
 
     start_time = time.time()
     for epoch in range(iterations):
@@ -255,27 +228,22 @@ def train_enet_model(p_net, e1_net, optimizer, scheduler, mse_cost_function, ite
         e10_target = e10.detach()
         # e10_target = e10.clone().detach().numpy()
         # e10_target = Variable(torch.from_numpy(e10_target).float(), requires_grad=False).to(device)
-        e10_hat = e1_net(x_bc, t_bc)[:,0].view(-1,1)
+        e10_hat = e1_net(x_bc, t_bc)
         mse_e1_ic = mse_cost_function(e10_hat/normalize, e10_target/normalize)
         
         # using detached p_net
         diff_e = Diff_e_func(x, t, e1_net)
         diff_e_target = -p_res_func(x, t, p_net)
-        # diff_e_target = Variable(torch.from_numpy(diff_e_target).float(), requires_grad=False).to(device)
         diff_e_target = diff_e_target.detach()
         mse_e1_res = mse_cost_function(diff_e/normalize, diff_e_target/normalize)
-        # using no detached p_net
-        # all_zeros = torch.zeros((len(t),1), dtype=torch.float32, requires_grad=False).to(device)
-        # e1_res_out = e_res_func(x, t, e1_net, p_net)/normalize
-        # mse_e1_res = mse_cost_function(e1_res_out, all_zeros)
 
-        e1_res_out = e_res_func(x, t, e1_net, p_net)/normalize
-        res_x = torch.autograd.grad(e1_res_out, x, grad_outputs=torch.ones_like(e1_res_out), create_graph=True)[0]
-        res_t = torch.autograd.grad(e1_res_out, t, grad_outputs=torch.ones_like(e1_res_out), create_graph=True)[0]
-        mse_res_grad = torch.mean(res_x**2+res_t**2)
+        # e1_res_out = e_res_func(x, t, e1_net, p_net)/normalize
+        # res_x = torch.autograd.grad(e1_res_out, x, grad_outputs=torch.ones_like(e1_res_out), create_graph=True)[0]
+        # res_t = torch.autograd.grad(e1_res_out, t, grad_outputs=torch.ones_like(e1_res_out), create_graph=True)[0]
+        # mse_res_grad = torch.mean(res_x**2 + res_t**2)
     
         # Combining the loss functions
-        loss = mse_e1_ic + mse_e1_res + weight_reg*mse_res_grad
+        loss = mse_e1_ic + mse_e1_res #+ weight_reg*mse_res_grad
         loss_history.append(loss.data)
 
         # Save the min loss model
@@ -286,7 +254,7 @@ def train_enet_model(p_net, e1_net, optimizer, scheduler, mse_cost_function, ite
             print("e1net best epoch:", epoch, ", loss:", loss.data, 
                   "ic:", mse_e1_ic.data,
                   "res:", mse_e1_res.data,
-                  "grad:", mse_res_grad.data,
+                #   "grad:", mse_res_grad.data,
                   )
             torch.save({
                     'epoch': epoch,
@@ -299,35 +267,32 @@ def train_enet_model(p_net, e1_net, optimizer, scheduler, mse_cost_function, ite
             # np.save(FOLDER+"output/e1_net_train_loss.npy", np.array(loss_history))
 
             # Store alpha data (calculate data)
-            # Nsample_i = x_bc.shape[0] + x.shape[0]
-            # Loss_1_i    = (loss).data.cpu().numpy().item()
-            # Loss_2_i    = (0.0*loss).data.cpu().numpy().item() ###
-            # alpha_over_time = []
-            # for i in range(len(t1s)):
-            #     t1 = t1s[i]
-            #     pt_t_data = Variable(torch.from_numpy(x_data*0+t1).float(), requires_grad=True).to(device)
-            #     ehat = e1_net(pt_x_data, pt_t_data).data.cpu().numpy()
-            #     e1 = E1_list[i]
-            #     alpha = np.max(np.abs(e1-ehat))/ np.max(np.abs(ehat))
-            #     alpha = np.round(alpha, 3)
-            #     alpha_over_time.append(alpha)
-            # max_alpha = np.max(alpha_over_time)
-            # Nsample_list.append(Nsample_i)
-            # Loss_1_list.append(Loss_1_i)
-            # Loss_2_list.append(Loss_2_i)
-            # Alpha_list.append(max_alpha)
-            # Alpha_mean_list.append(np.mean(alpha_over_time))
-            # # Store alpha data (write data)
-            # np.save(FOLDER+"output/e1_Nsample_list.npy", np.array(Nsample_list))
-            # np.save(FOLDER+"output/e1_Loss_1_list.npy", np.array(Loss_1_list))
-            # np.save(FOLDER+"output/e1_Loss_2_list.npy", np.array(Loss_2_list))
-            # np.save(FOLDER+"output/e1_Alpha_list.npy", np.array(Alpha_list))
-            # np.save(FOLDER+"output/e1_Alpha_mean_list.npy", np.array(Alpha_mean_list))
-            # np.save(FOLDER+"output/e1_xsamples.npy", np.array(x.clone().detach().numpy()))
-            # np.save(FOLDER+"output/e1_tsamples.npy", np.array(t.clone().detach().numpy()))
+            Nsample_i = x_bc.shape[0] + x.shape[0]
+            Loss_1_i    = (loss).data.cpu().numpy().item()
+            alpha_over_time = []
+            for i in range(len(t1s)):
+                t1 = t1s[i]
+                pt_t_data = Variable(torch.from_numpy(x_data*0+t1).float(), requires_grad=True).to(device)
+                ehat = e1_net(pt_x_data, pt_t_data).data.cpu().numpy()
+                e1 = E1_list[i]
+                alpha = np.max(np.abs(e1-ehat))/ np.max(np.abs(ehat))
+                alpha = np.round(alpha, 3)
+                alpha_over_time.append(alpha)
+            max_alpha = np.max(alpha_over_time)
+            Nsample_list.append(Nsample_i)
+            Loss_1_list.append(Loss_1_i)
+            Alpha_list.append(max_alpha)
+            Alpha_mean_list.append(np.mean(alpha_over_time))
+            # Store alpha data (write data)
+            np.save(FOLDER+"output/e1_Nsample_list.npy", np.array(Nsample_list))
+            np.save(FOLDER+"output/e1_Loss_1_list.npy", np.array(Loss_1_list))
+            np.save(FOLDER+"output/e1_Alpha_list.npy", np.array(Alpha_list))
+            np.save(FOLDER+"output/e1_Alpha_mean_list.npy", np.array(Alpha_mean_list))
+            np.save(FOLDER+"output/e1_xsamples.npy", x.clone().data.cpu().numpy())
+            np.save(FOLDER+"output/e1_tsamples.npy", t.clone().data.cpu().numpy())
 
         # RAR
-        if (epoch%100 == 0 and FLAG):
+        if (epoch%10 == 0 and FLAG):
             quad_number = random.randint(10,30)
             _x = np.linspace(x_low, x_hig, num=quad_number, endpoint=True)
             _t = np.linspace(ti, tf, num=quad_number, endpoint=True)
@@ -335,38 +300,40 @@ def train_enet_model(p_net, e1_net, optimizer, scheduler, mse_cost_function, ite
             x_quad = Variable(torch.from_numpy(_xx.reshape(-1,1)).float(), requires_grad=True).to(device)
             t_quad = Variable(torch.from_numpy(_tt.reshape(-1,1)).float(), requires_grad=True).to(device)
             t_RAR = (torch.rand(S, 1, requires_grad=True) *   (tf - ti) + ti).to(device)
-            # _t_init_RAR = (torch.ones(500, 1, requires_grad=True) * ti).to(device)
-            # _t_end_RAR = (torch.ones(500, 1, requires_grad=True) * tf).to(device)
-            # t_RAR = torch.cat((t_RAR, _t_init_RAR, _t_end_RAR), dim=0)
             x_RAR = (torch.rand(len(t_RAR), n_d, requires_grad=True) * (x_hig - x_low + 2*x_mar) + x_low-x_mar).to(device)
             t_RAR = torch.cat((t_RAR, t_quad), dim=0)
             x_RAR = torch.cat((x_RAR, x_quad), dim=0)
-            # x_RAR = torch.clamp(x_RAR, min=x_low, max=x_hig)
-            # t0_RAR = 0.0*t_RAR.clone() + t0
-            # x0_RAR = x_RAR.clone()
-            # p0_RAR = p_init_torch(x0_RAR)
-            # p0_hat_RAR = p_net(x0_RAR, t0_RAR)
-            # e10_RAR = p0_RAR - p0_hat_RAR
-            # e10_hat_RAR = e1_net(x0_RAR, t0_RAR)
-            # mean_e0_RAR = torch.mean(torch.abs(e10_RAR/normalize-e10_hat_RAR/normalize))
-            # if(mean_e0_RAR > 0.0):
-            #     max_abs_e0, max_index = torch.max(torch.abs(e10_RAR/normalize-e10_hat_RAR/normalize), dim=0)
-            #     x_max = x0_RAR[max_index]
-            #     t_max = t0_RAR[max_index]
-            #     x_bc = torch.cat((x_bc, x_max), dim=0)
-            #     t_bc = torch.cat((t_bc, t_max), dim=0)
-            #     print("... Ic add [x,t]:", x_max.data, t_max.data, max_abs_e0.data)
+
+            t0_RAR = 0.0*t_RAR.clone() + t0
+            x0_RAR = x_RAR.clone()
+            p0_RAR = p_init_torch(x0_RAR)
+            p0_hat_RAR = p_net(x0_RAR, t0_RAR)
+            e10_RAR = p0_RAR - p0_hat_RAR
+            e10_hat_RAR = e1_net(x0_RAR, t0_RAR)
+            mean_e0_RAR = torch.mean(torch.abs(e10_RAR/normalize-e10_hat_RAR/normalize))
+            if(True):
+                max_abs_e0, max_index = torch.max(torch.abs(e10_RAR/normalize-e10_hat_RAR/normalize), dim=0)
+                x_max = x0_RAR[max_index]
+                t_max = t0_RAR[max_index]
+                # x_bc = x_bc[1:]
+                # t_bc = t_bc[1:]
+                x_bc = torch.cat((x_bc, x_max), dim=0)
+                t_bc = torch.cat((t_bc, t_max), dim=0)
+                print("... Ic add [x,t]:", x_max.data, t_max.data, max_abs_e0.data, x_bc.shape)
+
             res_RAR = e_res_func(x_RAR, t_RAR, e1_net, p_net)/normalize
             mean_res_error = torch.mean(torch.abs(res_RAR))
             print("RAR mean res: ", mean_res_error.data)
-            if(mean_res_error > 0.0):
+            if(True):
                 max_abs_res, max_index = torch.max(res_RAR**2, dim=0)
                 x_max = x_RAR[max_index]
                 t_max = t_RAR[max_index]
+                # x = x[1:]
+                # t = t[1:]
                 x = torch.cat((x, x_max), dim=0)
                 t = torch.cat((t, t_max), dim=0)
                 debug_value = (e_res_func(x_max, t_max, e1_net, p_net)/normalize)**2
-                print("... Res add [x,t]:", x_max.data, t_max.data, max_abs_res.data, debug_value.data)
+                print("... Res add [x,t]:", x_max.data, t_max.data, max_abs_res.data, debug_value.data, x.shape)
             # res_x_RAR = torch.autograd.grad(res_RAR, x_RAR, grad_outputs=torch.ones_like(res_RAR), create_graph=True)[0]
             # res_t_RAR = torch.autograd.grad(res_RAR, t_RAR, grad_outputs=torch.ones_like(res_RAR), create_graph=True)[0]
             # mean_res_grad = torch.mean(torch.abs(res_x_RAR)+torch.abs(res_t_RAR))
@@ -393,33 +360,6 @@ def train_enet_model(p_net, e1_net, optimizer, scheduler, mse_cost_function, ite
                     'label': "e1_net",
                     'train_time': training_time,
                     }, PATH)
-            #np.save(FOLDER+"output/e1_net_train_loss.npy", np.array(loss_history))
-            
-            # Store alpha data (calculate data)
-            # Nsample_i = x_bc.shape[0] + x.shape[0]
-            # Loss_1_i    = (loss).data.cpu().numpy().item()
-            # Loss_2_i    = (0.0*loss).data.cpu().numpy().item() ###
-            # alpha_over_time = []
-            # for i in range(len(t1s)):
-            #     t1 = t1s[i]
-            #     pt_t_data = Variable(torch.from_numpy(x_data*0+t1).float(), requires_grad=True).to(device)
-            #     ehat = e1_net(pt_x_data, pt_t_data).data.cpu().numpy()
-            #     e1 = E1_list[i]
-            #     alpha = np.max(np.abs(e1-ehat))/ np.max(np.abs(ehat))
-            #     alpha = np.round(alpha, 3)
-            #     alpha_over_time.append(alpha)
-            # max_alpha = np.max(alpha_over_time)
-            # Nsample_list.append(Nsample_i)
-            # Loss_1_list.append(Loss_1_i)
-            # Loss_2_list.append(Loss_2_i)
-            # Alpha_list.append(max_alpha)
-            # Alpha_mean_list.append(np.mean(alpha_over_time))
-            # # Store alpha data (write data)
-            # np.save(FOLDER+"output/e1_Nsample_list.npy", np.array(Nsample_list))
-            # np.save(FOLDER+"output/e1_Loss_1_list.npy", np.array(Loss_1_list))
-            # np.save(FOLDER+"output/e1_Loss_2_list.npy", np.array(Loss_2_list))
-            # np.save(FOLDER+"output/e1_Alpha_list.npy", np.array(Alpha_list))
-            # np.save(FOLDER+"output/e1_Alpha_mean_list.npy", np.array(Alpha_mean_list))
             return
 
         if (epoch) % 1000 == 0:
@@ -940,6 +880,8 @@ def main():
     torch.manual_seed(seed)
     np.random.seed(seed)
     random.seed(seed)
+
+    print("max epochs: ", MAX_EPOCHS)
 
     # plot_p_monte()
     mse_cost_function = torch.nn.MSELoss()
