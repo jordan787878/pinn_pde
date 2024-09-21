@@ -119,8 +119,8 @@ class ENet(nn.Module):
     def __init__(self, scale=1.0):
         super(ENet, self).__init__()
         self.scale = scale
-        num_hidden_layers=5
-        neurons=50
+        num_hidden_layers=20
+        neurons=100
         # Define a list to hold the layers
         layers = []
         # Input layer
