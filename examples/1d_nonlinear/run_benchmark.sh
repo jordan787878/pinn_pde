@@ -4,7 +4,7 @@
 N=9
 
 # Loop through each script from python1.py to pythonN.py
-for i in $(seq 0 $N)
+for i in $(seq 1 $N)
 do
   # Construct the script name
   script="main_train_pnet_benchmark.py"
@@ -29,4 +29,5 @@ do
     echo "$script failed to execute."
     exit 1
   fi
+
 done

@@ -16,6 +16,8 @@ from matplotlib.ticker import ScalarFormatter
 from scipy.optimize import curve_fit
 import argparse
 
+from main_train_pnet_benchmark import PNet
+
 FOLDER = "exp1/main_benchmark/"
 DATA_FOLDER = "exp1/data/"
 
@@ -40,8 +42,8 @@ T_end = 5.0
 t1s = [0.5, 1.0, 2.0, 3.0, 4.0, 5.0]
 
 datas = ["data1/"]
-enet_terminate = 1e-7
-MAX_EPOCHS = 100000
+enet_terminate = 1e-4
+MAX_EPOCHS = 50000
 
 
 def p_init(x):
@@ -102,50 +104,16 @@ def Diff_e_func(x, t, e_net, verbose=False):
 
 def init_weights(m):
     if isinstance(m, nn.Linear):
-        # print("init")
-        nn.init.kaiming_uniform_(m.weight)
-        # nn.init.normal_(m.weight, std=0.01)
-        # print(m.weight)
+        nn.init.kaiming_normal_(m.weight)
         m.bias.data.fill_(0.01)
-# def init_weights_He(model):
-#     """Initialize weights of the model using He initialization."""
-#     for layer in model.modules():
-#         if isinstance(layer, nn.Linear):
-#             # He initialization: Uniform distribution
-#             nn.init.normal_(layer.weight, std=0.01)
 
 
-# class PNet(nn.Module):
-#     def __init__(self, scale=1.0):
-#         super(PNet, self).__init__()
-#         self.scale = scale
-#         num_hidden_layers=20
-#         neurons=20
-#         # List to hold layers
-#         layers = []
-#         # Input layer
-#         layers.append(nn.Linear(2, neurons))
-#         # Hidden layers
-#         for _ in range(num_hidden_layers):
-#             layers.append(nn.Linear(neurons, neurons))
-#         # Output layer
-#         layers.append(nn.Linear(neurons, 1))
-#         # Register all layers
-#         self.layers = nn.ModuleList(layers)
-#     def forward(self, x, t):
-#         inputs = torch.cat([x, t], dim=1)
-#         out = inputs
-#         for layer in self.layers[:-1]:  # Apply hidden layers
-#             out = F.softplus(layer(out))
-#         out = self.layers[-1](out)  # Apply output layer
-#         return F.softplus(out)
- 
-class PNet(nn.Module):
+class ENet(nn.Module):
     def __init__(self, scale=1.0):
-        super(PNet, self).__init__()
+        super(ENet, self).__init__()
         self.scale = scale
-        num_hidden_layers=20
-        neurons=20
+        num_hidden_layers=5#5
+        neurons=50#100
         # List to hold layers
         layers = []
         # Input layer
@@ -159,70 +127,41 @@ class PNet(nn.Module):
         self.layers = nn.ModuleList(layers)
     def forward(self, x, t):
         inputs = torch.cat([x, t], dim=1)
-        out = inputs
-        for layer in self.layers[:-1]:  # Apply hidden layers
-            out = F.softplus(layer(out))
-        out = self.layers[-1](out)  # Apply output layer
-        return F.softplus(out)
-
-
+        out_1   = (self.layers[0](inputs))
+        out   = F.gelu(self.layers[0](inputs))
+        for layer in self.layers[1:-1]: 
+            out_k = (layer(out))
+            out = F.gelu(layer(out))
+        out = self.scale * (self.layers[-1](out))
+        # output = out[:,0].view(-1,1) + out[:,1].view(-1,1) * t.view(-1,1)
+        return out
 
 # class ENet(nn.Module):
-#     def __init__(self, scale=1.0): 
-#         neurons = 50
-#         self.scale = scale
+#     def __init__(self, scale=1.0):
 #         super(ENet, self).__init__()
-#         self.hidden_layer1 = (nn.Linear(2,neurons))
-#         self.hidden_layer2 = (nn.Linear(neurons,neurons))
-#         self.hidden_layer3 = (nn.Linear(neurons,neurons))
-#         self.hidden_layer4 = (nn.Linear(neurons,neurons))
-#         self.hidden_layer5 = (nn.Linear(neurons,neurons))
-#         self.hidden_layer6 = (nn.Linear(neurons,neurons))
-#         self.hidden_layer7 = (nn.Linear(neurons,neurons))
-#         self.hidden_layer8 = (nn.Linear(neurons,neurons))
-#         self.hidden_layer9 = (nn.Linear(neurons,neurons))
-#         self.output_layer =  (nn.Linear(neurons,1))
+#         self.scale = scale
+#         num_hidden_layers=20
+#         neurons=100
+#         # List to hold layers
+#         layers = []
+#         # Input layer
+#         layers.append(nn.Linear(2, neurons))
+#         # Hidden layers
+#         for _ in range(num_hidden_layers):
+#             layers.append(nn.Linear(neurons, neurons))
+#         # Output layer
+#         layers.append(nn.Linear(neurons, 2))
+#         # Register all layers
+#         self.layers = nn.ModuleList(layers)
 #     def forward(self, x, t):
-#         inputs = torch.cat([x,t], axis=1)
-#         layer1_out = F.softplus((self.hidden_layer1(inputs)))
-#         layer2_out = F.softplus((self.hidden_layer2(layer1_out)))
-#         layer3_out = F.softplus((self.hidden_layer3(layer2_out)))
-#         layer4_out = F.softplus((self.hidden_layer4(layer3_out)))
-#         layer5_out = F.softplus((self.hidden_layer5(layer4_out)))
-#         layer6_out = F.softplus((self.hidden_layer6(layer5_out)))
-#         layer7_out = F.softplus((self.hidden_layer7(layer6_out)))
-#         layer8_out = F.softplus((self.hidden_layer8(layer7_out)))
-#         layer9_out = F.softplus((self.hidden_layer9(layer8_out)))
-#         output = self.scale * (self.output_layer(layer9_out))
-#         return output
-
-
-class ENet(nn.Module):
-    def __init__(self, scale=1.0):
-        super(ENet, self).__init__()
-        self.scale = scale
-        num_hidden_layers=20
-        neurons=20
-        # Define a list to hold the layers
-        layers = []
-        # Input layer
-        layers.append(nn.Linear(2, neurons))
-        # Hidden layers
-        for _ in range(num_hidden_layers):
-            layers.append(nn.Linear(neurons, neurons))
-        # Output layer
-        layers.append(nn.Linear(neurons, 1))
-        # Register all layers as a ModuleList
-        self.layers = nn.ModuleList(layers)
-    def forward(self, x, t):
-        inputs = torch.cat([x, t], dim=1)
-        out = inputs
-        out = F.softplus(self.layers[0](out))
-        out_1 = out
-        for layer in self.layers[1:-1]:  # Apply hidden layers
-            out = F.softplus(layer(out))
-        out = self.layers[-1](out)  # Apply output layer
-        return self.scale * out 
+#         inputs = torch.cat([x, t], dim=1)
+#         out   = F.tanh(self.layers[0](inputs))
+#         for layer in self.layers[1:-1]: 
+#             out_l = layer(out)
+#             out = F.tanh(out_l)
+#         out = (self.layers[-1](out))
+#         output = out[:,0].view(-1,1) + out[:,1].view(-1,1) * t.view(-1,1)
+#         return self.scale * output
 
 
 def get_p_normalize():
@@ -420,19 +359,24 @@ def train_enet_model(p_net, e1_net, optimizer, scheduler, mse_cost_function, ite
     PATH = FOLDER+"output/e1_net.pth"
     x_mar = 0.0
 
-    x_bc = (torch.rand(200, n_d, requires_grad=True) * (x_hig - x_low) + x_low).to(device)
-    t_bc = (torch.ones(len(x_bc), 1, requires_grad=True) * ti).to(device)
-    _x = np.linspace(x_low, x_hig, num=20, endpoint=True)
-    _t = np.linspace(ti, tf, num=20, endpoint=True)
+    _x = np.linspace(x_low, x_hig, num=40, endpoint=True)
+    _t = np.linspace(ti, tf, num=40, endpoint=True)
+    
+    # space-time points for BC
+    x_bc = (torch.rand(500, n_d, requires_grad=False) * (x_hig - x_low) + x_low).to(device)
+    x_bc_quad = Variable(torch.from_numpy(_x.reshape(-1,1)).float(), requires_grad=False).to(device)
+    x_bc = torch.cat((x_bc, x_bc_quad), dim=0)
+    t_bc = (torch.ones(len(x_bc), 1, requires_grad=False) * ti).to(device)
+    
     _xx, _tt = np.meshgrid(_x, _t)
     x = Variable(torch.from_numpy(_xx.reshape(-1,1)).float(), requires_grad=True).to(device)
     t = Variable(torch.from_numpy(_tt.reshape(-1,1)).float(), requires_grad=True).to(device)
-    x_rand = (torch.rand(600, n_d, requires_grad=True) * (x_hig - x_low) + x_low).to(device)
-    t_rand = (torch.rand(600, 1  , requires_grad=True) * (tf - ti) + ti).to(device)
+    x_rand = (torch.rand(1000, n_d, requires_grad=True) * (x_hig - x_low) + x_low).to(device)
+    t_rand = (torch.rand(1000, 1  , requires_grad=True) * (tf - ti) + ti).to(device)
     x = torch.cat((x, x_rand), dim=0)
     t = torch.cat((t, t_rand), dim=0)
-    
-    weight_reg = 1e-3
+
+    weight_reg = 0.0
     FLAG = False
     S = 10000
     normalize = e1_net.scale
@@ -470,21 +414,17 @@ def train_enet_model(p_net, e1_net, optimizer, scheduler, mse_cost_function, ite
         diff_e_target = -p_res_func(x, t, p_net).detach().numpy()
         diff_e_target = Variable(torch.from_numpy(diff_e_target).float(), requires_grad=False).to(device)
         mse_e1_res = mse_cost_function(diff_e/normalize, diff_e_target/normalize)
-        # using no detached p_net
-        # all_zeros = torch.zeros((len(t),1), dtype=torch.float32, requires_grad=False).to(device)
-        # e1_res_out = e_res_func(x, t, e1_net, p_net)/normalize
-        # mse_e1_res = mse_cost_function(e1_res_out, all_zeros)
 
-        e1_res_out = e_res_func(x, t, e1_net, p_net)/normalize
-        res_x = torch.autograd.grad(e1_res_out, x, grad_outputs=torch.ones_like(e1_res_out), create_graph=True)[0]
-        res_t = torch.autograd.grad(e1_res_out, t, grad_outputs=torch.ones_like(e1_res_out), create_graph=True)[0]
-        mse_res_grad = torch.mean(res_x**2+res_t**2)
+        # e1_res_out = e_res_func(x, t, e1_net, p_net)/normalize
+        # res_x = torch.autograd.grad(e1_res_out, x, grad_outputs=torch.ones_like(e1_res_out), create_graph=True)[0]
+        # res_t = torch.autograd.grad(e1_res_out, t, grad_outputs=torch.ones_like(e1_res_out), create_graph=True)[0]
+        # mse_res_grad = torch.mean(res_x**2+res_t**2)
     
         # Combining the loss functions
-        loss = mse_e1_ic + mse_e1_res + weight_reg*mse_res_grad
+        loss = mse_e1_ic + 1.0*(mse_e1_res)
 
         # RAR
-        if (epoch%100 == 0 and FLAG):
+        if (epoch%100    == 0 and FLAG):
             quad_number = random.randint(10,30)
             _x = np.linspace(x_low, x_hig, num=quad_number, endpoint=True)
             _t = np.linspace(ti, tf, num=quad_number, endpoint=True)
@@ -499,27 +439,26 @@ def train_enet_model(p_net, e1_net, optimizer, scheduler, mse_cost_function, ite
             x_RAR = (torch.rand(len(t_RAR), n_d, requires_grad=True) * (x_hig - x_low + 2*x_mar) + x_low-x_mar).to(device)
             t_RAR = torch.cat((t_RAR, t_quad), dim=0)
             x_RAR = torch.cat((x_RAR, x_quad), dim=0)
-            # x_RAR = torch.clamp(x_RAR, min=x_low, max=x_hig)
 
-            # t0_RAR = 0.0*t_RAR.clone() + t0
-            # x0_RAR = x_RAR.clone()
-            # p0_RAR = p_init_torch(x0_RAR)
-            # p0_hat_RAR = p_net(x0_RAR, t0_RAR)
-            # e10_RAR = p0_RAR - p0_hat_RAR
-            # e10_hat_RAR = e1_net(x0_RAR, t0_RAR)
-            # mean_e0_RAR = torch.mean(torch.abs(e10_RAR/normalize-e10_hat_RAR/normalize))
-            # if(mean_e0_RAR > 0.0):
-            #     max_abs_e0, max_index = torch.max(torch.abs(e10_RAR/normalize-e10_hat_RAR/normalize), dim=0)
-            #     x_max = x0_RAR[max_index]
-            #     t_max = t0_RAR[max_index]
-            #     x_bc = torch.cat((x_bc, x_max), dim=0)
-            #     t_bc = torch.cat((t_bc, t_max), dim=0)
-            #     print("... Ic add [x,t]:", x_max.data, t_max.data, max_abs_e0.data)
+            t0_RAR = 0.0*t_RAR.clone() + t0
+            x0_RAR = x_RAR.clone()
+            p0_RAR = p_init_torch(x0_RAR)
+            p0_hat_RAR = p_net(x0_RAR, t0_RAR)
+            e10_RAR = p0_RAR - p0_hat_RAR
+            e10_hat_RAR = e1_net(x0_RAR, t0_RAR)
+            mean_e0_RAR = torch.mean(torch.abs(e10_RAR/normalize-e10_hat_RAR/normalize))
+            if(mean_e0_RAR > 0.0):
+                max_abs_e0, max_index = torch.max(torch.abs(e10_RAR/normalize-e10_hat_RAR/normalize), dim=0)
+                x_max = x0_RAR[max_index]
+                t_max = t0_RAR[max_index]
+                x_bc = torch.cat((x_bc, x_max), dim=0)
+                t_bc = torch.cat((t_bc, t_max), dim=0)
+                print("... Ic add [x,t]:", x_max.data, t_max.data, max_abs_e0.data)
 
             res_RAR = e_res_func(x_RAR, t_RAR, e1_net, p_net)/normalize
             mean_res_error = torch.mean(torch.abs(res_RAR))
             print("RAR mean res: ", mean_res_error.data)
-            if(mean_res_error > 5e-3):
+            if(True):
                 max_abs_res, max_index = torch.max(torch.abs(res_RAR), dim=0)
                 x_max = x_RAR[max_index]
                 t_max = t_RAR[max_index]
@@ -551,7 +490,7 @@ def train_enet_model(p_net, e1_net, optimizer, scheduler, mse_cost_function, ite
             print("e1net best epoch:", epoch, ", loss:", loss.data, 
                   "ic:", mse_e1_ic.data,
                   "res:", mse_e1_res.data,
-                  "grad:", mse_res_grad.data,
+                #   "grad:", mse_res_grad.data,
                   )
             torch.save({
                     'epoch': epoch,

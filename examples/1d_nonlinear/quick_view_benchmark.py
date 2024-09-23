@@ -13,11 +13,12 @@ from tqdm import tqdm
 import warnings
 import time
 from scipy.optimize import curve_fit
+import argparse
 
 from main_train_pnet_benchmark import PNet
 from main_train_enet_benchmark import ENet
 
-FOLDER = "exp1/main_benchmark/seed1/"
+FOLDER = "exp1/main_benchmark/"
 DATA_FOLDER = "exp1/data/"
 
 device = "cpu"
@@ -35,7 +36,7 @@ x_hig = 6
 
 t0 = 0.0
 T_end = 5.0
-t1s = [0.5, 1.0, 2.0, 3.0, 4.0, 5.0]
+t1s = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]
 
 datas = ["data1/"]
 pnet_terminate = 5e-5
@@ -818,7 +819,7 @@ def plot_e1res_surface(p_net, e1_net, num=100):
 
     fig = plt.figure(figsize=(6,6))
     ax = fig.add_subplot(111, projection='3d')
-    ax.plot_surface(x_mesh, t_mesh, e1res**2, cmap='Greys', alpha=0.8, label=r"$r_2^2$")
+    ax.plot_surface(x_mesh, t_mesh, e1res**2, cmap='binary', alpha=0.8, label=r"$r_2^2$")
     # x_samples = np.load(FOLDER+"output/e1_xsamples.npy")
     # t_samples = np.load(FOLDER+"output/e1_tsamples.npy")
     # z_max = 1.0*np.max(e1res**2)
@@ -942,17 +943,14 @@ def plot_position_encoding():
     plt.show()
 
 
-def debug(p_net, e_net):
-    x = torch.ones(1, 1, requires_grad=True)*(-6.0)
-    t = torch.ones(1, 1, requires_grad=True)*(0.0)
-    e_res = e_res_func(x, t, p_net, e_net)/e_net.scale
-    print("debug: ", x.data, t.data, e_res.data)
-
-
 def main():
-    # plot_position_encoding()
-    # plot_p_monte()
-    
+    global seed
+    global FOLDER
+    print("seed: ", seed, ", folder:", FOLDER)
+    torch.manual_seed(seed)
+    np.random.seed(seed)
+    random.seed(seed)
+
     p_model = PNet().to(device)
     e_model = ENet().to(device) 
     
@@ -967,8 +965,6 @@ def main():
 
     show_results(p_model, e_model)
 
-    debug(p_model, e_model)
-
     # plot_training_loss_data()
     plot_p_surface(p_model)
     plot_pres_surface(p_model)
@@ -979,6 +975,14 @@ def main():
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Pass seed as a command-line argument")
+    parser.add_argument("--seed", type=int, required=True, help="Seed value")
+    args = parser.parse_args()
+    
+    # Modify the global variable
+    seed = args.seed
+    FOLDER = FOLDER + "seed" + str(seed) + "/"
+
     main()
     
 
