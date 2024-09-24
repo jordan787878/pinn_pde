@@ -469,6 +469,7 @@ def plot_pres_surface(p_net, num=100):
     ax.set_zlabel('r')
     # ax.legend()
     ax.view_init(40, -60)
+    ax.grid(False)
     plt.subplots_adjust(left=0.08, right=0.92, top=0.92, bottom=0.08)
     fig.savefig(FOLDER+'figs/pres_surface_plot.pdf', format='pdf', dpi=300)
 
@@ -490,15 +491,16 @@ def plot_e1res_surface(p_net, e1_net, num=100):
     ax = fig.add_subplot(111, projection='3d')
     ax.plot_surface(x_mesh, t_mesh, e1res**2, cmap="Greys")
     print(np.max(e1res**2))
-    # x_samples = np.load(FOLDER+"output/e1_xsamples.npy")
-    # t_samples = np.load(FOLDER+"output/e1_tsamples.npy")
-    # z_max = 1.0*np.max(e1res**2)
-    # ax.scatter(x_samples, t_samples, t_samples*0+z_max, marker="x", color="black", s=0.02, label='Data Points')
+    x_samples = np.load(FOLDER+"output/e1_xsamples.npy")
+    t_samples = np.load(FOLDER+"output/e1_tsamples.npy")
+    z_max = 1.0*np.max(e1res**2)
+    ax.scatter(x_samples, t_samples, t_samples*0+z_max, marker="x", color="blue", s=0.05, alpha=0.2, label='Data Points')
     ax.set_xlabel("x")
     ax.set_ylabel("t"); 
     ax.set_zlabel('r')
     # ax.legend()
     ax.view_init(40, -60)
+    ax.grid(False)
     # zScalarFormatter = ScalarFormatterClass(useMathText=True)
     # zScalarFormatter.set_powerlimits((0,0))
     # ax.zaxis.set_major_formatter(zScalarFormatter)
@@ -535,7 +537,7 @@ def plot_alpha_data():
     data_folder = "exp1/main_alphas/"
     max_alpha_to_fit = 2.5
     max_total_loss_to_fit = 0.2
-    num_runs = 5
+    num_runs = 1
 
     plt.figure()
     X = []
@@ -557,7 +559,7 @@ def plot_alpha_data():
         Alpha_array = Alpha_array[mask]
         x_data = Loss_1_array
         y_data = Alpha_array
-        plt.plot(x_data, y_data, marker='o', linestyle='None', markersize=2, label="run seed"+str(i))
+        plt.plot(x_data, y_data, marker='o', linestyle='None', markersize=2) # , label="run seed"+str(i))
         X.append(x_data)
         Y.append(y_data)
 
