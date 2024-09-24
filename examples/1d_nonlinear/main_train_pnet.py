@@ -44,7 +44,7 @@ T_end = 5.0
 t1s = [0.5, 1.0, 2.0, 3.0, 4.0, 5.0]
 
 datas = ["data1/"]
-pnet_terminate = 5e-5
+pnet_terminate = 1e-4
 MAX_EPOCHS = 100000
 
 
@@ -79,14 +79,14 @@ def p_res_func(x, t, pnet, verbose=False):
 
 def init_weights_He(m):
     if isinstance(m, nn.Linear):
-        nn.init.kaiming_uniform_(m.weight)
+        nn.init.kaiming_normal_(m.weight)
         m.bias.data.fill_(0.01)
 
 class PNet(nn.Module):
     def __init__(self, scale=1.0):
         super(PNet, self).__init__()
         self.scale = scale
-        num_hidden_layers=5
+        num_hidden_layers=3
         neurons=50
         # List to hold layers
         layers = []
@@ -101,14 +101,13 @@ class PNet(nn.Module):
         self.layers = nn.ModuleList(layers)
     def forward(self, x, t):
         inputs = torch.cat([x, t], dim=1)
-        out = inputs
-        out_1 = self.layers[0](out)
-        out = F.softplus(out_1)   # First hidden layer
-        for layer in self.layers[1:-1]:         # Apply hidden layers
-            out_l = layer(out)
-            out = F.softplus(out_l)
-        out = self.layers[-1](out)              # Apply output layer (last + first hidden layers output)
-        return F.softplus(out)
+        out_1   = (self.layers[0](inputs))
+        out   = F.gelu(self.layers[0](inputs))
+        for layer in self.layers[1:-1]: 
+            out_k = (layer(out))
+            out = F.gelu(layer(out))
+        out = F.softplus(self.layers[-1](out))
+        return out
   
 
 def get_p_normalize():
@@ -126,11 +125,11 @@ def train_pnet_model(p_net, optimizer, scheduler, mse_cost_function, iterations=
     loss_history = []
     x_mar = 0.0
     
-    _x = np.linspace(x_low, x_hig, num=20, endpoint=True)
-    _t = np.linspace(ti, tf, num=20, endpoint=True)
+    _x = np.linspace(x_low, x_hig, num=40, endpoint=True)
+    _t = np.linspace(ti, tf, num=40, endpoint=True)
 
     # space-time points for BC
-    x_bc = (torch.rand(200, n_d, requires_grad=True) * (x_hig - x_low) + x_low) 
+    x_bc = (torch.rand(500, n_d, requires_grad=True) * (x_hig - x_low) + x_low) 
     x_bc_quad = Variable(torch.from_numpy(_x.reshape(-1,1)).float(), requires_grad=True).to(device) 
     x_bc = torch.cat((x_bc, x_bc_quad), dim=0)
     t_bc = (torch.ones(len(x_bc), 1, requires_grad=True) * ti) 
@@ -138,8 +137,8 @@ def train_pnet_model(p_net, optimizer, scheduler, mse_cost_function, iterations=
     _xx, _tt = np.meshgrid(_x, _t)
     x = Variable(torch.from_numpy(_xx.reshape(-1,1)).float(), requires_grad=True).to(device) 
     t = Variable(torch.from_numpy(_tt.reshape(-1,1)).float(), requires_grad=True).to(device) 
-    x_rand = (torch.rand(600, n_d, requires_grad=True) * (x_hig - x_low) + x_low).to(device) 
-    t_rand = (torch.rand(600, 1  , requires_grad=True) * (tf - ti) + ti).to(device) 
+    x_rand = (torch.rand(1400, n_d, requires_grad=True) * (x_hig - x_low) + x_low).to(device) 
+    t_rand = (torch.rand(1400, 1  , requires_grad=True) * (tf - ti) + ti).to(device) 
     x = torch.cat((x, x_rand), dim=0).to(device)
     t = torch.cat((t, t_rand), dim=0).to(device)
 
@@ -172,7 +171,7 @@ def train_pnet_model(p_net, optimizer, scheduler, mse_cost_function, iterations=
         mse_res_g = torch.mean(res_x**2 +res_t**2)
 
         # Loss Function
-        loss = mse_u + mse_res + weight_regular*mse_res_g
+        loss = mse_u + 5.0*(mse_res + weight_regular*mse_res_g)
         loss_history.append(loss.item())
         
         # Save the min loss model
