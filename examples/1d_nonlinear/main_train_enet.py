@@ -47,8 +47,8 @@ T_end = 5.0
 t1s = [0.5, 1.0, 2.0, 3.0, 4.0, 5.0]
 
 datas = ["data1/"]
-enet_terminate = 1e-4
-MAX_EPOCHS = 100000
+enet_terminate = 1e-3
+MAX_EPOCHS = 50000
 
 
 def p_init(x):
@@ -117,8 +117,8 @@ class ENet(nn.Module):
     def __init__(self, scale=1.0):
         super(ENet, self).__init__()
         self.scale = scale
-        num_hidden_layers=5#5
-        neurons=50#100
+        num_hidden_layers=5
+        neurons=50
         # List to hold layers
         layers = []
         # Input layer
@@ -132,13 +132,11 @@ class ENet(nn.Module):
         self.layers = nn.ModuleList(layers)
     def forward(self, x, t):
         inputs = torch.cat([x, t], dim=1)
-        out_1   = (self.layers[0](inputs))
-        out   = F.gelu(self.layers[0](inputs))
+        out1 = self.layers[0](inputs)
+        out  = F.gelu(out1)
         for layer in self.layers[1:-1]: 
-            out_k = (layer(out))
             out = F.gelu(layer(out))
         out = self.scale * (self.layers[-1](out))
-        # output = out[:,0].view(-1,1) + out[:,1].view(-1,1) * t.view(-1,1)
         return out
 
 
@@ -230,7 +228,7 @@ def train_enet_model(p_net, e1_net, optimizer, scheduler, mse_cost_function, ite
         loss = mse_e1_ic + 5.0*(mse_e1_res + weight_reg*mse_res_grad)
 
         # RAR
-        if (epoch > 500 and epoch%100 == 0 and FLAG):
+        if (epoch>500 and epoch%100 == 0 and FLAG):
             quad_number = random.randint(10,30)
             _x = np.linspace(x_low, x_hig, num=quad_number, endpoint=True)
             _t = np.linspace(ti, tf, num=quad_number, endpoint=True)
@@ -254,12 +252,14 @@ def train_enet_model(p_net, e1_net, optimizer, scheduler, mse_cost_function, ite
             e10_hat_RAR = e1_net(x0_RAR, t0_RAR)
             mean_e0_RAR = torch.mean(torch.abs(e10_RAR/normalize-e10_hat_RAR/normalize))
             if(mean_e0_RAR > 0.0):
-                max_abs_e0, max_index = torch.max(torch.abs(e10_RAR/normalize-e10_hat_RAR/normalize), dim=0)
+                # max_abs_e0, max_index = torch.max(torch.abs(e10_RAR/normalize-e10_hat_RAR/normalize), dim=0)
+                e10_diff = e10_RAR/normalize-e10_hat_RAR/normalize
+                max_abs_e0, max_index = torch.topk(torch.abs(e10_diff.squeeze()), 1)
                 x_max = x0_RAR[max_index]
                 t_max = t0_RAR[max_index]
                 x_bc = torch.cat((x_bc, x_max), dim=0)
                 t_bc = torch.cat((t_bc, t_max), dim=0)
-                print("... Ic add [x,t]:", x_max.data, t_max.data, max_abs_e0.data)
+                print("... Ic add [x,t]:", x_max[0].data, t_max[0].data, max_abs_e0[0].data)
 
             res_RAR = e_res_func(x_RAR, t_RAR, e1_net, p_net)/normalize
             mean_res_error = torch.mean(torch.abs(res_RAR))

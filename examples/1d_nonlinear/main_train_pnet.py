@@ -87,8 +87,8 @@ class PNet(nn.Module):
     def __init__(self, scale=1.0):
         super(PNet, self).__init__()
         self.scale = scale
-        num_hidden_layers=5#5
-        neurons=50#100
+        num_hidden_layers=5
+        neurons=50
         # List to hold layers
         layers = []
         # Input layer
@@ -102,10 +102,8 @@ class PNet(nn.Module):
         self.layers = nn.ModuleList(layers)
     def forward(self, x, t):
         inputs = torch.cat([x, t], dim=1)
-        out_1   = (self.layers[0](inputs))
         out   = F.gelu(self.layers[0](inputs))
         for layer in self.layers[1:-1]: 
-            out_k = (layer(out))
             out = F.gelu(layer(out))
         out = F.softplus(self.layers[-1](out))
         return out
@@ -193,26 +191,28 @@ def train_pnet_model(p_net, optimizer, scheduler, mse_cost_function, iterations=
             e0_RAR = p0_RAR - p0_hat_RAR
             mean_e0_RAR = torch.mean(torch.abs(e0_RAR))
             if(mean_e0_RAR > 0.0):
-                max_abs_e0, max_index = torch.max(torch.abs(e0_RAR), dim=0)
+                # max_abs_e0, max_index = torch.max(torch.abs(e0_RAR), dim=0)
+                max_abs_e0, max_index = torch.topk(torch.abs(e0_RAR.squeeze()), 1)
                 x_max = x0_RAR[max_index]
                 t_max = t0_RAR[max_index]
                 x_bc = torch.cat((x_bc, x_max), dim=0)
                 t_bc = torch.cat((t_bc, t_max), dim=0)
-                print("... Ic add [x,t]:", x_max.data, t_max.data, max_abs_e0.data)
+                print("... Ic add [x,t]:", x_max[0].data, t_max[0].data, max_abs_e0[0].data)
 
             res_RAR = p_res_func(x_RAR, t_RAR, p_net)
             mean_res_RAR = torch.mean(torch.abs(res_RAR))
             print("mean res RAR:", mean_res_RAR.data)
             if(mean_res_RAR > 0.0):
                 # Find the index of the maximum absolute value in res_RAR
-                max_abs_res, max_index = torch.max(torch.abs(res_RAR), dim=0)
+                # max_abs_res, max_index = torch.max(torch.abs(res_RAR), dim=0)
+                max_abs_res, max_index = torch.topk(torch.abs(res_RAR.squeeze()), 1)
                 # Get the corresponding x_RAR and t_RAR vectors
                 x_max = x_RAR[max_index]
                 t_max = t_RAR[max_index]
                 # Append x_max and t_max to x and t
                 x = torch.cat((x, x_max), dim=0)
                 t = torch.cat((t, t_max), dim=0)
-                print("... Res add [x,t]:", x_max.data, t_max.data, max_abs_res.data)
+                print("... Res add [x,t]:", x_max[0].data, t_max[0].data, max_abs_res[0].data)
 
             # res_x_RAR = torch.autograd.grad(res_RAR, x_RAR, grad_outputs=torch.ones_like(res_RAR), create_graph=True)[0]
             # res_t_RAR = torch.autograd.grad(res_RAR, t_RAR, grad_outputs=torch.ones_like(res_RAR), create_graph=True)[0]
@@ -248,6 +248,8 @@ def train_pnet_model(p_net, optimizer, scheduler, mse_cost_function, iterations=
                     'train_time': training_time,
                 }, PATH)
             np.save(FOLDER+"output/p_net_train_loss.npy", np.array(loss_history))
+            np.save(FOLDER+"output/p_xsamples.npy", x.clone().data.cpu().numpy())
+            np.save(FOLDER+"output/p_tsamples.npy", t.clone().data.cpu().numpy())
 
         # Terminate training 
         if(loss.data < pnet_terminate):

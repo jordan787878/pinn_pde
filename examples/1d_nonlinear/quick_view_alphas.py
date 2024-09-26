@@ -17,6 +17,7 @@ from scipy.optimize import curve_fit
 from main_train_pnet import PNet
 from main_train_enet import ENet
 
+
 FOLDER = "exp1/main_alphas/seed-test/"
 DATA_FOLDER = "exp1/data/"
 
@@ -463,6 +464,10 @@ def plot_pres_surface(p_net, num=100):
     fig = plt.figure(figsize=(6,6))
     ax = fig.add_subplot(111, projection='3d')
     ax.plot_surface(x_mesh, t_mesh, pres**2, cmap="Greys")
+    x_samples = np.load(FOLDER+"output/p_xsamples.npy")
+    t_samples = np.load(FOLDER+"output/p_tsamples.npy")
+    z_max = 1.0*np.max(pres**2)
+    ax.scatter(x_samples, t_samples, t_samples*0+z_max, marker="x", color="blue", s=0.05, alpha=0.2, label='Data Points')
     # ax.plot_surface(x_mesh, t_mesh, pres**2, cmap='viridis', alpha=0.8, label=r"$r_1^2$")
     ax.set_xlabel("x")
     ax.set_ylabel("t"); 
@@ -536,8 +541,8 @@ def fit_function(x, C1, C2):
 def plot_alpha_data():
     data_folder = "exp1/main_alphas/"
     max_alpha_to_fit = 2.5
-    max_total_loss_to_fit = 0.2
-    num_runs = 1
+    max_total_loss_to_fit = 0.5
+    num_runs = 5
 
     plt.figure()
     X = []
@@ -545,39 +550,40 @@ def plot_alpha_data():
     X1 = []
     X2 = []
     for i in range(0, num_runs):
-        data_folder_seedi = data_folder  + "seed" + str(i) + "/"
-        data_folder_seedi = FOLDER
-        Nsample_array = np.load(data_folder_seedi+"output/e1_Nsample_list.npy")
-        Loss_1_array = np.load(data_folder_seedi+"output/e1_Loss_1_list.npy")
-        Alpha_array = np.load(data_folder_seedi+"output/e1_Alpha_list.npy")
+        if(i <= 4):
+            data_folder_seedi = data_folder  + "seed" + str(i) + "/"
+            # data_folder_seedi = FOLDER
+            Nsample_array = np.load(data_folder_seedi+"output/e1_Nsample_list.npy")
+            Loss_1_array = np.load(data_folder_seedi+"output/e1_Loss_1_list.npy")
+            Alpha_array = np.load(data_folder_seedi+"output/e1_Alpha_list.npy")
 
-        mask_1 = Alpha_array < max_alpha_to_fit
-        mask_2 = (Loss_1_array) < max_total_loss_to_fit
-        mask = mask_1 & mask_2
+            mask_1 = Alpha_array < max_alpha_to_fit
+            mask_2 = (Loss_1_array) < max_total_loss_to_fit
+            mask = mask_1 & mask_2
 
-        Loss_1_array = Loss_1_array[mask]
-        Alpha_array = Alpha_array[mask]
-        x_data = Loss_1_array
-        y_data = Alpha_array
-        plt.plot(x_data, y_data, marker='o', linestyle='None', markersize=2) # , label="run seed"+str(i))
-        X.append(x_data)
-        Y.append(y_data)
+            Loss_1_array = Loss_1_array[mask]
+            Alpha_array = Alpha_array[mask]
+            x_data = Loss_1_array
+            y_data = Alpha_array
+            plt.plot(x_data, y_data, marker='o', linestyle='--', linewidth=0.5, markersize=1, label="seed"+str(i)) # , label="run seed"+str(i))
+            X.append(x_data)
+            Y.append(y_data)
 
     # Fit the model
     X = np.concatenate(X)
     Y = np.concatenate(Y)
     lower_bounds = [0, 0]
     upper_bounds = [np.inf, np.inf]
-    popt, pcov = curve_fit(fit_function, X, Y, bounds=(lower_bounds, upper_bounds))
-    C1, C2 = popt
-    print("fit line constants:", C1, C2)
-    xs = np.linspace(np.min(X), np.max(X), num=100)
-    ys = C1 * np.sqrt(xs) + C2
-    plt.plot(xs, ys, color="black", linewidth=0.5, linestyle="--", label="fit line")
+    # popt, pcov = curve_fit(fit_function, X, Y, bounds=(lower_bounds, upper_bounds))
+    # C1, C2 = popt
+    # print("fit line constants:", C1, C2)
+    # xs = np.linspace(np.min(X), np.max(X), num=100)
+    # ys = C1 * np.sqrt(xs) + C2
+    # plt.plot(xs, ys, color="black", linewidth=0.5, linestyle="--", label="fit line")
 
     plt.grid(linewidth=0.5)
     plt.xlabel("training loss")
-    plt.ylabel(r"max $\alpha_1(t)$")
+    plt.ylabel(r"max $\alpha_1$")
     plt.legend(loc="upper left")
     plt.tight_layout()
     plt.savefig(FOLDER+'figs/alpha_vs_loss.pdf', format='pdf', dpi=300)
@@ -620,6 +626,7 @@ def debug(p_net, e_net):
 
 
 def main():
+    torch.cuda.empty_cache()
     # plot_position_encoding()
     # plot_p_monte()
     
@@ -635,6 +642,7 @@ def main():
     e_model = load_trained_model(e_model, PATH=FOLDER+"output/e1_net.pth", PATH_LOSS=FOLDER+"output/e1_net_train_loss.npy")
     e_model.eval()
     show_results(p_model, e_model)
+    torch.cuda.empty_cache()
 
     # debug(p_model, e_model)
 
@@ -645,6 +653,8 @@ def main():
     # # plot_train_loss(FOLDER+"output/p_net_train_loss.npy", 
     # #                 FOLDER+"output/e1_net_train_loss.npy")
     plot_alpha_data()
+
+    torch.cuda.empty_cache()
 
 
 if __name__ == "__main__":
