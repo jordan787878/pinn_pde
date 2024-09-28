@@ -12,6 +12,8 @@ from scipy.linalg import expm
 from tqdm import tqdm
 from matplotlib.lines import Line2D
 import torch.nn.functional as F
+import time
+import argparse
 
 
 FOLDER = "exp1/main/"
@@ -35,6 +37,8 @@ t1s = [1.0, 2.0, 3.0, 4.0, 5.0]
 # Set a fixed seed for reproducibility
 torch.manual_seed(0)
 np.random.seed(0)
+
+TRAIN_FLAG = False
 
 # x1: theta
 # x2: d(theta)/dt
@@ -170,13 +174,12 @@ def res_func(x, t, p_net, verbose=False):
     return residual
 
 
-def init_weights(m):
+def init_weights_He(m):
     if isinstance(m, nn.Linear):
-        init.xavier_uniform_(m.weight)
+        init.kaiming_normal_(m.weight)
         m.bias.data.fill_(0.01)
 
 
-# p_net
 class Net(nn.Module):
     def __init__(self, scale=1.0): 
         neurons = 32
@@ -199,125 +202,106 @@ class Net(nn.Module):
         return output
                 
 
-# Custom L-infinity loss function
-def linf_loss(output, target):
-    return torch.max(torch.abs(output - target))
-
-
 def train_p_net(p_net, optimizer, scheduler, mse_cost_function, max_abs_p_ti, iterations=40000):
     global x_low, x_hig, ti, tf
-    batch_size = 600
     min_loss = np.inf
     iterations_per_decay = 1000
     loss_history = []
     x_mar = 0.0
 
-    # Define the mean and covariance matrix
-    mean = torch.tensor([pi*(0.5), 0.0])
-    covariance_matrix = torch.tensor([[0.5, 0.0], [0.0, 0.5]])
-    mvn = torch.distributions.MultivariateNormal(mean, covariance_matrix)
     # space-time points for BC
-    x_bc = (torch.rand(batch_size, n_d) * (x_hig - x_low) + x_low).to(device); #print(min(x_bc[:,0]), max(x_bc[:,0]), min(x_bc[:,1]), max(x_bc[:,1]))
-    x_bc_normal = mvn.sample((batch_size,))
-    x_bc = torch.cat((x_bc, x_bc_normal), dim=0)
+    x_bc = (torch.rand(500, n_d) * (x_hig - x_low) + x_low).to(device); #print(min(x_bc[:,0]), max(x_bc[:,0]), min(x_bc[:,1]), max(x_bc[:,1]))
     t_bc = (torch.ones(len(x_bc), 1) * ti).to(device)
     
     # space-time points for RES
-    x = (torch.rand(2500, n_d, requires_grad=True) * (x_hig - x_low + 2*x_mar) + x_low-x_mar).to(device)
-    t = (torch.rand(2500, 1, requires_grad=True) *   (tf - ti) + ti).to(device)
+    x = (torch.rand(1500, n_d, requires_grad=True) * (x_hig - x_low + 2*x_mar) + x_low-x_mar).to(device)
+    t = (torch.rand(1500, 1, requires_grad=True) *   (tf - ti) + ti).to(device)
 
     # RAR
-    S = 100000
+    S = 30000
+    FLAG = False
     
     PATH = FOLDER+"output/p_net.pth"
-
+    start_time = time.time()
     for epoch in range(iterations):
         optimizer.zero_grad()
 
         # Loss based on boundary conditions
-        u_bc = p_init_torch(x_bc)
+        u_bc = p_init_torch(x_bc).detach()
         net_bc_out = p_net(x_bc, t_bc).to(device)
         mse_u = mse_cost_function(net_bc_out/max_abs_p_ti, u_bc/max_abs_p_ti)
-        linf_u = linf_loss(net_bc_out/max_abs_p_ti, u_bc/max_abs_p_ti)
 
         # Loss based on PDE
         res_out = res_func(x, t, p_net)/max_abs_p_ti
         all_zeros = torch.zeros((len(t),1), dtype=torch.float32, requires_grad=False).to(device)
         mse_res = mse_cost_function(res_out, all_zeros)
-        linf_res = linf_loss(res_out, all_zeros)
 
         # Frequnecy Loss
         res_x = torch.autograd.grad(res_out, x, grad_outputs=torch.ones_like(res_out), create_graph=True)[0]
         res_t = torch.autograd.grad(res_out, t, grad_outputs=torch.ones_like(res_out), create_graph=True)[0]
         res_input = torch.cat([res_x, res_t], axis=1)
-        norm_res_input = torch.norm(res_input/max_abs_p_ti, dim=1).view(-1,1)
+        norm_res_input = torch.norm(res_input, dim=1).view(-1,1) ###
         mse_norm_res_input = mse_cost_function(norm_res_input, all_zeros)
-        linf_norm_res_input = linf_loss(norm_res_input, all_zeros)
 
         # Loss Function
-        loss = mse_u + mse_res + mse_norm_res_input
-        # loss = linf_u + 1e-2*(linf_res+ linf_norm_res_input)
-
-        # RAR
-        if (epoch%500 == 0):
-            x_RAR = (torch.rand(S, n_d, requires_grad=True) * (x_hig - x_low + 2*x_mar) + x_low-x_mar).to(device)
-            t_RAR = (torch.rand(S, 1, requires_grad=True) *   (tf - ti) + ti).to(device)
-            res_RAR = res_func(x_RAR, t_RAR, p_net)/max_abs_p_ti
-            mean_res_RAR = torch.mean(res_RAR**2)
-            print("mean res RAR:", mean_res_RAR.data)
-            if(mean_res_RAR > 0.0):
-                # Find the index of the maximum absolute value in res_RAR
-                max_abs_res, max_index = torch.max(torch.abs(res_RAR), dim=0)
-                # Get the corresponding x_RAR and t_RAR vectors
-                x_max = x_RAR[max_index]
-                t_max = t_RAR[max_index]
-                # Append x_max and t_max to x and t
-                x = torch.cat((x, x_max), dim=0)
-                t = torch.cat((t, t_max), dim=0)
-                print("... add [x,t]:", x_max.data, t_max.data, max_abs_res.data)
-            res_x_RAR = torch.autograd.grad(res_RAR, x_RAR, grad_outputs=torch.ones_like(res_RAR), create_graph=True)[0]
-            res_t_RAR = torch.autograd.grad(res_RAR, t_RAR, grad_outputs=torch.ones_like(res_RAR), create_graph=True)[0]
-            res_input_RAR = torch.cat([res_x_RAR, res_t_RAR], axis=1)
-            norm_res_input_RAR = torch.norm(res_input_RAR/max_abs_p_ti, dim=1).view(-1,1)
-            if(torch.mean(norm_res_input) > 0.0):
-                max_abs_res_input, max_index = torch.max(norm_res_input_RAR, dim=0)
-                # Get the corresponding x_RAR and t_RAR vectors
-                x_max = x_RAR[max_index]
-                t_max = t_RAR[max_index]
-                # Append x_max and t_max to x and t
-                x = torch.cat((x, x_max), dim=0)
-                t = torch.cat((t, t_max), dim=0)
-                print("... add [x,t]:", x_max.data, t_max.data, max_abs_res_input.data)
-
-
+        loss = mse_u + 5.0*(mse_res + mse_norm_res_input)
         loss_history.append(loss.data)
-        
+
         # Save the min loss model
-        if(loss.data < min_loss):
+        if(loss.data < 0.95*min_loss):
+            train_time = time.time() - start_time
             print("save epoch:", epoch, ",loss:", loss.data, ",ic:", mse_u.data, ",res:", mse_res.data,
-                   ",linf-ic:", linf_u.data, ",norm. linf-res:", linf_res.data, 
-                   ",res_freq:", mse_norm_res_input.data, linf_norm_res_input.data # , linf_res_t.data #res_cross_zero_metric.data, metric.data
-            #       # "FFT: ", largest_frequency_output.data)
+                   ",res_freq:", mse_norm_res_input.data
                    )
             torch.save({
                     'epoch': epoch,
                     'model_state_dict': p_net.state_dict(),
                     'optimizer_state_dict': optimizer.state_dict(),
                     'loss': loss.data,
+                    'train_time': train_time,
                     }, PATH)
             min_loss = loss.data
+            FLAG = True
+
+        # RAR
+        if (epoch%100 == 0 and FLAG):
+            x_RAR = (torch.rand(S, n_d, requires_grad=True) * (x_hig - x_low + 2*x_mar) + x_low-x_mar).to(device)
+            t_RAR = (torch.rand(S, 1, requires_grad=True) *   (tf - ti) + ti).to(device)
+            t0_RAR = 0.0*t_RAR + ti
+            p_bc_RAR = p_init_torch(x_RAR)
+            phat_bc_RAR = p_net(x_RAR, t0_RAR)
+            max_ic_error = torch.max(torch.abs(phat_bc_RAR - p_bc_RAR))/max_abs_p_ti
+            print("RAR max IC: ", max_ic_error.data)
+            if(max_ic_error > 5e-3):
+                # max_abs_ic, max_index = torch.max(torch.abs(phat_bc_RAR - p_bc_RAR), dim=0)
+                max_abs_ic, max_index = torch.topk(torch.abs(phat_bc_RAR.squeeze() - p_bc_RAR.squeeze()), 5)
+                x_max = x_RAR[max_index,:].clone()
+                t_max = t0_RAR[max_index].clone()
+                x_bc = torch.cat((x_bc, x_max), dim=0)
+                t_bc = torch.cat((t_bc, t_max), dim=0)
+                # print("... IC add [x,t]:", x_max.data, t_max.data, max_abs_ic.data)
+
+            res_RAR = res_func(x_RAR, t_RAR, p_net)/max_abs_p_ti
+            max_res_RAR = torch.max(torch.abs(res_RAR))
+            print("RAR max RES:", max_res_RAR.data)
+            if(max_res_RAR > 5e-3):
+                # max_abs_res, max_index = torch.max(torch.abs(res_RAR), dim=0)
+                max_abs_res, max_index = torch.topk(torch.abs(res_RAR.squeeze()), 5)
+                x_max = x_RAR[max_index,:].clone()
+                t_max = t_RAR[max_index].clone()
+                x = torch.cat((x, x_max), dim=0)
+                t = torch.cat((t, t_max), dim=0)
+                # print("... add [x,t]:", x_max.data, t_max.data, max_abs_res.data)
+            FLAG = False
 
         loss.backward(retain_graph=True) # This is for computing gradients using backward propagation
         optimizer.step() # This is equivalent to : theta_new = theta_old - alpha * derivative of J w.r.t theta
 
-        with torch.autograd.no_grad():
-            if (epoch%1000 == 0):
-                print(epoch,"Traning Loss:",loss.data)
-                np.save(FOLDER+"output/p_net_train_loss.npy", np.array(loss_history))
-
         # Exponential learning rate decay
         if (epoch + 1) % iterations_per_decay == 0:
             scheduler.step()
+
+    np.save(FOLDER+"output/p_net_train_loss.npy", np.array(loss_history))
 
 
 def pos_p_net_train(p_net, PATH, PATH_LOSS):
@@ -325,29 +309,26 @@ def pos_p_net_train(p_net, PATH, PATH_LOSS):
     p_net.load_state_dict(checkpoint['model_state_dict'])
     epoch = checkpoint['epoch']
     loss = checkpoint['loss']
-    print("pnet best epoch: ", epoch, ", loss:", loss.data)
-    # see training result
+    print("pnet best epoch: ", epoch, ", loss:", loss.data, ", train time:", checkpoint['train_time'])
     # keys = p_net.state_dict().keys()
     # for k in keys:
     #     l2_norm = torch.norm(p_net.state_dict()[k], p=2)
     #     print(f"L2 norm of {k} : {l2_norm.item()}")
     # plot loss history
     loss_history = np.load(PATH_LOSS)
-    print(len(loss_history))
     min_loss = min(loss_history)
     plt.figure()
-    plt.plot(np.arange(len(loss_history)), loss_history)
+    plt.plot(np.arange(len(loss_history)), loss_history, "black", linewidth=1)
     plt.ylim([min_loss, 10*min_loss])
     plt.xlabel("epoch")
-    plt.ylabel("loss")
-    plt.savefig(FOLDER+"figs/pnet_loss_history.png")
+    plt.ylabel("pnet loss")
+    plt.tight_layout()
+    plt.savefig(FOLDER+'figs/pnet_loss_history.pdf', format='pdf', dpi=300)
     plt.close()
     return p_net
 
 
 def show_p_net_results(p_net):
-    # x_low = -2.0
-    # x_hig = 2.0
     max_abe_e1_ti = np.inf
     x_points = np.load(FOLDER_DATA+"x_points.npy")
     sample_size = len(x_points)
@@ -356,13 +337,8 @@ def show_p_net_results(p_net):
     x1, x2 = np.meshgrid(x1s, x2s)
     x = np.column_stack([x1.ravel(), x2.ravel()])#; print(x)
     pt_x = Variable(torch.from_numpy(x).float(), requires_grad=True).to(device)
-    pt_ti = Variable(torch.from_numpy(x[:,0]*0+ti).float(), requires_grad=True).view(-1,1).to(device)
-    p0 = p_init(x)
-    p_hat = p_net(pt_x, pt_ti).data.cpu().numpy()
-    e1 = p0 - p_hat
-    max_abe_e1_ti = max(abs(e1))[0]
 
-    # Determine the global min and max values
+    # plot p_net vs p
     all_p = []
     for t1 in t1s:
         p = np.load(FOLDER_DATA + "p_sim_grid" + str(t1) + ".npy")
@@ -370,15 +346,12 @@ def show_p_net_results(p_net):
     all_p = np.concatenate(all_p)  # Combine all p values
     vmin = np.min(all_p)
     vmax = np.max(all_p)
-    print(vmin, vmax)
-
     fig = plt.figure(figsize=(10, 5))
     gs = fig.add_gridspec(2, 6, width_ratios=[1]*5 + [0.05], wspace=0.4)
     # Create subplot grid (2x5) for the plots
     axs = [fig.add_subplot(gs[i, j]) for i in range(2) for j in range(5)]
     # Create a subplot for the colorbar spanning the height of the grid
     cax = fig.add_subplot(gs[:, -1])
-
     for i, ax in enumerate(axs):
         if(i <= 4):
             t1 = t1s[i]
@@ -398,76 +371,46 @@ def show_p_net_results(p_net):
             ax.set_xlabel(r"$\theta$")
             if(i == 5):
                 ax.set_ylabel(r"$\omega$")
-                ax.text(0.01, 0.98, r"$\hat{p}$", transform=ax.transAxes, verticalalignment='top', fontsize=8)
-        
     # Add the colorbar to the colorbar subplot
     fig.colorbar(cp, cax=cax, orientation='vertical')
     # Add a box with text at the top-left corner of the figure
-    fig.text(0.02, 0.87, r"$p_s(x,t)$", bbox={'facecolor': 'white', 'alpha': 0.5, 'pad': 5})
+    fig.text(0.02, 0.87, r"$p(x,t)$", bbox={'facecolor': 'white', 'alpha': 0.5, 'pad': 5})
     fig.text(0.02, 0.45, r"$\hat{p}(x,t)$", bbox={'facecolor': 'white', 'alpha': 0.5, 'pad': 5})
     fig.subplots_adjust(left=0.07, right=0.92, bottom=0.1, top=0.9, wspace=0.4, hspace=0.1)
-    plt.savefig(FOLDER+"figs/p_vs_phat.png")
+    fig.savefig(FOLDER+'figs/p_vs_phat.pdf', format='pdf', dpi=300)
     plt.close()
 
-
-    # determine error vim, vmax
-    e1_all = []
-    for t1 in t1s:
-        p = np.load(FOLDER_DATA+"p_sim_grid"+str(t1)+".npy")
-        pt_t1 = Variable(torch.from_numpy(x[:,0]*0+t1).float(), requires_grad=True).view(-1,1).to(device)
-        p_hat = p_net(pt_x, pt_t1)
-        p_hat_numpy = p_hat.data.cpu().numpy().reshape((sample_size, sample_size))
-        e1 = p - p_hat_numpy
-        e1_all.append(e1)
-    e1_all = np.concatenate(e1_all)
-    vmin = np.min(e1_all)
-    vmax = np.max(e1_all)
-    print(vmin, vmax)
-
-    # fig = plt.figure(figsize=(10, 3))
-    # gs = fig.add_gridspec(1, 6, width_ratios=[1]*5 + [0.05], wspace=0.4)
-    # # Create subplot grid (2x5) for the plots
-    # axs = [fig.add_subplot(gs[i, j]) for i in range(1) for j in range(5)]
-    # # Create a subplot for the colorbar spanning the height of the grid
-    # cax = fig.add_subplot(gs[:, -1])
-    # for i, ax in enumerate(axs):
-    #     t1 = t1s[i]
-    #     p = np.load(FOLDER_DATA+"p_sim_grid"+str(t1)+".npy")
-    #     pt_t1 = Variable(torch.from_numpy(x[:,0]*0+t1).float(), requires_grad=True).view(-1,1).to(device)
-    #     p_hat = p_net(pt_x, pt_t1)
-    #     p_hat_numpy = p_hat.data.cpu().numpy().reshape((sample_size, sample_size))
-    #     e1 = p - p_hat_numpy
-    #     cp = ax.imshow(e1, extent=[x_low, x_hig, x_low, x_hig], cmap='viridis', aspect='equal', origin='lower',
-    #                    vmin=vmin, vmax=vmax)
-    #     ax.set_xlabel(r"$\theta$")
-    #     ax.set_title("t="+str(t1))
-    #     if(i == 0):
-    #         ax.set_ylabel(r"$\omega$")
-    # fig.colorbar(cp, cax=cax, orientation='vertical')
-    # fig.subplots_adjust(left=0.07, right=0.92, bottom=0.1, top=0.9, wspace=0.4, hspace=0.1)
-    # plt.savefig(FOLDER+"figs/pnet_error.png")
-    # plt.close()
-
-
-    fig, axs = plt.subplots(1, 6, figsize=(18, 6), subplot_kw={'projection': '3d'})
+    # plot pnet residual
+    fig = plt.figure(figsize=(10, 6))
     j = 0
     for t1 in t1s:
-        pt_t1 = Variable(torch.from_numpy(x[:,0]*0+t1).float(), requires_grad=True).view(-1,1).to(device)
-        res_out = res_func(pt_x, pt_t1, p_net)
-        res_numpy = res_out.data.cpu().numpy().reshape((sample_size, sample_size))
-        ax1 = axs[j]
-        surf1 = ax1.plot_surface(x1, x2, res_numpy, cmap='viridis')
-        # ax2 = axs[1, j]
-        # surf2 = ax2.plot_surface(x1, x2, e1, cmap='viridis')
-        # ax2.plot_surface(x1, x2, e1*0, alpha=0.3, color="red")
-        # if(j == 0):
-        #     ax1.set_zlabel(r"$r_1$")
-        #     ax2.set_zlabel(r"$e_1$")
-        ax1.set_title("t="+str(t1))
+        if (j < 5):
+            ax = fig.add_subplot(2, 3, j+1, projection="3d")
+            pt_t1 = Variable(torch.from_numpy(x[:,0]*0+t1).float(), requires_grad=True).view(-1,1).to(device)
+            res_out = res_func(pt_x, pt_t1, p_net)
+            res_numpy = res_out.data.cpu().numpy().reshape((sample_size, sample_size))
+            surf1 = ax.plot_surface(x1, x2, res_numpy, cmap='viridis')
+            ax.set_xlabel(r"$\theta$", fontsize=8)
+            ax.set_ylabel(r"$\omega$", fontsize=8)
+            ax.set_zlabel(r"$r_1$", fontsize=8)
+            ax.set_title("t="+str(t1))
         j = j + 1
-    plt.savefig(FOLDER+"figs/pnet_resdiual.png")
+    fig.subplots_adjust(left=0.02, right=0.98, bottom=0.1, top=0.9, wspace=0.2, hspace=0.5)
+    fig.savefig(FOLDER+'figs/pnet_resdiual.pdf', format='pdf', dpi=300)
     plt.close()
 
+
+def get_e1net_scale(p_net):
+    x1s = np.linspace(x_low, x_hig, num=200, endpoint=True)
+    x2s = np.linspace(x_low, x_hig, num=200, endpoint=True)
+    x1, x2 = np.meshgrid(x1s, x2s)
+    x = np.column_stack([x1.ravel(), x2.ravel()])
+    p0 = p_init(x)
+    pt_x = Variable(torch.from_numpy(x).float(), requires_grad=True).to(device)
+    pt_ti = Variable(torch.from_numpy(x[:,0]*0+ti).float(), requires_grad=True).view(-1,1).to(device)
+    p_hat = p_net(pt_x, pt_ti).data.cpu().numpy()
+    e1 = p0 - p_hat
+    max_abe_e1_ti = max(abs(e1))[0]
     return max_abe_e1_ti
 
 
@@ -481,8 +424,10 @@ class E1Net(nn.Module):
         self.hidden_layer3 = (nn.Linear(neurons,neurons))
         self.hidden_layer4 = (nn.Linear(neurons,neurons))
         self.hidden_layer5 = (nn.Linear(neurons,neurons))
+        self.hidden_layer6 = (nn.Linear(neurons,neurons))
+        self.hidden_layer7 = (nn.Linear(neurons,neurons))
         self.output_layer =  (nn.Linear(neurons,1))
-        self.activation = nn.Tanh()
+        self.activation = nn.Softplus()
     def forward(self, x, t):
         inputs = torch.cat([x,t],axis=1)
         layer1_out = self.activation((self.hidden_layer1(inputs)))
@@ -490,7 +435,9 @@ class E1Net(nn.Module):
         layer3_out = self.activation((self.hidden_layer3(layer2_out)))
         layer4_out = self.activation((self.hidden_layer4(layer3_out)))
         layer5_out = self.activation((self.hidden_layer5(layer4_out)))
-        output = self.output_layer(layer5_out)
+        layer6_out = self.activation((self.hidden_layer6(layer5_out)))
+        layer7_out = self.activation((self.hidden_layer7(layer6_out)))
+        output = self.output_layer(layer7_out)
         output = self.scale * output
         return output
 
@@ -532,29 +479,58 @@ def e1_res_func(x, t, e1_net, p_net, verbose=False):
     return residual
 
 
+def diff_e1(x, t, e1_net, verbose=False):
+    B_torch = torch.tensor(B, dtype=torch.float32, requires_grad=True)
+    net = e1_net(x,t)
+    net_x = torch.autograd.grad(net, x, grad_outputs=torch.ones_like(net), create_graph=True)[0]
+    net_t = torch.autograd.grad(net, t, grad_outputs=torch.ones_like(net), create_graph=True)[0]
+    net_x1 = net_x[:,0].view(-1,1)
+    net_x2 = net_x[:,1].view(-1,1)
+    x1 = x[:,0].view(-1, 1)
+    x2 = x[:,1].view(-1, 1)
+
+    # Compute the second derivative (Hessian) of p with respect to x
+    hessian = []
+    for i in range(net_x.size(1)):
+        grad2 = torch.autograd.grad(net_x[:, i], x, grad_outputs=torch.ones_like(net_x[:, i]), create_graph=True)[0]
+        hessian.append(grad2)
+    net_xx = torch.stack(hessian, dim=-1)
+    net_x1x1 = net_xx[:, 0, 0].view(-1, 1)
+    net_x2x2 = net_xx[:, 1, 1].view(-1, 1)
+
+    f1 = torch.reshape(x2, (-1,1))
+    f2 = torch.reshape(-g*torch.sin(x1)/l, (-1,1))
+
+    # f1_x1 = torch.reshape(torch.autograd.grad(f1, x1, grad_outputs=torch.ones_like(f1), create_graph=True)[0], (-1,1))
+    # f2_x2 = torch.reshape(torch.autograd.grad(f2, x2, grad_outputs=torch.ones_like(f2), create_graph=True)[0], (-1,1))
+    f1_x1 = (0.0*x1).view(-1,1)
+    f2_x2 = (0.0*x2).view(-1,1)
+
+    Lnet = net_x1*f1 + net*f1_x1 + net_x2*f2 + net*f2_x2 - 0.5*(B_torch[0,0]*B_torch[0,0]*net_x1x1 + B_torch[1,1]*B_torch[1,1]*net_x2x2)
+    diff_e1 = net_t + Lnet
+
+    return diff_e1
+
+
 def train_e1_net(e1_net, optimizer, scheduler, mse_cost_function, p_net, max_abs_e1_ti, iterations=40000):
     min_loss = np.inf
     loss_history = []
     iterations_per_decay = 1000
-    PATH = FOLDER+"output/e1_net.pt"
+    PATH = FOLDER+"output/e1_net.pth"
     x_mar = 0.0
 
-    # Define the mean and covariance matrix
-    mean = torch.tensor([pi*(0.5), 0.0])
-    covariance_matrix = torch.tensor([[0.5, 0.0], [0.0, 0.5]])
-    mvn = torch.distributions.MultivariateNormal(mean, covariance_matrix)
     # space-time points for BC
-    x_bc = (torch.rand(600, n_d) * (x_hig - x_low) + x_low).to(device); #print(min(x_bc[:,0]), max(x_bc[:,0]), min(x_bc[:,1]), max(x_bc[:,1]))
-    x_bc_normal = mvn.sample((600,))
-    x_bc = torch.cat((x_bc, x_bc_normal), dim=0)
+    x_bc = (torch.rand(500, n_d) * (x_hig - x_low) + x_low).to(device); #print(min(x_bc[:,0]), max(x_bc[:,0]), min(x_bc[:,1]), max(x_bc[:,1]))
     t_bc = (torch.ones(len(x_bc), 1) * ti).to(device)
     
     # space-time points for RES
-    x = (torch.rand(2500, n_d, requires_grad=True) * (x_hig - x_low + 2*x_mar) + x_low-x_mar).to(device)
-    t = (torch.rand(2500, 1, requires_grad=True) *   (tf - ti) + ti).to(device)
-    FLAG = False
-    S = 100000
+    x = (torch.rand(1500, n_d, requires_grad=True) * (x_hig - x_low + 2*x_mar) + x_low-x_mar).to(device)
+    t = (torch.rand(1500, 1, requires_grad=True) *   (tf - ti) + ti).to(device)
 
+    S = 30000
+    FLAG = False
+
+    start_time = time.time()
     for epoch in range(iterations):
         optimizer.zero_grad() # to make the gradients zero
 
@@ -563,28 +539,28 @@ def train_e1_net(e1_net, optimizer, scheduler, mse_cost_function, p_net, max_abs
         phat_bc = p_net(x_bc, t_bc)
         u_bc = (p_bc - phat_bc)/max_abs_e1_ti
         net_bc_out = e1_net(x_bc, t_bc)/max_abs_e1_ti
-        mse_u = mse_cost_function(net_bc_out, u_bc)
+        mse_u = mse_cost_function(net_bc_out, u_bc.detach())
 
         # Loss based on PDE
-        all_zeros = torch.zeros((len(t),1), dtype=torch.float32, requires_grad=False).to(device)
-        res_out = e1_res_func(x, t, e1_net, p_net)/max_abs_e1_ti
-        mse_res = mse_cost_function(res_out, all_zeros)
+        diff_e1_hat = diff_e1(x, t, e1_net)
+        diff_e1_target = -res_func(x, t, p_net).detach()
+        mse_res = mse_cost_function(diff_e1_hat/max_abs_e1_ti, diff_e1_target/max_abs_e1_ti)
 
         # Frequnecy Loss
+        res_out = e1_res_func(x, t, e1_net, p_net)/max_abs_e1_ti
         res_x = torch.autograd.grad(res_out, x, grad_outputs=torch.ones_like(res_out), create_graph=True)[0]
         res_t = torch.autograd.grad(res_out, t, grad_outputs=torch.ones_like(res_out), create_graph=True)[0]
         res_input = torch.cat([res_x, res_t], axis=1)
         norm_res_input = torch.norm(res_input, dim=1).view(-1,1)
-        mse_norm_res_input = mse_cost_function(norm_res_input, all_zeros)
+        mse_norm_res_input = torch.mean(norm_res_input**2)
         
         # Combining the loss functions
-        loss = mse_u + mse_res + mse_norm_res_input
-
-        if (epoch%1000 == 0):
-            print(epoch,"Traning Loss:",loss.data)
+        loss = mse_u + 5.0*(mse_res + mse_norm_res_input)
+        loss_history.append(loss.data)
 
         # Save the min loss model
         if(loss.data < 0.95*min_loss):
+            train_time = time.time() - start_time
             print("e1net best epoch:", epoch, ", loss:", loss.data, 
                   ",ic:", mse_u.data, 
                   ",res:", mse_res.data,
@@ -595,12 +571,13 @@ def train_e1_net(e1_net, optimizer, scheduler, mse_cost_function, p_net, max_abs
                     'model_state_dict': e1_net.state_dict(),
                     'optimizer_state_dict': optimizer.state_dict(),
                     'loss': loss.data,
+                    'train_time': train_time,
                     }, PATH)
             min_loss = loss.data 
             FLAG = True
 
         # RAR
-        if (epoch%1000 == 0 and FLAG):
+        if (epoch%100 == 0 and FLAG):
             x_RAR = (torch.rand(S, n_d, requires_grad=True) * (x_hig - x_low + 2*x_mar) + x_low-x_mar).to(device)
             t_RAR = (torch.rand(S, 1, requires_grad=True) *   (tf - ti) + ti).to(device)
             t0_RAR = 0.0*t_RAR + ti
@@ -608,44 +585,31 @@ def train_e1_net(e1_net, optimizer, scheduler, mse_cost_function, p_net, max_abs
             p_bc_RAR = p_init_torch(x_RAR)
             phat_bc_RAR = p_net(x_RAR, t0_RAR)
             ic_RAR = (p_bc_RAR - phat_bc_RAR)/max_abs_e1_ti
-            mean_ic_error = torch.mean(torch.abs(ic_RAR - ic_hat_RAR))
-            print("RAR mean IC: ", mean_ic_error.data)
-            if(mean_ic_error > 5e-3):
-                max_abs_ic, max_index = torch.max(torch.abs(ic_RAR - ic_hat_RAR), dim=0)
-                x_max = x_RAR[max_index].clone().detach()
-                t_max = t0_RAR[max_index].clone().detach()
+            max_ic_error = torch.max(torch.abs(ic_RAR - ic_hat_RAR))
+            print("RAR max IC: ", max_ic_error.data)
+            if(max_ic_error > 5e-3):
+                # max_abs_ic, max_index = torch.max(torch.abs(ic_RAR - ic_hat_RAR), dim=0)
+                ic_diff = ic_RAR - ic_hat_RAR
+                max_abs_ic, max_index = torch.topk(torch.abs(ic_diff.squeeze()), 5)
+                x_max = x_RAR[max_index,:].clone()
+                t_max = t0_RAR[max_index].clone()
                 x_bc = torch.cat((x_bc, x_max), dim=0)
                 t_bc = torch.cat((t_bc, t_max), dim=0)
-                print("... IC add [x,t]:", x_max.data, t_max.data, ". max ic value: ", max_abs_ic.data)
-                FLAG = False
+                # print("... IC add [x,t]:", x_max.data, t_max.data, max_abs_ic.data)
 
             res_RAR = e1_res_func(x_RAR, t_RAR, e1_net, p_net)/max_abs_e1_ti
-            mean_res_error = torch.mean(torch.abs(res_RAR))
-            print("RAR mean res: ", mean_res_error.data)
-            if(mean_res_error > 5e-3):
-                max_abs_res, max_index = torch.max(torch.abs(res_RAR), dim=0)
-                x_max = x_RAR[max_index]
-                t_max = t_RAR[max_index]
+            max_res_error = torch.max(torch.abs(res_RAR))
+            print("RAR max RES: ", max_res_error.data)
+            if(max_res_error > 5e-3):
+                # max_abs_res, max_index = torch.max(torch.abs(res_RAR), dim=0)
+                max_abs_res, max_index = torch.topk(torch.abs(res_RAR.squeeze()), 5)
+                x_max = x_RAR[max_index,:].clone()
+                t_max = t_RAR[max_index].clone()
                 x = torch.cat((x, x_max), dim=0)
                 t = torch.cat((t, t_max), dim=0)
-                print("... RES add [x,t]:", x_max.data, t_max.data, ". max res value: ", max_abs_res.data)
-                FLAG = False
+                # print("... RES add [x,t]:", x_max.data, t_max.data, max_abs_res.data)
+            FLAG = False
 
-            res_x_RAR = torch.autograd.grad(res_RAR, x_RAR, grad_outputs=torch.ones_like(res_RAR), create_graph=True)[0]
-            res_t_RAR = torch.autograd.grad(res_RAR, t_RAR, grad_outputs=torch.ones_like(res_RAR), create_graph=True)[0]
-            res_input_RAR = torch.cat([res_x_RAR, res_t_RAR], axis=1)
-            norm_res_input_RAR = torch.norm(res_input_RAR, dim=1).view(-1,1)
-            mean_res_input_error = torch.mean(norm_res_input)
-            print("RAR mean res input: ", mean_res_input_error.data)
-            if(mean_res_input_error > 5e-3):
-                max_abs_res_input, max_index = torch.max(norm_res_input_RAR, dim=0)
-                x_max = x_RAR[max_index]
-                t_max = t_RAR[max_index]
-                x = torch.cat((x, x_max), dim=0)
-                t = torch.cat((t, t_max), dim=0)
-                print("... RES_INPUT add [x,t]:", x_max.data, t_max.data, ". max res value: ", max_abs_res_input.data)
-
-        loss_history.append(loss.data)
         loss.backward(retain_graph=True) 
         optimizer.step()
         
@@ -660,20 +624,19 @@ def pos_e1_net_train(e1_net, PATH, PATH_LOSS):
     e1_net.load_state_dict(checkpoint['model_state_dict'])
     epoch = checkpoint['epoch']
     loss = checkpoint['loss']
-    print("best epoch: ", epoch, ", loss:", loss.data)
-    # see training result
-    keys = e1_net.state_dict().keys()
-    for k in keys:
-        l2_norm = torch.norm(e1_net.state_dict()[k], p=2)
-        print(f"L2 norm of {k} : {l2_norm.item()}")
+    print("e1net best epoch: ", epoch, ", loss:", loss.data, ", train time:", checkpoint['train_time'])
+    # keys = e1_net.state_dict().keys()
+    # for k in keys:
+    #     l2_norm = torch.norm(e1_net.state_dict()[k], p=2)
+    #     # print(f"L2 norm of {k} : {l2_norm.item()}")
     # plot loss history
     loss_history = np.load(PATH_LOSS)
     min_loss = min(loss_history)
     plt.figure()
-    plt.plot(np.arange(len(loss_history)), loss_history)
+    plt.plot(np.arange(len(loss_history)), loss_history, "black", linewidth=1)
     plt.xlabel("epoch")
-    plt.ylabel("loss")
-    plt.savefig(FOLDER+"figs/e1net_loss_history.png")
+    plt.ylabel("e1net loss")
+    plt.savefig(FOLDER+'figs/e1net_loss_history.pdf', format='pdf', dpi=300)
     plt.close()
     return e1_net
 
@@ -686,32 +649,8 @@ def show_e1_net_results(p_net, e1_net):
     x1, x2 = np.meshgrid(x1s, x2s)
     x = np.column_stack([x1.ravel(), x2.ravel()])#; print(x)
     pt_x = Variable(torch.from_numpy(x).float(), requires_grad=True).to(device)
-    # p0 = p_init(x).reshape(sample_size, sample_size)
 
-    # fig, axs = plt.subplots(1, 6, figsize=(18, 6))
-    # j = 0
-    # for t1 in t1s:
-    #     p = np.load(FOLDER_DATA+"p_sim_grid"+str(t1)+".npy")
-    #     pt_t1 = Variable(torch.from_numpy(x[:,0]*0+t1).float(), requires_grad=True).view(-1,1).to(device)
-    #     p_hat = p_net(pt_x, pt_t1).data.cpu().numpy().reshape((sample_size, sample_size))
-    #     e1 = p - p_hat
-    #     e1_hat = e1_net(pt_x, pt_t1).data.cpu().numpy().reshape((sample_size, sample_size))
-    #     ax1 = axs[j]
-    #     cp = ax1.imshow(e1_hat, extent=[x_low, x_hig, x_low, x_hig], cmap='viridis', aspect='equal', origin='lower')
-    #     fig.colorbar(cp, ax=ax1, orientation='horizontal')
-    #     ax1.set_xlabel(r"$\theta$")
-    #     ax1.set_ylabel(r"$\omega$")
-    #     ax1.set_title("t="+str(t1))
-    #     alpha = max(abs(e1.reshape(-1,1) - e1_hat.reshape(-1,1))) / max(abs(e1_hat.reshape(-1,1)))
-    #     ax1.set_title("t="+str(t1)+"\n"+r"$\alpha_1=$"+str(np.round(alpha,2)))
-    #     print("t1: ", t1, " , alpha_1: ", alpha)
-
-    #     j = j + 1
-    # plt.tight_layout()
-    # plt.savefig(FOLDER+"figs/e1_result.png")
-    # plt.close()
-
-    # determine error vim, vmax
+    # plot e1net vs e1
     e1_all = []
     for t1 in t1s:
         p = np.load(FOLDER_DATA+"p_sim_grid"+str(t1)+".npy")
@@ -723,14 +662,12 @@ def show_e1_net_results(p_net, e1_net):
     e1_all = np.concatenate(e1_all)
     vmin = np.min(e1_all)
     vmax = np.max(e1_all)
-
     fig = plt.figure(figsize=(10, 5))
     gs = fig.add_gridspec(2, 6, width_ratios=[1]*5 + [0.05], wspace=0.4)
     # Create subplot grid (2x5) for the plots
     axs = [fig.add_subplot(gs[i, j]) for i in range(2) for j in range(5)]
     # Create a subplot for the colorbar spanning the height of the grid
     cax = fig.add_subplot(gs[:, -1])
-
     for i, ax in enumerate(axs):
         if(i <= 4):
             t1 = t1s[i]
@@ -757,22 +694,21 @@ def show_e1_net_results(p_net, e1_net):
                             vmin=vmin, vmax=vmax)
             alpha = max(abs(e1.reshape(-1,1) - e1_hat.reshape(-1,1))) / max(abs(e1_hat.reshape(-1,1)))
             alpha = alpha[0]
+            print("t: ",t1, ", a1: {:.3f}".format(alpha))
             ax.set_xlabel(r"$\theta$")
             ax.set_title(r"$\alpha_1=$"+str(np.round(alpha,2)))
             if(i == 5):
                 ax.set_ylabel(r"$\omega$")
-                ax.text(0.01, 0.98, r"$\hat{p}$", transform=ax.transAxes, verticalalignment='top', fontsize=8)
-        
     # Add the colorbar to the colorbar subplot
     fig.colorbar(cp, cax=cax, orientation='vertical')
     # Add a box with text at the top-left corner of the figure
-    fig.text(0.02, 0.87, r"$e_s(x,t)$", bbox={'facecolor': 'white', 'alpha': 0.5, 'pad': 5})
+    fig.text(0.02, 0.87, r"$e(x,t)$", bbox={'facecolor': 'white', 'alpha': 0.5, 'pad': 5})
     fig.text(0.02, 0.45, r"$\hat{e}_1(x,t)$", bbox={'facecolor': 'white', 'alpha': 0.5, 'pad': 5})
     fig.subplots_adjust(left=0.07, right=0.92, bottom=0.1, top=0.9, wspace=0.4, hspace=0.1)
-    plt.savefig(FOLDER+"figs/e1hat_result.png")
+    plt.savefig(FOLDER+'figs/e_vs_e1hat.pdf', format='pdf', dpi=300)
     plt.close()
 
-
+    # plot special error bound
     fig = plt.figure(figsize=(10, 6))
     j = 0
     for t1 in t1s:
@@ -785,45 +721,59 @@ def show_e1_net_results(p_net, e1_net):
             e1_hat = e1_net(pt_x, pt_t1).data.cpu().numpy().reshape((sample_size, sample_size))
             error_bound = max(abs(e1_hat.reshape(-1,1)))*2
             error_bound = error_bound[0]
-            ax.plot_surface(x1, x2, abs(e1_hat), cmap='viridis', vmin=0.0, vmax=0.008)
+            ax.plot_surface(x1, x2, abs(e1), cmap='viridis', vmin=0.0, vmax=0.008)
             ax.plot_surface(x1, x2, e1_hat*0+error_bound, color="green", alpha=0.3)
             ax.set_zlim([0, 0.02])
             ax.set_xlabel(r"$\theta$", fontsize=8)
             ax.set_ylabel(r"$\omega$", fontsize=8)
-            ax.set_zlabel(r"$|e_s|$", fontsize=8)
-            ax.set_title("t="+str(t1)+", "+r"$e_L=$"+str(np.round(error_bound,2)))
+            ax.set_zlabel(r"$|e|$", fontsize=8)
+            print("t: ",t1, ", max|e|: {:.3f}".format(np.max(np.abs(e1))), ", e_S: {:.3f}".format(error_bound))
+            ax.set_title("t="+str(t1)+", "+r"$e_S=$"+str(np.round(error_bound,3)))
         j = j + 1
     fig.subplots_adjust(left=0.02, right=0.98, bottom=0.1, top=0.9, wspace=0.2, hspace=0.5)
-    plt.savefig(FOLDER+"figs/uni_error_bound.png")
+    plt.savefig(FOLDER+'figs/special_error_bound.pdf', format='pdf', dpi=300)
     plt.close()
 
 
 def main():
     # test_p_sol_monte(stat_sample=100000000)
+    mse_cost_function = torch.nn.MSELoss() # Mean squared error
+
+    p_net = Net().to(device)
+    p_net.apply(init_weights_He)
+    e1_net = E1Net().to(device)
+    e1_net.apply(init_weights_He)
 
     max_pi = test_p_init()
-    print("max abs p(x,ti):", max_pi)
-
-    p_net = Net(scale=max_pi).to(device)
-    p_net.apply(init_weights)
-    mse_cost_function = torch.nn.MSELoss() # Mean squared error
+    p_net.scale = max_pi
     optimizer = torch.optim.Adam(p_net.parameters(), lr=1e-3)
     scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.95)
-    train_p_net(p_net, optimizer, scheduler, mse_cost_function, max_pi, iterations=30000); print("p_net train complete")
+    if(TRAIN_FLAG):
+        train_p_net(p_net, optimizer, scheduler, mse_cost_function, max_pi, iterations=15000); print("p_net train complete")
     p_net = pos_p_net_train(p_net, PATH=FOLDER+"output/p_net.pth", PATH_LOSS=FOLDER+"output/p_net_train_loss.npy"); p_net.eval()
-    max_abe_e1_ti = show_p_net_results(p_net)
-    print("max abs e1(x,ti):", max_abe_e1_ti)
+    print("[load pnet model from: "+FOLDER+"output/p_net.pth]")
+    show_p_net_results(p_net)
 
-    e1_net = E1Net(scale=max_abe_e1_ti).to(device)
-    e1_net.apply(init_weights)
+    max_abe_e1_ti = get_e1net_scale(p_net)
+    e1_net.scale = max_abe_e1_ti
     optimizer = torch.optim.Adam(e1_net.parameters(), lr=1e-3)
     scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.95)
-    train_e1_net(e1_net, optimizer, scheduler, mse_cost_function, p_net, max_abe_e1_ti, iterations=100000); print("e1_net train complete")
-    e1_net = pos_e1_net_train(e1_net, PATH=FOLDER+"output/e1_net.pt", PATH_LOSS=FOLDER+"output/e1_net_train_loss.npy"); e1_net.eval()
+    if(TRAIN_FLAG):
+        train_e1_net(e1_net, optimizer, scheduler, mse_cost_function, p_net, max_abe_e1_ti, iterations=15000); print("e1_net train complete")
+    e1_net = pos_e1_net_train(e1_net, PATH=FOLDER+"output/e1_net.pth", PATH_LOSS=FOLDER+"output/e1_net_train_loss.npy"); e1_net.eval()
+    print("[load e1net model from: "+FOLDER+"output/e1_net.pth]")
     show_e1_net_results(p_net ,e1_net)
 
-    print("[complete 2d linear]")
+    if(TRAIN_FLAG == False):
+        print("[complete 2d nonlinear, with pre-trained models]")
+    else:
+        print("[complete 2d nonlinear]")
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Pass 1 to train, 0 to use the pre-trained models")
+    parser.add_argument("--train", type=int, required=True, help="train bool")
+    args = parser.parse_args()
+    # Modify the TRAIN_FLAG
+    TRAIN_FLAG = args.train
     main()
