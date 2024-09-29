@@ -17,6 +17,7 @@ Follow these steps to set up your environment:
 
 1. **create python virtual environment** run: python3 -m venv venv
 2. **activate python virtual environment** run: source venv/bin/activate
+3. **install packages** run: pip3 install -r requirements.txt
 
 ## 1D Nonlinear Dynamics
 The pre-trained models are stored in the folder: examples/1d_nonlinear_gpu/exp1/main_alphas/[seed number]/output/
