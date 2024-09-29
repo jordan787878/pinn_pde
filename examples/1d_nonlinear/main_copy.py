@@ -3,19 +3,19 @@ import torch.nn as nn
 import torch.nn.init as init
 import torch.nn.functional as F
 from torch.autograd import Variable
+import torch.nn.utils.spectral_norm as spectral_norm
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib import cm
-from matplotlib.ticker import LinearLocator, FormatStrFormatter, FuncFormatter, ScalarFormatter
+from matplotlib.ticker import LinearLocator, FormatStrFormatter
 import random
+from tqdm import tqdm
 import warnings
 import time
 from matplotlib.ticker import ScalarFormatter
-import argparse
 
 FOLDER = "exp1/main/"
 DATA_FOLDER = "exp1/data/"
-TRAIN_FLAG = False
 
 device = "cpu"; print(device)
 
@@ -39,23 +39,13 @@ T_end = 5.0
 t1s = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]
 
 datas = ["data1/"]
-S = 30000
+S = 10000
 pnet_terminate = 1e-4
-enet_terminate = 1e-5
+enet_terminate = 5e-4
 
 
 def p_init(x):
     return np.exp(-0.5*((x-mu)/std)**2) / (std*np.sqrt(2*np.pi))
-
-
-def p_init_torch(x):
-    # Ensure x is a torch tensor
-    x = torch.tensor(x, dtype=torch.float32) if not isinstance(x, torch.Tensor) else x
-    # Compute the Gaussian function
-    exponent = -0.5 * ((x - mu) / std) ** 2
-    normalization = std * torch.sqrt(torch.tensor(2 * torch.pi))
-    result = torch.exp(exponent) / normalization
-    return result
 
 
 def p_res_func(x, t, pnet, verbose=False):
@@ -85,46 +75,18 @@ def e_res_func(x, t, e1_net, p_net, verbose=False):
     return residual
 
 
-def diff_e(x, t, e1_net):
-    e1_out = e1_net(x, t)
-    e_x = torch.autograd.grad(e1_out, x, grad_outputs=torch.ones_like(e1_out), create_graph=True)[0]
-    e_t = torch.autograd.grad(e1_out, t, grad_outputs=torch.ones_like(e1_out), create_graph=True)[0]
-    e_xx = torch.autograd.grad(e_x,  x, grad_outputs=torch.ones_like(e_x), create_graph=True)[0]
-    diff_e1net = e_t + (3*const_a*x*x + 2*const_b*x + const_c)*e1_out \
-                     + (const_a*x*x*x + const_b*x*x + const_c*x + const_d)*e_x \
-                     - 0.5*const_e*const_e*e_xx
-    return diff_e1net
-
-
-def init_weights_He(m):
+def init_weights(m):
     if isinstance(m, nn.Linear):
-        init.kaiming_normal_(m.weight)
+        init.xavier_uniform_(m.weight)
         m.bias.data.fill_(0.01)
 
 
 class PNet(nn.Module):
     def __init__(self, scale=1.0): 
-        neurons = 50
+        neurons = 32
         self.scale = scale
+        self.normalize = 1.0
         super(PNet, self).__init__()
-        self.hidden_layer1 = (nn.Linear(n_d+1,neurons))
-        self.hidden_layer2 = (nn.Linear(neurons,neurons))
-        self.hidden_layer3 = (nn.Linear(neurons,neurons))
-        self.output_layer =  (nn.Linear(neurons,1))
-    def forward(self, x, t):
-        inputs = torch.cat([x, t],axis=1)
-        layer1_out = F.softplus((self.hidden_layer1(inputs)))
-        layer2_out = F.softplus((self.hidden_layer2(layer1_out)))
-        layer3_out = F.softplus((self.hidden_layer3(layer2_out)))
-        output = F.softplus( self.output_layer(layer3_out) )
-        return output
-
-
-class E1Net(nn.Module):
-    def __init__(self, scale=1.0): 
-        neurons = 50
-        self.scale = scale
-        super(E1Net, self).__init__()
         self.hidden_layer1 = (nn.Linear(n_d+1,neurons))
         self.hidden_layer2 = (nn.Linear(neurons,neurons))
         self.hidden_layer3 = (nn.Linear(neurons,neurons))
@@ -132,16 +94,42 @@ class E1Net(nn.Module):
         self.hidden_layer5 = (nn.Linear(neurons,neurons))
         self.hidden_layer6 = (nn.Linear(neurons,neurons))
         self.output_layer =  (nn.Linear(neurons,1))
-        self.activation = nn.Softplus()
     def forward(self, x, t):
-        inputs = torch.cat([x, t],axis=1)
+        inputs = torch.cat([x,t],axis=1)
+        layer1_out = F.softplus((self.hidden_layer1(inputs)))
+        layer2_out = F.softplus((self.hidden_layer2(layer1_out)))
+        layer3_out = F.softplus((self.hidden_layer3(layer2_out)))
+        layer4_out = F.softplus((self.hidden_layer4(layer3_out)))
+        layer5_out = F.softplus((self.hidden_layer5(layer4_out)))
+        layer6_out = F.softplus((self.hidden_layer6(layer5_out)))
+        output = F.softplus( self.output_layer(layer6_out) )
+        return output
+
+
+class ENet(nn.Module):
+    def __init__(self, scale=1.0): 
+        neurons = 32
+        self.scale = scale
+        super(ENet, self).__init__()
+        self.hidden_layer1 = (nn.Linear(2,neurons))
+        self.hidden_layer2 = (nn.Linear(neurons,neurons))
+        self.hidden_layer3 = (nn.Linear(neurons,neurons))
+        self.hidden_layer4 = (nn.Linear(neurons,neurons))
+        self.hidden_layer5 = (nn.Linear(neurons,neurons))
+        self.hidden_layer6 = (nn.Linear(neurons,neurons))
+        self.hidden_layer7 = (nn.Linear(neurons,neurons))
+        self.output_layer =  (nn.Linear(neurons,1))
+        self.activation = nn.Tanh()
+    def forward(self, x, t):
+        inputs = torch.cat([x,t],axis=1)
         layer1_out = self.activation((self.hidden_layer1(inputs)))
         layer2_out = self.activation((self.hidden_layer2(layer1_out)))
         layer3_out = self.activation((self.hidden_layer3(layer2_out)))
         layer4_out = self.activation((self.hidden_layer4(layer3_out)))
         layer5_out = self.activation((self.hidden_layer5(layer4_out)))
         layer6_out = self.activation((self.hidden_layer6(layer5_out)))
-        output = self.output_layer(layer6_out)
+        layer7_out = self.activation((self.hidden_layer7(layer6_out)))
+        output = self.output_layer(layer7_out)
         output = self.scale * output
         return output
     
@@ -168,32 +156,41 @@ def train_pnet_model(p_net, optimizer, scheduler, mse_cost_function, iterations=
     min_loss = np.inf
     iterations_per_decay = 1000
     loss_history = []
-    PATH = FOLDER+"output/p_net.pth"
+    x_mar = 0.0
 
+    # Define the mean and covariance matrix
+    mean = torch.tensor([-2.0])
+    covariance_matrix = torch.tensor([[0.5]])
+    mvn = torch.distributions.MultivariateNormal(mean, covariance_matrix)
     # space-time points for BC
-    x_bc = (torch.rand(1000, n_d) * (x_hig - x_low) + x_low).to(device); #print(min(x_bc[:,0]), max(x_bc[:,0]), min(x_bc[:,1]), max(x_bc[:,1]))
+    x_bc = (torch.rand(600, n_d) * (x_hig - x_low) + x_low).to(device); 
+    x_bc_normal = mvn.sample((600,))
+    x_bc = torch.cat((x_bc, x_bc_normal), dim=0)
     t_bc = (torch.ones(len(x_bc), 1) * ti).to(device)
-    
     # space-time points for RES
-    x = (torch.rand(1000, n_d, requires_grad=True) * (x_hig - x_low) + x_low).to(device)
-    t = (torch.rand(1000, 1, requires_grad=True) *   (tf - ti) + ti).to(device)
+    x = (torch.rand(2500, n_d, requires_grad=True) * (x_hig - x_low + 2*x_mar) + x_low-x_mar).to(device)
+    t = (torch.rand(2500, 1, requires_grad=True) *   (tf - ti) + ti).to(device)
 
-    normalize = p_net.scale
+    max_abs_p_ti = p_net.normalize
 
     # RAR
+    S = 100000
     FLAG = False
+    w_regular = 1.0 #0.5
+    
+    PATH = FOLDER+"output/p_net.pth"
 
-    start_time = time.time()
     for epoch in range(iterations):
         optimizer.zero_grad()
 
         # Loss based on boundary conditions
-        p0 = p_init_torch(x_bc).detach()
-        p0_hat = p_net(x_bc, t_bc).to(device)
-        mse_u = mse_cost_function(p0_hat/normalize, p0/normalize)
+        p0 = p_init(x_bc.detach().numpy())
+        u_bc = Variable(torch.from_numpy(p0).float(), requires_grad=False).to(device)
+        net_bc_out = p_net(x_bc, t_bc).to(device)
+        mse_u = mse_cost_function(net_bc_out/max_abs_p_ti, u_bc/max_abs_p_ti)
 
         # Loss based on PDE
-        res_out = p_res_func(x, t, p_net)/normalize
+        res_out = p_res_func(x, t, p_net)/max_abs_p_ti
         all_zeros = torch.zeros((len(t),1), dtype=torch.float32, requires_grad=False).to(device)
         mse_res = mse_cost_function(res_out, all_zeros)
 
@@ -205,31 +202,47 @@ def train_pnet_model(p_net, optimizer, scheduler, mse_cost_function, iterations=
         mse_norm_res_input = mse_cost_function(norm_res_input, all_zeros)
 
         # Loss Function
-        loss = mse_u + 5.0*(mse_res + mse_norm_res_input)
+        loss = mse_u + mse_res + w_regular*mse_norm_res_input
+
+        # RAR
+        if (epoch%500 == 0 and FLAG):
+            x_RAR = (torch.rand(S, n_d, requires_grad=True) * (x_hig - x_low + 2*x_mar) + x_low-x_mar).to(device)
+            t_RAR = (torch.rand(S, 1, requires_grad=True) *   (tf - ti) + ti).to(device)
+            res_RAR = p_res_func(x_RAR, t_RAR, p_net)/max_abs_p_ti
+            mean_res_RAR = torch.mean(res_RAR**2)
+            print("mean res RAR:", mean_res_RAR.data)
+            if(mean_res_RAR > 0.0):
+                # Find the index of the maximum absolute value in res_RAR
+                max_abs_res, max_index = torch.max(torch.abs(res_RAR), dim=0)
+                # Get the corresponding x_RAR and t_RAR vectors
+                x_max = x_RAR[max_index]
+                t_max = t_RAR[max_index]
+                # Append x_max and t_max to x and t
+                x = torch.cat((x, x_max), dim=0)
+                t = torch.cat((t, t_max), dim=0)
+                print("... add [x,t]:", x_max.data, t_max.data, max_abs_res.data)
+                FLAG = False
+            # res_x_RAR = torch.autograd.grad(res_RAR, x_RAR, grad_outputs=torch.ones_like(res_RAR), create_graph=True)[0]
+            # res_t_RAR = torch.autograd.grad(res_RAR, t_RAR, grad_outputs=torch.ones_like(res_RAR), create_graph=True)[0]
+            # res_input_RAR = torch.cat([res_x_RAR, res_t_RAR], axis=1)
+            # norm_res_input_RAR = torch.norm(res_input_RAR, dim=1).view(-1,1)
+            # if(torch.mean(norm_res_input) > 0.0):
+            #     max_abs_res_input, max_index = torch.max(norm_res_input_RAR, dim=0)
+            #     # Get the corresponding x_RAR and t_RAR vectors
+            #     x_max = x_RAR[max_index]
+            #     t_max = t_RAR[max_index]
+            #     # Append x_max and t_max to x and t
+            #     x = torch.cat((x, x_max), dim=0)
+            #     t = torch.cat((t, t_max), dim=0)
+            #     print("... add [x,t]:", x_max.data, t_max.data, max_abs_res_input.data)
+            # FLAG = False
+
         loss_history.append(loss.data)
-
-        # Terminate training 
-        if(loss.data < pnet_terminate):
-            train_time = time.time() - start_time
-            print("save epoch:", epoch, ",loss:", loss.data, ",ic:", mse_u.data, ",res:", mse_res.data,
-                  "res grad:", mse_norm_res_input.data,
-                 )
-            torch.save({
-                    'epoch': epoch,
-                    'model_state_dict': p_net.state_dict(),
-                    'optimizer_state_dict': optimizer.state_dict(),
-                    'loss': loss.data,
-                    'label': "p_net",
-                    'train_time': train_time,
-                    }, PATH)
-            np.save(FOLDER+"output/p_net_train_loss.npy", np.array(loss_history))
-            return
-
+        
         # Save the min loss model
         if(loss.data < 0.95*min_loss):
-            train_time = time.time() - start_time
             print("save epoch:", epoch, ",loss:", loss.data, ",ic:", mse_u.data, ",res:", mse_res.data,
-                  "res grad:", mse_norm_res_input.data,
+                  "res input:", mse_norm_res_input.data,
                  )
             torch.save({
                     'epoch': epoch,
@@ -237,52 +250,39 @@ def train_pnet_model(p_net, optimizer, scheduler, mse_cost_function, iterations=
                     'optimizer_state_dict': optimizer.state_dict(),
                     'loss': loss.data,
                     'label': "p_net",
-                    'train_time': train_time,
                     }, PATH)
             min_loss = loss.data
             FLAG = True
 
-        # RAR
-        if (epoch%100 == 0 and FLAG):
-            x_RAR = (torch.rand(S, n_d, requires_grad=True) * (x_hig - x_low) + x_low).to(device)
-            t_RAR = (torch.rand(S, 1, requires_grad=True) *   (tf - ti) + ti).to(device)
-            t0_RAR = 0.0*t_RAR + ti
-            p_bc_RAR = p_init_torch(x_RAR)
-            phat_bc_RAR = p_net(x_RAR, t0_RAR)
-            max_ic_error = torch.max(torch.abs(phat_bc_RAR - p_bc_RAR))/normalize
-            print("RAR max IC: ", max_ic_error.data)
-            if(max_ic_error > 5e-3):
-                # max_abs_ic, max_index = torch.max(torch.abs(phat_bc_RAR - p_bc_RAR), dim=0)
-                max_abs_ic, max_index = torch.topk(torch.abs(phat_bc_RAR.squeeze() - p_bc_RAR.squeeze()), 5)
-                x_max = x_RAR[max_index,:].clone()
-                t_max = t0_RAR[max_index].clone()
-                x_bc = torch.cat((x_bc, x_max), dim=0)
-                t_bc = torch.cat((t_bc, t_max), dim=0)
-                # print("... IC add [x,t]:", x_max.data, t_max.data, max_abs_ic.data)
-
-            res_RAR = p_res_func(x_RAR, t_RAR, p_net)/normalize
-            max_res_RAR = torch.max(torch.abs(res_RAR))
-            print("RAR max RES:", max_res_RAR.data)
-            if(max_res_RAR > 5e-3):
-                # max_abs_res, max_index = torch.max(torch.abs(res_RAR), dim=0)
-                max_abs_res, max_index = torch.topk(torch.abs(res_RAR.squeeze()), 5)
-                x_max = x_RAR[max_index,:].clone()
-                t_max = t_RAR[max_index].clone()
-                x = torch.cat((x, x_max), dim=0)
-                t = torch.cat((t, t_max), dim=0)
-                # print("... add [x,t]:", x_max.data, t_max.data, max_abs_res.data)
-            np.save(FOLDER+"output/p_xsamples.npy", x.clone().data.cpu().numpy())
-            np.save(FOLDER+"output/p_tsamples.npy", t.clone().data.cpu().numpy())
-            FLAG = False
+        # terminate training 
+        if(loss.data < pnet_terminate):
+            print("save epoch:", epoch, ",loss:", loss.data, ",ic:", mse_u.data, ",res:", mse_res.data,
+                  "res input:", mse_norm_res_input.data,
+                 )
+            torch.save({
+                    'epoch': epoch,
+                    'model_state_dict': p_net.state_dict(),
+                    'optimizer_state_dict': optimizer.state_dict(),
+                    'loss': loss.data,
+                    'label': "p_net",
+                    }, PATH)
+            np.save(FOLDER+"output/p_net_train_loss.npy", np.array(loss_history))
+            return
 
         loss.backward(retain_graph=True) # This is for computing gradients using backward propagation
         optimizer.step() # This is equivalent to : theta_new = theta_old - alpha * derivative of J w.r.t theta
+
+        with torch.autograd.no_grad():
+            if (epoch%1000 == 0):
+                print(epoch,"Traning Loss:",loss.data)
+                np.save(FOLDER+"output/p_net_train_loss.npy", np.array(loss_history))
+
         # Exponential learning rate decay
         if (epoch + 1) % iterations_per_decay == 0:
             scheduler.step()
-    np.save(FOLDER+"output/p_net_train_loss.npy", np.array(loss_history))
 
 
+# 1. Test with _t_init samples
 def train_enet_model(p_net, e1_net, optimizer, scheduler, mse_cost_function, iterations=40000):
     global x_low, x_hig, t0, T_end
     ti = t0; tf = T_end
@@ -290,73 +290,64 @@ def train_enet_model(p_net, e1_net, optimizer, scheduler, mse_cost_function, ite
     loss_history = []
     iterations_per_decay = 1000
     PATH = FOLDER+"output/e1_net.pth"
+    x_mar = 0.0
 
+    # Define the mean and covariance matrix
+    mean = torch.tensor([-2.0])
+    covariance_matrix = torch.tensor([[0.5]])
+    mvn = torch.distributions.MultivariateNormal(mean, covariance_matrix)
     # space-time points for BC
-    x_bc = (torch.rand(1000, n_d) * (x_hig - x_low) + x_low).to(device);
+    x_bc = (torch.rand(600, n_d) * (x_hig - x_low) + x_low).to(device)
+    x_bc_normal = mvn.sample((600,))
+    x_bc = torch.cat((x_bc, x_bc_normal), dim=0)
     t_bc = (torch.ones(len(x_bc), 1) * ti).to(device)
     
     # space-time points for RES
-    x = (torch.rand(1000, n_d, requires_grad=True) * (x_hig - x_low) + x_low).to(device)
-    t = (torch.rand(1000, 1, requires_grad=True) *   (tf - ti) + ti).to(device)
-
-    normalize = e1_net.scale
+    x = (torch.rand(2500, n_d, requires_grad=True) * (x_hig - x_low + 2*x_mar) + x_low-x_mar).to(device)
+    _t_init = (torch.ones(50, 1, requires_grad=True) * ti).to(device)
+    t = (torch.rand(2450, 1, requires_grad=True) *   (tf - ti) + ti).to(device)
+    t = torch.cat((t, _t_init), dim=0)
     
-    # RAR
     FLAG = False
+    S = 100000
+    max_abs_e1_ti = e1_net.scale
+    # w_regular = 1e-2
 
-    start_time = time.time()
     for epoch in range(iterations):
         optimizer.zero_grad() # to make the gradients zero
 
         # Loss based on boundary conditions
-        p0 = p_init_torch(x_bc).detach()
-        p0_hat = p_net(x_bc, t_bc).to(device)
-        e0 = (p0 - p0_hat).detach()
-        e0_hat = e1_net(x_bc, t_bc)
-        mse_u = mse_cost_function(e0_hat/normalize, e0/normalize)
+        p0 = p_init(x_bc.detach().numpy())
+        p_bc = Variable(torch.from_numpy(p0).float(), requires_grad=False).to(device)
+        phat_bc = p_net(x_bc, t_bc)
+        u_bc = (p_bc - phat_bc)/max_abs_e1_ti
+        net_bc_out = e1_net(x_bc, t_bc)/max_abs_e1_ti
+        mse_u = mse_cost_function(net_bc_out, u_bc)
 
         # Loss based on PDE
-        diff_ehat = diff_e(x, t, e1_net)
-        diff_e_target = -p_res_func(x, t, p_net).detach()
-        mse_res = mse_cost_function(diff_ehat/normalize, diff_e_target/normalize)
+        all_zeros = torch.zeros((len(t),1), dtype=torch.float32, requires_grad=False).to(device)
+        res_out = e_res_func(x, t, e1_net, p_net)/max_abs_e1_ti
+        mse_res = mse_cost_function(res_out, all_zeros)
 
         # Frequnecy Loss
-        res_out = e_res_func(x, t, e1_net, p_net)/normalize
-        res_x = torch.autograd.grad(res_out, x, grad_outputs=torch.ones_like(res_out), create_graph=True)[0]
-        res_t = torch.autograd.grad(res_out, t, grad_outputs=torch.ones_like(res_out), create_graph=True)[0]
-        res_grad = torch.cat([res_x, res_t], axis=1)
-        all_zeros = torch.zeros((len(t),1), dtype=torch.float32, requires_grad=False).to(device)
-        norm_res_grad = torch.norm(res_grad, dim=1).view(-1,1)
-        mse_res_grad = mse_cost_function(norm_res_grad, all_zeros)
+        # res_x = torch.autograd.grad(res_out, x, grad_outputs=torch.ones_like(res_out), create_graph=True)[0]
+        # res_t = torch.autograd.grad(res_out, t, grad_outputs=torch.ones_like(res_out), create_graph=True)[0]
+        # res_input = torch.cat([res_x, res_t], axis=1)
+        # norm_res_input = torch.norm(res_input, dim=1).view(-1,1)
+        # mse_norm_res_input = mse_cost_function(norm_res_input, all_zeros)
         
         # Combining the loss functions
-        loss = mse_u + 5.0*(mse_res + mse_res_grad)
-        loss_history.append(loss.item())
+        loss = mse_u + mse_res# + mse_norm_res_input
 
-        # Terminaion
-        if(loss.data < enet_terminate):
-            print("e1net best epoch:", epoch, ", loss:", loss.data, 
-                  ",ic:", mse_u.data, 
-                  ",res:", mse_res.data,
-                  ",res grad:", mse_res_grad.data
-                  )
-            torch.save({
-                    'epoch': epoch,
-                    'model_state_dict': e1_net.state_dict(),
-                    'optimizer_state_dict': optimizer.state_dict(),
-                    'loss': loss.data,
-                    'label': "e1_net",
-                    'train_time': time.time() - start_time
-                    }, PATH)
-            np.save(FOLDER+"output/e1_net_train_loss.npy", np.array(loss_history))
-            return
+        if (epoch%1000 == 0):
+            print(epoch,"Traning Loss:",loss.data)
 
         # Save the min loss model
         if(loss.data < 0.95*min_loss):
             print("e1net best epoch:", epoch, ", loss:", loss.data, 
                   ",ic:", mse_u.data, 
                   ",res:", mse_res.data,
-                  ",res grad:", mse_res_grad.data
+                  #",res freq:", mse_norm_res_input.data
                   )
             torch.save({
                     'epoch': epoch,
@@ -364,53 +355,85 @@ def train_enet_model(p_net, e1_net, optimizer, scheduler, mse_cost_function, ite
                     'optimizer_state_dict': optimizer.state_dict(),
                     'loss': loss.data,
                     'label': "e1_net",
-                    'train_time': time.time() - start_time
                     }, PATH)
             min_loss = loss.data 
             FLAG = True
 
+        # Terminaion
+        if(loss.data < enet_terminate):
+            print("e1net best epoch:", epoch, ", loss:", loss.data, 
+                  ",ic:", mse_u.data, 
+                  ",res:", mse_res.data,
+                  #",res freq:", mse_norm_res_input.data
+                  )
+            torch.save({
+                    'epoch': epoch,
+                    'model_state_dict': e1_net.state_dict(),
+                    'optimizer_state_dict': optimizer.state_dict(),
+                    'loss': loss.data,
+                    'label': "e1_net",
+                    }, PATH)
+            np.save(FOLDER+"output/e1_net_train_loss.npy", np.array(loss_history))
+            return
+
         # RAR
-        if (epoch%100 == 0 and FLAG):
-            x_RAR = (torch.rand(S, n_d, requires_grad=True) * (x_hig - x_low) + x_low).to(device)
+        if (epoch%1000 == 0 and FLAG):
             t_RAR = (torch.rand(S, 1, requires_grad=True) *   (tf - ti) + ti).to(device)
+            _t_i_RAR = (torch.ones(100, 1, requires_grad=True) * ti).to(device)
+            t_RAR = torch.cat((t_RAR, _t_i_RAR), dim=0)
+            x_RAR = (torch.rand(len(t_RAR), n_d, requires_grad=True) * (x_hig - x_low + 2*x_mar) + x_low-x_mar).to(device)
             t0_RAR = 0.0*t_RAR + ti
-            ic_hat_RAR = e1_net(x_RAR, t0_RAR)/normalize
-            p_bc_RAR = p_init_torch(x_RAR)
+            
+            ic_hat_RAR = e1_net(x_RAR, t0_RAR)/max_abs_e1_ti
+            p0_RAR = p_init(x_RAR.detach().numpy())
+            p_bc_RAR = Variable(torch.from_numpy(p0_RAR).float(), requires_grad=False).to(device)
             phat_bc_RAR = p_net(x_RAR, t0_RAR)
-            ic_RAR = (p_bc_RAR - phat_bc_RAR)/normalize
-            max_ic_error = torch.max(torch.abs(ic_RAR - ic_hat_RAR))
-            print("RAR max IC: ", max_ic_error.data)
-            if(max_ic_error > 5e-3):
-                # max_abs_ic, max_index = torch.max(torch.abs(ic_RAR - ic_hat_RAR), dim=0)
-                ic_diff = ic_RAR - ic_hat_RAR
-                max_abs_ic, max_index = torch.topk(torch.abs(ic_diff.squeeze()), 5)
-                x_max = x_RAR[max_index,:].clone()
-                t_max = t0_RAR[max_index].clone()
+            ic_RAR = (p_bc_RAR - phat_bc_RAR)/max_abs_e1_ti
+            mean_ic_error = torch.mean(torch.abs(ic_RAR - ic_hat_RAR))
+            print("RAR mean IC: ", mean_ic_error.data)
+            if(mean_ic_error > 5e-3):
+                max_abs_ic, max_index = torch.max(torch.abs(ic_RAR - ic_hat_RAR), dim=0)
+                x_max = x_RAR[max_index].clone().detach()
+                t_max = t0_RAR[max_index].clone().detach()
                 x_bc = torch.cat((x_bc, x_max), dim=0)
                 t_bc = torch.cat((t_bc, t_max), dim=0)
-                # print("... IC add [x,t]:", x_max.data, t_max.data, max_abs_ic.data)
+                print("... IC add [x,t]:", x_max.data, t_max.data, ". max ic value: ", max_abs_ic.data)
+                FLAG = False
 
-            res_RAR = e_res_func(x_RAR, t_RAR, e1_net, p_net)/normalize
-            max_res_error = torch.max(torch.abs(res_RAR))
-            print("RAR max RES: ", max_res_error.data)
-            if(max_res_error > 5e-3):
-                # max_abs_res, max_index = torch.max(torch.abs(res_RAR), dim=0)
-                max_abs_res, max_index = torch.topk(torch.abs(res_RAR.squeeze()), 5)
-                x_max = x_RAR[max_index,:].clone()
-                t_max = t_RAR[max_index].clone()
+            res_RAR = e_res_func(x_RAR, t_RAR, e1_net, p_net)/max_abs_e1_ti
+            mean_res_error = torch.mean(torch.abs(res_RAR))
+            print("RAR mean res: ", mean_res_error.data)
+            if(mean_res_error > 5e-3):
+                max_abs_res, max_index = torch.max(torch.abs(res_RAR), dim=0)
+                x_max = x_RAR[max_index]
+                t_max = t_RAR[max_index]
                 x = torch.cat((x, x_max), dim=0)
                 t = torch.cat((t, t_max), dim=0)
-                # print("... RES add [x,t]:", x_max.data, t_max.data, max_abs_res.data)
-            np.save(FOLDER+"output/e1_xsamples.npy", x.clone().data.cpu().numpy())
-            np.save(FOLDER+"output/e1_tsamples.npy", t.clone().data.cpu().numpy())
-            FLAG = False
+                print("... RES add [x,t]:", x_max.data, t_max.data, ". max res value: ", max_abs_res.data)
+                FLAG = False
 
+            # res_x_RAR = torch.autograd.grad(res_RAR, x_RAR, grad_outputs=torch.ones_like(res_RAR), create_graph=True)[0]
+            # res_t_RAR = torch.autograd.grad(res_RAR, t_RAR, grad_outputs=torch.ones_like(res_RAR), create_graph=True)[0]
+            # res_input_RAR = torch.cat([res_x_RAR, res_t_RAR], axis=1)
+            # norm_res_input_RAR = torch.norm(res_input_RAR, dim=1).view(-1,1)
+            # mean_res_input_error = torch.mean(norm_res_input)
+            # print("RAR mean res input: ", mean_res_input_error.data)
+            # if(mean_res_input_error > 5e-3):
+            #     max_abs_res_input, max_index = torch.max(norm_res_input_RAR, dim=0)
+            #     x_max = x_RAR[max_index]
+            #     t_max = t_RAR[max_index]
+            #     x = torch.cat((x, x_max), dim=0)
+            #     t = torch.cat((t, t_max), dim=0)
+            #     print("... RES_INPUT add [x,t]:", x_max.data, t_max.data, ". max res value: ", max_abs_res_input.data)
+            #     FLAG = False
+
+        loss_history.append(loss.data)
         loss.backward(retain_graph=True) 
         optimizer.step()
+        
         # Exponential learning rate decay
         if (epoch + 1) % iterations_per_decay == 0:
             scheduler.step()
-
     np.save(FOLDER+"output/e1_net_train_loss.npy", np.array(loss_history))
 
 
@@ -419,7 +442,7 @@ def load_trained_model(net, PATH, PATH_LOSS):
     net.load_state_dict(checkpoint['model_state_dict'])
     epoch = checkpoint['epoch']
     loss = checkpoint['loss']
-    print(checkpoint['label'] + " best epoch: ", epoch, ", loss:", loss.data, ", train time: ", checkpoint['train_time'])
+    print(checkpoint['label'] + " best epoch: ", epoch, ", loss:", loss.data)
     loss_history = np.load(PATH_LOSS)
     min_loss = min(loss_history)
     plt.figure()
@@ -432,55 +455,35 @@ def load_trained_model(net, PATH, PATH_LOSS):
     return net
 
 
-class ScalarFormatterClass(ScalarFormatter):
-    def _set_format(self):
-       self.format = "%1.1f"
-
-
 def show_results(pnet, enet):
     x = np.load(DATA_FOLDER + datas[0] + "xsim.npy").reshape(-1,1)
     pt_x = Variable(torch.from_numpy(x).float(), requires_grad=True).to(device)
     limit_margin = 0.0
 
-    # Create a ScalarFormatter object
-    formatter = ScalarFormatter()
-    formatter.set_scientific(True)
-
     p_monte_list = []
     p_hat_list = []
     e1_list = []
     e1_hat_list = []
-    e2_list = []
-    e2_hat_list = []
     p_res_list = []
     e_res_list = []
-    e2_res_list = []
     for t1 in t1s:
         p_monte = np.load(DATA_FOLDER + datas[0] + "psim_t" + str(t1) + ".npy").reshape(-1, 1)
         # if(t1 == 0.0): p_monte = p_init(x)
         p_monte_list.append(p_monte)
         pt_t1 = Variable(torch.from_numpy(x*0+t1).float(), requires_grad=True).to(device)
         phat = pnet(pt_x, pt_t1)
-        ehat = enet(pt_x, pt_t1)[:,0].view(-1,1)
-        #e2hat = enet(pt_x, pt_t1)[:,1].view(-1,1)
+        ehat = enet(pt_x, pt_t1)
         pres = p_res_func(pt_x, pt_t1, pnet).data.cpu().numpy()
         eres = e_res_func(pt_x, pt_t1, enet, pnet).data.cpu().numpy()
-        # e2res = e2_res_func(pt_x, pt_t1, enet, pnet).data.cpu().numpy()
         
         phat = phat.data.cpu().numpy() # change tensor to numpy
         ehat = ehat.data.cpu().numpy() # change tensor to numpy
-        #e2hat = e2hat.data.cpu().numpy()
         p_hat_list.append(phat)
         e1 = p_monte - phat
         e1_list.append(e1)
         e1_hat_list.append(ehat)
-        # e2 = e1 - ehat
-        # e2_list.append(e2)
-        # e2_hat_list.append(e2hat)
-
         p_res_list.append(pres)
         e_res_list.append(eres)
-        # e2_res_list.append(e2res)
 
     global_max = float('-inf')
     for i, (phat) in enumerate(zip(p_hat_list)):
@@ -514,7 +517,7 @@ def show_results(pnet, enet):
         if i == 0:
             ax1.legend(loc="upper right")
 
-        ax1.set_xlim([x_low, x_hig])
+        ax1.set_xlim([-4.5, 4.5])
         ax1.set_ylim(0.0, global_max+limit_margin)
         ax1.grid(True, which='both', linestyle='-', linewidth=0.5)
         ax1.text(0.01, 0.98, r"$t:$ "+str(t1s[i]) + r", $e_S:$ "+str(eL), 
@@ -523,6 +526,36 @@ def show_results(pnet, enet):
     plt.tight_layout()
     fig.savefig(FOLDER+'figs/phat_eS.pdf', format='pdf', dpi=300)
     plt.close()
+
+    # global_max = float('-inf')
+    # for i, (pres) in enumerate(zip(p_res_list)):
+    #     max_value = np.max(np.abs(pres))
+    #     global_max = max(global_max, max_value)
+    # fig, axs = plt.subplots(3, 2, figsize=(8, 6))
+    # for i in range(0,6):
+    #     pres = p_res_list[i]
+    #     if i == 0:
+    #         ax1 = axs[0,0]
+    #     if i == 1:
+    #         ax1 = axs[1,0]
+    #     if i == 2:
+    #         ax1 = axs[2,0]
+    #     if i == 3:
+    #         ax1 = axs[0,1]
+    #     if i == 4:
+    #         ax1 = axs[1,1]
+    #     if i == 5:
+    #         ax1 = axs[2,1]
+    #     if i == 0:
+    #         ax1.plot(x, pres, "red", linestyle="--", label=r"$r_1$")
+    #         ax1.legend()  # Add legend only to the first subplot
+    #     else:
+    #         ax1.plot(x, pres, "red", linestyle="--")
+    #     ax1.set_ylim([-global_max, global_max])
+    #     ax1.grid(True, which='both', linestyle='-', linewidth=0.5)
+    # plt.tight_layout()
+    # plt.savefig(FOLDER+"figs/pnet_res.png")
+    # plt.close()
 
     global_max = float('-inf')
     for i, (e1_true, e1_hat) in enumerate(zip(e1_list, e1_hat_list)):
@@ -560,28 +593,24 @@ def show_results(pnet, enet):
         if i == 0:
             ax1.legend(loc="upper right")
 
-        ax1.set_xlim([x_low, x_hig])
-        # ax1.set_ylim(-(1.5*eL), 1.5*eL)
-        ax1.set_ylim(-(global_max), global_max)
+        ax1.set_xlim([-4.5, 4.5])
+        ax1.set_ylim(-(1.5*eL), 1.5*eL)
         ax1.grid(True, which='both', linestyle='-', linewidth=0.5)
         ax1.text(0.01, 0.98, r"$t:$ "+str(t1s[i]) + r", $\alpha_1:$ "+str(alpha), 
                   transform=ax1.transAxes, verticalalignment='top', fontsize=8,
                   bbox=dict(facecolor='white', edgecolor='black', boxstyle='round,pad=0.2'))
-        # Set y-axis to scientific notation
-        yScalarFormatter = ScalarFormatterClass(useMathText=True)
-        yScalarFormatter.set_powerlimits((0,0))
-        ax1.yaxis.set_major_formatter(yScalarFormatter)
     plt.tight_layout()
     fig.savefig(FOLDER+'figs/e1hat_eS.pdf', format='pdf', dpi=300)
     plt.close()
 
     global_max = float('-inf')
-    for i, (eres, pres) in enumerate(zip(e_res_list, p_res_list)):
-        max_value = max(np.max(np.abs(pres/pnet.scale)), 0.0)
+    for i, (e1hat, eres, pres) in enumerate(zip(e1_hat_list, e_res_list, p_res_list)):
+        max_value = max(np.max(np.abs(pres)), 0.0)
         global_max = max(global_max, max_value)
     fig, axs = plt.subplots(3, 2, figsize=(7, 6))
     for i in range(0,6):
         pres = p_res_list[i]
+        eres = e_res_list[i]
         if i == 0:
             ax1 = axs[0,0]
             ax1.set_ylabel("Error")
@@ -600,56 +629,17 @@ def show_results(pnet, enet):
             ax1 = axs[2,1]
             ax1.set_xlabel("x")
         if i == 0:
-            ax1.plot(x, pres/pnet.scale, "red", linewidth=1.0, linestyle="--", label=r"$D[\hat{e}_1]$")
-            #ax1.plot(x, pres, "black", linewidth=1.0, linestyle="-", label=r"$-D[\hat{p}]$")
+            ax1.plot(x, eres-pres, "red", linewidth=1.0, linestyle="--", label=r"$D[\hat{e}_1]$")
+            ax1.plot(x, -pres, "black", linewidth=1.0, linestyle="-", label=r"$-D[\hat{p}]$")
             ax1.legend()  # Add legend only to the first subplot
         else:
-            ax1.plot(x, pres/pnet.scale, "red", linewidth=1.0, linestyle="--")
-            #ax1.plot(x, -pres, "black", linewidth=1.0, linestyle="-")
+            ax1.plot(x, eres-pres, "red", linewidth=1.0, linestyle="--")
+            ax1.plot(x, -pres, "black", linewidth=1.0, linestyle="-")
         ax1.set_ylim([-global_max, global_max])
         ax1.grid(True, which='both', linestyle='-', linewidth=0.5)
     plt.tight_layout()
     # plt.savefig(FOLDER+"figs/enet_res.png")
-    fig.savefig(FOLDER+'figs/p_res.pdf', format='pdf', dpi=300)
-    plt.close()
-
-    global_max = float('-inf')
-    for i, (e1hat, eres, pres) in enumerate(zip(e1_hat_list, e_res_list, p_res_list)):
-        max_value = max(np.max(np.abs(eres/enet.scale)), 0.0)**2
-        global_max = max(global_max, max_value)
-    fig, axs = plt.subplots(3, 2, figsize=(7, 6))
-    for i in range(0,6):
-        pres = p_res_list[i]
-        eres = e_res_list[i]/enet.scale
-        if i == 0:
-            ax1 = axs[0,0]
-            ax1.set_ylabel("Error")
-        if i == 1:
-            ax1 = axs[1,0]
-            ax1.set_ylabel("Error")
-        if i == 2:
-            ax1 = axs[2,0]
-            ax1.set_xlabel("x")
-            ax1.set_ylabel("Error")
-        if i == 3:
-            ax1 = axs[0,1]
-        if i == 4:
-            ax1 = axs[1,1]
-        if i == 5:
-            ax1 = axs[2,1]
-            ax1.set_xlabel("x")
-        if i == 0:
-            ax1.plot(x, eres**2, "red", linewidth=1.0, linestyle="--", label=r"$r_2^2$")
-            #ax1.plot(x, -pres, "black", linewidth=1.0, linestyle="-", label=r"$-D[\hat{p}]$")
-            ax1.legend()  # Add legend only to the first subplot
-        else:
-            ax1.plot(x, eres**2, "red", linewidth=1.0, linestyle="--")
-            #ax1.plot(x, -pres, "black", linewidth=1.0, linestyle="-")
-        # ax1.set_ylim([0, global_max])
-        ax1.grid(True, which='both', linestyle='-', linewidth=0.5)
-    plt.tight_layout()
-    # plt.savefig(FOLDER+"figs/enet_res.png")
-    fig.savefig(FOLDER+'figs/e1_res.pdf', format='pdf', dpi=300)
+    fig.savefig(FOLDER+'figs/enet_res.pdf', format='pdf', dpi=300)
     plt.close()
 
 
@@ -770,54 +760,27 @@ def plot_pres_surface(p_net, num=100):
     x_mesh, t_mesh = np.meshgrid(x,t)
     pt_x = Variable(torch.from_numpy(x_mesh.reshape(-1,1)).float(), requires_grad=True).to(device)
     pt_t = Variable(torch.from_numpy(t_mesh.reshape(-1,1)).float(), requires_grad=True).to(device)
-    pres = p_res_func(pt_x, pt_t, p_net).data.cpu().numpy().reshape(num, -1)/p_net.scale
+    pres = p_res_func(pt_x, pt_t, p_net).data.cpu().numpy().reshape(num, -1)
+
+    p_list = []
+    x_monte = np.load(DATA_FOLDER + datas[0] + "xsim.npy").reshape(-1,1)
+    pt_x_monte = Variable(torch.from_numpy(x_monte).float(), requires_grad=True).to(device)
+    for t1 in t1s:
+        p_monte = np.load(DATA_FOLDER + datas[0] + "psim_t" + str(t1) + ".npy").reshape(-1, 1)
+        p_list.append(p_monte)
 
     fig = plt.figure(figsize=(6,6))
     ax = fig.add_subplot(111, projection='3d')
-    ax.plot_surface(x_mesh, t_mesh, pres**2, cmap='Greys', alpha=0.8, label=r"$r_1^2$")
-    x_samples = np.load(FOLDER+"output/p_xsamples.npy")
-    t_samples = np.load(FOLDER+"output/p_tsamples.npy")
-    z_max = 1.0*np.max(pres**2)
-    ax.scatter(x_samples, t_samples, t_samples*0+z_max, marker="o", color="blue", s=2.0, alpha=0.05, label='sample points')
+    ax.plot_surface(x_mesh, t_mesh, pres, cmap='viridis', alpha=0.8, label=r"$D[\hat{p}]$")
     ax.set_xlabel("x")
     ax.set_ylabel("t"); 
     ax.set_zlabel('r')
     ax.legend()
-    ax.view_init(40, -60)
-    zScalarFormatter = ScalarFormatterClass(useMathText=True)
-    zScalarFormatter.set_powerlimits((0,0))
-    ax.zaxis.set_major_formatter(zScalarFormatter)
+    ax.view_init(20, -60)
+    # y_ticks = np.array([1, 2, 3])  # Example y-tick positions
+    # ax.set_yticks(y_ticks)  # Set the positions of the y-ticks
     plt.subplots_adjust(left=0.08, right=0.92, top=0.92, bottom=0.08)
     fig.savefig(FOLDER+'figs/pres_surface_plot.pdf', format='pdf', dpi=300)
-
-
-def plot_e1res_surface(p_net, e1_net, num=100):
-    x = np.linspace(x_low, x_hig, num=num, endpoint=True)
-    t = np.linspace(t0, T_end, num=num, endpoint=True)
-    x_mesh, t_mesh = np.meshgrid(x,t)
-    pt_x = Variable(torch.from_numpy(x_mesh.reshape(-1,1)).float(), requires_grad=True).to(device)
-    pt_t = Variable(torch.from_numpy(t_mesh.reshape(-1,1)).float(), requires_grad=True).to(device)
-    e1res = e_res_func(pt_x, pt_t, e1_net, p_net).data.cpu().numpy().reshape(num, -1)
-    e1res = e1res/e1_net.scale
-
-    fig = plt.figure(figsize=(6,6))
-    ax = fig.add_subplot(111, projection='3d')
-    ax.plot_surface(x_mesh, t_mesh, e1res**2, cmap='Greys', alpha=0.8, label=r"$r_2^2$")
-    x_samples = np.load(FOLDER+"output/e1_xsamples.npy")
-    t_samples = np.load(FOLDER+"output/e1_tsamples.npy")
-    z_max = 1.0*np.max(e1res**2)
-    ax.scatter(x_samples, t_samples, t_samples*0+z_max, marker="o", color="blue", s=2.0, alpha=0.05, label='sample points')
-    # ax.scatter(x_samples[-1], t_samples[-1], z_max, marker="x", color="red", s=10.0, label='Max Points')
-    ax.set_xlabel("x")
-    ax.set_ylabel("t"); 
-    ax.set_zlabel(r"$r_2^2$")
-    ax.legend()
-    ax.view_init(40, -60)
-    zScalarFormatter = ScalarFormatterClass(useMathText=True)
-    zScalarFormatter.set_powerlimits((0,0))
-    ax.zaxis.set_major_formatter(zScalarFormatter)
-    plt.subplots_adjust(left=0.08, right=0.92, top=0.92, bottom=0.08)
-    fig.savefig(FOLDER+'figs/e1res_surface_plot.pdf', format='pdf', dpi=300)
 
 
 def plot_train_loss(path_1, path_2):
@@ -825,6 +788,7 @@ def plot_train_loss(path_1, path_2):
     min_loss_1 = min(loss_history_1)
     loss_history_2 = np.load(path_2)
     min_loss_2 = min(loss_history_2)
+    print(loss_history_2)
     fig, axs = plt.subplots(2, 1, figsize=(7, 6))
     axs[0].plot(np.arange(len(loss_history_1)), loss_history_1, "black", linewidth=1.0)
     axs[0].set_ylim([min_loss_1, 10*min_loss_1])
@@ -841,43 +805,79 @@ def plot_train_loss(path_1, path_2):
 
 
 def main():
-    # plot_p_monte()
+    plot_p_monte()
     mse_cost_function = torch.nn.MSELoss()
     
     p_model = PNet().to(device)
-    e_model = E1Net().to(device)
-    p_model.apply(init_weights_He)
-    e_model.apply(init_weights_He)
+    e_model = ENet().to(device)
+    p_model.apply(init_weights)
+    e_model.apply(init_weights)
     optimizer_p_model = torch.optim.Adam(p_model.parameters())
     optimizer_e_model = torch.optim.Adam(e_model.parameters())
     scheduler_p_model = torch.optim.lr_scheduler.ExponentialLR(optimizer_p_model, gamma=0.95)
     scheduler_e_model = torch.optim.lr_scheduler.ExponentialLR(optimizer_e_model, gamma=0.95)
     
-    p_model.scale = get_p_normalize()
-    if(TRAIN_FLAG):
-        train_pnet_model(p_model, optimizer_p_model, scheduler_p_model, mse_cost_function, iterations=15000); print("[p_net train complete]")
+    p_model.normalize = get_p_normalize()
+    start_time = time.time()
+    # train_pnet_model(p_model, optimizer_p_model, scheduler_p_model, mse_cost_function, iterations=50000); print("[p_net train complete]")
+    end_time = time.time()
+    time_train_p = end_time - start_time
     p_model = load_trained_model(p_model, PATH=FOLDER+"output/p_net.pth", PATH_LOSS=FOLDER+"output/p_net_train_loss.npy")
     p_model.eval()
 
     e_model.scale = get_e1_normalize(p_model)
-    if(TRAIN_FLAG):
-        train_enet_model(p_model, e_model, optimizer_e_model, scheduler_e_model, mse_cost_function, iterations=25000); print("[e1_net train complete]")
+    print("enet scale: ", e_model.scale)
+    start_time = time.time()
+    # train_enet_model(p_model, e_model, optimizer_e_model, scheduler_e_model, mse_cost_function, iterations=1000000); print("[e1_net train complete]")
+    end_time = time.time()
+    time_train_e = end_time - start_time
     e_model = load_trained_model(e_model, PATH=FOLDER+"output/e1_net.pth", PATH_LOSS=FOLDER+"output/e1_net_train_loss.npy")
     e_model.eval()
-
     show_results(p_model, e_model)
+
+    print(f"train pnet time: {time_train_p:.4f} seconds")
+    print(f"train enet time: {time_train_e:.4f} seconds")
+
     plot_p_surface(p_model)
     plot_pres_surface(p_model)
     plot_e1_surface(p_model, e_model)
-    plot_e1res_surface(p_model, e_model)
     plot_train_loss(FOLDER+"output/p_net_train_loss.npy", 
                     FOLDER+"output/e1_net_train_loss.npy")
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Pass 1 to train, 0 to use the pre-trained models")
-    parser.add_argument("--train", type=int, required=True, help="train bool")
-    args = parser.parse_args()
-    # Modify the TRAIN_FLAG
-    TRAIN_FLAG = args.train
     main()
+
+
+# Log
+# p_net best epoch:  14540 , loss: tensor(9.9996e-05)
+# e1_net best epoch:  7866 , loss: tensor(0.0005)
+# eL:  0.032 	 alpha:  0.036
+# eL:  0.047 	 alpha:  0.157
+# eL:  0.039 	 alpha:  0.181
+# eL:  0.034 	 alpha:  0.131
+# eL:  0.029 	 alpha:  0.219
+# eL:  0.024 	 alpha:  0.287
+# train pnet time: 1634.4859 seconds
+# train enet time: 335.1071 seconds
+
+# save epoch: 0 ,loss: tensor(5.1993) ,ic: tensor(0.1656) ,res: tensor(4.1181) res input: tensor(0.9157)
+# 0 Traning Loss: tensor(5.1993)
+# save epoch: 1 ,loss: tensor(3.6747) ,ic: tensor(0.1510) ,res: tensor(2.8863) res input: tensor(0.6374)
+# save epoch: 2 ,loss: tensor(2.5961) ,ic: tensor(0.1468) ,res: tensor(2.0087) res input: tensor(0.4406)
+# save epoch: 3 ,loss: tensor(1.8463) ,ic: tensor(0.1493) ,res: tensor(1.3935) res input: tensor(0.3035)
+# save epoch: 4 ,loss: tensor(1.3320) ,ic: tensor(0.1555) ,res: tensor(0.9672) res input: tensor(0.2093)
+# save epoch: 5 ,loss: tensor(0.9821) ,ic: tensor(0.1636) ,res: tensor(0.6737) res input: tensor(0.1448)
+# save epoch: 6 ,loss: tensor(0.7453) ,ic: tensor(0.1723) ,res: tensor(0.4721) res input: tensor(0.1009)
+# save epoch: 7 ,loss: tensor(0.5853) ,ic: tensor(0.1809) ,res: tensor(0.3335) res input: tensor(0.0709)
+# save epoch: 8 ,loss: tensor(0.4772) ,ic: tensor(0.1889) ,res: tensor(0.2380) res input: tensor(0.0503)
+# save epoch: 9 ,loss: tensor(0.4040) ,ic: tensor(0.1961) ,res: tensor(0.1718) res input: tensor(0.0362)
+# save epoch: 10 ,loss: tensor(0.3544) ,ic: tensor(0.2025) ,res: tensor(0.1255) res input: tensor(0.0264)
+# save epoch: 11 ,loss: tensor(0.3205) ,ic: tensor(0.2081) ,res: tensor(0.0930) res input: tensor(0.0195)
+# save epoch: 12 ,loss: tensor(0.2973) ,ic: tensor(0.2130) ,res: tensor(0.0698) res input: tensor(0.0146)
+# save epoch: 13 ,loss: tensor(0.2814) ,ic: tensor(0.2172) ,res: tensor(0.0532) res input: tensor(0.0111)
+# save epoch: 15 ,loss: tensor(0.2627) ,ic: tensor(0.2239) ,res: tensor(0.0322) res input: tensor(0.0067)
+# save epoch: 19 ,loss: tensor(0.2493) ,ic: tensor(0.2325) ,res: tensor(0.0139) res input: tensor(0.0029)
+# save epoch: 359 ,loss: tensor(0.2368) ,ic: tensor(0.2307) ,res: tensor(0.0054) res input: tensor(0.0007)
+# save epoch: 459 ,loss: tensor(0.2249) ,ic: tensor(0.2168) ,res: tensor(0.0070) res input: tensor(0.0011)
+# save epoch: 495 ,loss: tensor(0.2137) ,ic: tensor(0.2037) ,res: tensor(0.0080) res input: tensor(0.0020)
