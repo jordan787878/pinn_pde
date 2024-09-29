@@ -540,34 +540,36 @@ def fit_function(x, C1, C2):
 
 def plot_alpha_data():
     data_folder = "exp1/main_alphas/"
-    max_alpha_to_fit = 2.5
-    max_total_loss_to_fit = 0.5
-    num_runs = 5
+    max_alpha_to_fit = 300.0
+    max_total_loss_to_fit = 100.0
+    num_runs = 6
 
-    plt.figure()
+    plt.figure(figsize=(7, 6))
+    plt.axhline(y=1, color="black", linestyle='-', linewidth=2, label="condition of constructing " + r"$e_S$")
     X = []
     Y = []
     X1 = []
     X2 = []
     for i in range(0, num_runs):
-        if(i <= 4):
-            data_folder_seedi = data_folder  + "seed" + str(i) + "/"
-            # data_folder_seedi = FOLDER
-            Nsample_array = np.load(data_folder_seedi+"output/e1_Nsample_list.npy")
-            Loss_1_array = np.load(data_folder_seedi+"output/e1_Loss_1_list.npy")
-            Alpha_array = np.load(data_folder_seedi+"output/e1_Alpha_list.npy")
+        data_folder_seedi = data_folder  + "seed" + str(i) + "/"
+        # data_folder_seedi = FOLDER
+        Nsample_array = np.load(data_folder_seedi+"output/e1_Nsample_list.npy")
+        Loss_1_array = np.load(data_folder_seedi+"output/e1_Loss_1_list.npy")
+        Alpha_array = np.load(data_folder_seedi+"output/e1_Alpha_list.npy")
 
-            mask_1 = Alpha_array < max_alpha_to_fit
-            mask_2 = (Loss_1_array) < max_total_loss_to_fit
-            mask = mask_1 & mask_2
+        mask_1 = Alpha_array < max_alpha_to_fit
+        mask_2 = (Loss_1_array) < max_total_loss_to_fit
+        mask = mask_1 & mask_2
 
-            Loss_1_array = Loss_1_array[mask]
-            Alpha_array = Alpha_array[mask]
-            x_data = Loss_1_array
-            y_data = Alpha_array
-            plt.plot(x_data, y_data, marker='o', linestyle='--', linewidth=0.5, markersize=1, label="seed"+str(i)) # , label="run seed"+str(i))
-            X.append(x_data)
-            Y.append(y_data)
+        Loss_1_array = Loss_1_array[mask]
+        Alpha_array = Alpha_array[mask]
+        x_data = Loss_1_array
+        y_data = Alpha_array
+        plt.plot(x_data, y_data, marker='o', linestyle='--', linewidth=0.5, markersize=1, label="seed"+str(i)) # , label="run seed"+str(i))
+        plt.yscale('log')
+        plt.xscale('log')
+        X.append(x_data)
+        Y.append(y_data)
 
     # Fit the model
     X = np.concatenate(X)
@@ -580,11 +582,11 @@ def plot_alpha_data():
     # xs = np.linspace(np.min(X), np.max(X), num=100)
     # ys = C1 * np.sqrt(xs) + C2
     # plt.plot(xs, ys, color="black", linewidth=0.5, linestyle="--", label="fit line")
-
+    plt.gca().invert_xaxis()
     plt.grid(linewidth=0.5)
-    plt.xlabel("training loss")
-    plt.ylabel(r"max $\alpha_1$")
-    plt.legend(loc="upper left")
+    plt.xlabel(r"$\hat{e}_1$" + " training loss")
+    plt.ylabel(r"$\max_{\tau} (\alpha_1(t))$")
+    plt.legend(loc="upper right")
     plt.tight_layout()
     plt.savefig(FOLDER+'figs/alpha_vs_loss.pdf', format='pdf', dpi=300)
     plt.close()
@@ -605,29 +607,11 @@ def plot_training_loss_data():
     plt.close()
 
 
-def plot_position_encoding():
-    x = np.linspace(x_low, x_hig, num=100)
-    d = 128
-    n = 100
-    plt.figure()
-    for i in range(int(d/2)):
-        w_i = (1/pow(n, 2*i/d))
-        x_sin_i = np.sin(w_i*x)
-        plt.plot(x, x_sin_i, label=str(i))
-    plt.legend()
-    plt.show()
 
-
-def debug(p_net, e_net):
-    x = torch.ones(1, 1, requires_grad=True)*(-6.0)
-    t = torch.ones(1, 1, requires_grad=True)*(0.0)
-    e_res = e_res_func(x, t, p_net, e_net)/e_net.scale
-    print("debug: ", x.data, t.data, e_res.data)
 
 
 def main():
     torch.cuda.empty_cache()
-    # plot_position_encoding()
     # plot_p_monte()
     
     p_model = PNet().to(device)
@@ -641,15 +625,14 @@ def main():
     print("enet scale: ", e_model.scale)
     e_model = load_trained_model(e_model, PATH=FOLDER+"output/e1_net.pth", PATH_LOSS=FOLDER+"output/e1_net_train_loss.npy")
     e_model.eval()
-    show_results(p_model, e_model)
+    
+    #show_results(p_model, e_model)
     torch.cuda.empty_cache()
-
-    # debug(p_model, e_model)
 
     # plot_training_loss_data()
     # plot_p_surface(p_model)
-    plot_pres_surface(p_model)
-    plot_e1res_surface(p_model, e_model)
+    # plot_pres_surface(p_model)
+    # plot_e1res_surface(p_model, e_model)
     # # plot_train_loss(FOLDER+"output/p_net_train_loss.npy", 
     # #                 FOLDER+"output/e1_net_train_loss.npy")
     plot_alpha_data()
@@ -660,65 +643,3 @@ def main():
 if __name__ == "__main__":
     main()
     
-
-# Log
-# seed 0:
-# p_net best epoch   :  26871 , loss: tensor(4.9806e-05)
-# p_net training time:  5821.863755941391
-# enet scale:  0.016309724460288444
-# e1_net best epoch   :  37600 , loss: tensor(4.9926e-05)
-# e1_net training time:  4989.488249063492
-# eL:  0.024 	 alpha:  0.08
-# eL:  0.022 	 alpha:  0.077
-# eL:  0.018 	 alpha:  0.144
-# eL:  0.015 	 alpha:  0.214
-# eL:  0.012 	 alpha:  0.243
-# eL:  0.01 	 alpha:  0.373
-# seed 1:
-# p_net best epoch   :  10212 , loss: tensor(4.9775e-05)
-# p_net training time:  2186.8904871940613
-# enet scale:  0.014084038567330537
-# e1_net best epoch   :  18336 , loss: tensor(4.8409e-05)
-# e1_net training time:  2456.1712930202484
-# eL:  0.025 	 alpha:  0.054
-# eL:  0.022 	 alpha:  0.039
-# eL:  0.016 	 alpha:  0.04
-# eL:  0.012 	 alpha:  0.049
-# eL:  0.01 	 alpha:  0.086
-# eL:  0.008 	 alpha:  0.26
-# seed 2:
-# p_net best epoch   :  8012 , loss: tensor(4.9920e-05)
-# p_net training time:  1753.1701729297638
-# enet scale:  0.01716732518079578
-# e1_net best epoch   :  20039 , loss: tensor(4.8637e-05)
-# e1_net training time:  2680.4655091762543
-# eL:  0.026 	 alpha:  0.059
-# eL:  0.022 	 alpha:  0.128
-# eL:  0.016 	 alpha:  0.275
-# eL:  0.012 	 alpha:  0.371
-# eL:  0.01 	 alpha:  0.446
-# eL:  0.007 	 alpha:  0.713
-# seed 3:
-# p_net best epoch   :  9829 , loss: tensor(4.8863e-05)
-# p_net training time:  2091.676687002182
-# enet scale:  0.014130058625465014
-# e1_net best epoch   :  12051 , loss: tensor(4.9878e-05)
-# e1_net training time:  1611.511799812317
-# eL:  0.035 	 alpha:  0.15
-# eL:  0.034 	 alpha:  0.236
-# eL:  0.028 	 alpha:  0.3
-# eL:  0.025 	 alpha:  0.266
-# eL:  0.023 	 alpha:  0.227
-# eL:  0.022 	 alpha:  0.192
-# seed 4:
-# p_net best epoch   :  99233 , loss: tensor(0.0001)
-# p_net training time:  21701.780370235443
-# enet scale:  0.022112098709025682
-# e1_net best epoch   :  48242 , loss: tensor(4.9634e-05)
-# e1_net training time:  6401.431030988693
-# eL:  0.017 	 alpha:  0.089
-# eL:  0.016 	 alpha:  0.107
-# eL:  0.01 	 alpha:  0.447
-# eL:  0.01 	 alpha:  0.953
-# eL:  0.024 	 alpha:  0.605
-# eL:  0.065 	 alpha:  0.816
