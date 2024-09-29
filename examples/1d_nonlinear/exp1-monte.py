@@ -7,7 +7,7 @@ from tqdm import tqdm
 import warnings
 
 
-DATA_FOLDER = "exp1/data_10ksamples"
+DATA_FOLDER = "exp1/data/"
 device = "cpu"; print(device)
 
 # Set a fixed seed for reproducibility
@@ -107,11 +107,9 @@ def p_sol_monte(linespace_num=200, stat_sample=100000000):
 
 
 def main():
+    pass
     # exp1/data
     #p_sol_monte(linespace_num=200, stat_sample=1000000000)
-
-    # exp1/data_10ksamples
-    p_sol_monte(linespace_num=200, stat_sample=10000)
 
 
 if __name__ == "__main__":
