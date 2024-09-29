@@ -204,7 +204,7 @@ def plot_p_net_results(p_net):
         p = p_exact(x, x*0+t1)
         phat = p_net(pt_x, pt_t1).data.cpu().numpy()
         plt.plot(x, p, color=colors[i], linestyle="-", linewidth=1.0, label=r"$p$(x,"+str(t1)+")")
-        plt.plot(x, phat, color=colors[i], linestyle="--", linewidth=1.0, label=r"$\hat{p}$(x,"+str(t1)+")")
+        plt.plot(x, phat, color="red", linestyle="--", linewidth=1.0, label=r"$\hat{p}$(x,"+str(t1)+")")
     plt.legend()
     plt.grid(linewidth=0.5)
     plt.savefig(FOLDER+"figs/phat_result.png")
@@ -350,7 +350,7 @@ def plot_tight_error_bounds(p_net, e1_net):
         a1 = max(abs(e1-e1_hat))/max(abs(e1_hat))
         a2 = max(abs(e2-e2_hat))/max(abs(e2_hat))
         axs[i].plot(x, e2, color=colors[i], linestyle="-", linewidth=1.0, label=r"$e_2$")
-        axs[i].plot(x, e2_hat, linestyle="--", color = colors[i], linewidth=1.0, label=r"$\hat{e}_2$")
+        axs[i].plot(x, e2_hat, linestyle="--", color = "red", linewidth=1.0, label=r"$\hat{e}_2$")
         axs[i].grid(linewidth=0.5)
         axs[i].legend(loc="upper right")
         # Add text to the left top corner
@@ -376,12 +376,12 @@ def plot_tight_error_bounds(p_net, e1_net):
         eL = np.round(eL,3)
         if i == 0:
             axs[i].plot(x, p, color=colors[i], linestyle="-", linewidth=1.0, label=r"$p$")
-            axs[i].plot(x, phat, linestyle="--", color = colors[i], linewidth=1.0, label=r"$\hat{p}$")
+            axs[i].plot(x, phat, linestyle="--", color = "red", linewidth=1.0, label=r"$\hat{p}$")
             axs[i].fill_between(x.reshape(-1), y1=phat.reshape(-1)+eL, y2=phat.reshape(-1)-eL, color="green", alpha=0.3, label=r"$e_S$")
             axs[i].legend(loc="upper right")
         else:
             axs[i].plot(x, p, color=colors[i], linestyle="-", linewidth=1.0)
-            axs[i].plot(x, phat, linestyle="--", color = colors[i], linewidth=1.0)
+            axs[i].plot(x, phat, linestyle="--", color = "red", linewidth=1.0)
             axs[i].fill_between(x.reshape(-1), y1=phat.reshape(-1)+eL, y2=phat.reshape(-1)-eL, color="green", alpha=0.3)
         axs[i].set_ylim([0, 0.75])
         axs[i].grid(linewidth=0.5)
@@ -411,16 +411,16 @@ def plot_tight_error_bounds(p_net, e1_net):
         print("Error Bounds: tight, special", eB, eL)
         if i == 0:
             axs[i].plot(x, e1, color=colors[i], linestyle="-", linewidth=1.0, label=r"$e_1$")
-            axs[i].plot(x, e1_hat, linestyle="--", color = colors[i], linewidth=1.0, label=r"$\hat{e}_1$")
-            axs[i].plot(x, x*0+eB, linestyle=":", color = colors[i], linewidth=1.0, label=r"$e_B$")
-            axs[i].plot(x, x*0-eB, linestyle=":", color = colors[i], linewidth=1.0)
+            axs[i].plot(x, e1_hat, linestyle="--", color = "red", linewidth=1.0, label=r"$\hat{e}_1$")
+            axs[i].plot(x, x*0+eB, linestyle=":", color = "blue", linewidth=1.0, label=r"$e_B$")
+            axs[i].plot(x, x*0-eB, linestyle=":", color = "blue", linewidth=1.0)
             axs[i].fill_between(x.reshape(-1), y1=0*phat.reshape(-1)+eL, y2=0*phat.reshape(-1)-eL, color="green", alpha=0.3, label=r"$e_S$")
             axs[i].legend(loc="upper right")
         else:
             axs[i].plot(x, e1, color=colors[i], linestyle="-", linewidth=1.0)
-            axs[i].plot(x, e1_hat, linestyle="--", color = colors[i], linewidth=1.0)
-            axs[i].plot(x, x*0+eB, linestyle=":", color = colors[i], linewidth=1.0)
-            axs[i].plot(x, x*0-eB, linestyle=":", color = colors[i], linewidth=1.0)
+            axs[i].plot(x, e1_hat, linestyle="--", color = "red", linewidth=1.0)
+            axs[i].plot(x, x*0+eB, linestyle=":", color = "blue", linewidth=1.0)
+            axs[i].plot(x, x*0-eB, linestyle=":", color = "blue", linewidth=1.0)
             axs[i].fill_between(x.reshape(-1), y1=0*phat.reshape(-1)+eL, y2=0*phat.reshape(-1)-eL, color="green", alpha=0.3, label=r"$e_S$")
         axs[i].grid(linewidth=0.5)
         axs[i].text(0.01, 0.95, "t="+str(t1)+", "+r"$e_B=$"+str(eB[0])+", "+r"$e_S=$"+str(eL[0]),
@@ -476,16 +476,16 @@ def plot_alphas(p_net, e1_net):
     cond_2 = a1_list**2
     y_2 = a2_list*(1+a2_list)
 
-    fig, axs = plt.subplots(2, 2, figsize=(7, 6))
-    axs[0,0].plot(t1s, eB_list, color="black", linestyle=":", linewidth=1.0, label=r"$e_B$")
-    axs[0,0].plot(t1s, eS_list, color="black", linestyle="-", linewidth=1.0, label=r"$e_S$")
-    axs[0,0].plot(t1s, e1_list, color="black", linestyle="--", linewidth=1.0, label=r"$\max|e|$")
+    fig, axs = plt.subplots(2, 2, figsize=(8, 6))
+    axs[0,0].plot(t1s, eB_list, color="black", linestyle=":", linewidth=1.0, label=r"$e_B(t)$")
+    axs[0,0].plot(t1s, eS_list, color="black", linestyle="-", linewidth=1.0, label=r"$e_S(t)$")
+    axs[0,0].plot(t1s, e1_list, color="black", linestyle="--", linewidth=1.0, label=r"$\max_x|e(x,t)|$")
     axs[0,0].legend(loc="upper right")
     axs[0,0].grid(linewidth=0.5)
 
     axs[0,1].plot(t1s, t1s*0+1.0, color="black", linestyle="-", linewidth=1.0, label="condition 1")
     axs[0,1].plot(t1s, a1_list, color="black", linestyle="--", linewidth=1.0, label=r"$\alpha_1$")
-    axs[0,1].legend(loc="lower right")
+    axs[0,1].legend(loc="upper right")
     axs[0,1].grid(linewidth=0.5)
     axs[0,1].text(0.01, 0.98, "condition 1: " + r"$\alpha_1<1$", 
                   transform=axs[0,1].transAxes, verticalalignment='top', fontsize=8,
@@ -494,7 +494,7 @@ def plot_alphas(p_net, e1_net):
     axs[1,0].plot(t1s, cond_1, color="black", linewidth=1.0, linestyle="-", label="condition 2")
     axs[1,0].plot(t1s, y_1, color="black", linewidth=1.0, linestyle="--", label=r"$\alpha_2$")
     axs[1,0].set_xlabel('t')
-    axs[1,0].legend(loc="lower right")
+    axs[1,0].legend(loc="upper right")
     axs[1,0].grid(linewidth=0.5)
     axs[1,0].text(0.01, 0.98, "condition 2: "+r"$\alpha_2 < 1-\alpha_1$", 
                   transform=axs[1,0].transAxes, verticalalignment='top', fontsize=8,
@@ -503,16 +503,15 @@ def plot_alphas(p_net, e1_net):
     axs[1,1].plot(t1s, cond_2, color="black", linewidth=1.0, linestyle="-", label="condition 3")
     axs[1,1].plot(t1s, y_2, color="black", linewidth=1.0, linestyle="--", label=r"$\alpha_2(1+\alpha_2)$")
     axs[1,1].set_xlabel('t')
-    axs[1,1].legend(loc="lower right")
+    axs[1,1].legend(loc="upper right")
     axs[1,1].grid(linewidth=0.5)
     axs[1,1].text(0.01, 0.98, "condition 3: "+r"$\alpha_2(1+\alpha_2) <\alpha_1^2$", 
                   transform=axs[1,1].transAxes, verticalalignment='top', fontsize=8,
                   bbox=dict(facecolor='white', edgecolor='black', boxstyle='round,pad=0.2'))
     
     plt.tight_layout()
-    plt.savefig(FOLDER+"figs/error_and_conditions.png")
+    fig.savefig(FOLDER+'figs/error_and_conditions.pdf', format='pdf', dpi=300)
     plt.close()
-    # plt.show()
 
 
 def plot_train_loss(path_1, path_2):

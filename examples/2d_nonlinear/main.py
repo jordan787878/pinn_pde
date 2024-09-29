@@ -735,6 +735,27 @@ def show_e1_net_results(p_net, e1_net):
     plt.close()
 
 
+def plot_train_loss(path_1, path_2):
+    loss_history_1 = np.load(path_1)
+    min_loss_1 = min(loss_history_1)
+    loss_history_2 = np.load(path_2)
+    min_loss_2 = min(loss_history_2)
+    # print(loss_history_2)
+    fig, axs = plt.subplots(2, 1, figsize=(7, 6))
+    axs[0].plot(np.arange(len(loss_history_1)), loss_history_1, "black", linewidth=1.0)
+    axs[0].set_ylim([min_loss_1, 10*min_loss_1])
+    axs[1].plot(np.arange(len(loss_history_2)), loss_history_2, "black", linewidth=1.0)
+    axs[1].set_ylim([min_loss_2, 10*min_loss_2])
+    axs[0].grid(linewidth=0.5)
+    axs[1].grid(linewidth=0.5)
+    axs[1].set_xlabel("epochs")
+    axs[0].set_ylabel("train loss: "+r"$\hat{p}$")
+    axs[1].set_ylabel("train loss: "+r"$\hat{e}_1$")
+    plt.tight_layout()
+    fig.savefig(FOLDER+'figs/train_loss.pdf', format='pdf', dpi=300, bbox_inches='tight')
+    plt.close()
+
+
 def main():
     # test_p_sol_monte(stat_sample=100000000)
     mse_cost_function = torch.nn.MSELoss() # Mean squared error
@@ -763,6 +784,8 @@ def main():
     e1_net = pos_e1_net_train(e1_net, PATH=FOLDER+"output/e1_net.pth", PATH_LOSS=FOLDER+"output/e1_net_train_loss.npy"); e1_net.eval()
     print("[load e1net model from: "+FOLDER+"output/e1_net.pth]")
     show_e1_net_results(p_net ,e1_net)
+
+    plot_train_loss(FOLDER+"output/p_net_train_loss.npy", FOLDER+"output/e1_net_train_loss.npy")
 
     if(TRAIN_FLAG == False):
         print("[complete 2d nonlinear, with pre-trained models]")

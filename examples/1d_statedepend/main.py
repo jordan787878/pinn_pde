@@ -274,7 +274,7 @@ def show_p_net_results(p_net):
     e1_true = p - p_hat
     max_abs_e1_ti = max(abs(e1_true))[0]
 
-    fig, axs = plt.subplots(6, 1, figsize=(6, 8))
+    fig, axs = plt.subplots(6, 1, figsize=(6, 6))
     # Determine global min and max for y-axis limits
     global_min = float('inf')
     global_max = float('-inf')
@@ -308,7 +308,7 @@ def show_p_net_results(p_net):
     plt.savefig(FOLDER+"figs/pnet_result.png")
     plt.close()
 
-    fig, axs = plt.subplots(6, 1, figsize=(6, 8))
+    fig, axs = plt.subplots(6, 1, figsize=(6, 6))
     global_min = float('inf')
     global_max = float('-inf')
     res_list = []
@@ -562,7 +562,7 @@ def show_e1_net_results(p_net, e1_net):
         r2 = e1_res_func(pt_x, pt_t1, e1_net, p_net).data.cpu().numpy()
         r2_list.append(r2)
 
-    fig, axs = plt.subplots(3, 1, figsize=(5, 6))
+    fig, axs = plt.subplots(3, 1, figsize=(6, 6))
     for i, (t1, ax1, e1, e1_hat, alpha_1) in enumerate(zip(t1s, axs, e1_list, e1_hat_list, alpha_1_list)):
         error_bound = 2.0 * max(abs(e1_hat))[0]
         if i == 0:
@@ -591,7 +591,7 @@ def show_e1_net_results(p_net, e1_net):
     fig.savefig(FOLDER+'figs/e1hat_result.pdf', format='pdf', dpi=300)
     plt.close()
 
-    fig, axs = plt.subplots(3, 1, figsize=(5, 6))
+    fig, axs = plt.subplots(3, 1, figsize=(6, 6))
     for i, (t1, ax1, p, p_hat, e1_hat, alpha_1) in enumerate(zip(t1s, axs, p_monte_list, p_hat_list, e1_hat_list, alpha_1_list)):
         error_bound = 2.0 * max(abs(e1_hat))[0]
         if i == 0:

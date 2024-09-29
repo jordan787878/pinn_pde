@@ -361,7 +361,7 @@ def pos_e1_net_train(e1_net, PATH, PATH_LOSS):
 
 
 def show_e1_results(p_net, e1_net):
-    plt.figure(figsize=(6,7))
+    plt.figure(figsize=(6,6))
     global x_low, x_hig, t0, T_end
     x = np.arange(x_low, x_hig, 0.01).reshape(-1,1)
     t1s = [0.2, 0.6, 1.0]
@@ -399,7 +399,7 @@ def show_e1_results(p_net, e1_net):
 
 
 def show_uniform_bound(p_net, e1_net):
-    plt.figure(figsize=(6,7))
+    plt.figure(figsize=(6,6))
     global x_low, x_hig, t0, T_end
     x = np.arange(x_low, x_hig, 0.01).reshape(-1,1)
     t1s = [0.2, 0.6, 1.0]
@@ -497,7 +497,7 @@ def plot_e1_surface(p_net, e1_net, num=100):
         t1 = t1s[i]
         t1_monte = x_monte*0 + t1
         if(i == 0):
-            ax.plot(x_monte, t1_monte, e1_list[i], color="black", label=r"$e_1$")
+            ax.plot(x_monte, t1_monte, e1_list[i], color="black", label=r"$e$")
         else:
             ax.plot(x_monte, t1_monte, e1_list[i], color="black")
     # Set z-ticks to scientific notation
@@ -535,6 +535,39 @@ def plot_train_loss(path_1, path_2):
     plt.close()
 
 
+def show_enet_res(p_net, e1_net):
+    t1s = [0.2, 0.6, 1.0]
+    x = np.linspace(x_low, x_hig, num=100).reshape(-1,1)
+    pt_x = Variable(torch.from_numpy(x).float(), requires_grad=True).to(device)
+    r1_list = []
+    r2_list = []
+    for t1 in t1s:
+        pt_t1 = Variable(torch.from_numpy(0*x + t1).float(), requires_grad=True).to(device)
+        r1 = res_func(pt_x, pt_t1, p_net).data.cpu().numpy()
+        r1_list.append(r1)
+        r2 = e1_res_func(pt_x, pt_t1, e1_net, p_net).data.cpu().numpy()
+        r2_list.append(r2)
+    fig, axs = plt.subplots(3, 1, figsize=(7, 6))
+    for i in range(0,3):
+        pres = r1_list[i]
+        eres = r2_list[i]
+        ax1 = axs[i]
+        if i == 0:
+            ax1.plot(x, eres-pres, "red", linewidth=1.0, linestyle="--", label=r"$D[\hat{e}_1]$")
+            ax1.plot(x, -pres, "black", linewidth=1.0, linestyle="-", label=r"$-D[\hat{u}]$")
+            ax1.legend(loc="upper right")  # Add legend only to the first subplot
+        else:
+            ax1.plot(x, eres-pres, "red", linewidth=1.0, linestyle="--")
+            ax1.plot(x, -pres, "black", linewidth=1.0, linestyle="-")
+        ax1.text(0.01, 0.95, "t="+str(t1s[i]), 
+                 transform=ax1.transAxes, verticalalignment='top', fontsize=8,
+                 bbox=dict(facecolor='white', edgecolor='black', boxstyle='round,pad=0.3'))
+        ax1.grid(True, which='both', linestyle='-', linewidth=0.5)
+    ax1.set_xlabel('x')
+    plt.tight_layout()
+    fig.savefig('figs/enet_res.pdf', format='pdf', dpi=300)
+    plt.close()
+
 
 def main():
     # create p_net
@@ -560,6 +593,7 @@ def main():
     e1_net = pos_e1_net_train(e1_net, PATH="output/e1_net.pt", PATH_LOSS="output/e1_net_train_loss.npy"); e1_net.eval()
     show_e1_results(p_net, e1_net)
     show_uniform_bound(p_net, e1_net)
+    show_enet_res(p_net, e1_net)
 
     print(f"train pnet time: {time_train_p:.4f} seconds")
     print(f"train enet time: {time_train_e:.4f} seconds")

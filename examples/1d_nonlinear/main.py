@@ -36,7 +36,7 @@ x_hig = 6
 
 t0 = 0.0
 T_end = 5.0
-t1s = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]
+t1s = [0.5, 1.0, 2.0, 3.0, 4.0, 5.0]
 
 datas = ["data1/"]
 S = 30000
@@ -781,8 +781,8 @@ def plot_pres_surface(p_net, num=100):
     ax.scatter(x_samples, t_samples, t_samples*0+z_max, marker="o", color="blue", s=2.0, alpha=0.05, label='sample points')
     ax.set_xlabel("x")
     ax.set_ylabel("t"); 
-    ax.set_zlabel('r')
-    ax.legend()
+    ax.set_zlabel(r"$r_1^2$")
+    # ax.legend()
     ax.view_init(40, -60)
     zScalarFormatter = ScalarFormatterClass(useMathText=True)
     zScalarFormatter.set_powerlimits((0,0))

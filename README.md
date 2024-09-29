@@ -16,6 +16,7 @@ Follow these steps to set up your environment:
 
 1. **create python virtual environment** run: python3 -m venv venv
 2. **activate python virtual environment** run: source venv/bin/activate
+3. **install required packages** run: pip3 install -r requirements.txt
 
 ## Run Examples
 
