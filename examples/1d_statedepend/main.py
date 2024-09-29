@@ -13,9 +13,11 @@ from tqdm import tqdm
 import warnings
 import time
 from matplotlib.ticker import ScalarFormatter
+import argparse
 
 
 FOLDER = "exp1/main/"
+TRAIN_FLAG = False
 
 device = "cpu"; print(device)
 
@@ -40,7 +42,7 @@ d = 0.0
 
 batch_size = 1000
 RAR_THRESHOLD = 1e-3
-TRAIN_LOSS_THRESHOLD = 5e-4
+TRAIN_LOSS_THRESHOLD = 1e-3
 
 
 def gbm_transition_density(S_t, t):
@@ -94,43 +96,26 @@ def res_func(x,t, net, verbose=False):
     return residual
 
 
-# Custom L-infinity loss function
-def linf_loss(output, target):
-    return torch.max(torch.abs(output - target))
-
-
 def init_weights(m):
     if isinstance(m, nn.Linear):
-        init.xavier_uniform_(m.weight)
+        init.kaiming_normal_(m.weight)
         m.bias.data.fill_(0.01)
 
 
-# p_net
 class Net(nn.Module):
     def __init__(self, scale=1.0): 
         neurons = 32
         self.scale = scale
         super(Net, self).__init__()
-        self.hidden_layer1 = (nn.Linear(16,neurons))
+        self.hidden_layer1 = (nn.Linear(2,neurons))
         self.hidden_layer2 = (nn.Linear(neurons,neurons))
         self.hidden_layer3 = (nn.Linear(neurons,neurons))
         self.hidden_layer4 = (nn.Linear(neurons,neurons))
         self.hidden_layer5 = (nn.Linear(neurons,neurons))
         self.output_layer =  (nn.Linear(neurons,1))
     def forward(self, x, t):
-        inputs = torch.cat([x,t], axis=1)
-        d = 8; n = 100
-        for i in range(int(d/2)):
-            w_i = (1/pow(n, 2*i/d))
-            x_sin_i = torch.sin(w_i*x)
-            x_cos_i = torch.cos(w_i*x)
-            inputs = torch.cat([inputs, x_sin_i, x_cos_i], axis=1)
-        for i in range(int(d/2)):
-            w_i = (1/pow(n, 2*i/d))
-            t_sin_i = torch.sin(w_i*t)
-            t_cos_i = torch.cos(w_i*t)
-            inputs = torch.cat([inputs, t_sin_i, t_cos_i], axis=1)
-        inputs = inputs[:, 2:]
+        _x = (x-S_0)/S_0
+        inputs = torch.cat([_x,t], axis=1)
         layer1_out = F.softplus((self.hidden_layer1(inputs)))
         layer2_out = F.softplus((self.hidden_layer2(layer1_out)))
         layer3_out = F.softplus((self.hidden_layer3(layer2_out)))
@@ -161,8 +146,10 @@ def train_p_net(p_net, optimizer, scheduler, mse_cost_function, max_abs_p_ti, it
     t = (torch.rand(int(1.0*batch_size), 1, requires_grad=True)*(T_end-t0)   +t0).to(device)
     x = (torch.rand(len(t), 1, requires_grad=True)*(x_hig-x_low)+x_low).to(device)
 
-    S = 100000
+    S = 30000
     FLAG = False
+    normalize = max_abs_p_ti
+    start_time = time.time()
 
     for epoch in range(iterations):
         optimizer.zero_grad() # to make the gradients zero
@@ -171,39 +158,25 @@ def train_p_net(p_net, optimizer, scheduler, mse_cost_function, max_abs_p_ti, it
         u_bc = p_init(x_bc.detach().numpy())
         u_bc = Variable(torch.from_numpy(u_bc).float(), requires_grad=False).to(device)
         net_bc_out = p_net(x_bc, t_bc).to(device)
-        mse_u = mse_cost_function(net_bc_out/max_abs_p_ti, u_bc/max_abs_p_ti)
+        mse_u = mse_cost_function(net_bc_out/normalize, u_bc/normalize)
 
         # Loss based on PDE
         all_zeros = torch.zeros((len(t),1), dtype=torch.float32, requires_grad=False).to(device)
-        res_out = res_func(x, t, p_net)/max_abs_p_ti
+        res_out = res_func(x, t, p_net)/normalize
         mse_res = mse_cost_function(res_out, all_zeros)
 
         res_g = res_out; x_g = x; t_g = t
-        # res_g = res_func(x_g, t_g, p_net)/max_abs_p_ti
         res_x = torch.autograd.grad(res_g, x_g, grad_outputs=torch.ones_like(res_g), create_graph=True)[0]
         res_t = torch.autograd.grad(res_g, t_g, grad_outputs=torch.ones_like(res_g), create_graph=True)[0]
         mse_norm_res_input = torch.mean(res_x**2 + res_t**2)
 
         # loss
-        loss = mse_u + mse_res + mse_norm_res_input
+        loss = mse_u + 5.0*(mse_res + mse_norm_res_input)
         loss_history.append(loss.data)
 
-        # Save the min loss model
-        if(loss.data < 0.95*min_loss):
-            print("save epoch:", epoch, ", loss:", loss.data, ", ic:",mse_u.data, ", res:",mse_res.data, 
-                  ", res freq:", mse_norm_res_input.data,
-                  )
-            torch.save({
-                    'epoch': epoch,
-                    'model_state_dict': p_net.state_dict(),
-                    'optimizer_state_dict': optimizer.state_dict(),
-                    'loss': loss.data,
-                    }, PATH)
-            min_loss = loss.data
-            FLAG = True
-
         # Termination
-        if(loss.data < TRAIN_LOSS_THRESHOLD):
+        if(loss.data < 5e-3):
+            train_time = time.time() - start_time
             print("save epoch:", epoch, ", loss:", loss.data, ", ic:",mse_u.data, ", res:",mse_res.data, 
                   ", res freq:", mse_norm_res_input.data,
                   )
@@ -212,19 +185,33 @@ def train_p_net(p_net, optimizer, scheduler, mse_cost_function, max_abs_p_ti, it
                     'model_state_dict': p_net.state_dict(),
                     'optimizer_state_dict': optimizer.state_dict(),
                     'loss': loss.data,
+                    'train_time': train_time
                     }, PATH)
             np.save(PATH_LOSS, np.array(loss_history))
             return
-        
-        if (epoch%1000 == 0):
-            print(epoch,"Traning Loss:",loss.data)
+
+        # Save the min loss model
+        if(loss.data < 0.95*min_loss):
+            train_time = time.time() - start_time
+            print("save epoch:", epoch, ", loss:", loss.data, ", ic:",mse_u.data, ", res:",mse_res.data, 
+                  ", res grad:", mse_norm_res_input.data,
+                  )
+            torch.save({
+                    'epoch': epoch,
+                    'model_state_dict': p_net.state_dict(),
+                    'optimizer_state_dict': optimizer.state_dict(),
+                    'loss': loss.data,
+                    'train_time': train_time
+                    }, PATH)
             np.save(PATH_LOSS, np.array(loss_history))
+            min_loss = loss.data
+            FLAG = True
 
         # RAR
-        if (epoch%500 == 0 and FLAG):
+        if (epoch%100 == 0 and FLAG):
             t_RAR = (torch.rand(S, 1, requires_grad=True)  *(T_end-t0)   +t0).to(device)
             x_RAR = (torch.rand(len(t_RAR), n_d, requires_grad=True)*(x_hig-x_low)+x_low).to(device)
-            res_RAR = res_func(x_RAR, t_RAR, p_net)/max_abs_p_ti
+            res_RAR = res_func(x_RAR, t_RAR, p_net)/normalize
             mean_res_error = torch.mean(torch.abs(res_RAR))
             print("... RAR mean res: ", mean_res_error.data)
             if(mean_res_error > RAR_THRESHOLD):
@@ -238,11 +225,9 @@ def train_p_net(p_net, optimizer, scheduler, mse_cost_function, max_abs_p_ti, it
 
         loss.backward(retain_graph=True) 
         optimizer.step()
-
         # Exponential learning rate decay
         if (epoch + 1) % iterations_per_decay == 0:
             scheduler.step()
-
 
 
 def pos_p_net_train(p_net, PATH, PATH_LOSS):
@@ -250,7 +235,7 @@ def pos_p_net_train(p_net, PATH, PATH_LOSS):
     p_net.load_state_dict(checkpoint['model_state_dict'])
     epoch = checkpoint['epoch']
     loss = checkpoint['loss']
-    print("pnet best epoch: ", epoch, ", loss:", loss.data)
+    print("best pnet epoch: ", epoch, ", loss: " , loss.data, ", train time: ", checkpoint['train_time'])
     # see training result
     # keys = p_net.state_dict().keys()
     # for k in keys:
@@ -363,30 +348,19 @@ def show_p_net_results(p_net):
 
 class E1Net(nn.Module):
     def __init__(self, scale=1.0): 
-        neurons = 32
+        neurons = 64
         self.scale = scale
         super(E1Net, self).__init__()
-        self.hidden_layer1 = (nn.Linear(16,neurons))
+        self.hidden_layer1 = (nn.Linear(2,neurons))
         self.hidden_layer2 = (nn.Linear(neurons,neurons))
         self.hidden_layer3 = (nn.Linear(neurons,neurons))
         self.hidden_layer4 = (nn.Linear(neurons,neurons))
         self.hidden_layer5 = (nn.Linear(neurons,neurons))
         self.output_layer =  (nn.Linear(neurons,1))
-        self.activation = nn.Tanh()
+        self.activation = nn.Softplus()
     def forward(self, x, t):
-        inputs = torch.cat([x,t], axis=1)
-        d = 8; n = 100
-        for i in range(int(d/2)):
-            w_i = (1/pow(n, 2*i/d))
-            x_sin_i = torch.sin(w_i*x)
-            x_cos_i = torch.cos(w_i*x)
-            inputs = torch.cat([inputs, x_sin_i, x_cos_i], axis=1)
-        for i in range(int(d/2)):
-            w_i = (1/pow(n, 2*i/d))
-            t_sin_i = torch.sin(w_i*t)
-            t_cos_i = torch.cos(w_i*t)
-            inputs = torch.cat([inputs, t_sin_i, t_cos_i], axis=1)
-        inputs = inputs[:, 2:]
+        _x = (x-S_0)/S_0
+        inputs = torch.cat([_x,t], axis=1)
         layer1_out = self.activation((self.hidden_layer1(inputs)))
         layer2_out = self.activation((self.hidden_layer2(layer1_out)))
         layer3_out = self.activation((self.hidden_layer3(layer2_out)))
@@ -408,6 +382,15 @@ def e1_res_func(x, t, e1_net, p_net, verbose=False):
     return residual
 
 
+def diff_e1(x, t, e1_net):
+    out = e1_net(x,t)
+    out_x = torch.autograd.grad(out, x, grad_outputs=torch.ones_like(out), create_graph=True)[0]
+    out_t = torch.autograd.grad(out, t, grad_outputs=torch.ones_like(out), create_graph=True)[0]
+    out_xx = torch.autograd.grad(out_x, x, grad_outputs=torch.ones_like(out_x), create_graph=True)[0]
+    Lp = a*out + (a*x+d)*out_x - 0.5*b*b*(2*out + x*x*out_xx)
+    return out_t + Lp
+
+
 def train_e1_net(e1_net, optimizer, scheduler1, mse_cost_function, p_net, max_abs_e1_x_0, iterations=40000):
     min_loss = np.inf
     loss_history = []
@@ -415,14 +398,24 @@ def train_e1_net(e1_net, optimizer, scheduler1, mse_cost_function, p_net, max_ab
     PATH_LOSS = FOLDER+"output/e1_net_train_loss.npy"
     iterations_per_decay = 1000
 
-    x_bc = (torch.rand(int(batch_size), 1)*(x_hig-x_low)+x_low).to(device)
+    # Define the mean and covariance matrix
+    _mean = torch.tensor([100.0])
+    _covariance_matrix = torch.tensor([[1.0]])
+    mvn = torch.distributions.MultivariateNormal(_mean, _covariance_matrix)
+
+    x_bc = (torch.rand(int(0.5*batch_size), 1)*(x_hig-x_low)+x_low).to(device)
+    x_bc_normal = mvn.sample((int(0.5*batch_size),)).to(device)
+    x_bc_normal = torch.clamp(x_bc_normal, min=x_low, max=x_hig)
+    x_bc = torch.cat((x_bc, x_bc_normal), dim=0)
     t_bc = (torch.ones(len(x_bc), 1) * t0).to(device)
 
-    t = (torch.rand(int(0.9*batch_size), 1, requires_grad=True)*(T_end-t0)   +t0).to(device)
+    t = (torch.rand(int(1.0*batch_size), 1, requires_grad=True)*(T_end-t0)   +t0).to(device)
     x = (torch.rand(len(t), 1, requires_grad=True)*(x_hig-x_low)+x_low).to(device)
 
     S = 100000
     FLAG = False
+    normalize = max_abs_e1_x_0
+    start_time = time.time()
 
     for epoch in range(iterations):
         optimizer.zero_grad() # to make the gradients zero
@@ -431,63 +424,65 @@ def train_e1_net(e1_net, optimizer, scheduler1, mse_cost_function, p_net, max_ab
         p_bc = p_init(x_bc.detach().numpy())
         p_bc = Variable(torch.from_numpy(p_bc).float(), requires_grad=False).to(device)
         phat_bc = p_net(x_bc, t_bc)
-        u_bc = p_bc - phat_bc
+        u_bc = (p_bc - phat_bc).detach()
         net_bc_out = e1_net(x_bc, t_bc)
-        mse_u = mse_cost_function(net_bc_out/max_abs_e1_x_0, u_bc/max_abs_e1_x_0)
+        mse_u = mse_cost_function(net_bc_out/normalize, u_bc/normalize)
 
         # Loss based on residual
-        all_zeros = torch.zeros((len(t),1), dtype=torch.float32, requires_grad=False).to(device)
-        res_out = e1_res_func(x, t, e1_net, p_net)/max_abs_e1_x_0
-        mse_res = mse_cost_function(res_out, all_zeros)
+        diff_e1_hat = diff_e1(x, t, e1_net)
+        diff_e1_target = -res_func(x, t, p_net).detach()
+        mse_res = mse_cost_function(diff_e1_hat/normalize, diff_e1_target/normalize)
+
+        res_out = e1_res_func(x, t, e1_net, p_net)/normalize
+        res_g = res_out; x_g = x; t_g = t
+        res_x = torch.autograd.grad(res_g, x_g, grad_outputs=torch.ones_like(res_g), create_graph=True)[0]
+        res_t = torch.autograd.grad(res_g, t_g, grad_outputs=torch.ones_like(res_g), create_graph=True)[0]
+        mse_res_grad = torch.mean(res_x**2 + res_t**2)
 
         # Combining the loss functions
-        loss = mse_u + mse_res
+        loss = mse_u + 5.0*(mse_res + mse_res_grad)
         loss_history.append(loss.data)
 
-        # Save the min loss model
-        if(loss.data < 0.95*min_loss):
-            print("e1net epoch:", epoch, ",loss:", loss.data, ",ic loss:", mse_u.data, ",res:", mse_res.data,
-                  # ",res freq:", mse_norm_res_input.data
-                )
-            torch.save({
-                    'epoch': epoch,
-                    'model_state_dict': e1_net.state_dict(),
-                    'optimizer_state_dict': optimizer.state_dict(),
-                    'loss': loss.data,
-                    }, PATH)
-            min_loss = loss.data 
-            FLAG = True
-
         # Termination
-        if(loss.data < TRAIN_LOSS_THRESHOLD):
-            print("e1net epoch:", epoch, ",loss:", loss.data, ",ic loss:", mse_u.data, ",res:", mse_res.data,
-                  #",res freq:", mse_norm_res_input.data
+        if(loss.data < 5e-3):
+            train_time = time.time() - start_time
+            print("e1net epoch:", epoch, ",loss:", loss.data, ",ic loss:", mse_u.data, 
+                  ",res:", mse_res.data, 
+                  ",res grad:", mse_res_grad.data
                 )
             torch.save({
                     'epoch': epoch,
                     'model_state_dict': e1_net.state_dict(),
                     'optimizer_state_dict': optimizer.state_dict(),
                     'loss': loss.data,
+                    'train_time': train_time
                     }, PATH)
             np.save(PATH_LOSS, np.array(loss_history))
             return
 
-        if (epoch%1000 == 0):
-            print(epoch,"Traning Loss:",loss.data)
+        # Save the min loss model
+        if(loss.data < 0.95*min_loss):
+            train_time = time.time() - start_time
+            print("e1net epoch:", epoch, ",loss:", loss.data, ",ic loss:", mse_u.data, 
+                  ",res:", mse_res.data, 
+                  ",res grad:", mse_res_grad.data
+                )
+            torch.save({
+                    'epoch': epoch,
+                    'model_state_dict': e1_net.state_dict(),
+                    'optimizer_state_dict': optimizer.state_dict(),
+                    'loss': loss.data,
+                    'train_time': train_time
+                    }, PATH)
             np.save(PATH_LOSS, np.array(loss_history))
-
-        loss.backward(retain_graph=True) 
-        optimizer.step()
-
-        # Exponential learning rate decay
-        if (epoch + 1) % iterations_per_decay == 0:
-            scheduler1.step()
+            min_loss = loss.data 
+            FLAG = True
 
         # RAR
-        if (epoch%500 == 0 and FLAG):
+        if (epoch%100 == 0 and FLAG):
             t_RAR = (torch.rand(S, 1, requires_grad=True)  *(T_end-t0)   +t0).to(device)
             x_RAR = (torch.rand(len(t_RAR), n_d, requires_grad=True)*(x_hig-x_low)+x_low).to(device)
-            res_RAR = e1_res_func(x_RAR, t_RAR, e1_net, p_net)/max_abs_e1_x_0
+            res_RAR = e1_res_func(x_RAR, t_RAR, e1_net, p_net)/normalize
             mean_res_error = torch.mean(torch.abs(res_RAR))
             print("... RAR mean res: ", mean_res_error.data)
             if(mean_res_error > RAR_THRESHOLD):
@@ -499,13 +494,19 @@ def train_e1_net(e1_net, optimizer, scheduler1, mse_cost_function, p_net, max_ab
                 print("... RES add [x,t]:", x_max.data, t_max.data, ". max res value: ", max_abs_res.data)
                 FLAG = False
 
+        loss.backward(retain_graph=True) 
+        optimizer.step()
+        # Exponential learning rate decay
+        if (epoch + 1) % iterations_per_decay == 0:
+            scheduler1.step()
+
 
 def pos_e1_net_train(e1_net, PATH, PATH_LOSS):
     checkpoint = torch.load(PATH)
     e1_net.load_state_dict(checkpoint['model_state_dict'])
     epoch = checkpoint['epoch']
     loss = checkpoint['loss']
-    print("best epoch: ", epoch, ", loss:", loss.data)
+    print("best e1net epoch: ", epoch, ", loss: ", loss.data, ", train time: ", checkpoint['train_time'])
     # see training result
     # keys = e1_net.state_dict().keys()
     # for k in keys:
@@ -746,97 +747,30 @@ def plot_train_loss(path_1, path_2):
     fig.savefig(FOLDER+'figs/train_loss.pdf', format='pdf', dpi=300, bbox_inches='tight')
     plt.close()
 
-
-# Estimat max a1 over time
-def evalute_metric(p_net, e1_net):
-    # 1. get max_x |f_x|
-    f_x_star = a
-    print("f_x_star:", f_x_star)
-    C_PDE = 1 + (1+2*f_x_star)*T_end*np.exp(T_end*(1+2*f_x_star))
-    print("C_PDE:", C_PDE)
-
-    # 2. get min_t max_x |e1hat(x,t)|
-    num_points = 500
-    _x = np.linspace(x_low, x_hig, num=num_points, endpoint=True)
-    _t = np.linspace(t0, T_end, num=num_points, endpoint=True)
-    dx = (_x[1]-_x[0])
-    dxdt = (_x[1]-_x[0])*(_t[1]-_t[0])
-    x  = Variable(torch.from_numpy(_x).float(), requires_grad=True).to(device).view(1,-1)
-    t  = Variable(torch.from_numpy(_t).float(), requires_grad=True).to(device).view(-1,1)
-    x0_inputs = x.clone().view(-1,1)
-    t0_inputs = (t.clone()*0.0 + t0).view(-1,1)
-    x_tensor = x.repeat(t.shape[0], 1)
-    t_tensor = t.repeat(1, x.shape[1])
-    x_inputs = x_tensor.reshape(-1,1)
-    t_inputs = t_tensor.reshape(-1,1)
-    e1hat = e1_net(x_inputs, t_inputs).reshape(x_tensor.shape)
-    max_abs_e1hat_at_time, _ = torch.max(torch.abs(e1hat), dim=1, keepdim=True)
-    min_e1hat = torch.min(max_abs_e1hat_at_time)
-    # print(e1hat) # print(max_abs_e1hat_at_time)
-    print("min e1hat_star:", min_e1hat)
-
-    # 3. get training loss of interior residuals
-    res = e1_res_func(x_inputs, t_inputs, e1_net, p_net)
-    l_res = torch.sum(res**2)
-    # l_res_x = torch.autograd.grad(l_res, x_inputs, grad_outputs=torch.ones_like(l_res), create_graph=True)[0]
-    p0 = p_init(x0_inputs.detach().numpy())
-    p0 = Variable(torch.from_numpy(p0).float(), requires_grad=True).to(device)
-    p0_hat = p_net(x0_inputs, t0_inputs)
-    e0 = p0-p0_hat
-    e0_hat = e1_net(x0_inputs, t0_inputs)
-    l_ic = torch.sum((e0-e0_hat)**2)
-    l_train = l_res*dxdt + l_ic*dx
-
-    e_total = (C_PDE*l_train)
-    print("e_total:", e_total)
-
-    alpha_bound = e_total/min_e1hat
-    print("a1 bound (mean):", alpha_bound)
-
-
-# This test how to take derivative of the Loss function
-def test_function_derivative():
-    num_points = 1000
-    _x = np.linspace(-2, 2, num=num_points, endpoint=True)
-    dx = _x[1] - _x[0]
-    print(dx)
-    x  = Variable(torch.from_numpy(_x).float(), requires_grad=True).to(device).view(1,-1)
-    e_values = (x**2 + x + 1.0)
-    e_train_integral = (torch.sum(e_values))*dx
-    print(torch.sum(e_values)*(2-(-2))/num_points) # dx can be esitmated by x_hig-x_low/num of points
-    print(e_train_integral)
-    e_train_dx = torch.autograd.grad(e_train_integral, x, grad_outputs=torch.ones_like(e_train_integral), create_graph=True)[0]
-    max_e_train_dx = torch.max(torch.abs(e_train_dx))/dx
-    print(max_e_train_dx)
     
-    
-
-
 def main():
     mse_cost_function = torch.nn.MSELoss() # Mean squared error
 
     p_net = Net().to(device)
     p_net.apply(init_weights)
+    e1_net = E1Net().to(device)
+    e1_net.apply(init_weights)
+
     optimizer = torch.optim.Adam(p_net.parameters())
     scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.95)
     p0_max = get_p0_max()
     print("p0_max: ", p0_max)
-    start_time = time.time()
-    # train_p_net(p_net, optimizer, scheduler, mse_cost_function, p0_max, iterations=10000); print("[p_net train complete]")
-    end_time = time.time()
-    time_train_pnet = end_time - start_time
+    if(TRAIN_FLAG):
+        train_p_net(p_net, optimizer, scheduler, mse_cost_function, p0_max, iterations=10000); print("[p_net train complete]")
     p_net = pos_p_net_train(p_net, PATH=FOLDER+"output/p_net.pt", PATH_LOSS=FOLDER+"output/p_net_train_loss.npy"); p_net.eval()
     max_abs_e1_ti = show_p_net_results(p_net)
     print("max abs e1(x,0): ", max_abs_e1_ti)
 
-    e1_net = E1Net(scale=max_abs_e1_ti).to(device)
-    e1_net.apply(init_weights)
+    e1_net.scale = max_abs_e1_ti
     optimizer = torch.optim.Adam(e1_net.parameters())
     scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.95)
-    start_time = time.time()
-    # train_e1_net(e1_net, optimizer, scheduler, mse_cost_function, p_net, max_abs_e1_ti, iterations=30000); print("[e1_net train complete]")
-    end_time = time.time()
-    time_train_e1net = end_time - start_time
+    if(TRAIN_FLAG):
+        train_e1_net(e1_net, optimizer, scheduler, mse_cost_function, p_net, max_abs_e1_ti, iterations=30000); print("[e1_net train complete]")
     e1_net = pos_e1_net_train(e1_net, PATH=FOLDER+"output/e1_net.pt", PATH_LOSS=FOLDER+"output/e1_net_train_loss.npy"); e1_net.eval()
     show_e1_net_results(p_net, e1_net)
 
@@ -845,23 +779,13 @@ def main():
     plot_train_loss(FOLDER+"output/p_net_train_loss.npy",
                     FOLDER+"output/e1_net_train_loss.npy")
 
-    print(f"train pnet time: {time_train_pnet:.4f} seconds")
-    print(f"train e1net time: {time_train_e1net:.4f} seconds")
-
-    evalute_metric(p_net, e1_net)
-
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Pass 1 to train, 0 to use the pre-trained models")
+    parser.add_argument("--train", type=int, required=True, help="train bool")
+    args = parser.parse_args()
+    # Modify the TRAIN_FLAG
+    TRAIN_FLAG = args.train
     main()
-
-
-# Log
-# pnet best epoch:  5574 , loss: tensor(0.0005)
-# best epoch:  1909 , loss: tensor(0.0005)
-# t1= 2.0 , a1 [Monte]= [0.17923956]
-# t1= 4.0 , a1 [Monte]= [0.28114263]
-# t1= 6.0 , a1 [Monte]= [0.11387599]
-# train pnet time: 283.7034 seconds
-# train e1net time: 41.0233 seconds
 
 
