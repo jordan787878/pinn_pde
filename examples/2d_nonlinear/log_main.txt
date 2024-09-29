@@ -1,4 +1,3 @@
-(venv) chko1829@UCB-X1Q6HY3GQC 2d_nonlinear % python main.py
 cpu
 save epoch: 0 ,loss: tensor(749.7709) ,ic: tensor(41.5168) ,res: tensor(102.0401) ,res_freq: tensor(39.6107)
 RAR max IC:  tensor(19.4153)
