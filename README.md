@@ -8,7 +8,7 @@ The project is built on Linux desktop
 
 Make sure you have the following on your system:
 - NVIDIA GPU
-- Python 3.12.2
+- Python 3.8.10
 - pip3 (python package manager)
 
 ## Installation
