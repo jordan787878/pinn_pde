@@ -626,7 +626,7 @@ def main():
     mse_cost_function = torch.nn.MSELoss() # Mean squared error
     optimizer = torch.optim.Adam(p_net.parameters())
     start_time = time.time()
-    # train_p_net(p_net, optimizer, mse_cost_function, iterations=10000); print("p_net train complete")
+    train_p_net(p_net, optimizer, mse_cost_function, iterations=10000); print("p_net train complete")
     time_train_p = time.time() - start_time
     p_net = pos_p_net_train(p_net, PATH="output/p_net.pt", PATH_LOSS="output/p_net_train_loss.npy"); p_net.eval()
     max_abs_e1_t0 = show_p_net_results(p_net)
@@ -638,7 +638,7 @@ def main():
     optimizer = torch.optim.Adam(e1_net.parameters(), lr=1e-3);   # test_e1_res(e1_net, p_net)
     scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.9)
     start_time = time.time()
-    # train_e1_net(e1_net, optimizer, scheduler, mse_cost_function, p_net, max_abs_e1_t0, iterations=10000); print("e1_net train complete")
+    train_e1_net(e1_net, optimizer, scheduler, mse_cost_function, p_net, max_abs_e1_t0, iterations=10000); print("e1_net train complete")
     time_train_e = time.time() - start_time
     e1_net = pos_e1_net_train(e1_net, PATH="output/e1_net.pt", PATH_LOSS="output/e1_net_train_loss.npy"); e1_net.eval()
     show_e1_results(p_net, e1_net)
