@@ -326,18 +326,21 @@ def pos_e1_net_train(e1_net, PATH, PATH_LOSS):
     plt.close()
     return e1_net
 
+
 # construct artificial e2hat 
 e2_hat_mag = 2e-2
 e2_hat_freq = 5
 e2_hat_drift = 1e-4
 
+
 def plot_tight_error_bounds(p_net, e1_net):
+    plt.rcParams['font.size'] = 18
     x = np.arange(x_low, x_hig+0.005, 0.005).reshape(-1,1)
     pt_x = Variable(torch.from_numpy(x).float(), requires_grad=True).to(device)
     t1s = [1.5, 2.0, 3.0]
     colors = ["black","black","black"]
 
-    fig, axs = plt.subplots(3, 1, figsize=(7, 6))
+    fig, axs = plt.subplots(3, 1, figsize=(6, 6))
     for i in range(3):
         t1 = t1s[i]
         pt_t1 = Variable(torch.from_numpy(0*x+t1).float(), requires_grad=True).to(device)
@@ -359,7 +362,7 @@ def plot_tight_error_bounds(p_net, e1_net):
     fig.savefig(FOLDER+'figs/e2hat_result.pdf', format='pdf', dpi=300)
     plt.close()
     
-    fig, axs = plt.subplots(3, 1, figsize=(5, 5))
+    fig, axs = plt.subplots(3, 1, figsize=(5, 6))
     for i in range(3):
         t1 = t1s[i]
         pt_t1 = Variable(torch.from_numpy(0*x+t1).float(), requires_grad=True).to(device)
@@ -378,22 +381,24 @@ def plot_tight_error_bounds(p_net, e1_net):
             axs[i].plot(x, p, color=colors[i], linestyle="-", linewidth=1.0, label=r"$p$")
             axs[i].plot(x, phat, linestyle="--", color = "red", linewidth=1.0, label=r"$\hat{p}$")
             axs[i].fill_between(x.reshape(-1), y1=phat.reshape(-1)+eL, y2=phat.reshape(-1)-eL, color="green", alpha=0.3, label=r"$e_S$")
-            axs[i].legend(loc="upper right")
+            axs[i].legend(loc="lower left", fontsize=18, framealpha=0.6)
         else:
             axs[i].plot(x, p, color=colors[i], linestyle="-", linewidth=1.0)
             axs[i].plot(x, phat, linestyle="--", color = "red", linewidth=1.0)
             axs[i].fill_between(x.reshape(-1), y1=phat.reshape(-1)+eL, y2=phat.reshape(-1)-eL, color="green", alpha=0.3)
+        if i < 2:
+            axs[i].set_xticks([])
         axs[i].set_ylim([0, 0.75])
-        axs[i].grid(linewidth=0.5)
-        axs[i].text(0.01, 0.98, "t="+str(t1)+", "+r"$e_S=$"+str(eL), transform=axs[i].transAxes, verticalalignment='top', fontsize=8)
+        axs[i].text(0.01, 0.98, "t="+str(t1)+", "+r"$e_S=$"+str(eL), transform=axs[i].transAxes, verticalalignment='top', fontsize=18)
         axs[i].set_xlim([-3,3])
-        axs[i].set_ylabel("PDF")
+        # axs[i].set_ylabel("PDF")
+        axs[i].yaxis.set_major_formatter(FormatStrFormatter('%.2f'))
     axs[2].set_xlabel("x")
-    plt.tight_layout()
+    plt.tight_layout(pad=0.3, h_pad=0.3)
     fig.savefig(FOLDER+'figs/error_bounds_result.pdf', format='pdf', dpi=300)
     plt.close()
 
-    fig, axs = plt.subplots(3, 1, figsize=(5, 5))
+    fig, axs = plt.subplots(3, 1, figsize=(5, 6))
     for i in range(3):
         t1 = t1s[i]
         pt_t1 = Variable(torch.from_numpy(0*x+t1).float(), requires_grad=True).to(device)
@@ -415,26 +420,27 @@ def plot_tight_error_bounds(p_net, e1_net):
             axs[i].plot(x, x*0+eB, linestyle=":", color = "blue", linewidth=1.0, label=r"$e_B$")
             axs[i].plot(x, x*0-eB, linestyle=":", color = "blue", linewidth=1.0)
             axs[i].fill_between(x.reshape(-1), y1=0*phat.reshape(-1)+eL, y2=0*phat.reshape(-1)-eL, color="green", alpha=0.3, label=r"$e_S$")
-            axs[i].legend(loc="upper right")
+            axs[i].legend(loc="lower left", ncol=2, fontsize=16, framealpha=0.6)
         else:
             axs[i].plot(x, e1, color=colors[i], linestyle="-", linewidth=1.0)
             axs[i].plot(x, e1_hat, linestyle="--", color = "red", linewidth=1.0)
             axs[i].plot(x, x*0+eB, linestyle=":", color = "blue", linewidth=1.0)
             axs[i].plot(x, x*0-eB, linestyle=":", color = "blue", linewidth=1.0)
             axs[i].fill_between(x.reshape(-1), y1=0*phat.reshape(-1)+eL, y2=0*phat.reshape(-1)-eL, color="green", alpha=0.3, label=r"$e_S$")
-        axs[i].grid(linewidth=0.5)
         axs[i].text(0.01, 0.95, "t="+str(t1)+", "+r"$e_B=$"+str(eB[0])+", "+r"$e_S=$"+str(eL[0]),
-                    transform=axs[i].transAxes, verticalalignment='top', fontsize=8,
-                    bbox=dict(facecolor='white', edgecolor='black', boxstyle='round,pad=0.2'))
+                    transform=axs[i].transAxes, verticalalignment='top', fontsize=18)
         axs[i].set_xlim([-3,3])
         axs[i].set_ylim([-2*eL, 2*eL])
+        if i < 2:
+            axs[i].set_xticks([])
     axs[2].set_xlabel('x')
-    plt.tight_layout()
+    plt.tight_layout(pad=0.2, h_pad=0.2)
     fig.savefig(FOLDER+'figs/e1hat_result.pdf', format='pdf', dpi=300)
     plt.close()
 
 
 def plot_alphas(p_net, e1_net):
+    plt.rcParams['font.size'] = 18
     x = np.arange(x_low, x_hig+0.005, 0.005).reshape(-1,1)
     pt_x = Variable(torch.from_numpy(x).float(), requires_grad=True).to(device)
     t1s = np.arange(1.0, 3.0+0.01, 0.01)
@@ -444,6 +450,9 @@ def plot_alphas(p_net, e1_net):
     e1_list = []
     eS_list = []
     eB_list = []
+    gap_list = []
+    e_ratio = []
+    eS_ratio_list = []
 
     for i in range(len(t1s)):
         t1 = t1s[i]
@@ -466,9 +475,18 @@ def plot_alphas(p_net, e1_net):
         a2 = max(abs(e2-e2_hat))/max(abs(e2_hat))
         a1_list.append(a1[0])
         a2_list.append(a2[0])
+        gap = (eS - e1_list[i])/np.max(np.abs(p))
+        gap_list.append(gap)
+        e_ratio.append(eS/eB)
+        eS_ratio = eS/np.max(np.abs(p))
+        eS_ratio_list.append(eS_ratio)
         # print(a1, a2, (1-a1), a2, a1*a1, a2*(1+a2))
 
     # print("a1_list", a1_list)
+    print("[info] max a1: " +str(np.max(np.array(a1_list))) + ", avg a1:" + str(np.mean(np.array(a1_list))))
+    print("[info] max gap: " +str(np.max(np.array(gap_list))) + ", avg gap:" + str(np.mean(np.array(gap_list))))
+    print("[info] max eS_ratio: " +str(np.max(np.array(eS_ratio_list))) + ", avg eS_ratio:" + str(np.mean(np.array(eS_ratio_list))))
+    print("[info] max eS/eB: ", np.max(np.array(e_ratio)))
     a1_list = np.array(a1_list)
     a2_list = np.array(a2_list)
     cond_1 = (1-a1_list)
@@ -476,42 +494,60 @@ def plot_alphas(p_net, e1_net):
     cond_2 = a1_list**2
     y_2 = a2_list*(1+a2_list)
 
-    fig, axs = plt.subplots(2, 2, figsize=(8, 6))
-    axs[0,0].plot(t1s, eB_list, color="black", linestyle=":", linewidth=1.0, label=r"$e_B(t)$")
-    axs[0,0].plot(t1s, eS_list, color="black", linestyle="-", linewidth=1.0, label=r"$e_S(t)$")
-    axs[0,0].plot(t1s, e1_list, color="black", linestyle="--", linewidth=1.0, label=r"$\max_x|e(x,t)|$")
-    axs[0,0].legend(loc="upper right")
-    axs[0,0].grid(linewidth=0.5)
-
-    axs[0,1].plot(t1s, t1s*0+1.0, color="black", linestyle="-", linewidth=1.0, label="condition 1")
-    axs[0,1].plot(t1s, a1_list, color="black", linestyle="--", linewidth=1.0, label=r"$\alpha_1$")
-    axs[0,1].legend(loc="upper right")
-    axs[0,1].grid(linewidth=0.5)
-    axs[0,1].text(0.01, 0.98, "condition 1: " + r"$\alpha_1<1$", 
-                  transform=axs[0,1].transAxes, verticalalignment='top', fontsize=8,
-                  bbox=dict(facecolor='white', edgecolor='black', boxstyle='round,pad=0.2'))
-    
-    axs[1,0].plot(t1s, cond_1, color="black", linewidth=1.0, linestyle="-", label="condition 2")
-    axs[1,0].plot(t1s, y_1, color="black", linewidth=1.0, linestyle="--", label=r"$\alpha_2$")
-    axs[1,0].set_xlabel('t')
-    axs[1,0].legend(loc="upper right")
-    axs[1,0].grid(linewidth=0.5)
-    axs[1,0].text(0.01, 0.98, "condition 2: "+r"$\alpha_2 < 1-\alpha_1$", 
-                  transform=axs[1,0].transAxes, verticalalignment='top', fontsize=8,
-                  bbox=dict(facecolor='white', edgecolor='black', boxstyle='round,pad=0.2'))
-
-    axs[1,1].plot(t1s, cond_2, color="black", linewidth=1.0, linestyle="-", label="condition 3")
-    axs[1,1].plot(t1s, y_2, color="black", linewidth=1.0, linestyle="--", label=r"$\alpha_2(1+\alpha_2)$")
-    axs[1,1].set_xlabel('t')
-    axs[1,1].legend(loc="upper right")
-    axs[1,1].grid(linewidth=0.5)
-    axs[1,1].text(0.01, 0.98, "condition 3: "+r"$\alpha_2(1+\alpha_2) <\alpha_1^2$", 
-                  transform=axs[1,1].transAxes, verticalalignment='top', fontsize=8,
-                  bbox=dict(facecolor='white', edgecolor='black', boxstyle='round,pad=0.2'))
-    
+    plt.figure(figsize=(6, 6))
+    plt.plot(t1s, eB_list, color="blue", linestyle=":", linewidth=1.0, label=r"$e_B(t)$")
+    plt.plot(t1s, eS_list, color="green", linestyle="-", linewidth=1.0, label=r"$e_S(t)$")
+    plt.plot(t1s, e1_list, color="black", linestyle="--", linewidth=1.0, label=r"$\max_x|e(x,t)|$")
+    plt.legend(loc="upper right", framealpha=0.3, fontsize=18)
+    # plt.grid(linewidth=0.5)
+    plt.xlabel("t")
+    # plt.title("Error Bounds")
     plt.tight_layout()
-    fig.savefig(FOLDER+'figs/error_and_conditions.pdf', format='pdf', dpi=300)
+    plt.savefig(FOLDER+'figs/error_and_conditions_1.pdf', format='pdf', dpi=300)
     plt.close()
+
+    plt.figure(figsize=(6, 6))
+    # plt.plot(t1s, t1s*0+1.0, color="black", linestyle="-", linewidth=1.0, label="1")
+    plt.plot(t1s, a1_list, color="black", linestyle="--", linewidth=1.0, label=r"$\alpha_1$")
+    plt.legend(loc="upper right", framealpha=0.3, fontsize=18)
+    # plt.grid(linewidth=0.5)
+    # plt.title("Condition 1: "+r"$\alpha_1<1$")
+    plt.xlabel("t")
+    plt.tight_layout()
+    plt.savefig(FOLDER+'figs/error_and_conditions_2.pdf', format='pdf', dpi=300)
+    plt.close()
+    
+    plt.figure(figsize=(6, 6))
+    plt.plot(t1s, cond_1, color="red", linewidth=1.0, linestyle="-", label=r"$1-\alpha_1$")
+    plt.plot(t1s, y_1, color="black", linewidth=1.0, linestyle="--", label=r"$\alpha_2$")
+    plt.legend(loc="upper left", bbox_to_anchor=(0.6, 0.8), framealpha=0.3, fontsize=18)
+    # plt.grid(linewidth=0.5)
+    plt.xlabel("t")
+    # plt.title("Condition 2: "+r"$\alpha_2 < 1-\alpha_1$")
+    plt.tight_layout()
+    plt.savefig(FOLDER+'figs/error_and_conditions_3.pdf', format='pdf', dpi=300)
+    plt.close()
+    # axs[1,0].text(0.01, 0.98, "condition 2: "+r"$\alpha_2 < 1-\alpha_1$", 
+    #               transform=axs[1,0].transAxes, verticalalignment='top', fontsize=8,
+    #               bbox=dict(facecolor='white', edgecolor='black', boxstyle='round,pad=0.2'))
+
+    plt.figure(figsize=(6, 6))
+    plt.plot(t1s, cond_2, color="red", linewidth=1.0, linestyle="-", label=r"$\alpha_1^2$")
+    plt.plot(t1s, y_2, color="black", linewidth=1.0, linestyle="--", label=r"$\alpha_2(1+\alpha_2)$")
+    plt.legend(loc="upper right", framealpha=0.3, fontsize=18)
+    # plt.grid(linewidth=0.5)
+    plt.xlabel("t")
+    # plt.title("Condition 3: "+r"$\alpha_2(1+\alpha_2) <\alpha_1^2$")
+    plt.tight_layout()
+    plt.savefig(FOLDER+'figs/error_and_conditions_4.pdf', format='pdf', dpi=300)
+    plt.close()
+
+    # axs[1,1].text(0.01, 0.98, "condition 3: "+r"$\alpha_2(1+\alpha_2) <\alpha_1^2$", 
+    #               transform=axs[1,1].transAxes, verticalalignment='top', fontsize=8,
+    #               bbox=dict(facecolor='white', edgecolor='black', boxstyle='round,pad=0.2'))
+    # plt.tight_layout()
+    # fig.savefig(FOLDER+'figs/error_and_conditions.pdf', format='pdf', dpi=300)
+    # plt.close()
 
 
 def plot_train_loss(path_1, path_2):
@@ -535,6 +571,7 @@ def plot_train_loss(path_1, path_2):
 
 
 def plot_p_surface(p_net, num=100):
+    plt.rcParams['font.size'] = 18
     t1s = [1.0, 2.0, 3.0]
     x = np.linspace(x_low, x_hig, num=num)
     t = np.linspace(t0, T_end, num=num)
@@ -560,12 +597,13 @@ def plot_p_surface(p_net, num=100):
         else:
             ax.plot(x, t1_monte, p_list[i], color="black")
 
-    ax.set_xlabel("x"); ax.set_ylabel("t"); ax.set_zlabel("PDF")
-    ax.legend()
+    ax.set_xlabel("x"); ax.set_ylabel("t"); ax.set_zlabel("  PDF")
+    ax.legend(loc='upper left', bbox_to_anchor=(0.1, 0.85), fontsize=18)
     y_ticks = np.array([1, 2, 3])  # Example y-tick positions
     ax.set_yticks(y_ticks)  # Set the positions of the y-ticks
     ax.view_init(20, -50)
-    plt.subplots_adjust(left=0.05, right=0.90, top=0.92, bottom=0.08)
+    plt.subplots_adjust(left=0.00, right=0.90, top=1.0, bottom=0.0)
+    # plt.tight_layout()
     fig.savefig(FOLDER+'figs/phat_surface_plot.pdf', format='pdf', dpi=300)
 
 
@@ -605,12 +643,12 @@ def plot_e1_surface(p_net, e1_net, num=100):
     ax.zaxis.get_major_formatter().set_powerlimits((-2, 2))  # Use scientific notation if value is outside this range
     y_ticks = np.array([1, 2, 3])  # Example y-tick positions
     ax.set_yticks(y_ticks)  # Set the positions of the y-ticks
-    ax.legend()
-    ax.set_xlabel("x")
-    ax.set_ylabel("t")
-    ax.set_zlabel("Error")
+    ax.set_xlabel("x"); ax.set_ylabel("t"); ax.set_zlabel("e")
+    ax.legend(loc='upper left', bbox_to_anchor=(0.1, 0.85), fontsize=18)
+    y_ticks = np.array([1, 2, 3])  # Example y-tick positions
+    ax.set_yticks(y_ticks)  # Set the positions of the y-ticks
     ax.view_init(20, -50)
-    plt.subplots_adjust(left=0.05, right=0.9, top=0.92, bottom=0.08)
+    plt.subplots_adjust(left=0.00, right=0.90, top=1.0, bottom=0.0)
     fig.savefig(FOLDER+'figs/e1hat_surface_plot.pdf', format='pdf', dpi=300)
 
 

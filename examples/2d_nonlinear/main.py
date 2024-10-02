@@ -6,11 +6,13 @@ import torch.nn.utils.spectral_norm as spectral_norm
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib import cm
-from matplotlib.ticker import LinearLocator, FormatStrFormatter
+from matplotlib.ticker import LinearLocator, FormatStrFormatter, ScalarFormatter
 from scipy.stats import multivariate_normal
 from scipy.linalg import expm
 from tqdm import tqdm
 from matplotlib.lines import Line2D
+from mpl_toolkits.mplot3d import Axes3D
+from matplotlib.gridspec import GridSpec
 import torch.nn.functional as F
 import time
 import argparse
@@ -756,6 +758,166 @@ def plot_train_loss(path_1, path_2):
     plt.close()
 
 
+class ScalarFormatterClass(ScalarFormatter):
+    def _set_format(self):
+       self.format = "%1.1f"
+
+
+def plot_results_at_one_time(t1, p_net, e1_net):
+    plt.rcParams['font.size'] = 14
+    # Load data
+    x_points = np.load(FOLDER_DATA+"x_points.npy")
+    sample_size = len(x_points)
+    x1s = x_points
+    x2s = x_points
+    x1, x2 = np.meshgrid(x1s, x2s)
+    x = np.column_stack([x1.ravel(), x2.ravel()])
+    pt_x = Variable(torch.from_numpy(x).float(), requires_grad=True).to(device)
+    p = np.load(FOLDER_DATA+"p_sim_grid"+str(t1)+".npy")
+    pt_t1 = Variable(torch.from_numpy(x[:,0]*0+t1).float(), requires_grad=True).view(-1,1).to(device)
+    p_hat = p_net(pt_x, pt_t1)
+    p_hat_numpy = p_hat.data.cpu().numpy().reshape((sample_size, sample_size))
+    e1 = p - p_hat_numpy
+    pt_t1 = Variable(torch.from_numpy(x[:,0]*0+t1).float(), requires_grad=True).view(-1,1).to(device)
+    e1_hat = e1_net(pt_x, pt_t1).data.cpu().numpy().reshape((sample_size, sample_size))
+    alpha = max(abs(e1.reshape(-1,1) - e1_hat.reshape(-1,1))) / max(abs(e1_hat.reshape(-1,1)))
+    alpha = alpha[0]
+    alpha = np.round(alpha, 2)
+
+    p_all = []
+    p_all.append(p)
+    p_all.append(p_hat_numpy)
+    p_all = np.concatenate(p_all)
+    pmin = np.min(p_all)
+    pmax = np.max(p_all)
+
+    e_all = []
+    e_all.append(e1)
+    e_all = np.concatenate(e_all)
+    emin = np.min(e_all)
+    emax = np.max(e_all)
+
+    # Create a figure with a specified size
+    fig = plt.figure(figsize=(9, 5))
+    
+    # Create a GridSpec for a 2x2 layout for 2D plots and 1x1 for 3D plot
+    gs = GridSpec(2, 3, width_ratios=[0.8, 0.9, 1.7])  # Adjust width ratios to make 3D plot larger
+
+    # 2D Subplots
+    ax1 = fig.add_subplot(gs[0, 0])
+    ax2 = fig.add_subplot(gs[0, 1])
+    ax3 = fig.add_subplot(gs[1, 0])
+    ax4 = fig.add_subplot(gs[1, 1])
+
+    # Plot p
+    im1 = ax1.imshow(p, extent=[x_low, x_hig, x_low, x_hig], cmap='viridis', aspect='equal', 
+                     origin='lower', vmin=pmin, vmax=pmax)
+    ax1.text(0.05, 0.95, r"$p$", 
+             transform=ax1.transAxes, verticalalignment='top', fontsize=16,
+             bbox=dict(facecolor='white', edgecolor='black', boxstyle='round,pad=0.2'))
+    ax1.set_xticks([])
+    ax1.set_yticks(np.array([-9, -5, 0, 5, 9]))
+    ax1.set_ylabel(r"$x_2$")
+
+    # Plot p_hat
+    im2 = ax2.imshow(p_hat_numpy, extent=[x_low, x_hig, x_low, x_hig], cmap='viridis', aspect='equal', 
+                     origin='lower', vmin=pmin, vmax=pmax)
+    ax2.text(0.05, 0.95, r"$\hat{p}$", 
+             transform=ax2.transAxes, verticalalignment='top', fontsize=16,
+             bbox=dict(facecolor='white', edgecolor='black', boxstyle='round,pad=0.2'))
+    ax2.set_xticks([])
+    ax2.set_yticks([])
+
+    # Add colorbar for p_hat
+    cbar2 = fig.colorbar(im2, ax=ax2, orientation='vertical', fraction=0.046, pad=0.04)
+    zScalarFormatter = ScalarFormatterClass(useMathText=True)
+    zScalarFormatter.set_powerlimits((0, 0))
+    cbar2.ax.yaxis.set_major_formatter(zScalarFormatter)
+    # cbar2.ax.yaxis.set_major_formatter(ScalarFormatter(useMathText=True))
+    # cbar2.set_label('Value')
+    
+    # Plot e1
+    im3 = ax3.imshow(e1, extent=[x_low, x_hig, x_low, x_hig], cmap='viridis', aspect='equal', 
+                     origin='lower', vmin=emin, vmax=emax)
+    ax3.text(0.05, 0.95, r"$e$", 
+             transform=ax3.transAxes, verticalalignment='top', fontsize=16,
+             bbox=dict(facecolor='white', edgecolor='black', boxstyle='round,pad=0.2'))
+    ax3.set_xticks(np.array([-9, -5, 0, 5, 9]))
+    ax3.set_yticks(np.array([-9, -5, 0, 5, 9]))
+    ax3.set_ylabel(r"$x_2$")
+    ax3.set_xlabel(r"$x_1$")
+
+    # Plot e1_hat
+    im4 = ax4.imshow(e1_hat, extent=[x_low, x_hig, x_low, x_hig], cmap='viridis', aspect='equal', 
+                     origin='lower', vmin=emin, vmax=emax)
+    ax4.text(0.05, 0.95, r"$\hat{e}_1$", 
+             transform=ax4.transAxes, verticalalignment='top', fontsize=16,
+             bbox=dict(facecolor='white', edgecolor='black', boxstyle='round,pad=0.2'))
+    ax4.set_yticks([])
+    ax4.set_xticks(np.array([-9, -5, 0, 5, 9]))
+    ax4.set_xlabel(r"$x_1$")
+
+    # Add colorbar for e1_hat
+    cbar4 = fig.colorbar(im4, ax=ax4, orientation='vertical', fraction=0.046, pad=0.04)
+    zScalarFormatter = ScalarFormatterClass(useMathText=True)
+    zScalarFormatter.set_powerlimits((0, 0))
+    cbar4.ax.yaxis.set_major_formatter(zScalarFormatter)
+    # cbar4.set_label('Error')
+
+    # 3D Surface Plot
+    ax5 = fig.add_subplot(gs[:, 2], projection='3d')  # Use the entire right column for 3D plot
+    ax5.plot_surface(x1, x2, e1, cmap='viridis', vmin=emin, vmax=emax)
+    eS = 2.0 * np.max(np.abs(e1_hat))
+    eS = np.round(eS, 3)
+    ax5.plot_surface(x1, x2, e1_hat*0.0 + eS, color="green", alpha=0.3)
+    ax5.plot_surface(x1, x2, e1_hat*0.0 - eS, color="green", alpha=0.3)
+    ax5.set_zlabel("e")
+    ax5.set_xticks(np.array([-9, -5, 0, 5, 9]))
+    ax5.set_yticks(np.array([-9, -5, 0, 5, 9]))
+    zScalarFormatter = ScalarFormatterClass(useMathText=True)
+    zScalarFormatter.set_powerlimits((0, 0))
+    ax5.zaxis.set_major_formatter(zScalarFormatter)
+    ax5.set_ylabel(r"$x_2$")
+    ax5.set_xlabel(r"$x_1$")
+    ax5.set_title("t="+str(t1) + ", " + r"$\alpha_1=$"+str(alpha) + ", " + r"$e_S=$" + str(eS))
+    plt.subplots_adjust(left=0.08, right=0.9, top=0.90, bottom=0.1)
+    plt.savefig(FOLDER+'figs/special_error_bound_t1.pdf', format='pdf', dpi=300)
+    plt.close()
+
+
+def show_table(p_net, e1_net):
+    x_points = np.load(FOLDER_DATA+"x_points.npy")
+    sample_size = len(x_points)
+    x1s = x_points
+    x2s = x_points
+    x1, x2 = np.meshgrid(x1s, x2s)
+    x = np.column_stack([x1.ravel(), x2.ravel()])
+    pt_x = Variable(torch.from_numpy(x).float(), requires_grad=True).to(device)
+    t1s = [1.0, 2.0, 3.0, 4.0, 5.0]
+    a1_list = []
+    gap_list = []
+    eS_ratio_list = []
+    for t1 in t1s:
+        p = np.load(FOLDER_DATA+"p_sim_grid"+str(t1)+".npy")
+        pt_t1 = Variable(torch.from_numpy(x[:,0]*0+t1).float(), requires_grad=True).view(-1,1).to(device)
+        p_hat = p_net(pt_x, pt_t1).data.cpu().numpy().reshape((sample_size, sample_size))
+        e1 = p - p_hat
+        e1_hat = e1_net(pt_x, pt_t1).data.cpu().numpy().reshape((sample_size, sample_size))
+        eS = max(abs(e1_hat.reshape(-1,1)))*2
+        eS = eS[0]
+        a1 = max(abs(e1.reshape(-1,1) - e1_hat.reshape(-1,1))) / max(abs(e1_hat.reshape(-1,1)))
+        a1 = a1[0]
+        a1_list.append(a1)
+        e1max = max(abs(e1.reshape(-1,1)))
+        gap = (eS - e1max)/ max(abs(p.reshape(-1,1)))
+        gap_list.append(gap)
+        eS_ratio_list.append(eS/ max(abs(p.reshape(-1,1))) )
+    print("[info] max a1: " +str(np.max(np.array(a1_list))) + ", avg a1:" + str(np.mean(np.array(a1_list))))
+    print("[info] max gap: " +str(np.max(np.array(gap_list))) + ", avg gap:" + str(np.mean(np.array(gap_list))))
+    print("[info] max eS_ratio: " +str(np.max(np.array(eS_ratio_list))) + ", avg eS_ratio:" + str(np.mean(np.array(eS_ratio_list))))
+        
+
+
 def main():
     # test_p_sol_monte(stat_sample=100000000)
     mse_cost_function = torch.nn.MSELoss() # Mean squared error
@@ -784,8 +946,9 @@ def main():
     e1_net = pos_e1_net_train(e1_net, PATH=FOLDER+"output/e1_net.pth", PATH_LOSS=FOLDER+"output/e1_net_train_loss.npy"); e1_net.eval()
     print("[load e1net model from: "+FOLDER+"output/e1_net.pth]")
     show_e1_net_results(p_net ,e1_net)
-
+    show_table(p_net, e1_net)
     plot_train_loss(FOLDER+"output/p_net_train_loss.npy", FOLDER+"output/e1_net_train_loss.npy")
+    plot_results_at_one_time(3.0, p_net, e1_net)
 
     if(TRAIN_FLAG == False):
         print("[complete 2d nonlinear, with pre-trained models]")

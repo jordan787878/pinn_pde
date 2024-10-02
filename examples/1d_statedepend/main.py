@@ -526,6 +526,7 @@ def pos_e1_net_train(e1_net, PATH, PATH_LOSS):
 
 
 def show_e1_net_results(p_net, e1_net):
+    plt.rcParams['font.size'] = 14
     t1s = [2.0, 4.0, 6.0]
     x = np.linspace(x_low, x_hig, num=100).reshape(-1,1)
     pt_x = Variable(torch.from_numpy(x).float(), requires_grad=True).to(device)
@@ -562,7 +563,7 @@ def show_e1_net_results(p_net, e1_net):
         r2 = e1_res_func(pt_x, pt_t1, e1_net, p_net).data.cpu().numpy()
         r2_list.append(r2)
 
-    fig, axs = plt.subplots(3, 1, figsize=(6, 6))
+    fig, axs = plt.subplots(3, 1, figsize=(5, 6))
     for i, (t1, ax1, e1, e1_hat, alpha_1) in enumerate(zip(t1s, axs, e1_list, e1_hat_list, alpha_1_list)):
         error_bound = 2.0 * max(abs(e1_hat))[0]
         if i == 0:
@@ -582,16 +583,22 @@ def show_e1_net_results(p_net, e1_net):
         print("t1=",t1, ", a1 [Monte]=", alpha_1)
         if(i == 2):
             ax1.set_xlabel('x')
-        ax1.set_ylabel('Error')
-        ax1.grid(True, which='both', linestyle='-', linewidth=0.5)  # Add thin grid lines
+        if(i < 2):
+            ax1.set_xticks([])
+        # if(i == 1):
+        #     ax1.set_yticks(np.array([-0.03, 0.00, 0.03]))
+        ax1.yaxis.set_major_formatter(FormatStrFormatter('%.2f'))
+        ax1.set_xlim([92, 108])
+        ax1.set_xticks(np.array([92, 96, 100, 104, 108]))
+        # ax1.grid(True, which='both', linestyle='-', linewidth=0.5)  # Add thin grid lines
         # Add text to the left top corner
-        ax1.text(0.01, 0.95, "t:"+str(t1)+", "+r"$\alpha_1:$"+str(np.round(alpha_1[0],2)), transform=ax1.transAxes, verticalalignment='top', fontsize=8,
-                 bbox=dict(facecolor='white', edgecolor='black', boxstyle='round,pad=0.3'))
-    plt.tight_layout()
+        ax1.text(0.01, 0.95, "t:"+str(t1)+", "+r"$\alpha_1:$"+str(np.round(alpha_1[0],2)), 
+                 transform=axs[i].transAxes, verticalalignment='top', fontsize=16)
+    plt.tight_layout(pad=0.2, h_pad=0.1)
     fig.savefig(FOLDER+'figs/e1hat_result.pdf', format='pdf', dpi=300)
     plt.close()
 
-    fig, axs = plt.subplots(3, 1, figsize=(6, 6))
+    fig, axs = plt.subplots(3, 1, figsize=(5, 6))
     for i, (t1, ax1, p, p_hat, e1_hat, alpha_1) in enumerate(zip(t1s, axs, p_monte_list, p_hat_list, e1_hat_list, alpha_1_list)):
         error_bound = 2.0 * max(abs(e1_hat))[0]
         if i == 0:
@@ -605,14 +612,18 @@ def show_e1_net_results(p_net, e1_net):
             ax1.plot(x, p_hat, "red", linewidth=1.0, linestyle="--")
         #     ax1.plot(x, e1_hat, "red", linestyle="--")
             ax1.fill_between(x.reshape(-1), y1=p_hat.reshape(-1)+error_bound, y2=p_hat.reshape(-1)-error_bound, color="green", alpha=0.3)
-        ax1.grid(True, which='both', linestyle='-', linewidth=0.5)  # Add thin grid lines
+        #  ax1.grid(True, which='both', linestyle='-', linewidth=0.5)  # Add thin grid lines
         # Add text to the left top corner
         ax1.text(0.01, 0.95, "t="+str(t1)+", "+r"$e_S=$"+str(np.round(error_bound,3)), 
-                 transform=ax1.transAxes, verticalalignment='top', fontsize=8,
-                 bbox=dict(facecolor='white', edgecolor='black', boxstyle='round,pad=0.3'))
+                 transform=axs[i].transAxes, verticalalignment='top', fontsize=16)
         ax1.set_ylim([0.0, 0.42])
         ax1.set_xlim([92, 108])
-    plt.tight_layout()
+        ax1.set_xticks(np.array([92, 96, 100, 104, 108]))
+        if(i < 2):
+            ax1.set_xticks([])
+        if(i == 2):
+            ax1.set_xlabel("x")
+    plt.tight_layout(pad=0.2, h_pad=0.1)
     fig.savefig(FOLDER+'figs/error_bound_results.pdf', format='pdf', dpi=300)
     plt.close()
 
@@ -645,6 +656,7 @@ def show_e1_net_results(p_net, e1_net):
         
 
 def plot_p_surface(p_net, num=100):
+    plt.rcParams['font.size'] = 14
     t1s = [1.0, 2.0, 3.0, 4.0, 5.0]
     x = np.linspace(x_low, x_hig, num=num)
     t = np.linspace(t0, T_end, num=num)
@@ -670,18 +682,28 @@ def plot_p_surface(p_net, num=100):
         else:
             ax.plot(x, t1_monte, p_list[i], color="black")
 
-    ax.set_xlabel("x"); ax.set_ylabel("t"); ax.set_zlabel("PDF")
-    ax.legend()
-    # y_ticks = np.array([1, 2, 3])  # Example y-tick positions
-    # ax.set_yticks(y_ticks)  # Set the positions of the y-ticks
-    x_ticks = np.array([90, 95, 100, 105, 110])  # Example y-tick positions
+    # ax.set_xlabel("x"); ax.set_ylabel("t"); ax.set_zlabel("PDF")
+    # ax.legend()
+    # # y_ticks = np.array([1, 2, 3])  # Example y-tick positions
+    # # ax.set_yticks(y_ticks)  # Set the positions of the y-ticks
+    # x_ticks = np.array([90, 95, 100, 105, 110])  # Example y-tick positions
+    # ax.set_xticks(x_ticks)  # Set the positions of the y-ticks
+    # ax.view_init(35, -125)
+    # plt.subplots_adjust(left=0.05, right=0.90, top=0.92, bottom=0.08)
+    ax.set_xlabel("x"); ax.set_ylabel("t"); ax.set_zlabel("    PDF")
+    ax.legend(loc='upper left', bbox_to_anchor=(0.1, 0.9), fontsize=14)
+    x_ticks = np.array([90, 95, 100, 105, 110])
+    y_ticks = np.array([0, 1, 2, 3, 4, 5])  # Example y-tick positions
     ax.set_xticks(x_ticks)  # Set the positions of the y-ticks
-    ax.view_init(35, -125)
-    plt.subplots_adjust(left=0.05, right=0.90, top=0.92, bottom=0.08)
+    ax.set_yticks(y_ticks)  # Set the positions of the y-ticks
+    ax.set_zticks(np.array([0.0, 0.1, 0.2, 0.3, 0.4]))
+    ax.view_init(20, -60)
+    plt.subplots_adjust(left=0.00, right=0.90, top=1.0, bottom=0.0)
     fig.savefig(FOLDER+'figs/phat_surface_plot.pdf', format='pdf', dpi=300)
 
 
 def plot_e1_surface(p_net, e1_net, num=100):
+    plt.rcParams['font.size'] = 14
     t1s = [1.0, 2.0, 3.0, 4.0, 5.0]
     x = np.linspace(x_low, x_hig, num=num)
     t = np.linspace(t0, T_end, num=num)
@@ -715,15 +737,23 @@ def plot_e1_surface(p_net, e1_net, num=100):
     # Set z-ticks to scientific notation
     ax.zaxis.set_major_formatter(ScalarFormatter(useMathText=True))
     ax.zaxis.get_major_formatter().set_powerlimits((-2, 2))  # Use scientific notation if value is outside this range
-    y_ticks = np.array([1, 2, 3])  # Example y-tick positions
+    # y_ticks = np.array([1, 2, 3])  # Example y-tick positions
+    # ax.set_yticks(y_ticks)  # Set the positions of the y-ticks
+    # ax.legend()
+    # ax.set_xlabel("x")
+    # ax.set_ylabel("t")
+    # ax.set_zlabel("Error")
+    # # ax.view_init(35, -125)
+    # plt.subplots_adjust(left=0.05, right=0.9, top=0.92, bottom=0.08)
+    # # plt.show()
+    ax.set_xlabel("x"); ax.set_ylabel("t"); ax.set_zlabel(" e")
+    ax.legend(loc='upper left', bbox_to_anchor=(0.1, 0.9), fontsize=14)
+    x_ticks = np.array([90, 95, 100, 105, 110])
+    y_ticks = np.array([0, 1, 2, 3, 4, 5])  # Example y-tick positions
+    ax.set_xticks(x_ticks)  # Set the positions of the y-ticks
     ax.set_yticks(y_ticks)  # Set the positions of the y-ticks
-    ax.legend()
-    ax.set_xlabel("x")
-    ax.set_ylabel("t")
-    ax.set_zlabel("Error")
-    ax.view_init(35, -125)
-    plt.subplots_adjust(left=0.05, right=0.9, top=0.92, bottom=0.08)
-    # plt.show()
+    ax.view_init(20, -60)
+    plt.subplots_adjust(left=0.00, right=0.90, top=1.0, bottom=0.0)
     fig.savefig(FOLDER+'figs/e1hat_surface_plot.pdf', format='pdf', dpi=300)
 
 
@@ -747,7 +777,37 @@ def plot_train_loss(path_1, path_2):
     fig.savefig(FOLDER+'figs/train_loss.pdf', format='pdf', dpi=300, bbox_inches='tight')
     plt.close()
 
+
+def show_table(p_net, e1_net):
+    x = np.arange(x_low, x_hig+0.005, 0.005).reshape(-1,1)
+    pt_x = Variable(torch.from_numpy(x).float(), requires_grad=True).to(device)
+    t1s = np.arange(t0, T_end+0.01, 0.01)
+
+    a1_list = []
+    gap_list = []
+    e1_list = []
+    eS_ratio_list = []
+    for i in range(len(t1s)):
+        t1 = t1s[i]
+        pt_t1 = Variable(torch.from_numpy(0*x+t1).float(), requires_grad=True).to(device)
+        p = p_sol(x, x*0+t1)
+        phat = p_net(pt_x, pt_t1).data.cpu().numpy()
+        e1 = p - phat
+        e1_list.append(max(abs(e1))[0])
+        e1_hat = e1_net(pt_x, pt_t1).data.cpu().numpy()
+        eS = max(abs(e1_hat))*2
+        eS = np.round(eS,3)
+        a1 = max(abs(e1-e1_hat))/max(abs(e1_hat))
+        a1_list.append(a1[0])
+        gap_list.append((eS - e1_list[i])/np.max(np.abs(p)))
+        eS_ratio = eS/np.max(np.abs(p))
+        eS_ratio_list.append(eS_ratio)
+
+    print("[info] max a1: " +str(np.max(np.array(a1_list))) + ", avg a1:" + str(np.mean(np.array(a1_list))))
+    print("[info] max gap: " +str(np.max(np.array(gap_list))) + ", avg gap:" + str(np.mean(np.array(gap_list))))
+    print("[info] max eS_ratio: " +str(np.max(np.array(eS_ratio_list))) + ", avg eS_ratio:" + str(np.mean(np.array(eS_ratio_list))))
     
+
 def main():
     mse_cost_function = torch.nn.MSELoss() # Mean squared error
 
@@ -774,6 +834,7 @@ def main():
     e1_net = pos_e1_net_train(e1_net, PATH=FOLDER+"output/e1_net.pt", PATH_LOSS=FOLDER+"output/e1_net_train_loss.npy"); e1_net.eval()
     show_e1_net_results(p_net, e1_net)
 
+    show_table(p_net, e1_net)
     plot_p_surface(p_net)
     plot_e1_surface(p_net, e1_net)
     plot_train_loss(FOLDER+"output/p_net_train_loss.npy",

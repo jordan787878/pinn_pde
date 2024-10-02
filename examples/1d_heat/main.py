@@ -6,8 +6,7 @@ import torch.nn.utils.spectral_norm as spectral_norm
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib import cm
-from matplotlib.ticker import LinearLocator, FormatStrFormatter
-from matplotlib.ticker import ScalarFormatter
+from matplotlib.ticker import LinearLocator, FormatStrFormatter, ScalarFormatter
 import time
 
 # global variable
@@ -135,10 +134,10 @@ def pos_p_net_train(p_net, PATH, PATH_LOSS):
     loss = checkpoint['loss']
     print("pnet best epoch: ", epoch, ", loss:", loss.data)
     # see training result
-    keys = p_net.state_dict().keys()
-    for k in keys:
-        l2_norm = torch.norm(p_net.state_dict()[k], p=2)
-        print(f"L2 norm of {k} : {l2_norm.item()}")
+    # keys = p_net.state_dict().keys()
+    # for k in keys:
+    #     l2_norm = torch.norm(p_net.state_dict()[k], p=2)
+    #     print(f"L2 norm of {k} : {l2_norm.item()}")
     # plot loss history
     loss_history = np.load(PATH_LOSS)
     min_loss = min(loss_history)
@@ -170,7 +169,7 @@ def show_p_net_results(p_net):
 
     e1 = p_exact0 - p_approx0
     max_abs_e1_t0 = max(abs(p_exact0 - p_approx0))[0]
-    print(max_abs_e1_t0)
+    # print(max_abs_e1_t0)
 
     plt.figure()
     plt.plot(x, p_exact0,  "k--", label=r"$p(t_i)$")
@@ -343,10 +342,10 @@ def pos_e1_net_train(e1_net, PATH, PATH_LOSS):
     loss = checkpoint['loss']
     print("best epoch: ", epoch, ", loss:", loss.data)
     # see training result
-    keys = e1_net.state_dict().keys()
-    for k in keys:
-        l2_norm = torch.norm(e1_net.state_dict()[k], p=2)
-        print(f"L2 norm of {k} : {l2_norm.item()}")
+    # keys = e1_net.state_dict().keys()
+    # for k in keys:
+    #     l2_norm = torch.norm(e1_net.state_dict()[k], p=2)
+    #     print(f"L2 norm of {k} : {l2_norm.item()}")
     # plot loss history
     loss_history = np.load(PATH_LOSS)
     min_loss = min(loss_history)
@@ -360,13 +359,20 @@ def pos_e1_net_train(e1_net, PATH, PATH_LOSS):
     return e1_net
 
 
+class ScalarFormatterClass(ScalarFormatter):
+    def _set_format(self):
+       self.format = "%1.1f"
+
+
 def show_e1_results(p_net, e1_net):
-    plt.figure(figsize=(6,6))
+    plt.rcParams['font.size'] = 18
+    fig, axs = plt.subplots(3, 1, figsize=(5, 6))
     global x_low, x_hig, t0, T_end
     x = np.arange(x_low, x_hig, 0.01).reshape(-1,1)
     t1s = [0.2, 0.6, 1.0]
     j = 1
-    for t1 in t1s:
+    for i in range(3):
+        t1 = t1s[i]
         plt.subplot(3,1,j)
         T1 = 0*x + t1
         pt_x = Variable(torch.from_numpy(x).float(), requires_grad=True).to(device)
@@ -375,36 +381,43 @@ def show_e1_results(p_net, e1_net):
         p_exact1 = p_sol(x, t1)
         e1_exact_1 = p_exact1 - p_approx1   
         e1_1 = e1_net(pt_x, pt_T1).data.cpu().numpy()
-        alpha1 = max(abs(e1_exact_1-e1_1))/max(abs(e1_1))
         error_bound = max(abs(e1_1))*2
-        plt.plot(x, e1_exact_1, linestyle="-", color="black", label=r"$e$")
-        plt.plot(x, e1_1, color="red", linestyle="--", label=r"$\hat{e}_1$")
-        # plt.plot(x, x*0, color="black", linestyle=":", linewidth=0.5)
-        plt.fill_between(x.reshape(-1), y1=0.0*p_approx1.reshape(-1)+error_bound, y2=0.0*p_approx1.reshape(-1)-error_bound, 
+        error_bound = error_bound[0]
+        a1 = np.max(np.abs(e1_exact_1-e1_1)) / np.max(np.abs(e1_1))
+        ax1 = axs[i]
+        ax1.plot(x, e1_exact_1, color="black", linewidth=1.0, linestyle="-", label="$e$")
+        ax1.plot(x, e1_1, "red", linewidth=1.0, linestyle="--", label=r"$\hat{e}_1$")
+        ax1.fill_between(x.reshape(-1), y1=0.0*p_approx1.reshape(-1)+error_bound, 
+                         y2=0.0*p_approx1.reshape(-1)-error_bound, 
                          color="green", alpha=0.3, label=r"$e_S$")
-        props = dict(boxstyle='round', facecolor='white', alpha=0.5)
-        plt.text(0.01, 0.99, "t:"+str(t1)+ r"$, \alpha_1:$"+str(np.round(alpha1[0],2)), transform=plt.gca().transAxes, fontsize=10,
-            verticalalignment='top', bbox=props)
-        plt.ylim([-1.5*error_bound, 1.5*error_bound])
-        plt.grid(linewidth=0.5)
-        if(j == 1):
-            plt.legend(loc="upper right")
-        j = j + 1
-        plt.ylabel("Error")
-    plt.xlabel("x")
-    plt.tight_layout()
-    # plt.savefig("figs/e1net_result.png")
+        if i == 0:
+            ax1.legend(loc="upper right")
+        if i < 2:
+            ax1.set_xticks([])
+        if i == 2:
+            ax1.set_xlabel("x")
+        ax1.set_xlim([x_low, x_hig])
+        # ax1.grid(True, which='both', linestyle='-', linewidth=0.5)
+        ax1.text(0.01, 0.98, r"$t:$ "+str(t1s[i]) + r", $\alpha_1:$ "+str(np.round(a1, 3)), 
+                 transform=axs[i].transAxes, verticalalignment='top', fontsize=18)
+        # Set y-axis to scientific notation
+        yScalarFormatter = ScalarFormatterClass(useMathText=True)
+        yScalarFormatter.set_powerlimits((0,0))
+        ax1.yaxis.set_major_formatter(yScalarFormatter)
+    plt.tight_layout(pad=0.3, h_pad=0.3)
     plt.savefig("figs/e1net_result.pdf", format='pdf', dpi=300)
     plt.close()
 
 
 def show_uniform_bound(p_net, e1_net):
-    plt.figure(figsize=(6,6))
+    plt.rcParams['font.size'] = 18
+    fig, axs = plt.subplots(3, 1, figsize=(5, 6))
     global x_low, x_hig, t0, T_end
     x = np.arange(x_low, x_hig, 0.01).reshape(-1,1)
     t1s = [0.2, 0.6, 1.0]
     j = 1
-    for t1 in t1s:
+    for i in range(3):
+        t1 = t1s[i]
         plt.subplot(3,1,j)
         T1 = 0*x + t1
         pt_x = Variable(torch.from_numpy(x).float(), requires_grad=True).to(device)
@@ -414,26 +427,33 @@ def show_uniform_bound(p_net, e1_net):
         # e1_exact_1 = p_exact1 - p_approx1   
         e1_1 = e1_net(pt_x, pt_T1).data.cpu().numpy()
         error_bound = max(abs(e1_1))*2
-        plt.plot(x, p_exact1, color="black", linewidth=1.0, linestyle="-", label="$u$")
-        plt.plot(x, p_approx1, "red", linewidth=1.0, linestyle="--", label=r"$\hat{u}$")
-        plt.fill_between(x.reshape(-1), y1=p_approx1.reshape(-1)+error_bound, y2=p_approx1.reshape(-1)-error_bound, 
+        error_bound = error_bound[0]
+        ax1 = axs[i]
+        ax1.plot(x, p_exact1, color="black", linewidth=1.0, linestyle="-", label="$u$")
+        ax1.plot(x, p_approx1, "red", linewidth=1.0, linestyle="--", label=r"$\hat{u}$")
+        ax1.fill_between(x.reshape(-1), y1=p_approx1.reshape(-1)+error_bound, y2=p_approx1.reshape(-1)-error_bound, 
                          color="green", alpha=0.3, label=r"$e_S$")
-        textstr = 't:'+str(t1) + ", " + r"$e_S$:"+str(np.round(error_bound[0],3))
-        props = dict(boxstyle='round', facecolor='white', alpha=0.5)
-        plt.grid(linewidth=0.5)
-        plt.text(0.01, 0.99, textstr, transform=plt.gca().transAxes, fontsize=10,
-            verticalalignment='top', bbox=props)
-        if(j == 1):
-            plt.legend(loc="upper right")
-        j = j + 1
-        plt.ylabel("u")
-    plt.xlabel("x")
-    plt.tight_layout()
+        if i == 0:
+            ax1.legend(loc="upper right")
+        if i < 2:
+            ax1.set_xticks([])
+        if i == 2:
+            ax1.set_xlabel("x")
+        ax1.set_xlim([x_low, x_hig])
+        # ax1.grid(True, which='both', linestyle='-', linewidth=0.5)
+        ax1.text(0.01, 0.98, r"$t:$ "+str(t1s[i]) + r", $e_S:$ "+str(np.round(error_bound,4)), 
+                 transform=axs[i].transAxes, verticalalignment='top', fontsize=18)
+        # Set y-axis to scientific notation
+        yScalarFormatter = ScalarFormatterClass(useMathText=True)
+        yScalarFormatter.set_powerlimits((0,0))
+        ax1.yaxis.set_major_formatter(yScalarFormatter)
+    plt.tight_layout(pad=0.3, h_pad=0.3)
     plt.savefig("figs/uniform_error_bound.pdf", format='pdf', dpi=300)
     plt.close()
 
 
 def plot_p_surface(p_net, num=100):
+    plt.rcParams['font.size'] = 18
     t1s = [0.0, 0.5, 1.0]
     x = np.linspace(x_low, x_hig, num=num)
     t = np.linspace(t0, T_end, num=num)
@@ -460,16 +480,18 @@ def plot_p_surface(p_net, num=100):
             ax.plot(x, t1_monte, p_list[i], color="black")
 
     ax.set_xlabel("x"); ax.set_ylabel("t"); #ax.set_zlabel("PDF")
-    ax.legend()
+    ax.legend(loc='upper left', bbox_to_anchor=(0.1, 0.85), fontsize=18)
     x_ticks = np.array([-1, 0, 1])  # Example y-tick positions
     ax.set_xticks(x_ticks)  # Set the positions of the y-ticks
     ax.view_init(20, 150)
     plt.subplots_adjust(left=0.05, right=0.90, top=0.92, bottom=0.08)
     # plt.show()
     fig.savefig('figs/phat_surface_plot.pdf', format='pdf', dpi=300)
+    plt.close()
 
 
 def plot_e1_surface(p_net, e1_net, num=100):
+    plt.rcParams['font.size'] = 18
     t1s = [0.0, 0.5, 1.0]
     x = np.linspace(x_low, x_hig, num=num)
     t = np.linspace(t0, T_end, num=num)
@@ -505,13 +527,14 @@ def plot_e1_surface(p_net, e1_net, num=100):
     ax.zaxis.get_major_formatter().set_powerlimits((-2, 2))  # Use scientific notation if value is outside this range
     x_ticks = np.array([-1, 0, 1])  # Example y-tick positions
     ax.set_xticks(x_ticks)  # Set the positions of the y-ticks
-    ax.legend()
+    ax.legend(loc='upper left', bbox_to_anchor=(0.1, 0.85), fontsize=18)
     ax.set_xlabel("x")
     ax.set_ylabel("t")
     ax.set_zlabel("Error")
     ax.view_init(20, 150)
     plt.subplots_adjust(left=0.05, right=0.9, top=0.92, bottom=0.08)
     fig.savefig('figs/e1hat_surface_plot.pdf', format='pdf', dpi=300)
+    plt.close()
 
 
 def plot_train_loss(path_1, path_2):
@@ -519,7 +542,7 @@ def plot_train_loss(path_1, path_2):
     min_loss_1 = min(loss_history_1)
     loss_history_2 = np.load(path_2)
     min_loss_2 = min(loss_history_2)
-    print(loss_history_2)
+    # print(loss_history_2)
     fig, axs = plt.subplots(2, 1, figsize=(7, 6))
     axs[0].plot(np.arange(len(loss_history_1)), loss_history_1, "black", linewidth=1.0)
     axs[0].set_ylim([min_loss_1, 10*min_loss_1])
@@ -569,6 +592,33 @@ def show_enet_res(p_net, e1_net):
     plt.close()
 
 
+def show_table(p_net, e1_net):
+    x = np.arange(x_low, x_hig+0.005, 0.005).reshape(-1,1)
+    pt_x = Variable(torch.from_numpy(x).float(), requires_grad=True).to(device)
+    t1s = np.arange(t0, T_end+0.01, 0.01)
+    a1_list = []
+    gap_list = []
+    e1_list = []
+    eS_ratio_list = []
+    for i in range(len(t1s)):
+        t1 = t1s[i]
+        pt_t1 = Variable(torch.from_numpy(0*x+t1).float(), requires_grad=True).to(device)
+        p = p_sol(x, x*0+t1)
+        phat = p_net(pt_x, pt_t1).data.cpu().numpy()
+        e1 = p - phat
+        e1_list.append(max(abs(e1))[0])
+        e1_hat = e1_net(pt_x, pt_t1).data.cpu().numpy()
+        eS = max(abs(e1_hat))*2
+        eS = np.round(eS,3)
+        a1 = max(abs(e1-e1_hat))/max(abs(e1_hat))
+        a1_list.append(a1[0])
+        gap_list.append((eS - e1_list[i])/max(abs(p)))
+        eS_ratio_list.append(eS/ max(abs(p)) )
+    print("[info] max a1: " +str(np.max(np.array(a1_list))) + ", avg a1:" + str(np.mean(np.array(a1_list))))
+    print("[info] max gap: " +str(np.max(np.array(gap_list))) + ", avg gap:" + str(np.mean(np.array(gap_list))))
+    print("[info] max eS_ratio: " +str(np.max(np.array(eS_ratio_list))) + ", avg eS_ratio:" + str(np.mean(np.array(eS_ratio_list))))
+
+
 def main():
     # create p_net
     p_net = Net()
@@ -576,7 +626,7 @@ def main():
     mse_cost_function = torch.nn.MSELoss() # Mean squared error
     optimizer = torch.optim.Adam(p_net.parameters())
     start_time = time.time()
-    train_p_net(p_net, optimizer, mse_cost_function, iterations=10000); print("p_net train complete")
+    # train_p_net(p_net, optimizer, mse_cost_function, iterations=10000); print("p_net train complete")
     time_train_p = time.time() - start_time
     p_net = pos_p_net_train(p_net, PATH="output/p_net.pt", PATH_LOSS="output/p_net_train_loss.npy"); p_net.eval()
     max_abs_e1_t0 = show_p_net_results(p_net)
@@ -588,7 +638,7 @@ def main():
     optimizer = torch.optim.Adam(e1_net.parameters(), lr=1e-3);   # test_e1_res(e1_net, p_net)
     scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.9)
     start_time = time.time()
-    train_e1_net(e1_net, optimizer, scheduler, mse_cost_function, p_net, max_abs_e1_t0, iterations=10000); print("e1_net train complete")
+    # train_e1_net(e1_net, optimizer, scheduler, mse_cost_function, p_net, max_abs_e1_t0, iterations=10000); print("e1_net train complete")
     time_train_e = time.time() - start_time
     e1_net = pos_e1_net_train(e1_net, PATH="output/e1_net.pt", PATH_LOSS="output/e1_net_train_loss.npy"); e1_net.eval()
     show_e1_results(p_net, e1_net)
@@ -601,6 +651,7 @@ def main():
     plot_e1_surface(p_net, e1_net)
     plot_train_loss("output/p_net_train_loss.npy",
                     "output/e1_net_train_loss.npy")
+    show_table(p_net, e1_net)
 
 
 if __name__ == "__main__":
