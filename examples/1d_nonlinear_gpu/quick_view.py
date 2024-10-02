@@ -121,12 +121,235 @@ def load_trained_model(net, PATH, PATH_LOSS):
     return net
 
 
-# class ScalarFormatterClass(ScalarFormatter):
-#    def _set_format(self):
-#       self.format = "%1.1f"
+class ScalarFormatterClass(ScalarFormatter):
+    def _set_format(self):
+        self.format = "%1.1f"
 
 
 def show_results(pnet, enet):
+    plt.rcParams['font.size'] = 18
+    x = np.load(DATA_FOLDER + datas[0] + "xsim.npy").reshape(-1,1)
+    pt_x = Variable(torch.from_numpy(x).float(), requires_grad=True).to(device)
+    limit_margin = 0.1
+
+    # Create a ScalarFormatter object
+    formatter = ScalarFormatter()
+    formatter.set_scientific(True)
+
+    p_monte_list = []
+    p_hat_list = []
+    e1_list = []
+    e1_hat_list = []
+    e2_list = []
+    e2_hat_list = []
+    p_res_list = []
+    e_res_list = []
+    e2_res_list = []
+    t1s = [1.0, 3.0, 5.0]
+    for t1 in t1s:
+        p_monte = np.load(DATA_FOLDER + datas[0] + "psim_t" + str(t1) + ".npy").reshape(-1, 1)
+        # if(t1 == 0.0): p_monte = p_init(x)
+        p_monte_list.append(p_monte)
+        pt_t1 = Variable(torch.from_numpy(x*0+t1).float(), requires_grad=True).to(device)
+        phat = pnet(pt_x, pt_t1)
+        ehat = enet(pt_x, pt_t1)[:,0].view(-1,1)
+        #e2hat = enet(pt_x, pt_t1)[:,1].view(-1,1)
+        pres = p_res_func(pt_x, pt_t1, pnet).data.cpu().numpy()
+        eres = e_res_func(pt_x, pt_t1, enet, pnet).data.cpu().numpy()
+        # e2res = e2_res_func(pt_x, pt_t1, enet, pnet).data.cpu().numpy()
+
+        phat = phat.data.cpu().numpy() # change tensor to numpy
+        ehat = ehat.data.cpu().numpy() # change tensor to numpy
+        #e2hat = e2hat.data.cpu().numpy()
+        p_hat_list.append(phat)
+        e1 = p_monte - phat
+        e1_list.append(e1)
+        e1_hat_list.append(ehat)
+        # e2 = e1 - ehat
+        # e2_list.append(e2)
+        # e2_hat_list.append(e2hat)
+
+        p_res_list.append(pres)
+        e_res_list.append(eres)
+        # e2_res_list.append(e2res)
+
+    global_max = float('-inf')
+    for i, (phat) in enumerate(zip(p_hat_list)):
+        max_value = np.max(np.abs(phat))
+        global_max = max(global_max, max_value)
+    fig, axs = plt.subplots(3, 1, figsize=(5, 6))
+    for i, (p_monte, p_hat, e1_hat) in enumerate(zip(p_monte_list, p_hat_list, e1_hat_list)):
+        # if i == 0:
+        #     ax1 = axs[0,0]
+        #     ax1.set_ylabel("PDF")
+        # if i == 1:
+        #     ax1 = axs[1,0]
+        #     ax1.set_ylabel("PDF")
+        # if i == 2:
+        #     ax1 = axs[2,0]
+        #     ax1.set_xlabel("x")
+        #     ax1.set_ylabel("PDF")
+        # if i == 3:
+        #     ax1 = axs[0,1]
+        # if i == 4:
+        #     ax1 = axs[1,1]
+        # if i == 5:
+        #     ax1 = axs[2,1]
+        #     ax1.set_xlabel("x")
+        eL = 2.0 * np.max(np.abs(e1_hat)); eL = np.round(eL, 3)
+        ax1 = axs[i]
+        ax1.plot(x, p_monte, "black", linewidth = 1.0, label=r"$p$")
+        ax1.plot(x, p_hat, "red", linewidth = 1.0, linestyle="--", label=r"$\hat{p}$")
+        ax1.fill_between(x.reshape(-1), y1=p_hat.reshape(-1)+eL, y2=p_hat.reshape(-1)-eL,
+                            color="green", alpha=0.3, label=r"$e_S$")
+        if i == 0:
+            ax1.legend(loc="upper right")
+        if i < 2:
+            ax1.set_xticks([])
+        if i == 2:
+            ax1.set_xlabel("x")
+        ax1.set_xlim([x_low, x_hig])
+        ax1.set_ylim(0.0, global_max+limit_margin)
+        # ax1.grid(True, which='both', linestyle='-', linewidth=0.5)
+        ax1.text(0.01, 0.98, r"$t:$ "+str(t1s[i]) + r", $e_S:$ "+str(eL),
+                 transform=axs[i].transAxes, verticalalignment='top', fontsize=18)
+    plt.tight_layout(pad=0.7, h_pad=0.1)
+    fig.savefig(FOLDER+'figs/phat_eS.pdf', format='pdf', dpi=300)
+    plt.close()
+
+    global_max = float('-inf')
+    for i, (e1_true, e1_hat) in enumerate(zip(e1_list, e1_hat_list)):
+        max_value = max(np.max(np.abs(e1_true)), np.max(np.abs(e1_hat)))
+        global_max = max(global_max, max_value)
+    fig, axs = plt.subplots(3, 1, figsize=(5, 6))
+    for i, (e1_true, e1_hat) in enumerate(zip(e1_list, e1_hat_list)):
+        # if i == 0:
+        #     ax1 = axs[0,0]
+        #     ax1.set_ylabel("Error")
+        # if i == 1:
+        #     ax1 = axs[1,0]
+        #     ax1.set_ylabel("Error")
+        # if i == 2:
+        #     ax1 = axs[2,0]
+        #     ax1.set_xlabel("x")
+        #     ax1.set_ylabel("Error")
+        # if i == 3:
+        #     ax1 = axs[0,1]
+        # if i == 4:
+        #     ax1 = axs[1,1]
+        # if i == 5:
+        #     ax1 = axs[2,1]
+        #     ax1.set_xlabel("x")
+        eL = 2.0 * np.max(np.abs(e1_hat))
+        eL = np.round(eL, 3)
+        alpha = np.max(np.abs(e1_true-e1_hat))/ np.max(np.abs(e1_hat))
+        alpha = np.round(alpha, 3)
+        print("eL: ", np.round(eL, 3), "\t alpha: ", np.round(alpha,3))
+        ax1 = axs[i]
+        ax1.plot(x, e1_true, "black", linewidth=1.0, label=r"$e_1$")
+        ax1.plot(x, e1_hat,  "red", linewidth=1.0, linestyle="--", label=r"$\hat{e}_1$")
+        ax1.fill_between(x.reshape(-1), y1=0.0*p_hat.reshape(-1)+eL, y2=0.0*p_hat.reshape(-1)-eL,
+                         color="green", alpha=0.3, label=r"$e_S$")
+        if i == 0:
+            ax1.legend(loc="upper right")
+        if i < 2:
+            ax1.set_xticks([])
+        if i == 2:
+            ax1.set_xlabel("x")
+
+        ax1.set_xlim([x_low, x_hig])
+        ax1.set_ylim(-(1.5*eL), 1.5*eL)
+        # ax1.set_ylim(-(global_max), global_max)
+        # ax1.grid(True, which='both', linestyle='-', linewidth=0.5)
+        ax1.text(0.01, 0.98, r"$t:$ "+str(t1s[i]) + r", $\alpha_1:$ "+str(alpha),
+                 transform=axs[i].transAxes, verticalalignment='top', fontsize=18)
+        # Set y-axis to scientific notation
+        yScalarFormatter = ScalarFormatterClass(useMathText=True)
+        yScalarFormatter.set_powerlimits((0,0))
+        ax1.yaxis.set_major_formatter(yScalarFormatter)
+    plt.tight_layout(pad=0.3, h_pad=0.1)
+    fig.savefig(FOLDER+'figs/e1hat_eS.pdf', format='pdf', dpi=300)
+    plt.close()
+
+    # global_max = float('-inf')
+    # for i, (eres, pres) in enumerate(zip(e_res_list, p_res_list)):
+    #     max_value = max(np.max(np.abs(pres/pnet.scale)), 0.0)
+    #     global_max = max(global_max, max_value)
+    # fig, axs = plt.subplots(3, 2, figsize=(7, 6))
+    # for i in range(0,6):
+    #     pres = p_res_list[i]
+    #     if i == 0:
+    #         ax1 = axs[0,0]
+    #         ax1.set_ylabel("Error")
+    #     if i == 1:
+    #         ax1 = axs[1,0]
+    #         ax1.set_ylabel("Error")
+    #     if i == 2:
+    #         ax1 = axs[2,0]
+    #         ax1.set_xlabel("x")
+    #         ax1.set_ylabel("Error")
+    #     if i == 3:
+    #         ax1 = axs[0,1]
+    #     if i == 4:
+    #         ax1 = axs[1,1]
+    #     if i == 5:
+    #         ax1 = axs[2,1]
+    #         ax1.set_xlabel("x")
+    #     if i == 0:
+    #         ax1.plot(x, pres/pnet.scale, "red", linewidth=1.0, linestyle="--", label=r"$D[\hat{e}_1]$")
+    #         #ax1.plot(x, pres, "black", linewidth=1.0, linestyle="-", label=r"$-D[\hat{p}]$")
+    #         ax1.legend()  # Add legend only to the first subplot
+    #     else:
+    #         ax1.plot(x, pres/pnet.scale, "red", linewidth=1.0, linestyle="--")
+    #         #ax1.plot(x, -pres, "black", linewidth=1.0, linestyle="-")
+    #     ax1.set_ylim([-global_max, global_max])
+    #     ax1.grid(True, which='both', linestyle='-', linewidth=0.5)
+    # plt.tight_layout()
+    # # plt.savefig(FOLDER+"figs/enet_res.png")
+    # fig.savefig(FOLDER+'figs/p_res.pdf', format='pdf', dpi=300)
+    # plt.close()
+
+    # global_max = float('-inf')
+    # for i, (e1hat, eres, pres) in enumerate(zip(e1_hat_list, e_res_list, p_res_list)):
+    #     max_value = max(np.max(np.abs(eres/enet.scale)), 0.0)**2
+    #     global_max = max(global_max, max_value)
+    # fig, axs = plt.subplots(3, 2, figsize=(7, 6))
+    # for i in range(0,6):
+    #     pres = p_res_list[i]
+    #     eres = e_res_list[i]/enet.scale
+    #     if i == 0:
+    #         ax1 = axs[0,0]
+    #         ax1.set_ylabel("Error")
+    #     if i == 1:
+    #         ax1 = axs[1,0]
+    #         ax1.set_ylabel("Error")
+    #     if i == 2:
+    #         ax1 = axs[2,0]
+    #         ax1.set_xlabel("x")
+    #         ax1.set_ylabel("Error")
+    #     if i == 3:
+    #         ax1 = axs[0,1]
+    #     if i == 4:
+    #         ax1 = axs[1,1]
+    #     if i == 5:
+    #         ax1 = axs[2,1]
+    #         ax1.set_xlabel("x")
+    #     if i == 0:
+    #         ax1.plot(x, eres**2, "red", linewidth=1.0, linestyle="--", label=r"$r_2^2$")
+    #         #ax1.plot(x, -pres, "black", linewidth=1.0, linestyle="-", label=r"$-D[\hat{p}]$")
+    #         ax1.legend()  # Add legend only to the first subplot
+    #     else:
+    #         ax1.plot(x, eres**2, "red", linewidth=1.0, linestyle="--")
+    #         #ax1.plot(x, -pres, "black", linewidth=1.0, linestyle="-")
+    #     # ax1.set_ylim([0, global_max])
+    #     ax1.grid(True, which='both', linestyle='-', linewidth=0.5)
+    # plt.tight_layout()
+    # # plt.savefig(FOLDER+"figs/enet_res.png")
+    # fig.savefig(FOLDER+'figs/e1_res.pdf', format='pdf', dpi=300)
+    # plt.close()
+
+
+def show_results_old(pnet, enet):
     x = np.load(DATA_FOLDER + datas[0] + "xsim.npy").reshape(-1,1)
     pt_x = Variable(torch.from_numpy(x).float(), requires_grad=True).to(device)
     limit_margin = 0.0
@@ -540,13 +763,13 @@ def fit_function(x, C1, C2):
 
 
 def plot_alpha_data():
+    plt.rcParams['font.size'] = 18
     data_folder = "exp1/main_alphas/"
     max_alpha_to_fit = 300.0
     max_total_loss_to_fit = 100.0
     num_runs = 6
-
-    plt.figure(figsize=(7, 5))
-    plt.axhline(y=1, color="black", linestyle='-', linewidth=2, label="condition of constructing " + r"$e_S$")
+    plt.figure(figsize=(8, 6))
+    plt.axhline(y=1, color="black", linestyle='-', linewidth=2)
     X = []
     Y = []
     X1 = []
@@ -587,8 +810,8 @@ def plot_alpha_data():
     plt.grid(linewidth=0.5)
     plt.xlabel(r"$\hat{e}_1$" + " training loss")
     plt.ylabel(r"$\max_{\tau} (\alpha_1(t))$")
-    plt.legend(loc="upper right")
-    plt.tight_layout()
+    plt.legend(loc="upper right", fontsize=16)
+    plt.tight_layout(pad=0.1)
     plt.savefig(FOLDER+'figs/alpha_vs_loss.pdf', format='pdf', dpi=300)
     plt.close()
 
@@ -607,6 +830,33 @@ def plot_training_loss_data():
     plt.savefig(FOLDER+'figs/loss_history_compare.pdf', format='pdf', dpi=300)
     plt.close()
 
+
+def show_table(pnet, enet):
+    x = np.load(DATA_FOLDER + datas[0] + "xsim.npy").reshape(-1,1)
+    pt_x = Variable(torch.from_numpy(x).float(), requires_grad=True).to(device)
+
+    gap_list = []
+    a1_list = []
+    eS_ratio_list = []
+    t1s = [0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0]
+    for t1 in t1s:
+        p_monte = np.load(DATA_FOLDER + datas[0] + "psim_t" + str(t1) + ".npy").reshape(-1, 1)
+        pt_t1 = Variable(torch.from_numpy(x*0+t1).float(), requires_grad=True).to(device)
+        phat = pnet(pt_x, pt_t1)
+        ehat = enet(pt_x, pt_t1)[:,0].view(-1,1)
+        phat = phat.data.cpu().numpy() # change tensor to numpy
+        ehat = ehat.data.cpu().numpy() # change tensor to numpy
+        e1 = p_monte - phat
+        a1 = np.max(np.abs(e1 - ehat))/np.max(np.abs(ehat))
+        a1_list.append(a1)
+        eS = 2.0*np.max(np.abs(ehat))
+        eS_ratio = eS/np.max(np.abs(p_monte))
+        gap = (eS - np.max(np.abs(e1)))/np.max(np.abs(p_monte))
+        gap_list.append(gap)
+        eS_ratio_list.append(eS_ratio)
+    print("[info] max a1: " +str(np.max(np.array(a1_list))) + ", avg a1:" + str(np.mean(np.array(a1_list))))
+    print("[info] max gap: " +str(np.max(np.array(gap_list))) + ", avg a1:" + str(np.mean(np.array(gap_list))))
+    print("[info] max eS_ratio: " +str(np.max(np.array(eS_ratio_list))) + ", avg a1:" + str(np.mean(np.array(eS_ratio_list))))
 
 
 def main():
@@ -630,6 +880,7 @@ def main():
     e_model = load_trained_model(e_model, PATH=FOLDER+"output/e1_net.pth", PATH_LOSS=FOLDER+"output/e1_net_train_loss.npy")
     e_model.eval()
     
+    show_table(p_model, e_model)
     show_results(p_model, e_model)
     torch.cuda.empty_cache()
 
