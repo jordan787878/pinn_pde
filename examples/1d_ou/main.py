@@ -13,7 +13,7 @@ from matplotlib.ticker import ScalarFormatter
 import time
 import argparse
 
-FOLDER = ""
+FOLDER = "exp1/main/"
 TRAIN_FLAG = False
 
 device = "cpu"
@@ -484,7 +484,7 @@ def plot_alphas(p_net, e1_net):
 
     # print("a1_list", a1_list)
     print("[info] max a1: " +str(np.max(np.array(a1_list))) + ", avg a1:" + str(np.mean(np.array(a1_list))))
-    print("[info] max gap: " +str(np.max(np.array(gap_list))) + ", avg gap:" + str(np.mean(np.array(gap_list))))
+    print("[info] min gap: " +str(np.min(np.array(gap_list))) + ", max gap:" + str(np.max(np.array(gap_list))))
     print("[info] max eS_ratio: " +str(np.max(np.array(eS_ratio_list))) + ", avg eS_ratio:" + str(np.mean(np.array(eS_ratio_list))))
     print("[info] max eS/eB: ", np.max(np.array(e_ratio)))
     a1_list = np.array(a1_list)

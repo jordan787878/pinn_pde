@@ -9,6 +9,9 @@ from matplotlib import cm
 from matplotlib.ticker import LinearLocator, FormatStrFormatter, ScalarFormatter
 import time
 
+
+FOLDER = "exp1/main/"
+
 # global variable
 # Check if MPS (Apple's Metal Performance Shaders) is available
 # if torch.backends.mps.is_available():
@@ -78,7 +81,7 @@ def train_p_net(p_net, optimizer, mse_cost_function, iterations=40000):
     batch_size = 500
     min_loss = np.inf
     loss_history = []
-    PATH = "output/p_net.pt"
+    PATH = FOLDER+"output/p_net.pt"
     reg_bc = 1
 
     for epoch in range(iterations):
@@ -124,7 +127,7 @@ def train_p_net(p_net, optimizer, mse_cost_function, iterations=40000):
         loss_history.append(loss.data)
         loss.backward() # This is for computing gradients using backward propagation
         optimizer.step() # This is equivalent to : theta_new = theta_old - alpha * derivative of J w.r.t theta
-    np.save("output/p_net_train_loss.npy", np.array(loss_history))
+    np.save(FOLDER+"output/p_net_train_loss.npy", np.array(loss_history))
 
 
 def pos_p_net_train(p_net, PATH, PATH_LOSS):
@@ -146,7 +149,7 @@ def pos_p_net_train(p_net, PATH, PATH_LOSS):
     plt.ylim([min_loss, 10*min_loss])
     plt.xlabel("epoch")
     plt.ylabel("loss")
-    plt.savefig("figs/pnet_loss_history.png")
+    plt.savefig(FOLDER+"figs/pnet_loss_history.png")
     plt.close()
     return p_net
 
@@ -179,7 +182,7 @@ def show_p_net_results(p_net):
     plt.legend()
     plt.xlabel('x')
     plt.ylabel('pdf')
-    plt.savefig("figs/pnet_approx.png")
+    plt.savefig(FOLDER+"figs/pnet_approx.png")
     plt.close()
 
     res_0 = res_func(pt_x, pt_T0, p_net)
@@ -189,7 +192,7 @@ def show_p_net_results(p_net):
     plt.plot(x, res_1.detach().numpy(), "red", label=r"$r_1(t_f)$")
     plt.plot([x_low, x_hig], [0,0], "black")
     plt.legend()
-    plt.savefig("figs/pnet_resdiual.png")
+    plt.savefig(FOLDER+"figs/pnet_resdiual.png")
     plt.close()
     
     return max_abs_e1_t0
@@ -256,7 +259,7 @@ def train_e1_net(e1_net, optimizer, scheduler, mse_cost_function, p_net, max_abs
     loss_history = []
     reg_bc = 1.0
     iterations_per_decay = 1000
-    PATH = "output/e1_net.pt"
+    PATH = FOLDER+"output/e1_net.pt"
 
     # dt_train = 0.1
     # k = 5
@@ -332,7 +335,7 @@ def train_e1_net(e1_net, optimizer, scheduler, mse_cost_function, p_net, max_abs
         # Exponential learning rate decay
         if (epoch + 1) % iterations_per_decay == 0:
             scheduler.step()
-    np.save("output/e1_net_train_loss.npy", np.array(loss_history))
+    np.save(FOLDER+"output/e1_net_train_loss.npy", np.array(loss_history))
 
 
 def pos_e1_net_train(e1_net, PATH, PATH_LOSS):
@@ -354,7 +357,7 @@ def pos_e1_net_train(e1_net, PATH, PATH_LOSS):
     plt.ylim([min_loss, 10*min_loss])
     plt.xlabel("epoch")
     plt.ylabel("loss")
-    plt.savefig("figs/e1net_loss_history.png")
+    plt.savefig(FOLDER+"figs/e1net_loss_history.png")
     plt.close()
     return e1_net
 
@@ -405,7 +408,7 @@ def show_e1_results(p_net, e1_net):
         yScalarFormatter.set_powerlimits((0,0))
         ax1.yaxis.set_major_formatter(yScalarFormatter)
     plt.tight_layout(pad=0.3, h_pad=0.3)
-    plt.savefig("figs/e1net_result.pdf", format='pdf', dpi=300)
+    plt.savefig(FOLDER+"figs/e1net_result.pdf", format='pdf', dpi=300)
     plt.close()
 
 
@@ -448,7 +451,7 @@ def show_uniform_bound(p_net, e1_net):
         yScalarFormatter.set_powerlimits((0,0))
         ax1.yaxis.set_major_formatter(yScalarFormatter)
     plt.tight_layout(pad=0.3, h_pad=0.3)
-    plt.savefig("figs/uniform_error_bound.pdf", format='pdf', dpi=300)
+    plt.savefig(FOLDER+"figs/uniform_error_bound.pdf", format='pdf', dpi=300)
     plt.close()
 
 
@@ -486,7 +489,7 @@ def plot_p_surface(p_net, num=100):
     ax.view_init(20, 150)
     plt.subplots_adjust(left=0.05, right=0.90, top=0.92, bottom=0.08)
     # plt.show()
-    fig.savefig('figs/phat_surface_plot.pdf', format='pdf', dpi=300)
+    fig.savefig(FOLDER+'figs/phat_surface_plot.pdf', format='pdf', dpi=300)
     plt.close()
 
 
@@ -533,7 +536,7 @@ def plot_e1_surface(p_net, e1_net, num=100):
     ax.set_zlabel("Error")
     ax.view_init(20, 150)
     plt.subplots_adjust(left=0.05, right=0.9, top=0.92, bottom=0.08)
-    fig.savefig('figs/e1hat_surface_plot.pdf', format='pdf', dpi=300)
+    fig.savefig(FOLDER+'figs/e1hat_surface_plot.pdf', format='pdf', dpi=300)
     plt.close()
 
 
@@ -554,7 +557,7 @@ def plot_train_loss(path_1, path_2):
     axs[0].set_ylabel("train loss: "+r"$\hat{p}$")
     axs[1].set_ylabel("train loss: "+r"$\hat{e}_1$")
     plt.tight_layout()
-    fig.savefig('figs/train_loss.pdf', format='pdf', dpi=300, bbox_inches='tight')
+    fig.savefig(FOLDER+'figs/train_loss.pdf', format='pdf', dpi=300, bbox_inches='tight')
     plt.close()
 
 
@@ -588,7 +591,7 @@ def show_enet_res(p_net, e1_net):
         ax1.grid(True, which='both', linestyle='-', linewidth=0.5)
     ax1.set_xlabel('x')
     plt.tight_layout()
-    fig.savefig('figs/enet_res.pdf', format='pdf', dpi=300)
+    fig.savefig(FOLDER+'figs/enet_res.pdf', format='pdf', dpi=300)
     plt.close()
 
 
@@ -615,7 +618,7 @@ def show_table(p_net, e1_net):
         gap_list.append((eS - e1_list[i])/max(abs(p)))
         eS_ratio_list.append(eS/ max(abs(p)) )
     print("[info] max a1: " +str(np.max(np.array(a1_list))) + ", avg a1:" + str(np.mean(np.array(a1_list))))
-    print("[info] max gap: " +str(np.max(np.array(gap_list))) + ", avg gap:" + str(np.mean(np.array(gap_list))))
+    print("[info] min gap: " +str(np.min(np.array(gap_list))) + ", max gap:" + str(np.max(np.array(gap_list))))
     print("[info] max eS_ratio: " +str(np.max(np.array(eS_ratio_list))) + ", avg eS_ratio:" + str(np.mean(np.array(eS_ratio_list))))
 
 
@@ -626,9 +629,9 @@ def main():
     mse_cost_function = torch.nn.MSELoss() # Mean squared error
     optimizer = torch.optim.Adam(p_net.parameters())
     start_time = time.time()
-    train_p_net(p_net, optimizer, mse_cost_function, iterations=10000); print("p_net train complete")
+    # train_p_net(p_net, optimizer, mse_cost_function, iterations=10000); print("p_net train complete")
     time_train_p = time.time() - start_time
-    p_net = pos_p_net_train(p_net, PATH="output/p_net.pt", PATH_LOSS="output/p_net_train_loss.npy"); p_net.eval()
+    p_net = pos_p_net_train(p_net, PATH=FOLDER+"output/p_net.pt", PATH_LOSS=FOLDER+"output/p_net_train_loss.npy"); p_net.eval()
     max_abs_e1_t0 = show_p_net_results(p_net)
     print("max(abs(e1(x,0))):", max_abs_e1_t0)
 
@@ -638,9 +641,9 @@ def main():
     optimizer = torch.optim.Adam(e1_net.parameters(), lr=1e-3);   # test_e1_res(e1_net, p_net)
     scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.9)
     start_time = time.time()
-    train_e1_net(e1_net, optimizer, scheduler, mse_cost_function, p_net, max_abs_e1_t0, iterations=10000); print("e1_net train complete")
+    # train_e1_net(e1_net, optimizer, scheduler, mse_cost_function, p_net, max_abs_e1_t0, iterations=10000); print("e1_net train complete")
     time_train_e = time.time() - start_time
-    e1_net = pos_e1_net_train(e1_net, PATH="output/e1_net.pt", PATH_LOSS="output/e1_net_train_loss.npy"); e1_net.eval()
+    e1_net = pos_e1_net_train(e1_net, PATH=FOLDER+"output/e1_net.pt", PATH_LOSS=FOLDER+"output/e1_net_train_loss.npy"); e1_net.eval()
     show_e1_results(p_net, e1_net)
     show_uniform_bound(p_net, e1_net)
     show_enet_res(p_net, e1_net)
@@ -649,8 +652,8 @@ def main():
     print(f"train enet time: {time_train_e:.4f} seconds")
     plot_p_surface(p_net)
     plot_e1_surface(p_net, e1_net)
-    plot_train_loss("output/p_net_train_loss.npy",
-                    "output/e1_net_train_loss.npy")
+    plot_train_loss(FOLDER+"output/p_net_train_loss.npy",
+                    FOLDER+"output/e1_net_train_loss.npy")
     show_table(p_net, e1_net)
 
 

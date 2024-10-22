@@ -587,7 +587,7 @@ def show_e1_net_results(p_net, e1_net):
             ax1.set_xticks([])
         # if(i == 1):
         #     ax1.set_yticks(np.array([-0.03, 0.00, 0.03]))
-        ax1.yaxis.set_major_formatter(FormatStrFormatter('%.2f'))
+        # ax1.yaxis.set_major_formatter(FormatStrFormatter('%.2f'))
         ax1.set_xlim([92, 108])
         ax1.set_xticks(np.array([92, 96, 100, 104, 108]))
         # ax1.grid(True, which='both', linestyle='-', linewidth=0.5)  # Add thin grid lines
@@ -781,8 +781,8 @@ def plot_train_loss(path_1, path_2):
 def show_table(p_net, e1_net):
     x = np.arange(x_low, x_hig+0.005, 0.005).reshape(-1,1)
     pt_x = Variable(torch.from_numpy(x).float(), requires_grad=True).to(device)
-    t1s = np.arange(t0, T_end+0.01, 0.01)
-
+    # t1s = np.arange(t0, T_end+0.01, 0.01)
+    t1s = np.linspace(t0, T_end, num=100)
     a1_list = []
     gap_list = []
     e1_list = []
@@ -802,9 +802,13 @@ def show_table(p_net, e1_net):
         gap_list.append((eS - e1_list[i])/np.max(np.abs(p)))
         eS_ratio = eS/np.max(np.abs(p))
         eS_ratio_list.append(eS_ratio)
-
+    gap_metric = np.min(np.array(gap_list))
+    # if(np.min(np.array(gap_list))<=0):
+    #     gap_metric = np.min(np.array(gap_list))
+    # else:
+    #     gap_metric = np.max(np.array(gap_list))
     print("[info] max a1: " +str(np.max(np.array(a1_list))) + ", avg a1:" + str(np.mean(np.array(a1_list))))
-    print("[info] max gap: " +str(np.max(np.array(gap_list))) + ", avg gap:" + str(np.mean(np.array(gap_list))))
+    print("[info] max gap: " +str(gap_metric) )
     print("[info] max eS_ratio: " +str(np.max(np.array(eS_ratio_list))) + ", avg eS_ratio:" + str(np.mean(np.array(eS_ratio_list))))
     
 

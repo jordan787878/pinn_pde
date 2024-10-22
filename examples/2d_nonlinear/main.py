@@ -348,8 +348,9 @@ def show_p_net_results(p_net):
     all_p = np.concatenate(all_p)  # Combine all p values
     vmin = np.min(all_p)
     vmax = np.max(all_p)
-    fig = plt.figure(figsize=(10, 5))
-    gs = fig.add_gridspec(2, 6, width_ratios=[1]*5 + [0.05], wspace=0.4)
+
+    fig = plt.figure(figsize=(10, 4))
+    gs = fig.add_gridspec(2, 6, width_ratios=[1]*5 + [0.05], wspace=0.2)
     # Create subplot grid (2x5) for the plots
     axs = [fig.add_subplot(gs[i, j]) for i in range(2) for j in range(5)]
     # Create a subplot for the colorbar spanning the height of the grid
@@ -363,6 +364,9 @@ def show_p_net_results(p_net):
             ax.set_title("t="+str(t1))
             if(i == 0):
                 ax.set_ylabel(r"$\omega$")
+            ax.set_xticks([])
+            if(i != 0):
+                ax.set_yticks([])
         else:
             t1 = t1s[i-5]
             pt_t1 = Variable(torch.from_numpy(x[:,0]*0+t1).float(), requires_grad=True).view(-1,1).to(device)
@@ -373,12 +377,15 @@ def show_p_net_results(p_net):
             ax.set_xlabel(r"$\theta$")
             if(i == 5):
                 ax.set_ylabel(r"$\omega$")
+            if(i != 5):
+                ax.set_yticks([])
     # Add the colorbar to the colorbar subplot
     fig.colorbar(cp, cax=cax, orientation='vertical')
+    # cax.set_aspect(2)  # Change aspect ratio to make the colorbar shorter
     # Add a box with text at the top-left corner of the figure
-    fig.text(0.02, 0.87, r"$p(x,t)$", bbox={'facecolor': 'white', 'alpha': 0.5, 'pad': 5})
-    fig.text(0.02, 0.45, r"$\hat{p}(x,t)$", bbox={'facecolor': 'white', 'alpha': 0.5, 'pad': 5})
-    fig.subplots_adjust(left=0.07, right=0.92, bottom=0.1, top=0.9, wspace=0.4, hspace=0.1)
+    fig.text(0.01, 0.9, r"$p(x,t)$", bbox={'facecolor': 'white', 'alpha': 0.5, 'pad': 5})
+    fig.text(0.01, 0.47, r"$\hat{p}(x,t)$", bbox={'facecolor': 'white', 'alpha': 0.5, 'pad': 5})
+    fig.subplots_adjust(left=0.07, right=0.92, bottom=0.08, top=0.95, wspace=0.1, hspace=0.0)
     fig.savefig(FOLDER+'figs/p_vs_phat.pdf', format='pdf', dpi=300)
     plt.close()
 
@@ -582,6 +589,7 @@ def train_e1_net(e1_net, optimizer, scheduler, mse_cost_function, p_net, max_abs
         if (epoch%100 == 0 and FLAG):
             x_RAR = (torch.rand(S, n_d, requires_grad=True) * (x_hig - x_low + 2*x_mar) + x_low-x_mar).to(device)
             t_RAR = (torch.rand(S, 1, requires_grad=True) *   (tf - ti) + ti).to(device)
+            
             t0_RAR = 0.0*t_RAR + ti
             ic_hat_RAR = e1_net(x_RAR, t0_RAR)/max_abs_e1_ti
             p_bc_RAR = p_init_torch(x_RAR)
@@ -664,8 +672,9 @@ def show_e1_net_results(p_net, e1_net):
     e1_all = np.concatenate(e1_all)
     vmin = np.min(e1_all)
     vmax = np.max(e1_all)
-    fig = plt.figure(figsize=(10, 5))
-    gs = fig.add_gridspec(2, 6, width_ratios=[1]*5 + [0.05], wspace=0.4)
+
+    fig = plt.figure(figsize=(10, 4))
+    gs = fig.add_gridspec(2, 6, width_ratios=[1]*5 + [0.05], wspace=0.2)
     # Create subplot grid (2x5) for the plots
     axs = [fig.add_subplot(gs[i, j]) for i in range(2) for j in range(5)]
     # Create a subplot for the colorbar spanning the height of the grid
@@ -683,6 +692,9 @@ def show_e1_net_results(p_net, e1_net):
             ax.set_title("t="+str(t1))
             if(i == 0):
                 ax.set_ylabel(r"$\omega$")
+            ax.set_xticks([])
+            if(i != 0):
+                ax.set_yticks([])
         else:
             t1 = t1s[i-5]
             p = np.load(FOLDER_DATA+"p_sim_grid"+str(t1)+".npy")
@@ -701,17 +713,19 @@ def show_e1_net_results(p_net, e1_net):
             ax.set_title(r"$\alpha_1=$"+str(np.round(alpha,2)))
             if(i == 5):
                 ax.set_ylabel(r"$\omega$")
+            if(i != 5):
+                ax.set_yticks([])
     # Add the colorbar to the colorbar subplot
     fig.colorbar(cp, cax=cax, orientation='vertical')
     # Add a box with text at the top-left corner of the figure
-    fig.text(0.02, 0.87, r"$e(x,t)$", bbox={'facecolor': 'white', 'alpha': 0.5, 'pad': 5})
-    fig.text(0.02, 0.45, r"$\hat{e}_1(x,t)$", bbox={'facecolor': 'white', 'alpha': 0.5, 'pad': 5})
-    fig.subplots_adjust(left=0.07, right=0.92, bottom=0.1, top=0.9, wspace=0.4, hspace=0.1)
+    fig.text(0.01, 0.9, r"$e(x,t)$", bbox={'facecolor': 'white', 'alpha': 0.5, 'pad': 5})
+    fig.text(0.01, 0.47, r"$\hat{e}_1(x,t)$", bbox={'facecolor': 'white', 'alpha': 0.5, 'pad': 5})
+    fig.subplots_adjust(left=0.07, right=0.92, bottom=0.08, top=0.95, wspace=0.1, hspace=0.0)
     plt.savefig(FOLDER+'figs/e_vs_e1hat.pdf', format='pdf', dpi=300)
     plt.close()
 
     # plot special error bound
-    fig = plt.figure(figsize=(10, 6))
+    fig = plt.figure(figsize=(8, 5))
     j = 0
     for t1 in t1s:
         if (j < 5):
@@ -732,7 +746,7 @@ def show_e1_net_results(p_net, e1_net):
             print("t: ",t1, ", max|e|: {:.3f}".format(np.max(np.abs(e1))), ", e_S: {:.3f}".format(error_bound))
             ax.set_title("t="+str(t1)+", "+r"$e_S=$"+str(np.round(error_bound,3)))
         j = j + 1
-    fig.subplots_adjust(left=0.02, right=0.98, bottom=0.1, top=0.9, wspace=0.2, hspace=0.5)
+    fig.subplots_adjust(left=0.00, right=0.95, bottom=0.05, top=0.95, wspace=0.03, hspace=0.2)
     plt.savefig(FOLDER+'figs/special_error_bound.pdf', format='pdf', dpi=300)
     plt.close()
 
@@ -913,7 +927,7 @@ def show_table(p_net, e1_net):
         gap_list.append(gap)
         eS_ratio_list.append(eS/ max(abs(p.reshape(-1,1))) )
     print("[info] max a1: " +str(np.max(np.array(a1_list))) + ", avg a1:" + str(np.mean(np.array(a1_list))))
-    print("[info] max gap: " +str(np.max(np.array(gap_list))) + ", avg gap:" + str(np.mean(np.array(gap_list))))
+    print("[info] min gap: " +str(np.min(np.array(gap_list))) + ", max gap:" + str(np.max(np.array(gap_list))))
     print("[info] max eS_ratio: " +str(np.max(np.array(eS_ratio_list))) + ", avg eS_ratio:" + str(np.mean(np.array(eS_ratio_list))))
         
 
