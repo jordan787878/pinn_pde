@@ -1,0 +1,129 @@
+# moment stats using monte-carlo samples
+t:  0.0
+x1 sample var, skew, excess kurt:  62511.617 0.0013415564399143379 0.0029274445647944347
+x2 sample var, skew, excess kurt:  0.12174339 -0.0003251853687638888 -0.001124563381434296
+Counting samples: 100%|████████████████████████████████████████████████████████████████████████████████████████████████| 10000000/10000000 [00:13<00:00, 744795.07it/s]
+[check sum pdf=1.0] 0.9999332
+
+t:  3600.0
+x1 sample var, skew, excess kurt:  62492.49 0.00017645145055723385 -0.00196657591838445
+x2 sample var, skew, excess kurt:  0.14422385 0.013775271642687376 0.0021193772211467454
+Counting samples: 100%|████████████████████████████████████████████████████████████████████████████████████████████████| 10000000/10000000 [00:13<00:00, 750258.36it/s]
+[check sum pdf=1.0] 0.9999388
+
+t:  7200.0
+x1 sample var, skew, excess kurt:  62493.414 0.0011491860134290003 -0.0006510621477899825
+x2 sample var, skew, excess kurt:  0.2116106 0.06501777419691321 0.014844321635305135
+Counting samples: 100%|████████████████████████████████████████████████████████████████████████████████████████████████| 10000000/10000000 [00:13<00:00, 751024.14it/s]
+[check sum pdf=1.0] 0.99993986
+
+t:  10800.0
+x1 sample var, skew, excess kurt:  62507.504 -0.0008797388097832814 -0.0035873588907464615
+x2 sample var, skew, excess kurt:  0.32373875 0.11674563223294074 0.04223751221833183
+Counting samples: 100%|████████████████████████████████████████████████████████████████████████████████████████████████| 10000000/10000000 [00:13<00:00, 734195.75it/s]
+[check sum pdf=1.0] 0.99993896
+
+t:  14400.0
+x1 sample var, skew, excess kurt:  62433.67 0.00011544463873076285 0.002926859873012333
+x2 sample var, skew, excess kurt:  0.4803994 0.15340852054615078 0.06338917018691825
+Counting samples: 100%|████████████████████████████████████████████████████████████████████████████████████████████████| 10000000/10000000 [00:13<00:00, 738175.01it/s]
+[check sum pdf=1.0] 0.999936
+
+t:  18000.0
+x1 sample var, skew, excess kurt:  62470.652 0.0006776641900008926 0.0005014575058903681
+x2 sample var, skew, excess kurt:  0.6823044 0.17639200665519766 0.07429240445445284
+Counting samples: 100%|████████████████████████████████████████████████████████████████████████████████████████████████| 10000000/10000000 [00:13<00:00, 734644.82it/s]
+[check sum pdf=1.0] 0.9999345
+
+t:  21600.0
+x1 sample var, skew, excess kurt:  62495.53 0.0008465772312850681 0.0005748721790328482
+x2 sample var, skew, excess kurt:  0.9294012 0.19152258938825428 0.0834704010406302
+Counting samples: 100%|████████████████████████████████████████████████████████████████████████████████████████████████| 10000000/10000000 [00:14<00:00, 708315.58it/s]
+[check sum pdf=1.0] 0.99993414
+
+
+t1:  0.0
+[debug] dtype of xgrid and pdf:  float32 float32
+mean:  7999.212 -0.00018426335
+[debug] cov(x1x1) using E[(x-mux)^2]  62472.137
+[debug] cov(x2x2) using E[(x-mux)^2]  0.13175704
+[debug] cov(x1x2) using E[(x1-mux1)(x2-mux2)]  0.009874236
+[debug] skew(X1)  0.010388286
+[debug] skew(X2)  -0.0005263364
+[debug] kurtosis(X1)  2.9885664
+[debug] kurtosis(X2)  2.9918585
+[debug] dtype of xgrid and pdf:  float32 float32
+
+t1:  3600.0
+[debug] dtype of xgrid and pdf:  float32 float32
+mean:  7999.305 3.1819522
+[debug] cov(x1x1) using E[(x-mux)^2]  62456.3
+[debug] cov(x2x2) using E[(x-mux)^2]  0.15419233
+[debug] cov(x1x2) using E[(x1-mux1)(x2-mux2)]  -37.30379
+[debug] skew(X1)  0.008512354
+[debug] skew(X2)  0.014579315
+[debug] kurtosis(X1)  2.98465
+[debug] kurtosis(X2)  2.9969256
+[debug] dtype of xgrid and pdf:  float32 float32
+
+t1:  7200.0
+[debug] dtype of xgrid and pdf:  float32 float32
+mean:  7999.3013 6.3639436
+[debug] cov(x1x1) using E[(x-mux)^2]  62458.297
+[debug] cov(x2x2) using E[(x-mux)^2]  0.22152355
+[debug] cov(x1x2) using E[(x1-mux1)(x2-mux2)]  -74.72095
+[debug] skew(X1)  0.0095563745
+[debug] skew(X2)  0.06408241
+[debug] kurtosis(X1)  2.9865677
+[debug] kurtosis(X2)  3.0095482
+[debug] dtype of xgrid and pdf:  float32 float32
+
+t1:  10800.0
+[debug] dtype of xgrid and pdf:  float32 float32
+mean:  7999.457 9.545709
+[debug] cov(x1x1) using E[(x-mux)^2]  62471.68
+[debug] cov(x2x2) using E[(x-mux)^2]  0.33351523
+[debug] cov(x1x2) using E[(x1-mux1)(x2-mux2)]  -112.02083
+[debug] skew(X1)  0.007348378
+[debug] skew(X2)  0.11442681
+[debug] kurtosis(X1)  2.9832594
+[debug] kurtosis(X2)  3.032926
+[debug] dtype of xgrid and pdf:  float32 float32
+
+t1:  14400.0
+[debug] dtype of xgrid and pdf:  float32 float32
+mean:  7999.3047 12.727757
+[debug] cov(x1x1) using E[(x-mux)^2]  62393.227
+[debug] cov(x2x2) using E[(x-mux)^2]  0.4899278
+[debug] cov(x1x2) using E[(x1-mux1)(x2-mux2)]  -149.2021
+[debug] skew(X1)  0.008875182
+[debug] skew(X2)  0.15228501
+[debug] kurtosis(X1)  2.9890058
+[debug] kurtosis(X2)  3.0519576
+[debug] dtype of xgrid and pdf:  float32 float32
+
+t1:  18000.0
+[debug] dtype of xgrid and pdf:  float32 float32
+mean:  7999.289 15.909596
+[debug] cov(x1x1) using E[(x-mux)^2]  62429.26
+[debug] cov(x2x2) using E[(x-mux)^2]  0.691586
+[debug] cov(x1x2) using E[(x1-mux1)(x2-mux2)]  -186.59708
+[debug] skew(X1)  0.009029857
+[debug] skew(X2)  0.17680055
+[debug] kurtosis(X1)  2.9861386
+[debug] kurtosis(X2)  3.0623357
+[debug] dtype of xgrid and pdf:  float32 float32
+
+t1:  21600.0
+[debug] dtype of xgrid and pdf:  float32 float32
+mean:  7999.3867 19.091366
+[debug] cov(x1x1) using E[(x-mux)^2]  62455.63
+[debug] cov(x2x2) using E[(x-mux)^2]  0.9383534
+[debug] cov(x1x2) using E[(x1-mux1)(x2-mux2)]  -224.04005
+[debug] skew(X1)  0.009280705
+[debug] skew(X2)  0.19226412
+[debug] kurtosis(X1)  2.986368
+[debug] kurtosis(X2)  3.068938
+[debug] dtype of xgrid and pdf:  float32 float32
+[complete 2d nonlinear, with pre-trained models]
+
