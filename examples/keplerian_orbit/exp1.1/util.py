@@ -117,7 +117,7 @@ def COE2MEO(a, e, i, RAAN, nu, lonper):
 
 def true_to_mean_anomaly(e, nu):
     if(1-e**2 < 0):
-        print("[debug] not valid eccentricity: ", e)
+        print("[debug] not valid keplerian eccentricity: ", e)
     E = np.arctan2(np.sin(nu)*np.sqrt(1-e**2), np.cos(nu)+e)
     M = E - e*np.sin(E)
     return M
