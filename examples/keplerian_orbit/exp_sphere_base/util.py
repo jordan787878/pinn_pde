@@ -2,7 +2,7 @@ import numpy as np
 from scipy.optimize import fsolve
 
 
-def spherical4d_to_cartesian(input_array):
+def sphere_to_cartesian(input_array, reduced_to_four_dim=False):
     """
     Convert spherical coordinates (r, theta, phi) and their corresponding velocities
     (r_dot, theta_dot, phi_dot) to Cartesian coordinates and velocities for each row
@@ -15,15 +15,18 @@ def spherical4d_to_cartesian(input_array):
     """
     # Unpack input columns for vectorized operations
     r = input_array[:, 0]  # Radial distance
-    # theta = input_array[:, 1]  # Polar angle (theta)
-    phi = input_array[:, 1]  # Azimuthal angle (phi)
-    r_dot = input_array[:, 2]  # Radial velocity (r_dot)
-    # theta_dot = input_array[:, 4]  # Polar velocity (theta_dot)
-    phi_dot = input_array[:, 3]  # Azimuthal velocity (phi_dot)
-    sin_theta = np.float32(1.0)
-    cos_theta = np.float32(0.0)
-    theta_dot = np.float32(0.0)
-    # print("[debug] ", r, 0.5*np.pi, phi, r_dot, theta_dot, phi_dot)
+    theta = input_array[:, 1]  # Polar angle (theta)
+    phi = input_array[:, 2]  # Azimuthal angle (phi)
+    r_dot = input_array[:, 3]  # Radial velocity (r_dot)
+    theta_dot = input_array[:, 4]  # Polar velocity (theta_dot)
+    phi_dot = input_array[:, 5]  # Azimuthal velocity (phi_dot)
+    if(reduced_to_four_dim):
+        sin_theta = np.float32(1.0)
+        cos_theta = np.float32(0.0)
+        theta_dot = np.float32(0.0)
+    else:
+        sin_theta = np.sin(theta)
+        cos_theta = np.cos(theta)
     # Convert position from spherical to Cartesian
     x = r * sin_theta * np.cos(phi)
     y = r * sin_theta * np.sin(phi)
@@ -32,23 +35,41 @@ def spherical4d_to_cartesian(input_array):
     v_x = r_dot * sin_theta * np.cos(phi) + r * theta_dot * cos_theta * np.cos(phi) - r * sin_theta * np.sin(phi) * phi_dot
     v_y = r_dot * sin_theta * np.sin(phi) + r * theta_dot * cos_theta * np.sin(phi) + r * sin_theta * np.cos(phi) * phi_dot
     v_z = r_dot * cos_theta - r * sin_theta * theta_dot
-    # Stack the position and velocity into a single array
     # print("[debug] ", x, y, z, v_x, v_y, v_z)
     result = np.column_stack((x, y, z, v_x, v_y, v_z))
     return result
 
 
-def normspherical4d_to_cartesian(input_array, t_prime, constants):
+def rnsphere_to_sphere(input_array, t_prime, constants):
     """
-    input_array: A 2D array with shape (N,4) where each row is of the form:
-        [r', phi', r'_dot, phi'_dot]
+    input_array: A 2D array with shape (N,6) where each row is of the form:
+        [r', theta', phi', r'_dot, theta'_dot, phi'_dot]
+    output_array: A 2D array with shape (N,6) where each row is of the form:
+        [r, theta, phi, r_dot, theta_dot, phi_dot]
     """
     r = input_array[:, 0] * constants.R
-    phi = input_array[:, 1] * constants.PHI + constants.W*constants.T*t_prime
-    r_dot = input_array[:, 2] * (constants.R/constants.T)
-    phi_dot = input_array[:,3] * (constants.PHI/constants.T) + constants.W
-    result = np.column_stack((r, phi, r_dot, phi_dot))
-    return spherical4d_to_cartesian(result)
+    theta = input_array[:, 1] * constants.THETA
+    phi = input_array[:, 2] * constants.PHI + constants.W*constants.T*t_prime
+    r_dot = input_array[:, 3] * (constants.R/constants.T)
+    theta_dot = input_array[:, 4] * (constants.THETA/constants.T)
+    phi_dot = input_array[:,5] * (constants.PHI/constants.T) + constants.W
+    result = np.column_stack((r, theta, phi, r_dot, theta_dot, phi_dot))
+    return result
+
+
+def sphere_to_rnsphere(input_array, t_prime, constants):
+    """
+    inverse of the fcn: rnsphere_to_sphere
+    """
+    r =         input_array[:, 0]/constants.R
+    theta =     input_array[:, 1]/constants.THETA
+    phi =      (input_array[:, 2]-constants.W*constants.T*t_prime)/constants.PHI
+    r_dot =     input_array[:, 3]/(constants.R/constants.T)
+    theta_dot = input_array[:, 4]/(constants.THETA/constants.T)
+    phi_dot =  (input_array[:, 5]-constants.W)/(constants.PHI/constants.T)
+    result = np.column_stack((r, theta, phi, r_dot, theta_dot, phi_dot))
+    return result
+
 
     
 def RV2COE(input_array, mu_gravity):
@@ -138,7 +159,7 @@ def COE2RV(a, e, i, RAAN, w, nu, lonper, mu_gravity):
     return result
 
 
-def cartesian_to_spherical(input_array):
+def cartesian_to_sphere(input_array):
     """
     input_array: A 2D array with shape (N, 6), where each row is of the form:
             [x, y, z, v_x, v_y, v_z]
@@ -153,28 +174,16 @@ def cartesian_to_spherical(input_array):
     v_x = input_array[:,3]
     v_y = input_array[:,4]
     v_z = input_array[:,5]
+
     # Compute the spherical position components
     r = np.sqrt(x**2 + y**2 + z**2) # Radial distance
     theta = np.arccos(z / r);       # Polar angle (inclination)
     phi = np.arctan2(y, x);         # Azimuthal angle (longitude)
+
     # Compute the spherical velocity components
-    # Radial velocity (dr/dt)
     r_dot = (x * v_x + y * v_y + z * v_z) / r
-    # Polar velocity (dtheta/dt)
-    theta_dot = (x * v_x + y * v_y) / (r**2 * np.sin(theta))
-    # Azimuthal velocity (dphi/dt)
-    phi_dot = (x * v_y - y * v_x) / (r**2 * np.sin(theta))
-    # Stack the position and velocity into a single array
+    theta_dot = (-1/np.sqrt(1-(z/r)**2))*(v_z/r - z*r_dot/r**2)
+    phi_dot = (1/(1+(y/x)**2))*(v_y/x - y*v_x/x**2)
     # print("[debug] ", x, y, z, v_x, v_y, v_z)
     result = np.column_stack((r, theta, phi, r_dot, theta_dot, phi_dot))
-    return result
-
-
-def cartesian_to_normspherical4d(input_array, t_prime, constants):
-    x_sphere_6d = cartesian_to_spherical(input_array)
-    r_prime = x_sphere_6d[:,0]/ constants.R
-    phi_prime = (x_sphere_6d[:,2]-constants.W*constants.T*t_prime)/constants.PHI
-    r_dot_prime = x_sphere_6d[:,3]/(constants.R/constants.T)
-    phi_dot_prime = (x_sphere_6d[:,5]-constants.W)/(constants.PHI/constants.T)
-    result = np.column_stack((r_prime, phi_prime, r_dot_prime, phi_dot_prime))
     return result

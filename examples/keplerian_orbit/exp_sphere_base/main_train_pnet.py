@@ -3,6 +3,11 @@ The baseline of keplerian orbit using rotating spherical coordiante and dynamics
 It is similar to the Case 2 of the paper: Uncertainty propagation in orbital mechanics via tensor decompostion, except
 here we do not have process noise, and J2 perturbation.
 This case is a circular orbit on plannar motion. Hence, we reduce the dynamics to 4D.
+
+Issues:
+    1) NOTE: the true initial pdf is treated as R^4! Hence, it is the simple sum that adds to 1, not the r*dr*d(angle)...
+       What is the pdf(r, theta) such that (r,theta) are normally distributed, AND int pdf(r,theta) "r"*dr*dtheta = 1?
+    2) NOTE: the rotating-normalized angle: phi' (is it still angle?)
 """
 import numpy as np
 import torch
@@ -260,6 +265,11 @@ def check_pdfnn_marginalize(p_net, t=0.0):
     pdf_monte = np.load(DATA_FOLDER+"pdf_t{:.3f}.npy".format(t))
     print("[check] monte joint pdf shape, type: ", pdf_monte.shape, pdf_monte.dtype)
 
+    dx1 = x1s[1] - x1s[0]
+    dx2 = x2s[1] - x2s[0]
+    dx3 = x3s[1] - x3s[0]
+    dx4 = x4s[1] - x4s[0]
+
     # prepare grid points 
     x1_grid, x2_grid, x3_grid, x4_grid = np.meshgrid(x1s, x2s, x3s, x4s, indexing="ij") # the indexing is very important
     grid_points = np.vstack([x1_grid.ravel(), x2_grid.ravel(), x3_grid.ravel(), x4_grid.ravel()]).T
@@ -267,8 +277,23 @@ def check_pdfnn_marginalize(p_net, t=0.0):
     
     # if t == 0.0, obtain analytical p(true)
     if(t == 0.0):
-        pdf_true = p_init(grid_points).reshape(x1_grid.shape)
+        pdf_true = p_init(grid_points).reshape(x1_grid.shape) # NOTE: the true initial pdf is treated as R^4! Hence, it is the simple sum that adds to 1 ...
         print("[check] x1 ranges, true joint pdf shape, type: ", x1s.dtype, pdf_true.shape, pdf_true.dtype)
+        ### checking sum of p_init ### 
+        # _pdf_true_rphi = np.sum(pdf_true, axis=(2,3)) * dx3 * dx4
+        # # convert pdf
+        # pdf_true_rphi_sum = 0.0
+        # # pdf_true_rphi_data = np.empty((0,4))
+        # _x1_grid, _x2_grid =  np.meshgrid(x1s, x2s, indexing="ij") # the indexing is very important
+        # for i in range(len(_x1_grid)):
+        #     for j in range(len(_x2_grid)):
+        #         _r = _x1_grid[i,j]*constants.R
+        #         # phi = _x2_grid[i,j]*constants.PHI + constants.W*constants.T*0.0
+        #         # t = constants.T*0.0
+        #         # pdf_true_rphi_data = np.vstack((pdf_true_rphi_data, np.array([r, phi, t, pdf_true[i,j]/(constants.R*constants.PHI)])))
+        #         pdf_true_rphi_sum = pdf_true_rphi_sum + (_pdf_true_rphi[i,j]/(constants.R*constants.PHI))*(dx1*constants.R)*(dx2*constants.PHI)*_r
+        # print("[check] pdf_true(r, phi) sum: ", pdf_true_rphi_sum)
+
 
     # obtain pdf(nn)
     grid_points_tensor = torch.tensor(grid_points, dtype=torch.float32, requires_grad=False)
@@ -276,11 +301,6 @@ def check_pdfnn_marginalize(p_net, t=0.0):
     print("[check] grid points tensor shape type: ", grid_points_tensor.shape, grid_points_tensor.dtype)
     pdf_nn = p_net(grid_points_tensor, t_tensor).detach().numpy().reshape(x1_grid.shape)
     print("[check] nn joint pdf shape, type: ", pdf_nn.shape, pdf_nn.dtype)
-    
-    dx1 = x1s[1] - x1s[0]
-    dx2 = x2s[1] - x2s[0]
-    dx3 = x3s[1] - x3s[0]
-    dx4 = x4s[1] - x4s[0]
 
     # create figure
     fig, axs = plt.subplots(2, 2, figsize=(10, 8))
@@ -338,6 +358,7 @@ def check_pdfnn_marginalize(p_net, t=0.0):
                     marginalize_pdf_true = np.sum(pdf_true, axis=(0,1,2)) * dx1 * dx2 * dx3
                     ax.plot(x_axis, marginalize_pdf_true, "black", label="analytical")
         ax.legend()
+    fig.suptitle("t= {:.1f} sec".format(t*constants.T))
     plt.show()
 
 
@@ -429,8 +450,8 @@ def check_pdfnn_cartesian_wrt_monte(p_net):
         t_tensor = (torch.ones(len(grid_points_tensor), 1, dtype=torch.float32) * t_prime).to(device)
         pdf_nn = p_net(grid_points_tensor, t_tensor).detach().numpy().reshape(x1_grid.shape)
 
-        dx1 = x1s[1] - x1s[0]
-        dx2 = x2s[1] - x2s[0]
+        dx1 = x1s[1] - x1s[0] # dr'
+        dx2 = x2s[1] - x2s[0] # dphi'
         dx3 = x3s[1] - x3s[0]
         dx4 = x4s[1] - x4s[0]
 
@@ -441,8 +462,9 @@ def check_pdfnn_cartesian_wrt_monte(p_net):
         sum_p_nn = np.sum(pdf_nn_Nrphi) * dx1 * dx2
         print("[check] sum p_nn (N-sphere): ", sum_p_nn)
 
-        # convert pdf
-        pdf_nn_rphi_data = np.empty((0,4))
+        # convert pdf(r, phi)
+        # NOTE: I store the area = "dr*(r*dphi)" associated to each pdf
+        pdf_nn_rphi_data = np.empty((0,5))
         pdf_mo_rphi_data = np.empty((0,4))
         x1_grid, x2_grid =  np.meshgrid(x1s, x2s, indexing="ij") # the indexing is very important
         for i in range(len(x1_grid)):
@@ -453,19 +475,24 @@ def check_pdfnn_cartesian_wrt_monte(p_net):
                 r = Nr*constants.R
                 phi = Nphi*constants.PHI + constants.W*constants.T*t_prime
                 t = constants.T*t_prime
-                pdf_nn_rphi_data = np.vstack((pdf_nn_rphi_data, np.array([r, phi, t, pdf_nn_Nrphi[i,j]/(constants.R*constants.PHI)])))
+                pdf_nn_rphi_data = np.vstack((pdf_nn_rphi_data, np.array([r, phi, t, pdf_nn_Nrphi[i,j]/(constants.R*constants.PHI), (dx1*constants.R)*(r*dx2*constants.PHI)])))
                 pdf_mo_rphi_data = np.vstack((pdf_mo_rphi_data, np.array([r, phi, t, pdf_mo_Nrphi[i,j]/(constants.R*constants.PHI)])))
 
         # convert pdf(r,phi) to pdf(x,y)
         x = pdf_nn_rphi_data[:, 0] * np.cos(pdf_nn_rphi_data[:, 1]) 
         y = pdf_nn_rphi_data[:, 0] * np.sin(pdf_nn_rphi_data[:, 1])
         r = pdf_nn_rphi_data[:, 0]
-        z_nn = pdf_nn_rphi_data[:, 3]/(r**2) 
-        z_mo = pdf_mo_rphi_data[:, 3]/(r**2) 
+        z_nn = pdf_nn_rphi_data[:, 3]/(r) # see derivation of the factor (1/r) in Nov 7 notes
+        z_mo = pdf_mo_rphi_data[:, 3]/(r) 
 
-        # Define the grid where you want to plot the contours
-        grid_x, grid_y = np.meshgrid(np.linspace(x.min(), x.max(), 100),  # Adjust 100 to get finer resolution
-                                     np.linspace(y.min(), y.max(), 100))
+        _p_test = (np.sum(pdf_nn_Nrphi)/(constants.R*constants.PHI)) * (dx1*constants.R * dx2*constants.PHI)
+        __p_test = np.sum(z_nn * pdf_nn_rphi_data[:, 4])
+        ___p_test = np.sum(z_mo * pdf_nn_rphi_data[:, 4])
+        print("[check] p_monte in (x,y) {:.2f} & p_nn sum in (r,phi) {:.2f} and (x,y) {:.2f}".format(___p_test, _p_test, __p_test))
+
+        # visualize p(x,y) using interpolation
+        _grid_resolution = 70
+        grid_x, grid_y = np.meshgrid(np.linspace(x.min(), x.max(), _grid_resolution), np.linspace(y.min(), y.max(), _grid_resolution), indexing="ij")
         # Interpolate scattered data onto the grid
         grid_z_nn = griddata((x, y), z_nn, (grid_x, grid_y), method='cubic')
         grid_z_mo = griddata((x, y), z_mo, (grid_x, grid_y), method='cubic')
@@ -505,15 +532,15 @@ def main():
     # for t_prime in constants.T_PRIME_SPAN:
     #     check_pdfnn_marginalize(p_net, t=t_prime)
 
-    test_nn_cartesian_pdf_xy(p_net)
+    # test_nn_cartesian_pdf_xy(p_net)
 
     check_pdfnn_cartesian_wrt_monte(p_net)
     
     ### Finish printout ###
-    # if(TRAIN_FLAG == False):
-    #     print("[complete 2d nonlinear, with pre-trained models]")
-    # else:
-    #     print("[complete 2d nonlinear]")
+    if(TRAIN_FLAG == False):
+        print("[complete] 4d perfect keplerian orbit baseline")
+    else:
+        print("[complete] 4d perfect keplerian orbit baseline with pre-trained models")
 
 
 if __name__ == "__main__":
