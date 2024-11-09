@@ -286,22 +286,22 @@ def test_monte_cartesian_pdf_xy():
       
 
 def main():
-    # Generate data
-    # for t_prime in constants.T_PRIME_SPAN:
-    #     x1s, x2s, x3s, x4s, pdf = p_sol_monte(t=t_prime, linespace_num=51, stat_sample=100000)   
-    #     np.save(DATA_FOLDER+"pdf_t{:.3f}.npy".format(t_prime), pdf)
-    #     if t_prime == 0.0:
-    #         np.save(DATA_FOLDER+"x1s.npy", x1s)
-    #         np.save(DATA_FOLDER+"x2s.npy", x2s)
-    #         np.save(DATA_FOLDER+"x3s.npy", x3s)
-    #         np.save(DATA_FOLDER+"x4s.npy", x4s)
+    # # Generate data
+    for t_prime in constants.T_PRIME_SPAN:
+        x1s, x2s, x3s, x4s, pdf = p_sol_monte(t=t_prime, linespace_num=51, stat_sample=100000)   
+        np.save(DATA_FOLDER+"pdf_t{:.3f}.npy".format(t_prime), pdf)
+        if t_prime == 0.0:
+            np.save(DATA_FOLDER+"x1s.npy", x1s)
+            np.save(DATA_FOLDER+"x2s.npy", x2s)
+            np.save(DATA_FOLDER+"x3s.npy", x3s)
+            np.save(DATA_FOLDER+"x4s.npy", x4s)
 
     # # Testing functions
     test_monte_accuracy()
 
     # # [obsolete] test_propagate_using_oe(t_prime=constants.TF/constants.T)
 
-    test_monte_spherical_pdf_Nrphi()
+    # test_monte_spherical_pdf_Nrphi()
 
     test_monte_cartesian_pdf_xy()
     

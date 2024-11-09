@@ -529,8 +529,8 @@ def main():
     p_net = pos_p_net_train(p_net, PATH="output/p_net.pth", PATH_LOSS="output/p_net_train_loss.npy"); p_net.eval()
 
     ### Post-process ###
-    # for t_prime in constants.T_PRIME_SPAN:
-    #     check_pdfnn_marginalize(p_net, t=t_prime)
+    for t_prime in constants.T_PRIME_SPAN:
+        check_pdfnn_marginalize(p_net, t=t_prime)
 
     # test_nn_cartesian_pdf_xy(p_net)
 

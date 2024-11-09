@@ -458,8 +458,8 @@ def check_pdfnn_cartesian_wrt_monte(p_net):
         t_tensor = (torch.ones(len(grid_points_tensor), 1, dtype=torch.float32) * t_prime).to(device)
         pdf_nn = p_net(grid_points_tensor, t_tensor).detach().numpy().reshape(x1_grid.shape)
 
-        dx1 = x1s[1] - x1s[0]
-        dx2 = x2s[1] - x2s[0]
+        dx1 = x1s[1] - x1s[0] # dr'
+        dx2 = x2s[1] - x2s[0] # dphi'
         dx3 = x3s[1] - x3s[0]
         dx4 = x4s[1] - x4s[0]
 
@@ -470,8 +470,9 @@ def check_pdfnn_cartesian_wrt_monte(p_net):
         sum_p_nn = np.sum(pdf_nn_Nrphi) * dx1 * dx2
         print("[check] sum p_nn (N-sphere): ", sum_p_nn)
 
-        # convert pdf
-        pdf_nn_rphi_data = np.empty((0,4))
+        # convert pdf(r, phi)
+        # NOTE: I store the area = "dr*(r*dphi)" associated to each pdf
+        pdf_nn_rphi_data = np.empty((0,5))
         pdf_mo_rphi_data = np.empty((0,4))
         x1_grid, x2_grid =  np.meshgrid(x1s, x2s, indexing="ij") # the indexing is very important
         for i in range(len(x1_grid)):
@@ -482,33 +483,34 @@ def check_pdfnn_cartesian_wrt_monte(p_net):
                 r = Nr*constants.R
                 phi = Nphi*constants.PHI + constants.W*constants.T*t_prime
                 t = constants.T*t_prime
-                pdf_nn_rphi_data = np.vstack((pdf_nn_rphi_data, np.array([r, phi, t, pdf_nn_Nrphi[i,j]/(constants.R*constants.PHI)])))
+                pdf_nn_rphi_data = np.vstack((pdf_nn_rphi_data, np.array([r, phi, t, pdf_nn_Nrphi[i,j]/(constants.R*constants.PHI), (dx1*constants.R)*(r*dx2*constants.PHI)])))
                 pdf_mo_rphi_data = np.vstack((pdf_mo_rphi_data, np.array([r, phi, t, pdf_mo_Nrphi[i,j]/(constants.R*constants.PHI)])))
 
         # convert pdf(r,phi) to pdf(x,y)
         x = pdf_nn_rphi_data[:, 0] * np.cos(pdf_nn_rphi_data[:, 1]) 
         y = pdf_nn_rphi_data[:, 0] * np.sin(pdf_nn_rphi_data[:, 1])
         r = pdf_nn_rphi_data[:, 0]
-        z_nn = pdf_nn_rphi_data[:, 3]/(r**2) 
-        z_mo = pdf_mo_rphi_data[:, 3]/(r**2) 
+        z_nn = pdf_nn_rphi_data[:, 3]/(r) # see derivation of the factor (1/r) in Nov 7 notes
+        z_mo = pdf_mo_rphi_data[:, 3]/(r) 
 
-        # Define the grid where you want to plot the contours
-        grid_x, grid_y = np.meshgrid(np.linspace(x.min(), x.max(), 100),  # Adjust 100 to get finer resolution
-                                     np.linspace(y.min(), y.max(), 100))
+        _p_test = (np.sum(pdf_nn_Nrphi)/(constants.R*constants.PHI)) * (dx1*constants.R * dx2*constants.PHI)
+        __p_test = np.sum(z_nn * pdf_nn_rphi_data[:, 4])
+        ___p_test = np.sum(z_mo * pdf_nn_rphi_data[:, 4])
+        print("[check] p_monte in (x,y) {:.2f} & p_nn sum in (r,phi) {:.2f} and (x,y) {:.2f}".format(___p_test, _p_test, __p_test))
+
+        # visualize p(x,y) using interpolation
+        _grid_resolution = 70
+        grid_x, grid_y = np.meshgrid(np.linspace(x.min(), x.max(), _grid_resolution), np.linspace(y.min(), y.max(), _grid_resolution), indexing="ij")
         # Interpolate scattered data onto the grid
         grid_z_nn = griddata((x, y), z_nn, (grid_x, grid_y), method='cubic')
         grid_z_mo = griddata((x, y), z_mo, (grid_x, grid_y), method='cubic')
 
         if(t_prime == 0.0):
-            surf1 = ax.plot_surface(grid_x, grid_y, grid_z_nn, color="none", 
-                                    rstride=3, cstride=3, edgecolor='red',  linewidth=0.5, alpha=0.5, linestyle="--", label="NN")
-            surf2 = ax.plot_surface(grid_x, grid_y, grid_z_mo, color="none", 
-                                    rstride=3, cstride=3, edgecolor='blue', linewidth=0.5, label="Monte")
+            surf1 = ax.plot_surface(grid_x, grid_y, grid_z_nn, color="none", rstride=3, cstride=3, edgecolor='red',  linewidth=0.5, linestyle="--", label="NN")
+            surf2 = ax.plot_surface(grid_x, grid_y, grid_z_mo, color="none", rstride=3, cstride=3, edgecolor='blue', linewidth=0.5, label="Monte")
         else:
-            surf1 = ax.plot_surface(grid_x, grid_y, grid_z_nn, color="none", 
-                                    rstride=3, cstride=3, edgecolor='red',  linewidth=0.5, linestyle="--")
-            surf2 = ax.plot_surface(grid_x, grid_y, grid_z_mo, color="none", 
-                                    rstride=3, cstride=3, edgecolor='blue', linewidth=0.5)
+            surf1 = ax.plot_surface(grid_x, grid_y, grid_z_nn, color="none", rstride=3, cstride=3, edgecolor='red',  linewidth=0.5, linestyle="--")
+            surf2 = ax.plot_surface(grid_x, grid_y, grid_z_mo, color="none", rstride=3, cstride=3, edgecolor='blue', linewidth=0.5)
         # Optional: Add a color bar
         # fig.colorbar(surf, ax=ax, shrink=0.5, aspect=5)
     # Labels and title
@@ -535,18 +537,18 @@ def main():
     p_net = pos_p_net_train(p_net, PATH="output/p_net.pth", PATH_LOSS="output/p_net_train_loss.npy"); p_net.eval()
 
     ### Post-process ###
-    # for t_prime in constants.T_PRIME_SPAN:
-    #     check_pdfnn_marginalize(p_net, t=t_prime)
+    for t_prime in constants.T_PRIME_SPAN:
+        check_pdfnn_marginalize(p_net, t=t_prime)
 
     # test_nn_cartesian_pdf_xy(p_net)
 
     check_pdfnn_cartesian_wrt_monte(p_net)
     
     ### Finish printout ###
-    # if(TRAIN_FLAG == False):
-    #     print("[complete 2d nonlinear, with pre-trained models]")
-    # else:
-    #     print("[complete 2d nonlinear]")
+    if(TRAIN_FLAG == False):
+        print("[complete] 4d perfect keplerian orbit Case:2")
+    else:
+        print("[complete] 4d perfect keplerian orbit Case:2 with pre-trained models")
 
 
 if __name__ == "__main__":

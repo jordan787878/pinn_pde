@@ -5,7 +5,7 @@ import time
 from scipy.stats import norm, multivariate_normal
 from scipy.interpolate import griddata
 from constants import Case2_4D_Constants
-from util import normspherical4d_to_cartesian, RV2COE, true_to_mean_anomaly, solve_kepler, COE2RV, cartesian_to_normspherical4d
+from util import rnsphere_to_sphere, sphere_to_rnsphere, sphere_to_cartesian, cartesian_to_sphere, RV2COE, true_to_mean_anomaly, solve_kepler, COE2RV
 
 DATA_FOLDER = "data/"
 constants = Case2_4D_Constants()
@@ -14,19 +14,29 @@ np.random.seed(0)
 
 def p_sol_monte(t=0.0, linespace_num=100, stat_sample=100000):
     global constants
-    X = np.random.multivariate_normal(constants.N_MEAN_I, constants.N_COV_I, size=stat_sample).astype(np.float32)
+    X_four_dim = np.random.multivariate_normal(constants.N_MEAN_I, constants.N_COV_I, size=stat_sample).astype(np.float32)
+
+    # append constant theta' = 0.5pi/THETA, theta'_dot = 0.0
+    X = np.zeros((stat_sample, 6))
+    X[:,0] = X_four_dim[:,0]
+    X[:,1] = np.ones((stat_sample,)) * 0.5 * np.float32(np.pi) / constants.THETA
+    X[:,2] = X_four_dim[:,1]
+    X[:,3] = X_four_dim[:,2]
+    X[:,5] = X_four_dim[:,3]
     
-    # normalize spherical 4d to cartesian 6d
-    X_cart = normspherical4d_to_cartesian(X, 0.0, constants)
+    # convert rns to cartesian
+    X_cart = sphere_to_cartesian(rnsphere_to_sphere(X, constants.TI, constants), reduced_to_four_dim=True)
     for i in range(stat_sample):
         _a, _e, _i, _RAAN, _w, _nu, _lonper = RV2COE(X_cart[i,:], constants.MU_EARTH)
         _m = true_to_mean_anomaly(_e, _nu)
         _m = _m + np.sqrt(constants.MU_EARTH/_a**3) * constants.T * t
         _nu = solve_kepler(_e, _m)
         x_cart_t = COE2RV(_a, _e, _i, _RAAN, _w, _nu, _lonper, constants.MU_EARTH)
-        x_t = cartesian_to_normspherical4d(x_cart_t.reshape(1,-1), t, constants)
+        x_t = sphere_to_rnsphere(cartesian_to_sphere(x_cart_t.reshape(1,-1)), t, constants)
         # update state
         X[i,:] = x_t
+    # extract 4D data (0,2,3,5 columns)
+    X = X[:, [0, 2, 3, 5]]
     
     # Define bins for each dimension
     bins_x1 = np.linspace(constants.X1_RANGE[0], constants.X1_RANGE[1], num=linespace_num, endpoint=True).astype(np.float32)
@@ -63,7 +73,8 @@ def p_sol_monte(t=0.0, linespace_num=100, stat_sample=100000):
     dx2 = bins_x2[1] - bins_x2[0]
     dx3 = bins_x3[1] - bins_x3[0]
     dx4 = bins_x4[1] - bins_x4[0]
-    frequency_4d /= (dx1 * dx2 * dx3 * dx4 * stat_sample)
+    frequency_4d /= (dx1 * dx2 * dx3 * dx4 * stat_sample) 
+    # NOTE: I do not normalize the p with "r"*dr*dphi*dr_dot*dphi_dot. Instead, a simple version is used.
 
     # Check the sum of the probability density function
     print("[check] sum pdf(monte) = 1.0", np.sum(frequency_4d) * dx1 * dx2 * dx3 * dx4)
@@ -160,25 +171,25 @@ def test_monte_accuracy():
     plt.show()
 
 
-def test_propagate_using_oe(t_prime=0.0):
-    global constants
-    X = np.random.multivariate_normal(constants.N_MEAN_I, constants.N_COV_I, size=1).astype(np.float32)
-    # normalize spherical 4d to cartesian 6d
-    X_cart = normspherical4d_to_cartesian(X, 0.0, constants)
-    for i in range(1):
-        _a, _e, _i, _RAAN, _w, _nu, _lonper = RV2COE(X_cart[i,:], constants.MU_EARTH)
-        _m = true_to_mean_anomaly(_e, _nu)
-        print(X[i,:])
-        print(X_cart[i,:])
-        print(_a, _e, _i, _RAAN, _w, _nu, _lonper)
-        print(_m)
-        _m = _m + np.sqrt(constants.MU_EARTH/_a**3) * constants.T * t_prime
-        _nu = solve_kepler(_e, _m)
-        x_cart_t = COE2RV(_a, _e, _i, _RAAN, _w, _nu, _lonper, constants.MU_EARTH)
-        print(_m, _nu)
-        print(x_cart_t)
-        x_t = cartesian_to_normspherical4d(x_cart_t.reshape(1,-1), t_prime, constants)
-        print(x_t)
+# def test_propagate_using_oe(t_prime=0.0):
+#     global constants
+#     X = np.random.multivariate_normal(constants.N_MEAN_I, constants.N_COV_I, size=1).astype(np.float32)
+#     # normalize spherical 4d to cartesian 6d
+#     X_cart = normspherical4d_to_cartesian(X, 0.0, constants)
+#     for i in range(1):
+#         _a, _e, _i, _RAAN, _w, _nu, _lonper = RV2COE(X_cart[i,:], constants.MU_EARTH)
+#         _m = true_to_mean_anomaly(_e, _nu)
+#         print(X[i,:])
+#         print(X_cart[i,:])
+#         print(_a, _e, _i, _RAAN, _w, _nu, _lonper)
+#         print(_m)
+#         _m = _m + np.sqrt(constants.MU_EARTH/_a**3) * constants.T * t_prime
+#         _nu = solve_kepler(_e, _m)
+#         x_cart_t = COE2RV(_a, _e, _i, _RAAN, _w, _nu, _lonper, constants.MU_EARTH)
+#         print(_m, _nu)
+#         print(x_cart_t)
+#         x_t = cartesian_to_normspherical4d(x_cart_t.reshape(1,-1), t_prime, constants)
+#         print(x_t)
 
 
 def test_monte_spherical_pdf_Nrphi():
@@ -201,9 +212,9 @@ def test_monte_spherical_pdf_Nrphi():
 
         pdf_monte_Nrphi =  np.sum(pdf_monte, axis=(2,3)) * dx3 * dx4
         x1_grid, x2_grid =  np.meshgrid(x1s, x2s, indexing="ij") # the indexing is very important
-        for i in range(len(x1_grid)):
-            for j in range(len(x2_grid)):
-                print(x1_grid[i,j], x2_grid[i,j], pdf_monte_Nrphi[i,j])
+        # for i in range(len(x1_grid)):
+        #     for j in range(len(x2_grid)):
+        #         print(x1_grid[i,j], x2_grid[i,j], pdf_monte_Nrphi[i,j])
 
         # Plotting the contour plot
         plt.figure(figsize=(8, 6))
@@ -235,13 +246,10 @@ def test_monte_cartesian_pdf_xy():
         pdf_monte = np.load(DATA_FOLDER+"pdf_t{:.3f}.npy".format(t_prime))
         print("[check] x1s, pdf(monte) data type: ", x1s.dtype, pdf_monte.dtype)
 
-        dx1 = x1s[1] - x1s[0]
-        dx2 = x2s[1] - x2s[0]
         dx3 = x3s[1] - x3s[0]
         dx4 = x4s[1] - x4s[0]
 
         pdf_monte_Nrphi =  np.sum(pdf_monte, axis=(2,3)) * dx3 * dx4
-        print("[check] sum p(monte): ", np.sum(pdf_monte_Nrphi) * dx1 * dx2)
         x1_grid, x2_grid =  np.meshgrid(x1s, x2s, indexing="ij") # the indexing is very important
         pdf_rphi_data = np.empty((0,4))
         for i in range(len(x1_grid)):
@@ -259,6 +267,7 @@ def test_monte_cartesian_pdf_xy():
         x = pdf_rphi_data[:, 0] * np.cos(pdf_rphi_data[:, 1])  # x-coordinates (1st column)
         y = pdf_rphi_data[:, 0] * np.sin(pdf_rphi_data[:, 1])  # y-coordinates (2nd column)
         z = pdf_rphi_data[:, 3]  # values to plot (4th column)
+        print(np.max(z))
         # Define the grid where you want to plot the contours
         grid_x, grid_y = np.meshgrid(np.linspace(x.min(), x.max(), 100),  # Adjust 100 to get finer resolution
                                      np.linspace(y.min(), y.max(), 100))
@@ -277,8 +286,9 @@ def test_monte_cartesian_pdf_xy():
       
 
 def main():
+    # # Generate data
     for t_prime in constants.T_PRIME_SPAN:
-        x1s, x2s, x3s, x4s, pdf = p_sol_monte(t=t_prime, linespace_num=71, stat_sample=100000)   
+        x1s, x2s, x3s, x4s, pdf = p_sol_monte(t=t_prime, linespace_num=51, stat_sample=100000)   
         np.save(DATA_FOLDER+"pdf_t{:.3f}.npy".format(t_prime), pdf)
         if t_prime == 0.0:
             np.save(DATA_FOLDER+"x1s.npy", x1s)
@@ -286,10 +296,10 @@ def main():
             np.save(DATA_FOLDER+"x3s.npy", x3s)
             np.save(DATA_FOLDER+"x4s.npy", x4s)
 
-    # Testing functions
+    # # Testing functions
     test_monte_accuracy()
 
-    # test_propagate_using_oe(t_prime=constants.TF/constants.T)
+    # # [obsolete] test_propagate_using_oe(t_prime=constants.TF/constants.T)
 
     # test_monte_spherical_pdf_Nrphi()
 
