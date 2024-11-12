@@ -6,6 +6,7 @@ This case is a circular orbit on plannar motion. Hence, we reduce the dynamics t
 Compared to exp2_sphere_4d (baseline):
     1) the final time is increased to 0.2*T.
     2) the solution domain is increased to ensure sum(p) ~= 1.0
+Current p_net: save epoch: 98453 ,loss: tensor(0.0001) ,ic: tensor(2.6113e-05) ,res: tensor(0.0005) ,res g: tensor(2.6750)
 
 """
 import numpy as np
@@ -91,7 +92,7 @@ class PNet(nn.Module):
         layer3_out = F.softplus((self.hidden_layer3(layer2_out)))
         layer4_out = F.softplus((self.hidden_layer4(layer3_out)))
         layer5_out = F.softplus((self.hidden_layer5(layer4_out)))
-        output = F.softplus( self.output_layer(layer5_out) )
+        output = F.softplus(self.output_layer(layer5_out))
         return output
                 
 
@@ -149,19 +150,19 @@ def train_p_net(p_net, optimizer, scheduler, mse_cost_function, iterations=40000
         mse_u = mse_cost_function(phat_i/normalize, p_i/normalize)
 
         # Loss based on PDE
-        res_p = diff_opt_p(x, t, p_net)
+        res_p = diff_opt_p(x, t, p_net)/normalize
         all_zeros = torch.zeros((len(t),1), dtype=torch.float32, requires_grad=False).to(device)
-        mse_res = mse_cost_function(res_p/normalize, all_zeros)
+        mse_res = mse_cost_function(res_p, all_zeros)
 
         # Frequnecy Loss
-        # res_x = torch.autograd.grad(res_out, x, grad_outputs=torch.ones_like(res_out), create_graph=True)[0]
-        # res_t = torch.autograd.grad(res_out, t, grad_outputs=torch.ones_like(res_out), create_graph=True)[0]
-        # res_input = torch.cat([res_x, res_t], axis=1)
-        # norm_res_input = torch.norm(res_input, dim=1).view(-1,1) ###
-        # mse_norm_res_input = mse_cost_function(norm_res_input, all_zeros)
+        res_x = torch.autograd.grad(res_p, x, grad_outputs=torch.ones_like(res_p), create_graph=True)[0]
+        res_t = torch.autograd.grad(res_p, t, grad_outputs=torch.ones_like(res_p), create_graph=True)[0]
+        res_grad = torch.cat([res_x, res_t], axis=1)
+        res_grad = torch.sum(res_x**2, dim=1, keepdim=True)
+        mse_res_grad = mse_cost_function(res_grad, all_zeros)
 
         # Loss Function
-        loss = mse_u + (constants.TF/constants.T)*mse_res
+        loss = mse_u + (constants.TF/constants.T)*(mse_res)
         loss_history.append(loss.data)
 
         # Save the min loss model
@@ -170,7 +171,7 @@ def train_p_net(p_net, optimizer, scheduler, mse_cost_function, iterations=40000
             print("save epoch:", epoch, ",loss:", loss.data, 
                   ",ic:", mse_u.data, 
                   ",res:", mse_res.data,
-                #    ",res_freq:", mse_norm_res_input.data
+                  ",res g:", mse_res_grad.data
                    )
             torch.save({
                     'epoch': epoch,
@@ -221,7 +222,7 @@ def train_p_net(p_net, optimizer, scheduler, mse_cost_function, iterations=40000
                 t_max = t_bc_rar[max_index].clone().detach()
                 x_bc = torch.cat((x_bc, x_max), dim=0)
                 t_bc = torch.cat((t_bc, t_max), dim=0)
-                print("... RAR IC, add: ", x_max[0,:].data, t_max[0].item(), max_value[0].item())
+                print("... RAR IC, add: ", x_max[0,:].data, t_max[0].item(), max_error.item())
 
             # add residual points
             res_p = diff_opt_p(x_rar, t_rar, p_net)/normalize
@@ -232,7 +233,7 @@ def train_p_net(p_net, optimizer, scheduler, mse_cost_function, iterations=40000
                 t_max = t_rar[max_index].clone()
                 x = torch.cat((x, x_max), dim=0)
                 t = torch.cat((t, t_max), dim=0)
-                print("... RAR Res, add: ", x_max[0,:].data, t_max[0].item(), max_value[0].item())
+                print("... RAR Res, add: ", x_max[0,:].data, t_max[0].item(), max_error.item())
 
             # reset flag
             FLAG = False
