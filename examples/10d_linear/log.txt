@@ -1,0 +1,211 @@
+<baseline>
+[p_net: MLP 32 neurons 5 layers, loss = mse_u + mse_f, batch_size=200, Adam, 40k epochs]
+[e1_net: MLP 100 neurons 5 layers, loss = (mse_u + mse_res)/max_abs_e1_ti, batch_size=500, Adam, 80k epochs]
+p: 39572 , loss: tensor(2.1158e-07)
+e: 70194 , loss: tensor(8.9481e-09) ,ic: tensor(1.8905e-09) ,res: tensor(7.0576e-09)
+[Almost fail, alpha_1(tf)=0.97]
+
+<200e1>
+[p_net: pre-trained by <baseline>]
+[e1_net: MLP 200 neurons 5 layers, loss = (mse_u + mse_res)/max_abs_e1_ti, batch_size=500, Adam, 80k epochs]
+e: 73653 , loss: tensor(4.3215e-09) ,ic: tensor(9.3781e-10) ,res: tensor(3.3837e-09)
+[Almost fail, alpha_1(tf)=0.97]
+
+<baseline-newmetric-Adamax>
+[rerun baseline with normalized linf-ic, normalized linf-res, and res_freq loss metric, but loss is still loss = mse_u + mse_res]
+[Note: e1_net is the baseline MLP 100 neurons 5 layers]
+[Note: I also add the init bias function for p_net and e1_net]
+p: 39240 ,loss: tensor(3.3445e-05) ,ic: tensor(1.4319e-05) ,res: tensor(1.9126e-05) ,norm. linf-ic: tensor(0.0376) ,norm. linf-res: tensor(0.0396) ,res_freq: tensor(0.3361)
+e: 71099 , loss: tensor(3.2267e-08) ,ic: tensor(8.1494e-09) ,res: tensor(2.4118e-08)
+[Success]
+
+<baseline-newmetric-Adam>
+p: 39987 ,loss: tensor(0.0001) ,ic: tensor(3.6738e-05) ,res: tensor(8.4175e-05) ,norm. linf-ic: tensor(0.0594) ,norm. linf-res: tensor(0.0752) ,res_freq: tensor(0.1978)
+e: 69063 , loss: tensor(3.0716e-08) ,ic: tensor(6.8251e-09) ,res: tensor(2.3891e-08)
+[Success]
+
+<mseresfreq>
+[p_net: loss = torch.max(mse_u, mse_u*0+5e-5) + torch.max(mse_res, mse_res*0+5e-5) + 1e-4*res_freq/batch_size, Adam opt, 40k epochs, gamma=1.0]
+p: 38906 ,loss: tensor(0.0001) ,ic: tensor(3.3634e-05) ,res: tensor(4.8125e-05) ,norm. linf-ic: tensor(0.0411) ,norm. linf-res: tensor(0.0853) ,res_freq: tensor(0.0603)
+e: 73336 , loss: tensor(3.5194e-08) ,ic: tensor(6.6586e-09) ,res: tensor(2.8536e-08)
+[Success. Best so far. alpha_1(ts)=0.01, 0.4, 0.67]
+
+<mseresfreq-notgood>
+[Run-4]
+[Trying to improve <mseresfreq>]
+p: 71291 ,loss: tensor(0.0001) ,ic: tensor(1.2980e-05) ,res: tensor(4.7663e-05) ,norm. linf-ic: tensor(0.0244) ,norm. linf-res: tensor(0.0350) ,res_freq: tensor(2.1974e-05)
+e: 79552 , loss: tensor(5.1877e-08) ,ic: tensor(8.5358e-09) ,res: tensor(4.3342e-08)
+[Success. But not good. alpha_1(ts)=0.01, 0.81, 0.93]
+
+== Ok, I want to investiage the efficacy of the frequency approximation function
+
+<mse>
+Seems that I also need the dr/dt regularizaiton
+[p_net, loss = mse_u + mse_res, Adam]
+[e1_net, loss = mse_u + mse_res, Adam]
+p: 37330 ,loss: tensor(0.0001) ,ic: tensor(5.7620e-05) ,res: tensor(5.5152e-05) ,norm. linf-ic: tensor(0.0981) ,norm. linf-res: tensor(0.0693) ,res_freq: tensor(0.2132) tensor(0.4607)
+e: 74751 , loss: tensor(2.2446e-08) ,ic: tensor(1.6967e-07) ,res: tensor(5.4665e-07)
+[alpha_1 = 0.013, 0.635, 0.803]
+[Success]
+
+<resfreq>
+[p_net, loss = 1e-4*res_freq/batch_size + 1e-4*res_freq_x/batch_size, Adamax, 5000 epochs]
+[e1_net, loss = mse_u + mse_res, Adam, 10000 epochs]
+p: 4629 ,loss: tensor(1.1835e-12) ,ic: tensor(9.3349) ,res: tensor(0.0005) ,norm. linf-ic: tensor(5.6740) ,norm. linf-res: tensor(0.0671) ,res_freq: tensor(2.9292e-11) tensor(1.1805e-08) tensor(0.6364) tensor(0.0180) tensor(0.0056)
+e: 9859 , loss: tensor(1.6960e-05) ,ic: tensor(5.4723e-06) ,res: tensor(1.1488e-05)
+[alpha_1=0.009, 0.14, 0.25]
+
+<linfresfreq-base>
+[p_net: loss = torch.max(linf_u, 0*linf_u+0.08) + torch.max(linf_res, 0*linf_res+0.06) + 1e-4*res_freq/batch_size + 1e-4*res_freq_x/batch_size, Adamax, 100000 epochs]
+[e1_net: loss = mse_u + mse_res, Adam, 90000 epochs]
+p: 90730 ,loss: tensor(0.1704) ,ic: tensor(0.0004) ,res: tensor(0.0004) ,norm. linf-ic: tensor(0.0800) ,norm. linf-res: tensor(0.0903) ,res_freq: tensor(0.2639) tensor(0.1501) tensor(0.2666) tensor(0.3550) tensor(0.2417)
+e: 75915 , loss: tensor(4.7994e-08) ,ic: tensor(1.3244e-08) ,res: tensor(3.4749e-08)
+[alpha_1=0.017, 0.7, 0.8]
+
+<resfreq-newmetric>
+p:  2106 , loss: tensor(3.5873e-25)
+e:  72919 , loss: tensor(1.4747e-07) ,ic: tensor(5.7029e-08) ,res: tensor(9.0444e-08)
+[e1_net is better trained by just simple mse_u + mse_res]
+[alpha_1=0., 0.11, 0.12]
+
+<tmp>
+[p_net: loss = torch.max(linf_u, 0*linf_u+0.05) + torch.max(linf_res, 0*linf_res+0.03) + new_metric]
+p: 90480 ,loss: tensor(0.0997) ,ic: tensor(0.0001) ,res: tensor(9.2385e-05) ,norm. linf-ic: tensor(0.0494) ,norm. linf-res: tensor(0.0496) ,res_freq: tensor(0.3847) tensor(0.2159) tensor(0.0002)
+e: 67767 , loss: tensor(2.2509e-06) ,ic: tensor(7.1626e-07) ,res: tensor(1.5346e-06)
+[alpha_1 = 0.02, 0.86, 0.97]
+[Run-2: relax the ic and residual loss saturation]
+[p_net: loss = torch.max(linf_u, 0*linf_u+0.08) + torch.max(linf_res, 0*linf_res+0.07) + new_metric]
+p: 85187 ,loss: tensor(0.1500) ,ic: tensor(0.0013) ,res: tensor(0.0007) ,norm. linf-ic: tensor(0.0773) ,norm. linf-res: tensor(0.0673) ,res_freq: tensor(0.1216) tensor(0.0148) tensor(1.2425e-05)
+e: 78547 , loss: tensor(1.8322e-06) ,ic: tensor(4.7429e-07) ,res: tensor(1.3580e-06)
+[alpha_1 = 0.02, 0.8, 0.93]
+
+<bestalpha>
+[p_net: loss = torch.max(mse_u, mse_u*0+1e-5) + torch.max(mse_res, mse_res*0+1e-5) + 1e-5*res_freq/len(t). Adam]
+p: 72045 ,loss: tensor(2.7658e-05) ,ic: tensor(9.6722e-06) ,res: tensor(9.9099e-06) ,norm. linf-ic: tensor(0.0109) ,norm. linf-res: tensor(0.0163) ,res_freq: tensor(0.7658*)(0.1567) tensor(0.5532) tensor(0.0001)
+e: 43460 , loss: tensor(-5.2724) ,ic: tensor(-6.0730) ,res: tensor(-5.3472) (trained for 45k epochs only)
+[Note: 0.1567 is the freq using zero mean. 0.7658* is the mean using non-zero mean]
+[alpha_1 = 0.06, 0.23, 0.19, 0.2, 0.21]
+
+### June 17 ###
+
+<drdx-sat-augX> 
+[p_net: loss = torch.max(mse_u, mse_u*0+2e-5) + torch.max(mse_res, mse_res*0+2e-5) + 2e-5*metric]
+[x_mar = 1.0]
+p: 69381 ,loss: tensor(4.0002e-05) ,ic: tensor(1.5413e-05) ,res: tensor(1.6173e-05) ,norm. linf-ic: tensor(0.0099) ,norm. linf-res: tensor(0.0201) ,res_freq: tensor(0.0001)
+e: 79897 , loss: tensor(-5.5454) ,ic: tensor(-6.4284) ,res: tensor(-5.6063)
+alpha_1=0.1, 0.44, 0.54, 0.57, 0.57
+
+<mse-augX>
+[p_net: loss = mse_u + mse_res]
+p: 77321 ,loss: tensor(6.9546e-06) ,ic: tensor(1.7104e-06) ,res: tensor(5.2442e-06) ,norm. linf-ic: tensor(0.0064) ,norm. linf-res: tensor(0.0117) ,res_freq: tensor(6.3874e-05)
+e: 57146 , loss: tensor(-5.8010) ,ic: tensor(-6.4363) ,res: tensor(-5.9154)
+alpha_1=0.1, 0.82, 0.92, 0.95, 0.81
+
+<tmp-tmp>
+p: 37731 ,loss: tensor(0.0017) ,ic: tensor(0.0006) ,res: tensor(0.0010) ,norm. linf-ic: tensor(0.1298) ,norm. linf-res: tensor(0.1393) ,res_freq: tensor(0.0062) tensor(0.0096)
+### Explore Metric
+
+<drdx> 
+[p_net: loss = torch.max(mse_u, mse_u*0+2e-5) + torch.max(mse_res, mse_res*0+2e-5) + 2e-5*metric]
+p: 69025 ,loss: tensor(4.0002e-05) ,ic: tensor(1.4130e-05) ,res: tensor(1.1331e-05) ,norm. linf-ic: tensor(0.0164) ,norm. linf-res: tensor(0.0219) ,res_freq: tensor(0.0001)
+e: 79335 , loss: tensor(-5.4805) ,ic: tensor(-6.3683) ,res: tensor(-5.5408)
+alpha_1=0.08, 0.33, 0.32, 0.30, 0.26
+
+<mse>
+[p_net: loss = mse_u + mse_res]
+p: 77054 ,loss: tensor(9.4645e-07) ,ic: tensor(4.1778e-07) ,res: tensor(5.2867e-07) ,norm. linf-ic: tensor(0.0025) ,norm. linf-res: tensor(0.0033) ,res_freq: tensor(1.4037e-05)
+e: 67847 , loss: tensor(-5.4437) ,ic: tensor(-6.0769) ,res: tensor(-5.5588)
+alpha_1=0.42, 1.75, 1.83, 1.90, 1.72
+
+
+### June 18 ###
+extend the input domain to
+x = [-3,3]
+t = [0,3]
+p_net: 100 neurons 5 layers softplus MLP
+
+<0-mse-baseline>
+p loss function. loss = mse_u + mse_res
+p: 56720 ,loss: tensor(2.5177e-07) ,ic: tensor(6.9859e-08) ,res: tensor(1.8191e-07) ,norm. linf-ic: tensor(0.0012) ,norm. linf-res: tensor(0.0016) ,res_freq: tensor(0.0004)
+e: 37319 , loss: tensor(0.0001) ,ic: tensor(2.5906e-05) ,res: tensor(0.0001)
+alhpa_1(t):
+0.1 [0.09347]
+0.5 [0.29592521]
+1.0 [0.45764323]
+2.0 [0.38217887]
+3.0 [0.39567538]
+
+<0-mse-resgrad>
+p loss function. loss = mse_u + mse_res + mse_norm_res_input
+p: 47331 ,loss: tensor(1.1928e-06) ,ic: tensor(4.9780e-07) ,res: tensor(3.2986e-09) ,norm. linf-ic: tensor(0.0023) ,norm. linf-res: tensor(0.0003) ,res_freq: tensor(6.9175e-07)
+e: 31673 , loss: tensor(1.0932e-05) ,ic: tensor(3.6855e-06) ,res: tensor(7.2460e-06)
+alpha_1(t):
+0.1 [0.05412502]
+0.5 [0.31501649]
+1.0 [0.4411345]
+2.0 [0.42246616]
+3.0 [0.41728715]
+
+=== There is not much difference with/without res_gradient_loss ===
+
+
+### June 19 ###
+testing p_net with smaller NN. p_net 32 neurons 5 layers softplus activation MLP
+
+<0-mse-32neuron_pnet>
+p loss function. loss = mse_u + mse_res
+p: 55700 ,loss: tensor(2.3789e-06) ,ic: tensor(1.2501e-06) ,res: tensor(1.1288e-06) ,norm. linf-ic: tensor(0.0051) ,norm. linf-res: tensor(0.0057) ,res_freq: tensor(0.0007)
+e: 37380 , loss: tensor(2.6189e-05) ,ic: tensor(5.8779e-06) ,res: tensor(2.0311e-05)
+alpha_1(t)
+0.1 [0.08947794]
+0.5 [0.27392018]
+1.0 [0.28074854]
+2.0 [0.22771716]
+3.0 [0.21183001]
+
+<0-mse-32neuron_pnet-rerun1>
+p: 57476 ,loss: tensor(4.5561e-06) ,ic: tensor(1.8612e-06) ,res: tensor(2.6948e-06) ,norm. linf-ic: tensor(0.0039) ,norm. linf-res: tensor(0.0063) ,res_freq: tensor(0.0028)
+e: 38789 , loss: tensor(2.5180e-05) ,ic: tensor(4.6303e-06) ,res: tensor(2.0550e-05)
+alpha_1(t)
+0.1 [0.09073112]
+0.5 [0.21499348]
+1.0 [0.21328533]
+2.0 [0.13720355]
+3.0 [0.09537189]
+
+<0-mse-32neuron_pnet-rerun2>
+p: 52229 ,loss: tensor(3.9685e-06) ,ic: tensor(1.8805e-06) ,res: tensor(2.0880e-06) ,norm. linf-ic: tensor(0.0050) ,norm. linf-res: tensor(0.0067) ,res_freq: tensor(0.0014)
+e: 39938 , loss: tensor(3.6221e-05) ,ic: tensor(6.4878e-06) ,res: tensor(2.9733e-05)
+alpha_1(t)
+0.1 [0.07753182]
+0.5 [0.24114615]
+1.0 [0.2785678]
+2.0 [0.19490604]
+3.0 [0.15175769]
+
+<0-mse-resgrad-32neuron_pnet>
+p: 59187 ,loss: tensor(1.0321e-05) ,ic: tensor(4.0518e-06) ,res: tensor(4.5219e-08) ,norm. linf-ic: tensor(0.0061) ,norm. linf-res: tensor(0.0008) ,res_freq: tensor(6.2237e-06)
+e: 39150 , loss: tensor(3.4258e-06) ,ic: tensor(1.0641e-06) ,res: tensor(2.3617e-06)
+alpha_1(t)
+
+
+Extend input domian to x=[-4,4], t=[0,5]
+<1-mse>
+p: 45867 ,loss: tensor(1.3426e-05) ,ic: tensor(3.2448e-06) ,res: tensor(1.0182e-05) ,norm. linf-ic: tensor(0.0074) ,norm. linf-res: tensor(0.0238) ,res_freq: tensor(0.0127)
+e: 39823 , loss: tensor(6.1646e-05) ,ic: tensor(1.6199e-05) ,res: tensor(4.5448e-05)
+0.1 [0.01504333]
+1.0 [0.02982054]
+2.0 [0.02658088]
+3.0 [0.01886517]
+4.0 [0.01743075]
+5.0 [0.01644806]
+
+<1-mse-resgrad>
+p: 48488 ,loss: tensor(2.3103e-05) ,ic: tensor(5.5505e-06) ,res: tensor(1.0207e-07) ,norm. linf-ic: tensor(0.0128) ,norm. linf-res: tensor(0.0014) ,res_freq: tensor(1.7450e-05)
+e: 35807 , loss: tensor(2.4003e-06) ,ic: tensor(8.3102e-07) ,res: tensor(1.5693e-06)
+0.1 [0.01289016]
+1.0 [0.04626706]
+2.0 [0.05318178]
+3.0 [0.05513677]
+4.0 [0.0611121]
+5.0 [0.07268258]
