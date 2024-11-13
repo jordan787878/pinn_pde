@@ -6,11 +6,11 @@ import torch.nn.functional as F
 from torch.autograd import Variable
 import matplotlib.pyplot as plt
 import time
-from constants import MyConstants3D
+from constants import MyConstants5D
 
 
-TRAIN_FLAG = False
-constants = MyConstants3D()
+TRAIN_FLAG = True
+constants = MyConstants5D()
 # Set a fixed seed for reproducibility
 torch.manual_seed(1)
 np.random.seed(1)
@@ -18,15 +18,29 @@ np.random.seed(1)
 
 def dyn_f1(x):
     global constants
-    return constants.A_TENSOR[0,0]*x[:,0] + constants.A_TENSOR[0,1]*x[:,1] + constants.A_TENSOR[0,2]*x[:,2]
+    return constants.A_TENSOR[0,0]*x[:,0] + constants.A_TENSOR[0,1]*x[:,1] + constants.A_TENSOR[0,2]*x[:,2] + \
+           constants.A_TENSOR[0,3]*x[:,3] + constants.A_TENSOR[0,4]*x[:,4]
 
 def dyn_f2(x):
     global constants
-    return constants.A_TENSOR[1,0]*x[:,0] + constants.A_TENSOR[1,1]*x[:,1] + constants.A_TENSOR[1,2]*x[:,2]
+    return constants.A_TENSOR[1,0]*x[:,0] + constants.A_TENSOR[1,1]*x[:,1] + constants.A_TENSOR[1,2]*x[:,2]+ \
+           constants.A_TENSOR[1,3]*x[:,3] + constants.A_TENSOR[1,4]*x[:,4]
 
 def dyn_f3(x):
     global constants
-    return constants.A_TENSOR[2,0]*x[:,0] + constants.A_TENSOR[2,1]*x[:,1] + constants.A_TENSOR[2,2]*x[:,2]
+    return constants.A_TENSOR[2,0]*x[:,0] + constants.A_TENSOR[2,1]*x[:,1] + constants.A_TENSOR[2,2]*x[:,2]+ \
+           constants.A_TENSOR[2,3]*x[:,3] + constants.A_TENSOR[2,4]*x[:,4]
+
+def dyn_f4(x):
+    global constants
+    return constants.A_TENSOR[3,0]*x[:,0] + constants.A_TENSOR[3,1]*x[:,1] + constants.A_TENSOR[3,2]*x[:,2]+ \
+           constants.A_TENSOR[3,3]*x[:,3] + constants.A_TENSOR[3,4]*x[:,4]
+
+def dyn_f5(x):
+    global constants
+    return constants.A_TENSOR[4,0]*x[:,0] + constants.A_TENSOR[4,1]*x[:,1] + constants.A_TENSOR[4,2]*x[:,2]+ \
+           constants.A_TENSOR[4,3]*x[:,3] + constants.A_TENSOR[4,4]*x[:,4]
+
 
 
 def diff_opt(x, t, net, verbose=False):
@@ -36,18 +50,28 @@ def diff_opt(x, t, net, verbose=False):
     output_x1 = output_x[:,0].view(-1,1)
     output_x2 = output_x[:,1].view(-1,1)
     output_x3 = output_x[:,2].view(-1,1)
+    output_x4 = output_x[:,3].view(-1,1)
+    output_x5 = output_x[:,4].view(-1,1)
     f1 = dyn_f1(x).view(-1,1)
     f2 = dyn_f2(x).view(-1,1)
     f3 = dyn_f3(x).view(-1,1)
+    f4 = dyn_f4(x).view(-1,1)
+    f5 = dyn_f5(x).view(-1,1)
     f1_x = torch.autograd.grad(f1, x, grad_outputs=torch.ones_like(f1), create_graph=True)[0]
     f1_x1 = f1_x[:,0].view(-1,1)
     f2_x = torch.autograd.grad(f2, x, grad_outputs=torch.ones_like(f2), create_graph=True)[0]
     f2_x2 = f2_x[:,1].view(-1,1)
     f3_x = torch.autograd.grad(f3, x, grad_outputs=torch.ones_like(f3), create_graph=True)[0]
     f3_x3 = f3_x[:,2].view(-1,1)
+    f4_x = torch.autograd.grad(f4, x, grad_outputs=torch.ones_like(f4), create_graph=True)[0]
+    f4_x4 = f4_x[:,3].view(-1,1)
+    f5_x = torch.autograd.grad(f5, x, grad_outputs=torch.ones_like(f5), create_graph=True)[0]
+    f5_x5 = f5_x[:,4].view(-1,1)
     residual = output_t + output_x1*f1 + f1_x1*output \
                         + output_x2*f2 + f2_x2*output \
-                        + output_x3*f3 + f3_x3*output
+                        + output_x3*f3 + f3_x3*output \
+                        + output_x4*f4 + f4_x4*output \
+                        + output_x5*f5 + f5_x5*output
     
     # (if noise is present)
     # Compute the second derivative (Hessian) of p with respect to x
@@ -59,9 +83,14 @@ def diff_opt(x, t, net, verbose=False):
     output_x1x1 = output_xx[:, 0, 0].view(-1, 1)
     output_x2x2 = output_xx[:, 1, 1].view(-1, 1)
     output_x3x3 = output_xx[:, 2, 2].view(-1, 1)
+    output_x4x4 = output_xx[:, 3, 3].view(-1, 1)
+    output_x5x5 = output_xx[:, 4, 4].view(-1, 1)
     residual = residual - 0.5*(constants.L_TENSOR[0,0]*constants.L_TENSOR[0,0]*output_x1x1 + \
                                constants.L_TENSOR[1,1]*constants.L_TENSOR[1,1]*output_x2x2 + \
-                               constants.L_TENSOR[2,2]*constants.L_TENSOR[2,2]*output_x3x3)
+                               constants.L_TENSOR[2,2]*constants.L_TENSOR[2,2]*output_x3x3 + \
+                               constants.L_TENSOR[3,3]*constants.L_TENSOR[3,3]*output_x4x4 + \
+                               constants.L_TENSOR[4,4]*constants.L_TENSOR[4,4]*output_x5x5
+                               )
 
     if(verbose):
         print(residual.dtype, residual.shape)
@@ -135,6 +164,8 @@ def get_ini_samples(num_samples=400):
         np.random.uniform(constants.X_RANGE[0], constants.X_RANGE[1], num_samples),
         np.random.uniform(constants.X_RANGE[0], constants.X_RANGE[1], num_samples),
         np.random.uniform(constants.X_RANGE[0], constants.X_RANGE[1], num_samples),
+        np.random.uniform(constants.X_RANGE[0], constants.X_RANGE[1], num_samples),
+        np.random.uniform(constants.X_RANGE[0], constants.X_RANGE[1], num_samples),
     ])
     _x_bc = torch.tensor(_x_bc, dtype=torch.float32, requires_grad=False)
     x_bc = torch.cat((_x_bc_normal, _x_bc), dim=0)
@@ -149,6 +180,8 @@ def get_res_samples(num_samples=400):
     _x_normal = np.random.multivariate_normal(constants.MEAN_I, constants.COV_I, size=num_samples).astype(np.float32)
     _x_normal = torch.tensor(_x_normal, dtype=torch.float32, requires_grad=True)
     _x = np.column_stack([
+        np.random.uniform(constants.X_RANGE[0], constants.X_RANGE[1], num_samples),
+        np.random.uniform(constants.X_RANGE[0], constants.X_RANGE[1], num_samples),
         np.random.uniform(constants.X_RANGE[0], constants.X_RANGE[1], num_samples),
         np.random.uniform(constants.X_RANGE[0], constants.X_RANGE[1], num_samples),
         np.random.uniform(constants.X_RANGE[0], constants.X_RANGE[1], num_samples),
@@ -168,7 +201,7 @@ def train_p_net(p_net, optimizer, scheduler, mse_cost_function, iterations=40000
     iterations_per_decay = 1000
     loss_history = []
     normalize = p_net.scale
-    N_samples = 1000
+    N_samples = 2000 # 1000 (base)
 
     # samples of initial condition
     x_bc, t_bc = get_ini_samples(num_samples=N_samples)
@@ -229,7 +262,7 @@ def train_e1_net(e1_net, p_net, optimizer, scheduler, mse_cost_function, iterati
     iterations_per_decay = 1000
     loss_history = []
     normalize = e1_net.scale
-    N_samples = 1000
+    N_samples = 2000 # 1000 (base)
 
     # samples of initial condition
     x_bc, t_bc = get_ini_samples(num_samples=N_samples)
@@ -328,7 +361,7 @@ def pos_e1_net_train(e1_net):
 
 def check_pnn_result(p_net):
     global constants
-    grid_points_struct = constants.prepare_gridpoints()
+    grid_points_struct = constants.prepare_gridpoints(grid_num=25)
     grid_points = grid_points_struct[-1]
     for t in constants.T_SPAN:
         # print("[check] grid points shape type: ", grid_points.shape, grid_points.dtype)
@@ -352,30 +385,58 @@ def check_pnn_result(p_net):
 
 def check_e1nn_result(e1_net, p_net):
     global constants
-    grid_points_struct = constants.prepare_gridpoints()
-    grid_points = grid_points_struct[-1]
+    N_trials = 10
     for t in constants.T_SPAN:
-        # print("[check] grid points shape type: ", grid_points.shape, grid_points.dtype)
-        # compute p(true)
-        pdf_true = constants.p_sol(grid_points, t)
-        # print("[check] x1 ranges, true joint pdf shape, type: ", x1s.dtype, pdf_true.shape, pdf_true.dtype)
-        # obtain pdf(nn)
-        grid_points_tensor = torch.tensor(grid_points, dtype=torch.float32, requires_grad=False)
-        t_tensor = (torch.ones(len(grid_points_tensor), 1, dtype=torch.float32) * t)
-        # print("[check] grid points tensor shape type: ", grid_points_tensor.shape, grid_points_tensor.dtype)
-        pdf_nn = p_net(grid_points_tensor, t_tensor).detach().numpy()
-        # print("[check] nn joint pdf shape, type: ", pdf_nn.shape, pdf_nn.dtype)
-        e1 = pdf_true - pdf_nn
-        e1_nn = e1_net(grid_points_tensor, t_tensor).detach().numpy()
-        e2 = e1 - e1_nn
-        eS = 2.0*np.max(np.abs(e1_nn))
-        a1 = np.max(np.abs(e2))/np.max(np.abs(e1_nn))
-        print( " =result= e_nn(t={:.1f}) e1: {:.4f}, eS: {:.4f}, a1: {:.3f}".format(t, np.max(np.abs(e1)), eS, a1) )
+        record_a1 = 0.0
+        record_e1max = 0.0
+        record_eS = 0.0
+        for j in range(N_trials):
+            grid_points = constants.generate_random_samples()
+            # print("[check] grid points shape type: ", grid_points.shape, grid_points.dtype)
+            # compute p(true)
+            pdf_true = constants.p_sol(grid_points, t)
+            # print("[check] x1 ranges, true joint pdf shape, type: ", x1s.dtype, pdf_true.shape, pdf_true.dtype)
+            # obtain pdf(nn)
+            grid_points_tensor = torch.tensor(grid_points, dtype=torch.float32, requires_grad=False)
+            t_tensor = torch.ones(len(grid_points_tensor), 1, dtype=torch.float32) * t
+            # print("[check] grid points tensor shape type: ", grid_points_tensor.shape, grid_points_tensor.dtype)
+            pdf_nn = p_net(grid_points_tensor, t_tensor).detach().numpy()
+            # print("[check] nn joint pdf shape, type: ", pdf_nn.shape, pdf_nn.dtype)
+            e1 = pdf_true - pdf_nn
+            e1_nn = e1_net(grid_points_tensor, t_tensor).detach().numpy()
+            e2 = e1 - e1_nn
+            eS = 2.0*np.max(np.abs(e1_nn))
+            a1 = np.max(np.abs(e2))/np.max(np.abs(e1_nn))
+            if(a1 > record_a1):
+                record_a1 = a1
+                record_e1max = np.max(np.abs(e1))
+                record_eS = eS
+        print( " =result= e_nn(t={:.1f}) e1: {:.4f}, eS: {:.4f}, a1: {:.3f}".format(t, record_e1max, record_eS, record_a1) )
+    # grid_points_struct = constants.prepare_gridpoints(grid_num=25)
+    # grid_points = grid_points_struct[-1]
+    # for t in constants.T_SPAN:
+    #     # print("[check] grid points shape type: ", grid_points.shape, grid_points.dtype)
+    #     # compute p(true)
+    #     pdf_true = constants.p_sol(grid_points, t)
+    #     # print("[check] x1 ranges, true joint pdf shape, type: ", x1s.dtype, pdf_true.shape, pdf_true.dtype)
+    #     # obtain pdf(nn)
+    #     grid_points_tensor = torch.tensor(grid_points, dtype=torch.float32, requires_grad=False)
+    #     t_tensor = (torch.ones(len(grid_points_tensor), 1, dtype=torch.float32) * t)
+    #     # print("[check] grid points tensor shape type: ", grid_points_tensor.shape, grid_points_tensor.dtype)
+    #     pdf_nn = p_net(grid_points_tensor, t_tensor).detach().numpy()
+    #     # print("[check] nn joint pdf shape, type: ", pdf_nn.shape, pdf_nn.dtype)
+    #     e1 = pdf_true - pdf_nn
+    #     e1_nn = e1_net(grid_points_tensor, t_tensor).detach().numpy()
+    #     e2 = e1 - e1_nn
+    #     eS = 2.0*np.max(np.abs(e1_nn))
+    #     a1 = np.max(np.abs(e2))/np.max(np.abs(e1_nn))
+    #     print( " =result= e_nn(t={:.1f}) e1: {:.4f}, eS: {:.4f}, a1: {:.3f}".format(t, np.max(np.abs(e1)), eS, a1) )
+    
 
 
 def get_e1init_max(p_net):
     global constants
-    grid_points_struct = constants.prepare_gridpoints()
+    grid_points_struct = constants.prepare_gridpoints(grid_num=25)
     grid_points = grid_points_struct[-1]
     t = constants.TI
     # print("[check] grid points shape type: ", grid_points.shape, grid_points.dtype)
@@ -406,9 +467,9 @@ def main():
     optimizer = torch.optim.Adam(p_net.parameters(), lr=1e-3)
     scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.9)
     if(TRAIN_FLAG):
-        train_p_net(p_net, optimizer, scheduler, mse_cost_function, iterations=20000); print("p_net train complete")
+        train_p_net(p_net, optimizer, scheduler, mse_cost_function, iterations=15000); print("p_net train complete") # 20000 (base)
     p_net = pos_p_net_train(p_net); p_net.eval()
-    check_pnn_result(p_net)
+    # check_pnn_result(p_net)
 
     e1_net.scale = get_e1init_max(p_net)
     mse_cost_function = torch.nn.MSELoss() # Mean squared error
