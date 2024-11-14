@@ -6,11 +6,11 @@ import torch.nn.functional as F
 from torch.autograd import Variable
 import matplotlib.pyplot as plt
 import time
-from constants import MyConstants5D
+from constants import MyConstants7D
 
 
-TRAIN_FLAG = False
-constants = MyConstants5D()
+TRAIN_FLAG = True
+constants = MyConstants7D() #(testing non singular 5D A, will turn to 7D later)
 # Set a fixed seed for reproducibility
 torch.manual_seed(1)
 np.random.seed(1)
@@ -18,82 +18,87 @@ np.random.seed(1)
 
 def dyn_f1(x):
     global constants
-    return constants.A_TENSOR[0,0]*x[:,0] + constants.A_TENSOR[0,1]*x[:,1] + constants.A_TENSOR[0,2]*x[:,2] + \
-           constants.A_TENSOR[0,3]*x[:,3] + constants.A_TENSOR[0,4]*x[:,4]
+    result = torch.zeros(x.shape[0])
+    for i in range(constants.DIM):
+        result = result + constants.A_TENSOR[0,i]*x[:,i]
+    return result
 
 def dyn_f2(x):
     global constants
-    return constants.A_TENSOR[1,0]*x[:,0] + constants.A_TENSOR[1,1]*x[:,1] + constants.A_TENSOR[1,2]*x[:,2]+ \
-           constants.A_TENSOR[1,3]*x[:,3] + constants.A_TENSOR[1,4]*x[:,4]
+    result = torch.zeros(x.shape[0])
+    for i in range(constants.DIM):
+        result = result + constants.A_TENSOR[1,i]*x[:,i]
+    return result
 
 def dyn_f3(x):
     global constants
-    return constants.A_TENSOR[2,0]*x[:,0] + constants.A_TENSOR[2,1]*x[:,1] + constants.A_TENSOR[2,2]*x[:,2]+ \
-           constants.A_TENSOR[2,3]*x[:,3] + constants.A_TENSOR[2,4]*x[:,4]
+    result = torch.zeros(x.shape[0])
+    for i in range(constants.DIM):
+        result = result + constants.A_TENSOR[2,i]*x[:,i]
+    return result
 
 def dyn_f4(x):
     global constants
-    return constants.A_TENSOR[3,0]*x[:,0] + constants.A_TENSOR[3,1]*x[:,1] + constants.A_TENSOR[3,2]*x[:,2]+ \
-           constants.A_TENSOR[3,3]*x[:,3] + constants.A_TENSOR[3,4]*x[:,4]
+    result = torch.zeros(x.shape[0])
+    for i in range(constants.DIM):
+        result = result + constants.A_TENSOR[3,i]*x[:,i]
+    return result
 
 def dyn_f5(x):
     global constants
-    return constants.A_TENSOR[4,0]*x[:,0] + constants.A_TENSOR[4,1]*x[:,1] + constants.A_TENSOR[4,2]*x[:,2]+ \
-           constants.A_TENSOR[4,3]*x[:,3] + constants.A_TENSOR[4,4]*x[:,4]
+    result = torch.zeros(x.shape[0])
+    for i in range(constants.DIM):
+        result = result + constants.A_TENSOR[4,i]*x[:,i]
+    return result
 
+def dyn_f6(x):
+    global constants
+    result = torch.zeros(x.shape[0])
+    for i in range(constants.DIM):
+        result = result + constants.A_TENSOR[5,i]*x[:,i]
+    return result
+
+def dyn_f7(x):
+    global constants
+    result = torch.zeros(x.shape[0])
+    for i in range(constants.DIM):
+        result = result + constants.A_TENSOR[6,i]*x[:,i]
+    return result
 
 
 def diff_opt(x, t, net, verbose=False):
     output = net(x,t)
     output_x = torch.autograd.grad(output, x, grad_outputs=torch.ones_like(output), create_graph=True)[0]
     output_t = torch.autograd.grad(output, t, grad_outputs=torch.ones_like(output), create_graph=True)[0]
-    output_x1 = output_x[:,0].view(-1,1)
-    output_x2 = output_x[:,1].view(-1,1)
-    output_x3 = output_x[:,2].view(-1,1)
-    output_x4 = output_x[:,3].view(-1,1)
-    output_x5 = output_x[:,4].view(-1,1)
+    residual = output_t
+
     f1 = dyn_f1(x).view(-1,1)
     f2 = dyn_f2(x).view(-1,1)
     f3 = dyn_f3(x).view(-1,1)
     f4 = dyn_f4(x).view(-1,1)
     f5 = dyn_f5(x).view(-1,1)
-    f1_x = torch.autograd.grad(f1, x, grad_outputs=torch.ones_like(f1), create_graph=True)[0]
-    f1_x1 = f1_x[:,0].view(-1,1)
-    f2_x = torch.autograd.grad(f2, x, grad_outputs=torch.ones_like(f2), create_graph=True)[0]
-    f2_x2 = f2_x[:,1].view(-1,1)
-    f3_x = torch.autograd.grad(f3, x, grad_outputs=torch.ones_like(f3), create_graph=True)[0]
-    f3_x3 = f3_x[:,2].view(-1,1)
-    f4_x = torch.autograd.grad(f4, x, grad_outputs=torch.ones_like(f4), create_graph=True)[0]
-    f4_x4 = f4_x[:,3].view(-1,1)
-    f5_x = torch.autograd.grad(f5, x, grad_outputs=torch.ones_like(f5), create_graph=True)[0]
-    f5_x5 = f5_x[:,4].view(-1,1)
-    residual = output_t + output_x1*f1 + f1_x1*output \
-                        + output_x2*f2 + f2_x2*output \
-                        + output_x3*f3 + f3_x3*output \
-                        + output_x4*f4 + f4_x4*output \
-                        + output_x5*f5 + f5_x5*output
+    f6 = dyn_f6(x).view(-1,1)
+    f7 = dyn_f7(x).view(-1,1)
+    fs = torch.cat((f1, f2, f3, f4, f5, f6, f7), dim=1)
+
+    for i in range(constants.DIM):
+        fi = fs[:,i].view(-1,1)
+        fi_x = torch.autograd.grad(fi, x, grad_outputs=torch.ones_like(fi), create_graph=True)[0]
+        fi_xi = fi_x[:,i].view(-1,1)
+        residual = residual + output_x[:,i].view(-1,1)*fi + fi_xi*output
     
-    # (if noise is present)
-    # Compute the second derivative (Hessian) of p with respect to x
+    # (if noise is present) Compute the second derivative (Hessian) of p with respect to x
     hessian = []
     for i in range(output_x.size(1)):
         grad2 = torch.autograd.grad(output_x[:, i], x, grad_outputs=torch.ones_like(output_x[:, i]), create_graph=True)[0]
         hessian.append(grad2)
     output_xx = torch.stack(hessian, dim=-1)
-    output_x1x1 = output_xx[:, 0, 0].view(-1, 1)
-    output_x2x2 = output_xx[:, 1, 1].view(-1, 1)
-    output_x3x3 = output_xx[:, 2, 2].view(-1, 1)
-    output_x4x4 = output_xx[:, 3, 3].view(-1, 1)
-    output_x5x5 = output_xx[:, 4, 4].view(-1, 1)
-    residual = residual - 0.5*(constants.L_TENSOR[0,0]*constants.L_TENSOR[0,0]*output_x1x1 + \
-                               constants.L_TENSOR[1,1]*constants.L_TENSOR[1,1]*output_x2x2 + \
-                               constants.L_TENSOR[2,2]*constants.L_TENSOR[2,2]*output_x3x3 + \
-                               constants.L_TENSOR[3,3]*constants.L_TENSOR[3,3]*output_x4x4 + \
-                               constants.L_TENSOR[4,4]*constants.L_TENSOR[4,4]*output_x5x5
-                               )
+    for i in range(constants.DIM):
+        residual = residual - 0.5*((constants.L_TENSOR[i,i]**2)*output_xx[:, i, i].view(-1,1))
 
     if(verbose):
         print(residual.dtype, residual.shape)
+
     return residual
 
 
@@ -166,12 +171,14 @@ def get_ini_samples(num_samples=400):
         np.random.uniform(constants.X_RANGE[0], constants.X_RANGE[1], num_samples),
         np.random.uniform(constants.X_RANGE[0], constants.X_RANGE[1], num_samples),
         np.random.uniform(constants.X_RANGE[0], constants.X_RANGE[1], num_samples),
+        np.random.uniform(constants.X_RANGE[0], constants.X_RANGE[1], num_samples),
+        np.random.uniform(constants.X_RANGE[0], constants.X_RANGE[1], num_samples),
     ])
     _x_bc = torch.tensor(_x_bc, dtype=torch.float32, requires_grad=False)
     x_bc = torch.cat((_x_bc_normal, _x_bc), dim=0)
     t_bc = (torch.ones(len(x_bc), 1) * constants.TI)
-    print("x_bc shape type: ", x_bc.shape, x_bc.dtype)
-    print("t_bc shape type: ", t_bc.shape, t_bc.dtype)
+    # print("x_bc shape type: ", x_bc.shape, x_bc.dtype)
+    # print("t_bc shape type: ", t_bc.shape, t_bc.dtype)
     return x_bc, t_bc
 
 
@@ -185,13 +192,15 @@ def get_res_samples(num_samples=400):
         np.random.uniform(constants.X_RANGE[0], constants.X_RANGE[1], num_samples),
         np.random.uniform(constants.X_RANGE[0], constants.X_RANGE[1], num_samples),
         np.random.uniform(constants.X_RANGE[0], constants.X_RANGE[1], num_samples),
+        np.random.uniform(constants.X_RANGE[0], constants.X_RANGE[1], num_samples),
+        np.random.uniform(constants.X_RANGE[0], constants.X_RANGE[1], num_samples),
     ])
     _x = torch.tensor(_x, dtype=torch.float32, requires_grad=True)
     x = torch.cat((_x_normal, _x), dim=0)
     t = np.random.uniform(constants.TI, constants.TF, len(x)),
     t = torch.tensor(t, dtype=torch.float32, requires_grad=True).view(-1,1)
-    print("x shape type: ", x.shape, x.dtype)
-    print("t shape type: ", t.shape, t.dtype)
+    # print("x shape type: ", x.shape, x.dtype)
+    # print("t shape type: ", t.shape, t.dtype)
     return x, t
     
 
@@ -201,7 +210,7 @@ def train_p_net(p_net, optimizer, scheduler, mse_cost_function, iterations=40000
     iterations_per_decay = 1000
     loss_history = []
     normalize = p_net.scale
-    N_samples = 2000 # 1000 (base)
+    N_samples = 1000 # 1000 (base)
 
     # samples of initial condition
     x_bc, t_bc = get_ini_samples(num_samples=N_samples)
@@ -209,13 +218,40 @@ def train_p_net(p_net, optimizer, scheduler, mse_cost_function, iterations=40000
     x, t = get_res_samples(num_samples=N_samples)
 
     # RAR
-    # S = 30000
-    # FLAG = False
+    S = 5000
+    FLAG = False
     
     start_time = time.time()
     for epoch in range(iterations):
+        # Add more points to dataset
         optimizer.zero_grad()
+        if(epoch > 0 and epoch % 100 == 0 and FLAG):
+            _x_bc, _t_bc = get_ini_samples(num_samples=S)
+            _x, _t = get_res_samples(num_samples=S)
+            p_i = constants.p_init(_x_bc.detach().numpy())
+            p_i = torch.tensor(p_i, dtype=torch.float32, requires_grad=False)
+            phat_i = p_net(_x_bc, _t_bc)
+            res_p = diff_opt(_x, _t, p_net)/normalize
+            max_error = torch.max(torch.abs(p_i - phat_i))/normalize
+            if(max_error > 5e-3):
+                max_value, max_index = torch.topk(torch.abs(p_i.squeeze() - phat_i.squeeze()), 10)
+                x_max = _x_bc[max_index,:].clone().detach()
+                t_max = _t_bc[max_index].clone().detach()
+                x_bc = torch.cat((x_bc, x_max), dim=0)
+                t_bc = torch.cat((t_bc, t_max), dim=0)
+                print("... RAR IC, add: ", x_max[0,:].data, t_max[0].item(), max_error.item())
+            # add residual points
+            max_error= torch.max(torch.abs(res_p))
+            if(max_error > 5e-3):
+                max_value, max_index = torch.topk(torch.abs(res_p.squeeze()), 10)
+                x_max = _x[max_index,:].clone()
+                t_max = _t[max_index].clone()
+                x = torch.cat((x, x_max), dim=0)
+                t = torch.cat((t, t_max), dim=0)
+                print("... RAR Res, add: ", x_max[0,:].data, t_max[0].item(), max_error.item())
+            FLAG = False
 
+        optimizer.zero_grad()
         # Loss based on boundary conditions
         p_i = constants.p_init(x_bc.detach().numpy())
         p_i = torch.tensor(p_i, dtype=torch.float32, requires_grad=False)
@@ -230,7 +266,22 @@ def train_p_net(p_net, optimizer, scheduler, mse_cost_function, iterations=40000
         # Loss Function
         loss = mse_u + constants.TF*mse_res
         loss_history.append(loss.data)
-
+        # Termination
+        if(loss.data < 1e-3):
+            train_time = time.time() - start_time
+            print("save epoch:", epoch, ",loss:", loss.data, 
+                  ",ic:  {:.5f}".format(mse_u.item()), 
+                  ",res: {:.5f}".format(mse_res.item())
+                   )
+            torch.save({
+                    'epoch': epoch,
+                    'model_state_dict': p_net.state_dict(),
+                    'optimizer_state_dict': optimizer.state_dict(),
+                    'loss': loss.data,
+                    'train_time': train_time,
+                    'scale': p_net.scale
+                    }, constants._PATH_PNET)
+            return
         # Save the min loss model
         if(loss.data < 0.95*min_loss):
             train_time = time.time() - start_time
@@ -244,15 +295,16 @@ def train_p_net(p_net, optimizer, scheduler, mse_cost_function, iterations=40000
                     'optimizer_state_dict': optimizer.state_dict(),
                     'loss': loss.data,
                     'train_time': train_time,
+                    'scale': p_net.scale
                     }, constants._PATH_PNET)
             min_loss = loss.data
-            # FLAG = True
-
+            FLAG = True
         loss.backward(retain_graph=True) 
         optimizer.step()
         # Exponential learning rate decay
         if (epoch + 1) % iterations_per_decay == 0:
             scheduler.step()
+
     np.save(constants._PATH_PNET_LOSS, np.array(loss_history))
     
 
@@ -262,7 +314,7 @@ def train_e1_net(e1_net, p_net, optimizer, scheduler, mse_cost_function, iterati
     iterations_per_decay = 1000
     loss_history = []
     normalize = e1_net.scale
-    N_samples = 2000 # 1000 (base)
+    N_samples = 1000 # 1000 (base)
 
     # samples of initial condition
     x_bc, t_bc = get_ini_samples(num_samples=N_samples)
@@ -270,13 +322,43 @@ def train_e1_net(e1_net, p_net, optimizer, scheduler, mse_cost_function, iterati
     x, t = get_res_samples(num_samples=N_samples)
 
     # RAR
-    # S = 30000
-    # FLAG = False
+    S = 5000
+    FLAG = False
     
     start_time = time.time()
     for epoch in range(iterations):
+        # Add more points to dataset
         optimizer.zero_grad()
+        if(epoch > 0 and epoch % 100 == 0 and FLAG):
+            _x_bc, _t_bc = get_ini_samples(num_samples=S)
+            _x, _t = get_res_samples(num_samples=S)
+            p_i = constants.p_init(_x_bc.detach().numpy())
+            p_i = torch.tensor(p_i, dtype=torch.float32, requires_grad=False)
+            phat_i = p_net(_x_bc, _t_bc)
+            e_i = p_i - phat_i
+            ehat_i = e1_net(_x_bc, _t_bc)
+            res_p = diff_opt(_x, _t, p_net)
+            res_e1 = diff_opt(_x, _t, e1_net)
+            max_error = torch.max(torch.abs(e_i - ehat_i))/normalize
+            if(max_error > 5e-3):
+                max_value, max_index = torch.topk(torch.abs(e_i.squeeze() - ehat_i.squeeze()), 10)
+                x_max = _x_bc[max_index,:].clone().detach()
+                t_max = _t_bc[max_index].clone().detach()
+                x_bc = torch.cat((x_bc, x_max), dim=0)
+                t_bc = torch.cat((t_bc, t_max), dim=0)
+                print("... RAR IC, add: ", x_max[0,:].data, t_max[0].item(), max_error.item())
+            # add residual points
+            max_error= torch.max(torch.abs(res_e1 + res_p))/normalize
+            if(max_error > 5e-3):
+                max_value, max_index = torch.topk(torch.abs(res_e1.squeeze() + res_p.squeeze()), 10)
+                x_max = _x[max_index,:].clone()
+                t_max = _t[max_index].clone()
+                x = torch.cat((x, x_max), dim=0)
+                t = torch.cat((t, t_max), dim=0)
+                print("... RAR Res, add: ", x_max[0,:].data, t_max[0].item(), max_error.item())
+            FLAG = False
 
+        optimizer.zero_grad()
         # Loss based on boundary conditions
         p_i = constants.p_init(x_bc.detach().numpy())
         p_i = torch.tensor(p_i, dtype=torch.float32, requires_grad=False)
@@ -307,9 +389,10 @@ def train_e1_net(e1_net, p_net, optimizer, scheduler, mse_cost_function, iterati
                     'optimizer_state_dict': optimizer.state_dict(),
                     'loss': loss.data,
                     'train_time': train_time,
+                    'scale': e1_net.scale
                     }, constants._PATH_E1NET)
             min_loss = loss.data
-            # FLAG = True
+            FLAG = True
 
         loss.backward(retain_graph=True) 
         optimizer.step()
@@ -323,9 +406,10 @@ def pos_p_net_train(p_net):
     print("[load pnet model from: "+ constants._PATH_PNET)
     checkpoint = torch.load(constants._PATH_PNET)
     p_net.load_state_dict(checkpoint['model_state_dict'])
+    p_net.scale = checkpoint['scale']
     epoch = checkpoint['epoch']
     loss = checkpoint['loss']
-    print("pnet best epoch: ", epoch, ", loss:", loss.data, ", train time:", checkpoint['train_time'])
+    print("pnet best epoch: ", epoch, ", loss:", loss.data, ", train time:", checkpoint['train_time'], ', scale: ', p_net.scale)
     loss_history = np.load(constants._PATH_PNET_LOSS)
     min_loss = min(loss_history)
     plt.figure()
@@ -340,12 +424,13 @@ def pos_p_net_train(p_net):
 
 
 def pos_e1_net_train(e1_net):
-    print("[load pnet model from: "+ constants._PATH_E1NET)
+    print("[load e1net model from: "+ constants._PATH_E1NET)
     checkpoint = torch.load(constants._PATH_E1NET)
     e1_net.load_state_dict(checkpoint['model_state_dict'])
+    e1_net.scale = checkpoint['scale']
     epoch = checkpoint['epoch']
     loss = checkpoint['loss']
-    print("e1net best epoch: ", epoch, ", loss:", loss.data, ", train time:", checkpoint['train_time'])
+    print("e1net best epoch: ", epoch, ", loss:", loss.data, ", train time:", checkpoint['train_time'], ', scale: ', e1_net.scale)
     loss_history = np.load(constants._PATH_E1NET_LOSS)
     min_loss = min(loss_history)
     plt.figure()
@@ -361,8 +446,7 @@ def pos_e1_net_train(e1_net):
 
 def check_pnn_result(p_net):
     global constants
-    grid_points_struct = constants.prepare_gridpoints(grid_num=25)
-    grid_points = grid_points_struct[-1]
+    grid_points = constants.generate_random_samples()
     for t in constants.T_SPAN:
         # print("[check] grid points shape type: ", grid_points.shape, grid_points.dtype)
         # compute p(true)
@@ -411,33 +495,12 @@ def check_e1nn_result(e1_net, p_net):
                 record_a1 = a1
                 record_e1max = np.max(np.abs(e1))
                 record_eS = eS
-        print( " =result= e_nn(t={:.1f}) e1: {:.4f}, eS: {:.4f}, a1: {:.3f}".format(t, record_e1max, record_eS, record_a1) )
-    # grid_points_struct = constants.prepare_gridpoints(grid_num=25)
-    # grid_points = grid_points_struct[-1]
-    # for t in constants.T_SPAN:
-    #     # print("[check] grid points shape type: ", grid_points.shape, grid_points.dtype)
-    #     # compute p(true)
-    #     pdf_true = constants.p_sol(grid_points, t)
-    #     # print("[check] x1 ranges, true joint pdf shape, type: ", x1s.dtype, pdf_true.shape, pdf_true.dtype)
-    #     # obtain pdf(nn)
-    #     grid_points_tensor = torch.tensor(grid_points, dtype=torch.float32, requires_grad=False)
-    #     t_tensor = (torch.ones(len(grid_points_tensor), 1, dtype=torch.float32) * t)
-    #     # print("[check] grid points tensor shape type: ", grid_points_tensor.shape, grid_points_tensor.dtype)
-    #     pdf_nn = p_net(grid_points_tensor, t_tensor).detach().numpy()
-    #     # print("[check] nn joint pdf shape, type: ", pdf_nn.shape, pdf_nn.dtype)
-    #     e1 = pdf_true - pdf_nn
-    #     e1_nn = e1_net(grid_points_tensor, t_tensor).detach().numpy()
-    #     e2 = e1 - e1_nn
-    #     eS = 2.0*np.max(np.abs(e1_nn))
-    #     a1 = np.max(np.abs(e2))/np.max(np.abs(e1_nn))
-    #     print( " =result= e_nn(t={:.1f}) e1: {:.4f}, eS: {:.4f}, a1: {:.3f}".format(t, np.max(np.abs(e1)), eS, a1) )
-    
+        print( " =result= e_nn(t={:.1f}) e1: {:.4f}, eS: {:.4f}, a1: {:.3f}".format(t, record_e1max, record_eS, record_a1) )    
 
 
 def get_e1init_max(p_net):
     global constants
-    grid_points_struct = constants.prepare_gridpoints(grid_num=25)
-    grid_points = grid_points_struct[-1]
+    grid_points = constants.generate_random_samples()
     t = constants.TI
     # print("[check] grid points shape type: ", grid_points.shape, grid_points.dtype)
     # compute p(true)
@@ -469,14 +532,14 @@ def main():
     if(TRAIN_FLAG):
         train_p_net(p_net, optimizer, scheduler, mse_cost_function, iterations=15000); print("p_net train complete") # 20000 (base)
     p_net = pos_p_net_train(p_net); p_net.eval()
-    # check_pnn_result(p_net)
+    check_pnn_result(p_net)
 
     e1_net.scale = get_e1init_max(p_net)
     mse_cost_function = torch.nn.MSELoss() # Mean squared error
     optimizer = torch.optim.Adam(e1_net.parameters(), lr=1e-3)
     scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.9)
     if(TRAIN_FLAG):
-        train_e1_net(e1_net, p_net, optimizer, scheduler, mse_cost_function, iterations=30000); print("e1_net train complete")
+        train_e1_net(e1_net, p_net, optimizer, scheduler, mse_cost_function, iterations=50000); print("e1_net train complete")
     e1_net = pos_e1_net_train(e1_net); e1_net.eval()
     check_e1nn_result(e1_net, p_net)
 
