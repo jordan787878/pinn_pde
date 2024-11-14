@@ -9,7 +9,7 @@ import time
 from constants import MyConstants7D
 
 
-TRAIN_FLAG = True
+TRAIN_FLAG = False
 constants = MyConstants7D() #(testing non singular 5D A, will turn to 7D later)
 # Set a fixed seed for reproducibility
 torch.manual_seed(1)
