@@ -372,12 +372,12 @@ class MyConstants7D:
 
 class MyConstants10D:
     _DIM = 10
-    # _A = np.float32(np.diag([1.0, 1.0, 1.0]))
-    # [test] non singular A
-    _A = np.float32(0.3*np.diag([1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]))
+
+    _A = np.float32(0.05*np.diag([1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]))
+
     _L = np.float32(np.diag([0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05]))
     _MEAN_I   = np.float32([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
-    _COV_I    = np.float32(np.diag([0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]))
+    _COV_I    = np.float32(0.11*np.diag([1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]))
     _X_RANGE = np.float32(np.array([-1.0, 1.0]))
     _TI = np.float32(0.0)
     _TF = np.float32(1.0)
@@ -461,28 +461,15 @@ class MyConstants10D:
         pdf_eval = pdf_func.pdf(x).reshape(-1,1).astype(x.dtype)
         return pdf_eval
     
-    # [explode for high dimension]
-    # def prepare_gridpoints(self, grid_num=40):
-    #     x1s = np.linspace(self.X_RANGE[0], self.X_RANGE[1], num=grid_num, endpoint=True).astype(np.float32)
-    #     x2s = np.linspace(self.X_RANGE[0], self.X_RANGE[1], num=grid_num, endpoint=True).astype(np.float32)
-    #     x3s = np.linspace(self.X_RANGE[0], self.X_RANGE[1], num=grid_num, endpoint=True).astype(np.float32)
-    #     x4s = np.linspace(self.X_RANGE[0], self.X_RANGE[1], num=grid_num, endpoint=True).astype(np.float32)
-    #     x5s = np.linspace(self.X_RANGE[0], self.X_RANGE[1], num=grid_num, endpoint=True).astype(np.float32)
-    #     x6s = np.linspace(self.X_RANGE[0], self.X_RANGE[1], num=grid_num, endpoint=True).astype(np.float32)
-    #     x7s = np.linspace(self.X_RANGE[0], self.X_RANGE[1], num=grid_num, endpoint=True).astype(np.float32)
-    #     x1_grid, x2_grid, x3_grid, x4_grid, x5_grid, x6_grid, x7_grid = np.meshgrid(x1s, x2s, x3s, x4s, x5s, x6s, x7s, indexing="ij") # the indexing is very important
-    #     grid_points = np.vstack([x1_grid.ravel(), x2_grid.ravel(), x3_grid.ravel(), x4_grid.ravel(), x5_grid.ravel(), x6_grid.ravel(), x7_grid.ravel()]).T
-    #     return [x1s, x2s, x3s, x4s, x5s, x6s, x7s, grid_points]
-    
     def get_pinit_max(self):
-        grid_points = self.generate_random_samples()
-        p_i = self.p_init(grid_points)
-        p_i_max = np.max(p_i)
-        print("[check] p0 max: {:.3f}".format(p_i_max))
+        # grid_points = self.generate_random_samples()
+        # p_i = self.p_init(grid_points)
+        p_i_max = self.p_init(self.MEAN_I)
+        p_i_max = np.max(p_i_max)
+        print("[check] p0 max: {:.6f}".format(p_i_max))
         return p_i_max
     
-
-    def generate_random_samples(self, num_samples=1000000):
+    def generate_random_samples(self, num_samples=10000000):
         x = np.column_stack([
             np.random.uniform(self.X_RANGE[0], self.X_RANGE[1], num_samples),
             np.random.uniform(self.X_RANGE[0], self.X_RANGE[1], num_samples),

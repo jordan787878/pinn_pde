@@ -385,52 +385,45 @@ def check_pnn_result(p_net):
 
 def check_e1nn_result(e1_net, p_net):
     global constants
-    N_trials = 10
+    N_trials = 1
     for t in constants.T_SPAN:
         record_a1 = 0.0
         record_e1max = 0.0
         record_eS = 0.0
+        gap_data = []
+        eSratio_data = []
+        ptrue_max = 0.0
         for j in range(N_trials):
-            grid_points = constants.generate_random_samples()
+            grid_points = constants.generate_random_samples(num_samples=1000000)
             # print("[check] grid points shape type: ", grid_points.shape, grid_points.dtype)
             # compute p(true)
             pdf_true = constants.p_sol(grid_points, t)
-            # print("[check] x1 ranges, true joint pdf shape, type: ", x1s.dtype, pdf_true.shape, pdf_true.dtype)
             # obtain pdf(nn)
             grid_points_tensor = torch.tensor(grid_points, dtype=torch.float32, requires_grad=False)
             t_tensor = torch.ones(len(grid_points_tensor), 1, dtype=torch.float32) * t
             # print("[check] grid points tensor shape type: ", grid_points_tensor.shape, grid_points_tensor.dtype)
             pdf_nn = p_net(grid_points_tensor, t_tensor).detach().numpy()
-            # print("[check] nn joint pdf shape, type: ", pdf_nn.shape, pdf_nn.dtype)
+            # print("[check] pdf_true, pdf_nn shape dtype:", pdf_true.shape, pdf_true.dtype, 
+            #                                                pdf_nn.shape, pdf_nn.dtype)
             e1 = pdf_true - pdf_nn
             e1_nn = e1_net(grid_points_tensor, t_tensor).detach().numpy()
             e2 = e1 - e1_nn
             eS = 2.0*np.max(np.abs(e1_nn))
             a1 = np.max(np.abs(e2))/np.max(np.abs(e1_nn))
+            gap = (eS - np.max(np.abs(e1)))/ np.max(np.abs(pdf_true))
+            gap_data.append(gap)
+            eSratio = eS / np.max(np.abs(pdf_true))
+            eSratio_data.append(eSratio)
+            if(np.max(np.abs(pdf_true)) > ptrue_max):
+                ptrue_max = np.max(np.abs(pdf_true))
             if(a1 > record_a1):
                 record_a1 = a1
                 record_e1max = np.max(np.abs(e1))
                 record_eS = eS
-        print( " =result= e_nn(t={:.1f}) e1: {:.4f}, eS: {:.4f}, a1: {:.3f}".format(t, record_e1max, record_eS, record_a1) )
-    # grid_points_struct = constants.prepare_gridpoints(grid_num=25)
-    # grid_points = grid_points_struct[-1]
-    # for t in constants.T_SPAN:
-    #     # print("[check] grid points shape type: ", grid_points.shape, grid_points.dtype)
-    #     # compute p(true)
-    #     pdf_true = constants.p_sol(grid_points, t)
-    #     # print("[check] x1 ranges, true joint pdf shape, type: ", x1s.dtype, pdf_true.shape, pdf_true.dtype)
-    #     # obtain pdf(nn)
-    #     grid_points_tensor = torch.tensor(grid_points, dtype=torch.float32, requires_grad=False)
-    #     t_tensor = (torch.ones(len(grid_points_tensor), 1, dtype=torch.float32) * t)
-    #     # print("[check] grid points tensor shape type: ", grid_points_tensor.shape, grid_points_tensor.dtype)
-    #     pdf_nn = p_net(grid_points_tensor, t_tensor).detach().numpy()
-    #     # print("[check] nn joint pdf shape, type: ", pdf_nn.shape, pdf_nn.dtype)
-    #     e1 = pdf_true - pdf_nn
-    #     e1_nn = e1_net(grid_points_tensor, t_tensor).detach().numpy()
-    #     e2 = e1 - e1_nn
-    #     eS = 2.0*np.max(np.abs(e1_nn))
-    #     a1 = np.max(np.abs(e2))/np.max(np.abs(e1_nn))
-    #     print( " =result= e_nn(t={:.1f}) e1: {:.4f}, eS: {:.4f}, a1: {:.3f}".format(t, np.max(np.abs(e1)), eS, a1) )
+        print( " =result= e_nn(t={:.1f}) e1: {:.4f}, eS: {:.4f}, a1: {:.3f}".format(t, record_e1max, record_eS, record_a1) )    
+        print( " =result= min gap     : {:.3f}".format(np.min(np.array(gap_data))))
+        print( " =result= max eS_ratio: {:.3f}".format(np.max(np.array(eSratio_data))))
+        print("[check] p_true(t) max: {:.6f}".format(ptrue_max))
     
 
 

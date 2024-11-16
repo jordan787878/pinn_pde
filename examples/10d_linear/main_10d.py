@@ -130,6 +130,7 @@ def init_weights(m):
     if isinstance(m, nn.Linear):
         init.kaiming_uniform_(m.weight)
 
+
 def init_weights_xavier(m):
     if isinstance(m, nn.Linear):
         init.xavier_uniform_(m.weight)
@@ -139,14 +140,14 @@ def init_weights_xavier(m):
 class Net(nn.Module):
     global constants
     def __init__(self, scale=1.0): 
-        neurons = 32
+        neurons = 20
         self.scale = scale
         super(Net, self).__init__()
         self.hidden_layer1 = (nn.Linear(constants.DIM+1,neurons))
         self.hidden_layer2 = (nn.Linear(neurons,neurons))
         self.hidden_layer3 = (nn.Linear(neurons,neurons))
         self.hidden_layer4 = (nn.Linear(neurons,neurons))
-        self.hidden_layer5 = (nn.Linear(neurons,neurons))
+        # self.hidden_layer5 = (nn.Linear(neurons,neurons))
         self.output_layer =  (nn.Linear(neurons,1))
     def forward(self, x, t):
         inputs = torch.cat([x,t],axis=1)
@@ -154,8 +155,8 @@ class Net(nn.Module):
         layer2_out = F.softplus((self.hidden_layer2(layer1_out)))
         layer3_out = F.softplus((self.hidden_layer3(layer2_out)))
         layer4_out = F.softplus((self.hidden_layer4(layer3_out)))
-        layer5_out = F.softplus((self.hidden_layer5(layer4_out)))
-        output = F.softplus( self.output_layer(layer5_out) )
+        # layer5_out = F.softplus((self.hidden_layer5(layer4_out)))
+        output = F.softplus( self.output_layer(layer4_out) )
         return output
     
 
@@ -240,10 +241,10 @@ def train_p_net(p_net, optimizer, scheduler, mse_cost_function, iterations=40000
     iterations_per_decay = 1000
     loss_history = []
     normalize = p_net.scale
-    N_samples = 3000 # 1000 (base)
+    N_samples = 1000 # 1000 (base)
 
     # samples of initial condition
-    x_bc, t_bc = get_ini_samples(num_samples=N_samples)
+    x_bc, t_bc = get_ini_samples(num_samples=2*N_samples)
     # samples of residual
     x, t = get_res_samples(num_samples=N_samples)
 
@@ -254,34 +255,32 @@ def train_p_net(p_net, optimizer, scheduler, mse_cost_function, iterations=40000
     start_time = time.time()
     for epoch in range(iterations):
         # Add more points to dataset
-        # optimizer.zero_grad()
-        # if(epoch > 0 and epoch % 100 == 0 and FLAG):
-        #     _x_bc, _t_bc = get_ini_samples(num_samples=S)
-        #     _x, _t = get_res_samples(num_samples=S)
-        #     p_i = constants.p_init(_x_bc.detach().numpy())
-        #     p_i = torch.tensor(p_i, dtype=torch.float32, requires_grad=False)
-        #     phat_i = p_net(_x_bc, _t_bc)
-        #     res_p = diff_opt(_x, _t, p_net)/normalize
-        #     max_error = torch.max(torch.abs(p_i - phat_i))/normalize
-        #     if(max_error > 5e-3):
-        #         max_value, max_index = torch.topk(torch.abs(p_i.squeeze() - phat_i.squeeze()), 10)
-        #         x_max = _x_bc[max_index,:].clone().detach()
-        #         t_max = _t_bc[max_index].clone().detach()
-        #         x_bc = torch.cat((x_bc, x_max), dim=0)
-        #         t_bc = torch.cat((t_bc, t_max), dim=0)
-        #         print("... RAR Ic, add:  {:.3f}".format(max_error.item()))
-        #         # print("... RAR IC, add: ", x_max[0,:].data, t_max[0].item(), max_error.item())
-        #     # add residual points
-        #     max_error= torch.max(torch.abs(res_p))
-        #     if(max_error > 5e-3):
-        #         max_value, max_index = torch.topk(torch.abs(res_p.squeeze()), 10)
-        #         x_max = _x[max_index,:].clone()
-        #         t_max = _t[max_index].clone()
-        #         x = torch.cat((x, x_max), dim=0)
-        #         t = torch.cat((t, t_max), dim=0)
-        #         print("... RAR Res, add: {:.3f}".format(max_error.item()))
-        #         # print("... RAR Res, add: ", x_max[0,:].data, t_max[0].item(), max_error.item())
-        #     FLAG = False
+        optimizer.zero_grad()
+        if(epoch > 0 and epoch % 100 == 0 and FLAG):
+            _x_bc, _t_bc = get_ini_samples(num_samples=S)
+            _x, _t = get_res_samples(num_samples=S)
+            p_i = constants.p_init(_x_bc.detach().numpy())
+            p_i = torch.tensor(p_i, dtype=torch.float32, requires_grad=False)
+            phat_i = p_net(_x_bc, _t_bc)
+            res_p = diff_opt(_x, _t, p_net)/normalize
+            max_error = torch.max(torch.abs(p_i - phat_i))/normalize
+            if(max_error > 5e-3):
+                max_value, max_index = torch.topk(torch.abs(p_i.squeeze() - phat_i.squeeze()), 25)
+                x_max = _x_bc[max_index,:].clone().detach()
+                t_max = _t_bc[max_index].clone().detach()
+                x_bc = torch.cat((x_bc, x_max), dim=0)
+                t_bc = torch.cat((t_bc, t_max), dim=0)
+                print("... RAR IC, add: ", x_max[0,:].data, t_max[0].item(), max_error.item())
+            # add residual points
+            max_error= torch.max(torch.abs(res_p))
+            if(max_error > 5e-3):
+                max_value, max_index = torch.topk(torch.abs(res_p.squeeze()), 25)
+                x_max = _x[max_index,:].clone()
+                t_max = _t[max_index].clone()
+                x = torch.cat((x, x_max), dim=0)
+                t = torch.cat((t, t_max), dim=0)
+                print("... RAR Res, add: ", x_max[0,:].data, t_max[0].item(), max_error.item())
+            FLAG = False
 
         optimizer.zero_grad()
         # Loss based on boundary conditions
@@ -299,7 +298,7 @@ def train_p_net(p_net, optimizer, scheduler, mse_cost_function, iterations=40000
         loss = mse_u + constants.TF*mse_res
         loss_history.append(loss.data)
         # Termination
-        if(loss.data < 5e-4):
+        if(loss.data < 1e-4):
             train_time = time.time() - start_time
             print("save epoch:", epoch, ",loss:", loss.data, 
                   ",ic:  {:.5f}".format(mse_u.item()), 
@@ -313,7 +312,6 @@ def train_p_net(p_net, optimizer, scheduler, mse_cost_function, iterations=40000
                     'train_time': train_time,
                     'scale': p_net.scale
                     }, constants._PATH_PNET)
-            np.save(constants._PATH_PNET_LOSS, np.array(loss_history))
             return
         # Save the min loss model
         if(loss.data < 0.95*min_loss):
@@ -347,10 +345,10 @@ def train_e1_net(e1_net, p_net, optimizer, scheduler, mse_cost_function, iterati
     iterations_per_decay = 1000
     loss_history = []
     normalize = e1_net.scale
-    N_samples = 3000 # 1000 (base)
+    N_samples = 1000 # 1000 (base)
 
     # samples of initial condition
-    x_bc, t_bc = get_ini_samples(num_samples=N_samples)
+    x_bc, t_bc = get_ini_samples(num_samples=2*N_samples)
     # samples of residual
     x, t = get_res_samples(num_samples=N_samples)
 
@@ -360,36 +358,36 @@ def train_e1_net(e1_net, p_net, optimizer, scheduler, mse_cost_function, iterati
     
     start_time = time.time()
     for epoch in range(iterations):
-        # # Add more points to dataset
-        # optimizer.zero_grad()
-        # if(epoch > 0 and epoch % 100 == 0 and FLAG):
-        #     _x_bc, _t_bc = get_ini_samples(num_samples=S)
-        #     _x, _t = get_res_samples(num_samples=S)
-        #     p_i = constants.p_init(_x_bc.detach().numpy())
-        #     p_i = torch.tensor(p_i, dtype=torch.float32, requires_grad=False)
-        #     phat_i = p_net(_x_bc, _t_bc)
-        #     e_i = p_i - phat_i
-        #     ehat_i = e1_net(_x_bc, _t_bc)
-        #     res_p = diff_opt(_x, _t, p_net)
-        #     res_e1 = diff_opt(_x, _t, e1_net)
-        #     max_error = torch.max(torch.abs(e_i - ehat_i))/normalize
-        #     if(max_error > 5e-3):
-        #         max_value, max_index = torch.topk(torch.abs(e_i.squeeze() - ehat_i.squeeze()), 10)
-        #         x_max = _x_bc[max_index,:].clone().detach()
-        #         t_max = _t_bc[max_index].clone().detach()
-        #         x_bc = torch.cat((x_bc, x_max), dim=0)
-        #         t_bc = torch.cat((t_bc, t_max), dim=0)
-        #         print("... RAR Ic, add:  {:.3f}".format(max_error.item()))
-        #     # add residual points
-        #     max_error= torch.max(torch.abs(res_e1 + res_p))/normalize
-        #     if(max_error > 5e-3):
-        #         max_value, max_index = torch.topk(torch.abs(res_e1.squeeze() + res_p.squeeze()), 10)
-        #         x_max = _x[max_index,:].clone()
-        #         t_max = _t[max_index].clone()
-        #         x = torch.cat((x, x_max), dim=0)
-        #         t = torch.cat((t, t_max), dim=0)
-        #         print("... RAR Res, add: {:.3f}".format(max_error.item()))
-        #     FLAG = False
+        # Add more points to dataset
+        optimizer.zero_grad()
+        if(epoch > 0 and epoch % 100 == 0 and FLAG):
+            _x_bc, _t_bc = get_ini_samples(num_samples=S)
+            _x, _t = get_res_samples(num_samples=S)
+            p_i = constants.p_init(_x_bc.detach().numpy())
+            p_i = torch.tensor(p_i, dtype=torch.float32, requires_grad=False)
+            phat_i = p_net(_x_bc, _t_bc)
+            e_i = p_i - phat_i
+            ehat_i = e1_net(_x_bc, _t_bc)
+            res_p = diff_opt(_x, _t, p_net)
+            res_e1 = diff_opt(_x, _t, e1_net)
+            max_error = torch.max(torch.abs(e_i - ehat_i))/normalize
+            if(max_error > 5e-3):
+                max_value, max_index = torch.topk(torch.abs(e_i.squeeze() - ehat_i.squeeze()), 20)
+                x_max = _x_bc[max_index,:].clone().detach()
+                t_max = _t_bc[max_index].clone().detach()
+                x_bc = torch.cat((x_bc, x_max), dim=0)
+                t_bc = torch.cat((t_bc, t_max), dim=0)
+                print("... RAR IC, add: ", x_max[0,:].data, t_max[0].item(), max_error.item())
+            # add residual points
+            max_error= torch.max(torch.abs(res_e1 + res_p))/normalize
+            if(max_error > 5e-3):
+                max_value, max_index = torch.topk(torch.abs(res_e1.squeeze() + res_p.squeeze()), 20)
+                x_max = _x[max_index,:].clone()
+                t_max = _t[max_index].clone()
+                x = torch.cat((x, x_max), dim=0)
+                t = torch.cat((t, t_max), dim=0)
+                print("... RAR Res, add: ", x_max[0,:].data, t_max[0].item(), max_error.item())
+            FLAG = False
 
         optimizer.zero_grad()
         # Loss based on boundary conditions
@@ -479,7 +477,7 @@ def pos_e1_net_train(e1_net):
 
 def check_pnn_result(p_net):
     global constants
-    grid_points = constants.generate_random_samples()
+    grid_points = constants.generate_random_samples(num_samples=1000000)
     for t in constants.T_SPAN:
         # print("[check] grid points shape type: ", grid_points.shape, grid_points.dtype)
         # compute p(true)
@@ -502,33 +500,45 @@ def check_pnn_result(p_net):
 
 def check_e1nn_result(e1_net, p_net):
     global constants
-    N_trials = 10
+    N_trials = 1
     for t in constants.T_SPAN:
         record_a1 = 0.0
         record_e1max = 0.0
         record_eS = 0.0
+        gap_data = []
+        eSratio_data = []
+        ptrue_max = 0.0
         for j in range(N_trials):
-            grid_points = constants.generate_random_samples()
+            grid_points = constants.generate_random_samples(num_samples=1000000)
             # print("[check] grid points shape type: ", grid_points.shape, grid_points.dtype)
             # compute p(true)
             pdf_true = constants.p_sol(grid_points, t)
-            # print("[check] x1 ranges, true joint pdf shape, type: ", x1s.dtype, pdf_true.shape, pdf_true.dtype)
             # obtain pdf(nn)
             grid_points_tensor = torch.tensor(grid_points, dtype=torch.float32, requires_grad=False)
             t_tensor = torch.ones(len(grid_points_tensor), 1, dtype=torch.float32) * t
             # print("[check] grid points tensor shape type: ", grid_points_tensor.shape, grid_points_tensor.dtype)
             pdf_nn = p_net(grid_points_tensor, t_tensor).detach().numpy()
-            # print("[check] nn joint pdf shape, type: ", pdf_nn.shape, pdf_nn.dtype)
+            # print("[check] pdf_true, pdf_nn shape dtype:", pdf_true.shape, pdf_true.dtype, 
+            #                                                pdf_nn.shape, pdf_nn.dtype)
             e1 = pdf_true - pdf_nn
             e1_nn = e1_net(grid_points_tensor, t_tensor).detach().numpy()
             e2 = e1 - e1_nn
             eS = 2.0*np.max(np.abs(e1_nn))
             a1 = np.max(np.abs(e2))/np.max(np.abs(e1_nn))
+            gap = (eS - np.max(np.abs(e1)))/ np.max(np.abs(pdf_true))
+            gap_data.append(gap)
+            eSratio = eS / np.max(np.abs(pdf_true))
+            eSratio_data.append(eSratio)
+            if(np.max(np.abs(pdf_true)) > ptrue_max):
+                ptrue_max = np.max(np.abs(pdf_true))
             if(a1 > record_a1):
                 record_a1 = a1
                 record_e1max = np.max(np.abs(e1))
                 record_eS = eS
-        print( " =result= e_nn(t={:.1f}) e1: {:.4f}, eS: {:.4f}, a1: {:.3f}".format(t, record_e1max, record_eS, record_a1) )    
+        print( " =result= e_nn(t={:.1f}) e1: {:.7f}, eS: {:.7f}, a1: {:.3f}".format(t, record_e1max, record_eS, record_a1) )    
+        print( " =result= min gap     : {:.3f}".format(np.min(np.array(gap_data))))
+        print( " =result= max eS_ratio: {:.3f}".format(np.max(np.array(eSratio_data))))
+        print("[check] p_true(t) max: {:.6f}".format(ptrue_max))
 
 
 def get_e1init_max(p_net):
@@ -575,6 +585,7 @@ def main():
         train_e1_net(e1_net, p_net, optimizer, scheduler, mse_cost_function, iterations=50000); print("e1_net train complete")
     e1_net = pos_e1_net_train(e1_net); e1_net.eval()
     check_e1nn_result(e1_net, p_net)
+
 
 
 if __name__ == "__main__":
