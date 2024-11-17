@@ -386,12 +386,10 @@ def check_pnn_result(p_net):
 def check_e1nn_result(e1_net, p_net):
     global constants
     N_trials = 1
+    gap_data = []
+    eSratio_data = []
+    a1_data = []
     for t in constants.T_SPAN:
-        record_a1 = 0.0
-        record_e1max = 0.0
-        record_eS = 0.0
-        gap_data = []
-        eSratio_data = []
         ptrue_max = 0.0
         for j in range(N_trials):
             grid_points = constants.generate_random_samples(num_samples=1000000)
@@ -410,20 +408,20 @@ def check_e1nn_result(e1_net, p_net):
             e2 = e1 - e1_nn
             eS = 2.0*np.max(np.abs(e1_nn))
             a1 = np.max(np.abs(e2))/np.max(np.abs(e1_nn))
+            a1_data.append(a1)
             gap = (eS - np.max(np.abs(e1)))/ np.max(np.abs(pdf_true))
             gap_data.append(gap)
             eSratio = eS / np.max(np.abs(pdf_true))
             eSratio_data.append(eSratio)
             if(np.max(np.abs(pdf_true)) > ptrue_max):
                 ptrue_max = np.max(np.abs(pdf_true))
-            if(a1 > record_a1):
-                record_a1 = a1
-                record_e1max = np.max(np.abs(e1))
-                record_eS = eS
-        print( " =result= e_nn(t={:.1f}) e1: {:.4f}, eS: {:.4f}, a1: {:.3f}".format(t, record_e1max, record_eS, record_a1) )    
-        print( " =result= min gap     : {:.3f}".format(np.min(np.array(gap_data))))
-        print( " =result= max eS_ratio: {:.3f}".format(np.max(np.array(eSratio_data))))
         print("[check] p_true(t) max: {:.6f}".format(ptrue_max))
+        
+    print( " =result= max a1      : {:.3f}, var a1: {:.4f}".format(np.max(np.array(a1_data)),
+                                                                   np.var(np.array(a1_data))))    
+    print( " =result= min gap     : {:.3f}".format(np.min(np.array(gap_data))))
+    print( " =result= max eS_ratio: {:.3f}, avg eS_ratio: {:.3f}".format(np.max(np.array(eSratio_data)),
+                                                                         np.mean(np.array(eSratio_data))))
     
 
 

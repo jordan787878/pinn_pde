@@ -6,15 +6,9 @@ from scipy.linalg import expm
 
 class MyConstants3D:
     _DIM = 3
-    # _A = np.float32(np.diag([1.0, 1.0, 1.0]))
-    # _A = np.float32(np.array([[0.0, 1.0, 0.0],
-    #                           [0.0, 0.0, 1.0],
-    #                           [0.0, 0.0, 0.0]
-    #                           ]))
-    # _L = np.float32(np.diag([0.05, 0.05, 0.05]))
-    # _MEAN_I   = np.float32([0.0, 0.0, 0.0])
-    # _COV_I    = np.float32(np.diag([0.1, 0.1, 0.1]))
     _A = np.float32(0.3*np.diag([1.0, 1.0, 1.0]))
+    _A[2,0] = np.float32(-0.1)
+
     _L = np.float32(np.diag([0.05, 0.05, 0.05]))
     _MEAN_I   = np.float32([-0.2, 0.2, 0.0])
     _COV_I    = np.float32(np.diag([0.1, 0.1, 0.1]))
@@ -247,9 +241,10 @@ class MyConstants5D:
 
 class MyConstants7D:
     _DIM = 7
-    # _A = np.float32(np.diag([1.0, 1.0, 1.0]))
-    # [test] non singular A
+
     _A = np.float32(0.3*np.diag([1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]))
+    _A[6,0] = np.float32(-0.01)
+
     _L = np.float32(np.diag([0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05]))
     _MEAN_I   = np.float32([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
     _COV_I    = np.float32(np.diag([0.12, 0.12, 0.12, 0.12, 0.12, 0.12, 0.12]))
@@ -260,7 +255,7 @@ class MyConstants7D:
     _A_TENSOR = torch.tensor(_A)
     _L_TENSOR = torch.tensor(_L)
 
-    _FOLDER = "exp/7d/"
+    _FOLDER = "exp/7d_2/"
     _PATH_PNET = _FOLDER+"output/p_net.pth"
     _PATH_PNET_LOSS = _FOLDER+"output/p_net_train_loss.npy"
     _PATH_E1NET = _FOLDER+"output/e1_net.pth"
@@ -374,6 +369,7 @@ class MyConstants10D:
     _DIM = 10
 
     _A = np.float32(0.05*np.diag([1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]))
+    _A[9,0] = np.float32(-0.01)
 
     _L = np.float32(np.diag([0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05]))
     _MEAN_I   = np.float32([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
@@ -385,7 +381,7 @@ class MyConstants10D:
     _A_TENSOR = torch.tensor(_A)
     _L_TENSOR = torch.tensor(_L)
 
-    _FOLDER = "exp/10d/"
+    _FOLDER = "exp/10d_2/"
     _PATH_PNET = _FOLDER+"output/p_net.pth"
     _PATH_PNET_LOSS = _FOLDER+"output/p_net_train_loss.npy"
     _PATH_E1NET = _FOLDER+"output/e1_net.pth"

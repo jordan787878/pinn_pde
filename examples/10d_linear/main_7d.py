@@ -7,6 +7,8 @@ from torch.autograd import Variable
 import matplotlib.pyplot as plt
 import time
 from constants import MyConstants7D
+import argparse
+from torch.utils.data import Dataset, DataLoader
 
 
 TRAIN_FLAG = False
@@ -126,11 +128,11 @@ class Net(nn.Module):
         self.output_layer =  (nn.Linear(neurons,1))
     def forward(self, x, t):
         inputs = torch.cat([x,t],axis=1)
-        layer1_out = F.softplus((self.hidden_layer1(inputs)))
-        layer2_out = F.softplus((self.hidden_layer2(layer1_out)))
-        layer3_out = F.softplus((self.hidden_layer3(layer2_out)))
-        layer4_out = F.softplus((self.hidden_layer4(layer3_out)))
-        layer5_out = F.softplus((self.hidden_layer5(layer4_out)))
+        layer1_out = F.gelu((self.hidden_layer1(inputs)))
+        layer2_out = F.gelu((self.hidden_layer2(layer1_out)))
+        layer3_out = F.gelu((self.hidden_layer3(layer2_out)))
+        layer4_out = F.gelu((self.hidden_layer4(layer3_out)))
+        layer5_out = F.gelu((self.hidden_layer5(layer4_out)))
         output = F.softplus( self.output_layer(layer5_out) )
         return output
     
@@ -139,7 +141,7 @@ class Net(nn.Module):
 class E1Net(nn.Module):
     global constants
     def __init__(self, scale=1.0): 
-        neurons = 100
+        neurons = 32
         self.scale = scale
         super(E1Net, self).__init__()
         self.hidden_layer1 = (nn.Linear(constants.DIM+1,neurons))
@@ -148,7 +150,7 @@ class E1Net(nn.Module):
         self.hidden_layer4 = (nn.Linear(neurons,neurons))
         self.hidden_layer5 = (nn.Linear(neurons,neurons))
         self.output_layer =  (nn.Linear(neurons,1))
-        self.activation = nn.Tanh()
+        self.activation = nn.GELU()
     def forward(self, x, t):
         inputs = torch.cat([x,t],axis=1)
         layer1_out = self.activation((self.hidden_layer1(inputs)))
@@ -202,6 +204,18 @@ def get_res_samples(num_samples=400):
     # print("x shape type: ", x.shape, x.dtype)
     # print("t shape type: ", t.shape, t.dtype)
     return x, t
+
+
+class MyDataset(Dataset):
+    def __init__(self, x_bc, t_bc, x, t):
+        self.x_bc = x_bc
+        self.t_bc = t_bc
+        self.x = x
+        self.t = t
+    def __len__(self):
+        return len(self.x)
+    def __getitem__(self, idx):
+        return self.x_bc[idx], self.t_bc[idx], self.x[idx], self.t[idx]
     
 
 def train_p_net(p_net, optimizer, scheduler, mse_cost_function, iterations=40000):
@@ -211,100 +225,120 @@ def train_p_net(p_net, optimizer, scheduler, mse_cost_function, iterations=40000
     loss_history = []
     normalize = p_net.scale
     N_samples = 1000 # 1000 (base)
+    batch_size = 300
 
     # samples of initial condition
     x_bc, t_bc = get_ini_samples(num_samples=N_samples)
     # samples of residual
     x, t = get_res_samples(num_samples=N_samples)
+    # Create dataset
+    dataset = MyDataset(x_bc, t_bc, x, t)
+    data_loader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
 
     # RAR
-    S = 5000
+    S = 10000
     FLAG = False
     
     start_time = time.time()
+
     for epoch in range(iterations):
-        # Add more points to dataset
-        optimizer.zero_grad()
-        if(epoch > 0 and epoch % 100 == 0 and FLAG):
-            _x_bc, _t_bc = get_ini_samples(num_samples=S)
-            _x, _t = get_res_samples(num_samples=S)
-            p_i = constants.p_init(_x_bc.detach().numpy())
+        # # Dataset loss & RAR
+        if(epoch > 0):
+            p_i = constants.p_init(x_bc.detach().numpy())
             p_i = torch.tensor(p_i, dtype=torch.float32, requires_grad=False)
-            phat_i = p_net(_x_bc, _t_bc)
-            res_p = diff_opt(_x, _t, p_net)/normalize
-            max_error = torch.max(torch.abs(p_i - phat_i))/normalize
-            if(max_error > 5e-3):
-                max_value, max_index = torch.topk(torch.abs(p_i.squeeze() - phat_i.squeeze()), 10)
-                x_max = _x_bc[max_index,:].clone().detach()
-                t_max = _t_bc[max_index].clone().detach()
-                x_bc = torch.cat((x_bc, x_max), dim=0)
-                t_bc = torch.cat((t_bc, t_max), dim=0)
-                print("... RAR IC, add: ", x_max[0,:].data, t_max[0].item(), max_error.item())
-            # add residual points
-            max_error= torch.max(torch.abs(res_p))
-            if(max_error > 5e-3):
-                max_value, max_index = torch.topk(torch.abs(res_p.squeeze()), 10)
-                x_max = _x[max_index,:].clone()
-                t_max = _t[max_index].clone()
-                x = torch.cat((x, x_max), dim=0)
-                t = torch.cat((t, t_max), dim=0)
-                print("... RAR Res, add: ", x_max[0,:].data, t_max[0].item(), max_error.item())
-            FLAG = False
+            phat_i = p_net(x_bc, t_bc)
+            res_p = diff_opt(x, t, p_net)/normalize
+            mse_u = mse_cost_function(phat_i/normalize, p_i/normalize)
+            all_zeros = torch.zeros((len(t),1), dtype=torch.float32, requires_grad=False)
+            mse_res = mse_cost_function(res_p, all_zeros)
+            loss_dataset = mse_u + constants.TF*(mse_res)
+            loss_history.append(loss_dataset.item())
 
-        optimizer.zero_grad()
-        # Loss based on boundary conditions
-        p_i = constants.p_init(x_bc.detach().numpy())
-        p_i = torch.tensor(p_i, dtype=torch.float32, requires_grad=False)
-        phat_i = p_net(x_bc, t_bc)
-        mse_u = mse_cost_function(phat_i/normalize, p_i/normalize)
+            if(loss_dataset.item() < 1e-4):
+                train_time = time.time() - start_time
+                # Print the iteration number (and optionally the loss)
+                print(f'Epoch [{epoch+1}/{iterations}], Dataset Loss: {loss_dataset.item():.4f}, ic: {mse_u.item():.4f}, res: {mse_res.item():.4f}')
+                torch.save({
+                        'epoch': epoch,
+                        'model_state_dict': p_net.state_dict(),
+                        'optimizer_state_dict': optimizer.state_dict(),
+                        'loss': loss_dataset.data,
+                        'train_time': train_time,
+                        'scale': p_net.scale
+                         }, constants._PATH_PNET)
+                np.save(constants._PATH_PNET_LOSS, np.array(loss_history))
+                return
 
-        # Loss based on PDE
-        res_p = diff_opt(x, t, p_net)/normalize
-        all_zeros = torch.zeros((len(t),1), dtype=torch.float32, requires_grad=False)
-        mse_res = mse_cost_function(res_p, all_zeros)
+            if(loss_dataset.item() < 0.95*min_loss):
+                train_time = time.time() - start_time
+                # Print the iteration number (and optionally the loss)
+                print(f'Epoch [{epoch+1}/{iterations}], Dataset Loss: {loss_dataset.item():.4f}, ic: {mse_u.item():.4f}, res: {mse_res.item():.4f}')
+                torch.save({
+                        'epoch': epoch,
+                        'model_state_dict': p_net.state_dict(),
+                        'optimizer_state_dict': optimizer.state_dict(),
+                        'loss': loss_dataset.data,
+                        'train_time': train_time,
+                        'scale': p_net.scale
+                         }, constants._PATH_PNET)
+                min_loss = loss_dataset.item()
+                FLAG = True
 
-        # Loss Function
-        loss = mse_u + constants.TF*mse_res
-        loss_history.append(loss.data)
-        # Termination
-        if(loss.data < 1e-3):
-            train_time = time.time() - start_time
-            print("save epoch:", epoch, ",loss:", loss.data, 
-                  ",ic:  {:.5f}".format(mse_u.item()), 
-                  ",res: {:.5f}".format(mse_res.item())
-                   )
-            torch.save({
-                    'epoch': epoch,
-                    'model_state_dict': p_net.state_dict(),
-                    'optimizer_state_dict': optimizer.state_dict(),
-                    'loss': loss.data,
-                    'train_time': train_time,
-                    'scale': p_net.scale
-                    }, constants._PATH_PNET)
-            return
-        # Save the min loss model
-        if(loss.data < 0.95*min_loss):
-            train_time = time.time() - start_time
-            print("save epoch:", epoch, ",loss:", loss.data, 
-                  ",ic:  {:.5f}".format(mse_u.item()), 
-                  ",res: {:.5f}".format(mse_res.item())
-                   )
-            torch.save({
-                    'epoch': epoch,
-                    'model_state_dict': p_net.state_dict(),
-                    'optimizer_state_dict': optimizer.state_dict(),
-                    'loss': loss.data,
-                    'train_time': train_time,
-                    'scale': p_net.scale
-                    }, constants._PATH_PNET)
-            min_loss = loss.data
-            FLAG = True
-        loss.backward(retain_graph=True) 
+            if(FLAG):
+                # random sample points
+                x_bc_rar, t_bc_rar = get_ini_samples(num_samples=S)
+                x_rar, t_rar = get_res_samples(num_samples=N_samples)
+                # add ic points
+                p_i = constants.p_init(x_bc_rar.detach().numpy())
+                p_i = torch.tensor(p_i, dtype=torch.float32, requires_grad=False)
+                phat_i = p_net(x_bc_rar, t_bc_rar)
+                max_error = torch.max(torch.abs(p_i - phat_i))/normalize
+                if(max_error > 5e-3):
+                    max_value, max_index = torch.topk(torch.abs(p_i.squeeze() - phat_i.squeeze()), 20)
+                    x_max = x_bc_rar[max_index,:].clone().detach()
+                    t_max = t_bc_rar[max_index].clone().detach()
+                    x_bc = torch.cat((x_bc, x_max), dim=0)
+                    t_bc = torch.cat((t_bc, t_max), dim=0)
+                    print("... RAR IC, add: ", x_max[0,:].data, f' {t_max[0].item():.3f}, {max_error.item():.3f}')
+                # add residual points
+                res_p = diff_opt(x_rar, t_rar, p_net)/normalize
+                max_error= torch.max(torch.abs(res_p))
+                if(max_error > 5e-3):
+                    max_value, max_index = torch.topk(torch.abs(res_p.squeeze()), 20)
+                    x_max = x_rar[max_index,:].clone()
+                    t_max = t_rar[max_index].clone()
+                    x = torch.cat((x, x_max), dim=0)
+                    t = torch.cat((t, t_max), dim=0)
+                    print("... RAR Res, add: ", x_max[0,:].data, f' {t_max[0].item():.3f}, {max_error.item():.3f}')
+                # Recreate dataset
+                dataset = MyDataset(x_bc, t_bc, x, t)
+                data_loader = DataLoader(dataset, batch_size=batch_size, shuffle=True)     
+                # reset flag
+                FLAG = False
+
+        # mini-batch training
+        for iter, (x_bc_k, t_bc_k, x_k, t_k) in enumerate(data_loader, start=1): 
+            # zero the gradeint
+            optimizer.zero_grad()
+
+            # Loss based on boundary conditions
+            p_i = constants.p_init(x_bc_k.detach().numpy())
+            p_i = torch.tensor(p_i, dtype=torch.float32, requires_grad=False)
+            phat_i = p_net(x_bc_k, t_bc_k)
+            mse_u = mse_cost_function(phat_i/normalize, p_i/normalize)
+
+            # Loss based on PDE
+            res_p = diff_opt(x_k, t_k, p_net)/normalize
+            all_zeros = torch.zeros((len(t_k),1), dtype=torch.float32, requires_grad=False)
+            mse_res = mse_cost_function(res_p, all_zeros)
+
+            loss = mse_u + constants.TF*mse_res
+            loss.backward(retain_graph=True) 
+
         optimizer.step()
         # Exponential learning rate decay
         if (epoch + 1) % iterations_per_decay == 0:
             scheduler.step()
-
     np.save(constants._PATH_PNET_LOSS, np.array(loss_history))
     
 
@@ -314,87 +348,109 @@ def train_e1_net(e1_net, p_net, optimizer, scheduler, mse_cost_function, iterati
     iterations_per_decay = 1000
     loss_history = []
     normalize = e1_net.scale
-    N_samples = 1000 # 1000 (base)
+    N_samples = 150 # 1000 (base)
+    batch_size = 300
 
     # samples of initial condition
     x_bc, t_bc = get_ini_samples(num_samples=N_samples)
     # samples of residual
     x, t = get_res_samples(num_samples=N_samples)
+    # Create dataset
+    dataset = MyDataset(x_bc, t_bc, x, t)
+    data_loader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
 
     # RAR
-    S = 5000
+    S = 10000
     FLAG = False
     
     start_time = time.time()
+
     for epoch in range(iterations):
-        # Add more points to dataset
-        optimizer.zero_grad()
-        if(epoch > 0 and epoch % 100 == 0 and FLAG):
-            _x_bc, _t_bc = get_ini_samples(num_samples=S)
-            _x, _t = get_res_samples(num_samples=S)
-            p_i = constants.p_init(_x_bc.detach().numpy())
+        # # Dataset loss & RAR
+        if(epoch > 0):
+            p_i = constants.p_init(x_bc.detach().numpy())
             p_i = torch.tensor(p_i, dtype=torch.float32, requires_grad=False)
-            phat_i = p_net(_x_bc, _t_bc)
+            phat_i = p_net(x_bc, t_bc)
             e_i = p_i - phat_i
-            ehat_i = e1_net(_x_bc, _t_bc)
-            res_p = diff_opt(_x, _t, p_net)
-            res_e1 = diff_opt(_x, _t, e1_net)
-            max_error = torch.max(torch.abs(e_i - ehat_i))/normalize
-            if(max_error > 5e-3):
-                max_value, max_index = torch.topk(torch.abs(e_i.squeeze() - ehat_i.squeeze()), 10)
-                x_max = _x_bc[max_index,:].clone().detach()
-                t_max = _t_bc[max_index].clone().detach()
-                x_bc = torch.cat((x_bc, x_max), dim=0)
-                t_bc = torch.cat((t_bc, t_max), dim=0)
-                print("... RAR IC, add: ", x_max[0,:].data, t_max[0].item(), max_error.item())
-            # add residual points
-            max_error= torch.max(torch.abs(res_e1 + res_p))/normalize
-            if(max_error > 5e-3):
-                max_value, max_index = torch.topk(torch.abs(res_e1.squeeze() + res_p.squeeze()), 10)
-                x_max = _x[max_index,:].clone()
-                t_max = _t[max_index].clone()
-                x = torch.cat((x, x_max), dim=0)
-                t = torch.cat((t, t_max), dim=0)
-                print("... RAR Res, add: ", x_max[0,:].data, t_max[0].item(), max_error.item())
-            FLAG = False
+            ehat_i = e1_net(x_bc, t_bc)
+            res_p = diff_opt(x, t, p_net)
+            res_e = diff_opt(x, t, e1_net)
+            mse_u = mse_cost_function(ehat_i/normalize, e_i/normalize)
+            mse_res = mse_cost_function(res_e/normalize, -res_p/normalize)
+            loss_dataset = mse_u + constants.TF*(mse_res)
+            loss_history.append(loss_dataset.item())
 
-        optimizer.zero_grad()
-        # Loss based on boundary conditions
-        p_i = constants.p_init(x_bc.detach().numpy())
-        p_i = torch.tensor(p_i, dtype=torch.float32, requires_grad=False)
-        phat_i = p_net(x_bc, t_bc)
-        e_i = p_i - phat_i
-        ehat_i = e1_net(x_bc, t_bc)
-        mse_u = mse_cost_function(ehat_i/normalize, e_i/normalize)
+            if(loss_dataset.item() < 0.95*min_loss):
+                train_time = time.time() - start_time
+                # Print the iteration number (and optionally the loss)
+                print(f'Epoch [{epoch+1}/{iterations}], Dataset Loss: {loss_dataset.item():.4f}, ic: {mse_u.item():.4f}, res: {mse_res.item():.4f}')
+                torch.save({
+                        'epoch': epoch,
+                        'model_state_dict': e1_net.state_dict(),
+                        'optimizer_state_dict': optimizer.state_dict(),
+                        'loss': loss_dataset.data,
+                        'train_time': train_time,
+                        'scale': e1_net.scale
+                         }, constants._PATH_E1NET)
+                min_loss = loss_dataset.item()
+                FLAG = True
 
-        # Loss based on PDE
-        res_e1 = diff_opt(x, t, e1_net)
-        res_p  = diff_opt(x, t, p_net).detach()
-        mse_res = mse_cost_function(res_e1/normalize, -res_p/normalize)
+            if(FLAG):
+                # random sample points
+                x_bc_rar, t_bc_rar = get_ini_samples(num_samples=S)
+                x_rar, t_rar = get_res_samples(num_samples=N_samples)
+                # add ic points
+                p_i = constants.p_init(x_bc_rar.detach().numpy())
+                p_i = torch.tensor(p_i, dtype=torch.float32, requires_grad=False)
+                phat_i = p_net(x_bc_rar, t_bc_rar)
+                e_i = p_i - phat_i
+                ehat_i = e1_net(x_bc_rar, t_bc_rar)
+                res_p = diff_opt(x_rar, t_rar, p_net)/normalize
+                res_e = diff_opt(x_rar, t_rar, e1_net)/normalize
+                max_error = torch.max(torch.abs(e_i - ehat_i))/normalize
+                if(max_error > 5e-3):
+                    max_value, max_index = torch.topk(torch.abs(e_i.squeeze() - ehat_i.squeeze()), 20)
+                    x_max = x_bc_rar[max_index,:].clone().detach()
+                    t_max = t_bc_rar[max_index].clone().detach()
+                    x_bc = torch.cat((x_bc, x_max), dim=0)
+                    t_bc = torch.cat((t_bc, t_max), dim=0)
+                    print("... RAR IC, add: ", x_max[0,:].data, f' {t_max[0].item():.3f}, {max_error.item():.3f}')
+                # add residual points
+                max_error= torch.max(torch.abs(res_e + res_p))
+                if(max_error > 5e-3):
+                    max_value, max_index = torch.topk(torch.abs(res_e.squeeze() + res_p.squeeze()), 20)
+                    x_max = x_rar[max_index,:].clone()
+                    t_max = t_rar[max_index].clone()
+                    x = torch.cat((x, x_max), dim=0)
+                    t = torch.cat((t, t_max), dim=0)
+                    print("... RAR Res, add: ", x_max[0,:].data, f' {t_max[0].item():.3f}, {max_error.item():.3f}')
+                # Recreate dataset
+                dataset = MyDataset(x_bc, t_bc, x, t)
+                data_loader = DataLoader(dataset, batch_size=batch_size, shuffle=True)     
+                # reset flag
+                FLAG = False
 
-        # Loss Function
-        loss = mse_u + constants.TF*mse_res
-        loss_history.append(loss.data)
+        # mini-batch training
+        for iter, (x_bc_k, t_bc_k, x_k, t_k) in enumerate(data_loader, start=1): 
+            # zero the gradeint
+            optimizer.zero_grad()
 
-        # Save the min loss model
-        if(loss.data < 0.95*min_loss):
-            train_time = time.time() - start_time
-            print("save epoch:", epoch, ",loss:", loss.data, 
-                  ",ic:  {:.5f}".format(mse_u.item()), 
-                  ",res: {:.5f}".format(mse_res.item())
-                   )
-            torch.save({
-                    'epoch': epoch,
-                    'model_state_dict': e1_net.state_dict(),
-                    'optimizer_state_dict': optimizer.state_dict(),
-                    'loss': loss.data,
-                    'train_time': train_time,
-                    'scale': e1_net.scale
-                    }, constants._PATH_E1NET)
-            min_loss = loss.data
-            FLAG = True
+            # Loss based on boundary conditions
+            p_i = constants.p_init(x_bc_k.detach().numpy())
+            p_i = torch.tensor(p_i, dtype=torch.float32, requires_grad=False)
+            phat_i = p_net(x_bc_k, t_bc_k)
+            e_i = p_i - phat_i
+            ehat_i = e1_net(x_bc_k, t_bc_k)
+            mse_u = mse_cost_function(ehat_i/normalize, e_i/normalize)
 
-        loss.backward(retain_graph=True) 
+            # Loss based on PDE
+            res_p = diff_opt(x_k, t_k, p_net)
+            res_e = diff_opt(x_k, t_k, e1_net)
+            mse_res = mse_cost_function(res_e/normalize, -res_p/normalize)
+
+            loss = mse_u + constants.TF*mse_res
+            loss.backward(retain_graph=True) 
+
         optimizer.step()
         # Exponential learning rate decay
         if (epoch + 1) % iterations_per_decay == 0:
@@ -411,15 +467,15 @@ def pos_p_net_train(p_net):
     loss = checkpoint['loss']
     print("pnet best epoch: ", epoch, ", loss:", loss.data, ", train time:", checkpoint['train_time'], ', scale: ', p_net.scale)
     loss_history = np.load(constants._PATH_PNET_LOSS)
-    min_loss = min(loss_history)
-    plt.figure()
-    plt.plot(np.arange(len(loss_history)), loss_history, "black", linewidth=1)
-    plt.ylim([min_loss, 10*min_loss])
-    plt.xlabel("epoch")
-    plt.ylabel("pnet loss")
-    plt.tight_layout()
-    plt.savefig(constants._FOLDER+"figs/pnet_loss_history.pdf", format='pdf', dpi=300)
-    plt.close()
+    # min_loss = min(loss_history)
+    # plt.figure()
+    # plt.plot(np.arange(len(loss_history)), loss_history, "black", linewidth=1)
+    # plt.ylim([min_loss, 10*min_loss])
+    # plt.xlabel("epoch")
+    # plt.ylabel("pnet loss")
+    # plt.tight_layout()
+    # plt.savefig(constants._FOLDER+"figs/pnet_loss_history.pdf", format='pdf', dpi=300)
+    # plt.close()
     return p_net
 
 
@@ -431,22 +487,22 @@ def pos_e1_net_train(e1_net):
     epoch = checkpoint['epoch']
     loss = checkpoint['loss']
     print("e1net best epoch: ", epoch, ", loss:", loss.data, ", train time:", checkpoint['train_time'], ', scale: ', e1_net.scale)
-    loss_history = np.load(constants._PATH_E1NET_LOSS)
-    min_loss = min(loss_history)
-    plt.figure()
-    plt.plot(np.arange(len(loss_history)), loss_history, "black", linewidth=1)
-    plt.ylim([min_loss, 10*min_loss])
-    plt.xlabel("epoch")
-    plt.ylabel("pnet loss")
-    plt.tight_layout()
-    plt.savefig(constants._FOLDER+"figs/e1net_loss_history.pdf", format='pdf', dpi=300)
-    plt.close()
+    # loss_history = np.load(constants._PATH_E1NET_LOSS)
+    # min_loss = min(loss_history)
+    # plt.figure()
+    # plt.plot(np.arange(len(loss_history)), loss_history, "black", linewidth=1)
+    # plt.ylim([min_loss, 10*min_loss])
+    # plt.xlabel("epoch")
+    # plt.ylabel("pnet loss")
+    # plt.tight_layout()
+    # plt.savefig(constants._FOLDER+"figs/e1net_loss_history.pdf", format='pdf', dpi=300)
+    # plt.close()
     return e1_net
 
 
 def check_pnn_result(p_net):
     global constants
-    grid_points = constants.generate_random_samples()
+    grid_points = constants.generate_random_samples(num_samples=1000000)
     for t in constants.T_SPAN:
         # print("[check] grid points shape type: ", grid_points.shape, grid_points.dtype)
         # compute p(true)
@@ -470,15 +526,13 @@ def check_pnn_result(p_net):
 def check_e1nn_result(e1_net, p_net):
     global constants
     N_trials = 1
+    gap_data = []
+    eSratio_data = []
+    a1_data = []
     for t in constants.T_SPAN:
-        record_a1 = 0.0
-        record_e1max = 0.0
-        record_eS = 0.0
-        gap_data = []
-        eSratio_data = []
         ptrue_max = 0.0
         for j in range(N_trials):
-            grid_points = constants.generate_random_samples(num_samples=1000000)
+            grid_points = constants.generate_random_samples(num_samples=10000000)
             # print("[check] grid points shape type: ", grid_points.shape, grid_points.dtype)
             # compute p(true)
             pdf_true = constants.p_sol(grid_points, t)
@@ -493,21 +547,22 @@ def check_e1nn_result(e1_net, p_net):
             e1_nn = e1_net(grid_points_tensor, t_tensor).detach().numpy()
             e2 = e1 - e1_nn
             eS = 2.0*np.max(np.abs(e1_nn))
-            a1 = np.max(np.abs(e2))/np.max(np.abs(e1_nn))
+            a1 = np.max(np.abs(e2)) / np.max(np.abs(e1_nn))
+            a1_data.append(a1)
             gap = (eS - np.max(np.abs(e1)))/ np.max(np.abs(pdf_true))
             gap_data.append(gap)
             eSratio = eS / np.max(np.abs(pdf_true))
             eSratio_data.append(eSratio)
             if(np.max(np.abs(pdf_true)) > ptrue_max):
                 ptrue_max = np.max(np.abs(pdf_true))
-            if(a1 > record_a1):
-                record_a1 = a1
-                record_e1max = np.max(np.abs(e1))
-                record_eS = eS
-        print( " =result= e_nn(t={:.1f}) e1: {:.4f}, eS: {:.4f}, a1: {:.3f}".format(t, record_e1max, record_eS, record_a1) )    
-        print( " =result= min gap     : {:.3f}".format(np.min(np.array(gap_data))))
-        print( " =result= max eS_ratio: {:.3f}".format(np.max(np.array(eSratio_data))))
         print("[check] p_true(t) max: {:.6f}".format(ptrue_max))
+        
+    print("[check] a1_data shape: ", np.array(a1_data).shape)
+    print( " =result= max a1      : {:.3f}, var a1: {:.4f}".format(np.max(np.array(a1_data)),
+                                                                   np.var(np.array(a1_data))))    
+    print( " =result= min gap     : {:.3f}".format(np.min(np.array(gap_data))))
+    print( " =result= max eS_ratio: {:.3f}, avg eS_ratio: {:.3f}".format(np.max(np.array(eSratio_data)),
+                                                                         np.mean(np.array(eSratio_data))))
 
 
 def get_e1init_max(p_net):
@@ -536,13 +591,13 @@ def main():
     p_net = Net(scale=constants.get_pinit_max())
     e1_net = E1Net()
     p_net.apply(init_weights)
-    e1_net.apply(init_weights_xavier)
+    e1_net.apply(init_weights)
 
     mse_cost_function = torch.nn.MSELoss() # Mean squared error
     optimizer = torch.optim.Adam(p_net.parameters(), lr=1e-3)
     scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.9)
     if(TRAIN_FLAG):
-        train_p_net(p_net, optimizer, scheduler, mse_cost_function, iterations=15000); print("p_net train complete") # 20000 (base)
+        train_p_net(p_net, optimizer, scheduler, mse_cost_function, iterations=2000); print("p_net train complete") # 20000 (base)
     p_net = pos_p_net_train(p_net); p_net.eval()
     check_pnn_result(p_net)
 
@@ -551,11 +606,15 @@ def main():
     optimizer = torch.optim.Adam(e1_net.parameters(), lr=1e-3)
     scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.9)
     if(TRAIN_FLAG):
-        train_e1_net(e1_net, p_net, optimizer, scheduler, mse_cost_function, iterations=50000); print("e1_net train complete")
+        train_e1_net(e1_net, p_net, optimizer, scheduler, mse_cost_function, iterations=10000); print("e1_net train complete")
     e1_net = pos_e1_net_train(e1_net); e1_net.eval()
     check_e1nn_result(e1_net, p_net)
 
 
-
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Pass 1 to train, 0 to use the pre-trained models")
+    parser.add_argument("--train", type=int, required=True, help="train bool")
+    args = parser.parse_args()
+    # Set the TRAIN_FLAG
+    TRAIN_FLAG = args.train
     main()
