@@ -210,7 +210,7 @@ def show_results(pnet, enet):
             ax1.set_xlabel("x")
         ax1.set_xlim([x_low, x_hig])
         ax1.set_ylim(0.0, global_max+limit_margin)
-        ax1.set_xlabel("PDF")
+        ax1.set_ylabel("PDF")
         # ax1.grid(True, which='both', linestyle='-', linewidth=0.5)
         ax1.text(0.01, 0.98, r"$t:$ "+str(t1s[i]) + r", $e_S:$ "+str(eL),
                  transform=axs[i].transAxes, verticalalignment='top', fontsize=18)
