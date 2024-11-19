@@ -210,6 +210,7 @@ def show_results(pnet, enet):
             ax1.set_xlabel("x")
         ax1.set_xlim([x_low, x_hig])
         ax1.set_ylim(0.0, global_max+limit_margin)
+        ax1.set_xlabel("PDF")
         # ax1.grid(True, which='both', linestyle='-', linewidth=0.5)
         ax1.text(0.01, 0.98, r"$t:$ "+str(t1s[i]) + r", $e_S:$ "+str(eL),
                  transform=axs[i].transAxes, verticalalignment='top', fontsize=18)
@@ -259,6 +260,7 @@ def show_results(pnet, enet):
 
         ax1.set_xlim([x_low, x_hig])
         ax1.set_ylim(-(1.5*eL), 1.5*eL)
+        ax1.set_ylabel("e")
         # ax1.set_ylim(-(global_max), global_max)
         # ax1.grid(True, which='both', linestyle='-', linewidth=0.5)
         ax1.text(0.01, 0.98, r"$t:$ "+str(t1s[i]) + r", $\alpha_1:$ "+str(alpha),
@@ -854,7 +856,7 @@ def show_table(pnet, enet):
         gap = (eS - np.max(np.abs(e1)))/np.max(np.abs(p_monte))
         gap_list.append(gap)
         eS_ratio_list.append(eS_ratio)
-    print("[info] max a1: " +str(np.max(np.array(a1_list))) + ", avg a1:" + str(np.mean(np.array(a1_list))))
+    print("[info] max a1: " +str(np.max(np.array(a1_list))) + ", var a1:" + str(np.var(np.array(a1_list))))
     print("[info] max gap: " +str(np.max(np.array(gap_list))) + ", avg a1:" + str(np.mean(np.array(gap_list))))
     print("[info] max eS_ratio: " +str(np.max(np.array(eS_ratio_list))) + ", avg a1:" + str(np.mean(np.array(eS_ratio_list))))
 
