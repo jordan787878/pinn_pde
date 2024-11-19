@@ -797,92 +797,170 @@ def plot_results_at_one_time(t1, p_net, e1_net):
     emin = np.min(e_all)
     emax = np.max(e_all)
 
-    # Create a figure with a specified size
-    fig = plt.figure(figsize=(9, 5))
-    
-    # Create a GridSpec for a 2x2 layout for 2D plots and 1x1 for 3D plot
-    gs = GridSpec(2, 3, width_ratios=[0.8, 0.9, 1.7])  # Adjust width ratios to make 3D plot larger
+    data1 = p
+    data2 = p_hat_numpy
+    data3 = e1
+    data4 = e1_hat
 
-    # 2D Subplots
-    ax1 = fig.add_subplot(gs[0, 0])
-    ax2 = fig.add_subplot(gs[0, 1])
-    ax3 = fig.add_subplot(gs[1, 0])
-    ax4 = fig.add_subplot(gs[1, 1])
+    # Create the figure and 1x5 grid of subplots using gridspec to adjust layout
+    fig = plt.figure(figsize=(20, 5))
+    gs = fig.add_gridspec(1, 5, width_ratios=[1, 1, 1, 1, 2])
 
-    # Plot p
-    im1 = ax1.imshow(p, extent=[x_low, x_hig, x_low, x_hig], cmap='viridis', aspect='equal', 
-                     origin='lower', vmin=pmin, vmax=pmax)
+    # Create axes for the subplots
+    ax1 = fig.add_subplot(gs[0])
+    ax2 = fig.add_subplot(gs[1])
+    ax3 = fig.add_subplot(gs[2])
+    ax4 = fig.add_subplot(gs[3])
+    ax5 = fig.add_subplot(gs[4], projection='3d')
+
+    # First two subplots: 2D imshow with a common vertical colorbar
+    im1 = ax1.imshow(data1, extent=[x_low, x_hig, x_low, x_hig], cmap='viridis', origin="lower")
+    im2 = ax2.imshow(data2, extent=[x_low, x_hig, x_low, x_hig], cmap='viridis', origin="lower")
+    ax1.set_xticks(np.array([-9, -5, 0, 5, 9]))
+    ax1.set_yticks(np.array([-9, -5, 0, 5, 9]))
+    ax2.set_xticks(np.array([-9, -5, 0, 5, 9]))
+    ax2.set_yticks([])
+    ax1.set_xlabel(r"$x_1$")
+    ax1.set_ylabel(r"$x_2$")
+    ax2.set_xlabel(r"$x_1$")
     ax1.text(0.05, 0.95, r"$p$", 
              transform=ax1.transAxes, verticalalignment='top', fontsize=16,
              bbox=dict(facecolor='white', edgecolor='black', boxstyle='round,pad=0.2'))
-    ax1.set_xticks([])
-    ax1.set_yticks(np.array([-9, -5, 0, 5, 9]))
-    ax1.set_ylabel(r"$x_2$")
-
-    # Plot p_hat
-    im2 = ax2.imshow(p_hat_numpy, extent=[x_low, x_hig, x_low, x_hig], cmap='viridis', aspect='equal', 
-                     origin='lower', vmin=pmin, vmax=pmax)
     ax2.text(0.05, 0.95, r"$\hat{p}$", 
              transform=ax2.transAxes, verticalalignment='top', fontsize=16,
              bbox=dict(facecolor='white', edgecolor='black', boxstyle='round,pad=0.2'))
-    ax2.set_xticks([])
-    ax2.set_yticks([])
 
-    # Add colorbar for p_hat
-    cbar2 = fig.colorbar(im2, ax=ax2, orientation='vertical', fraction=0.046, pad=0.04)
-    zScalarFormatter = ScalarFormatterClass(useMathText=True)
-    zScalarFormatter.set_powerlimits((0, 0))
-    cbar2.ax.yaxis.set_major_formatter(zScalarFormatter)
-    # cbar2.ax.yaxis.set_major_formatter(ScalarFormatter(useMathText=True))
-    # cbar2.set_label('Value')
-    
-    # Plot e1
-    im3 = ax3.imshow(e1, extent=[x_low, x_hig, x_low, x_hig], cmap='viridis', aspect='equal', 
-                     origin='lower', vmin=emin, vmax=emax)
-    ax3.text(0.05, 0.95, r"$e$", 
+    # Create a single colorbar for the first two subplots and adjust its location
+    cbar = fig.colorbar(im1, ax=[ax1, ax2], orientation='horizontal', fraction=0.018, pad=0.2)
+    cbar.set_label(r'Colorbar for $p$ and $\hat{p}$', fontsize=12)
+
+    # Next two subplots: 2D imshow with a common horizontal colorbar
+    im3 = ax3.imshow(data3, extent=[x_low, x_hig, x_low, x_hig], cmap='plasma', origin="lower")
+    im4 = ax4.imshow(data4, extent=[x_low, x_hig, x_low, x_hig], cmap='plasma', origin="lower")
+    ax3.set_xticks(np.array([-9, -5, 0, 5, 9]))
+    ax4.set_xticks(np.array([-9, -5, 0, 5, 9]))
+    ax3.set_yticks([])
+    ax4.set_yticks([])
+    ax3.set_xlabel(r"$x_1$")
+    ax4.set_xlabel(r"$x_1$")
+    ax3.text(0.05, 0.95, r"$e_1$", 
              transform=ax3.transAxes, verticalalignment='top', fontsize=16,
              bbox=dict(facecolor='white', edgecolor='black', boxstyle='round,pad=0.2'))
-    ax3.set_xticks(np.array([-9, -5, 0, 5, 9]))
-    ax3.set_yticks(np.array([-9, -5, 0, 5, 9]))
-    ax3.set_ylabel(r"$x_2$")
-    ax3.set_xlabel(r"$x_1$")
-
-    # Plot e1_hat
-    im4 = ax4.imshow(e1_hat, extent=[x_low, x_hig, x_low, x_hig], cmap='viridis', aspect='equal', 
-                     origin='lower', vmin=emin, vmax=emax)
     ax4.text(0.05, 0.95, r"$\hat{e}_1$", 
              transform=ax4.transAxes, verticalalignment='top', fontsize=16,
              bbox=dict(facecolor='white', edgecolor='black', boxstyle='round,pad=0.2'))
-    ax4.set_yticks([])
-    ax4.set_xticks(np.array([-9, -5, 0, 5, 9]))
-    ax4.set_xlabel(r"$x_1$")
 
-    # Add colorbar for e1_hat
-    cbar4 = fig.colorbar(im4, ax=ax4, orientation='vertical', fraction=0.046, pad=0.04)
-    zScalarFormatter = ScalarFormatterClass(useMathText=True)
-    zScalarFormatter.set_powerlimits((0, 0))
-    cbar4.ax.yaxis.set_major_formatter(zScalarFormatter)
-    # cbar4.set_label('Error')
+    # Create a single colorbar for the third and fourth subplots and adjust its location
+    cbar2 = fig.colorbar(im3, ax=[ax3, ax4], orientation='horizontal', fraction=0.018, pad=0.2)
+    cbar2.set_label(r'Colorbar for $e_1$ and $\hat{e}_1$', fontsize=12)
 
-    # 3D Surface Plot
-    ax5 = fig.add_subplot(gs[:, 2], projection='3d')  # Use the entire right column for 3D plot
-    ax5.plot_surface(x1, x2, e1, cmap='viridis', vmin=emin, vmax=emax)
+    # Fifth subplot: 3D surface plot
+    ax5.plot_surface(x1, x2, e1, cmap='plasma', label=r"$e_1$")
     eS = 2.0 * np.max(np.abs(e1_hat))
     eS = np.round(eS, 3)
-    ax5.plot_surface(x1, x2, e1_hat*0.0 + eS, color="green", alpha=0.3)
+    ax5.plot_surface(x1, x2, e1_hat*0.0 + eS, color="green", alpha=0.3, label=r"$e_S$")
     ax5.plot_surface(x1, x2, e1_hat*0.0 - eS, color="green", alpha=0.3)
-    ax5.set_zlabel("e")
+    ax5.set_zlabel("  e")
     ax5.set_xticks(np.array([-9, -5, 0, 5, 9]))
     ax5.set_yticks(np.array([-9, -5, 0, 5, 9]))
-    zScalarFormatter = ScalarFormatterClass(useMathText=True)
-    zScalarFormatter.set_powerlimits((0, 0))
-    ax5.zaxis.set_major_formatter(zScalarFormatter)
-    ax5.set_ylabel(r"$x_2$")
     ax5.set_xlabel(r"$x_1$")
-    ax5.set_title("t="+str(t1) + ", " + r"$\alpha_1=$"+str(alpha) + ", " + r"$e_S=$" + str(eS))
-    plt.subplots_adjust(left=0.08, right=0.9, top=0.90, bottom=0.1)
+    ax5.set_ylabel(r"$x_2$")
+    ax5.legend(loc="upper left")
+
+    # Add a common title above the first four subplots
+    common_txt = "t="+str(t1) + ", " + r"$\alpha_1=$"+str(alpha) + ", " + r"$e_S=$" + str(eS)
+    fig.text(0.4, 0.8, common_txt, ha='center', fontsize=16)
+
     plt.savefig(FOLDER+'figs/special_error_bound_t1.pdf', format='pdf', dpi=300)
     plt.close()
+
+    # # Create a figure with a specified size
+    # fig = plt.figure(figsize=(9, 5))
+    
+    # # Create a GridSpec for a 2x2 layout for 2D plots and 1x1 for 3D plot
+    # gs = GridSpec(2, 3, width_ratios=[0.8, 0.9, 1.7])  # Adjust width ratios to make 3D plot larger
+
+    # # 2D Subplots
+    # ax1 = fig.add_subplot(gs[0, 0])
+    # ax2 = fig.add_subplot(gs[0, 1])
+    # ax3 = fig.add_subplot(gs[1, 0])
+    # ax4 = fig.add_subplot(gs[1, 1])
+
+    # # Plot p
+    # im1 = ax1.imshow(p, extent=[x_low, x_hig, x_low, x_hig], cmap='viridis', aspect='equal', 
+    #                  origin='lower', vmin=pmin, vmax=pmax)
+    # ax1.text(0.05, 0.95, r"$p$", 
+    #          transform=ax1.transAxes, verticalalignment='top', fontsize=16,
+    #          bbox=dict(facecolor='white', edgecolor='black', boxstyle='round,pad=0.2'))
+    # ax1.set_xticks([])
+    # ax1.set_yticks(np.array([-9, -5, 0, 5, 9]))
+    # ax1.set_ylabel(r"$x_2$")
+
+    # # Plot p_hat
+    # im2 = ax2.imshow(p_hat_numpy, extent=[x_low, x_hig, x_low, x_hig], cmap='viridis', aspect='equal', 
+    #                  origin='lower', vmin=pmin, vmax=pmax)
+    # ax2.text(0.05, 0.95, r"$\hat{p}$", 
+    #          transform=ax2.transAxes, verticalalignment='top', fontsize=16,
+    #          bbox=dict(facecolor='white', edgecolor='black', boxstyle='round,pad=0.2'))
+    # ax2.set_xticks([])
+    # ax2.set_yticks([])
+
+    # # Add colorbar for p_hat
+    # cbar2 = fig.colorbar(im2, ax=ax2, orientation='vertical', fraction=0.046, pad=0.04)
+    # zScalarFormatter = ScalarFormatterClass(useMathText=True)
+    # zScalarFormatter.set_powerlimits((0, 0))
+    # cbar2.ax.yaxis.set_major_formatter(zScalarFormatter)
+    # # cbar2.ax.yaxis.set_major_formatter(ScalarFormatter(useMathText=True))
+    # # cbar2.set_label('Value')
+    
+    # # Plot e1
+    # im3 = ax3.imshow(e1, extent=[x_low, x_hig, x_low, x_hig], cmap='viridis', aspect='equal', 
+    #                  origin='lower', vmin=emin, vmax=emax)
+    # ax3.text(0.05, 0.95, r"$e$", 
+    #          transform=ax3.transAxes, verticalalignment='top', fontsize=16,
+    #          bbox=dict(facecolor='white', edgecolor='black', boxstyle='round,pad=0.2'))
+    # ax3.set_xticks(np.array([-9, -5, 0, 5, 9]))
+    # ax3.set_yticks(np.array([-9, -5, 0, 5, 9]))
+    # ax3.set_ylabel(r"$x_2$")
+    # ax3.set_xlabel(r"$x_1$")
+
+    # # Plot e1_hat
+    # im4 = ax4.imshow(e1_hat, extent=[x_low, x_hig, x_low, x_hig], cmap='viridis', aspect='equal', 
+    #                  origin='lower', vmin=emin, vmax=emax)
+    # ax4.text(0.05, 0.95, r"$\hat{e}_1$", 
+    #          transform=ax4.transAxes, verticalalignment='top', fontsize=16,
+    #          bbox=dict(facecolor='white', edgecolor='black', boxstyle='round,pad=0.2'))
+    # ax4.set_yticks([])
+    # ax4.set_xticks(np.array([-9, -5, 0, 5, 9]))
+    # ax4.set_xlabel(r"$x_1$")
+
+    # # Add colorbar for e1_hat
+    # cbar4 = fig.colorbar(im4, ax=ax4, orientation='vertical', fraction=0.046, pad=0.04)
+    # zScalarFormatter = ScalarFormatterClass(useMathText=True)
+    # zScalarFormatter.set_powerlimits((0, 0))
+    # cbar4.ax.yaxis.set_major_formatter(zScalarFormatter)
+    # # cbar4.set_label('Error')
+
+    # # 3D Surface Plot
+    # ax5 = fig.add_subplot(gs[:, 2], projection='3d')  # Use the entire right column for 3D plot
+    # ax5.plot_surface(x1, x2, e1, cmap='viridis', vmin=emin, vmax=emax)
+    # eS = 2.0 * np.max(np.abs(e1_hat))
+    # eS = np.round(eS, 3)
+    # ax5.plot_surface(x1, x2, e1_hat*0.0 + eS, color="green", alpha=0.3)
+    # ax5.plot_surface(x1, x2, e1_hat*0.0 - eS, color="green", alpha=0.3)
+    # ax5.set_zlabel("e")
+    # ax5.set_xticks(np.array([-9, -5, 0, 5, 9]))
+    # ax5.set_yticks(np.array([-9, -5, 0, 5, 9]))
+    # zScalarFormatter = ScalarFormatterClass(useMathText=True)
+    # zScalarFormatter.set_powerlimits((0, 0))
+    # ax5.zaxis.set_major_formatter(zScalarFormatter)
+    # ax5.set_ylabel(r"$x_2$")
+    # ax5.set_xlabel(r"$x_1$")
+    # ax5.set_title("t="+str(t1) + ", " + r"$\alpha_1=$"+str(alpha) + ", " + r"$e_S=$" + str(eS))
+
+    # plt.subplots_adjust(left=0.08, right=0.9, top=0.90, bottom=0.1)
+    # plt.savefig(FOLDER+'figs/special_error_bound_t1.pdf', format='pdf', dpi=300)
+    # plt.close()
 
 
 def show_table(p_net, e1_net):
