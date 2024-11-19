@@ -13,11 +13,14 @@ class MyConstantsLorentz:
     _L = np.float32(np.diag([0.3, 0.3, 0.3]))
     _MEAN_I   = np.float32([-6.0, -8.0, 24.0])
     _COV_I    = np.float32(np.diag([0.5, 0.5, 0.5]))
-    _X_RANGE = np.float32(np.array([[-13.0, -2.0],
-                                    [-15.0, -2.0],
-                                    [20.0, 35.0]]))
+    # _X_RANGE = np.float32(np.array([[-13.0, -2.0],
+    #                                 [-15.0, -2.0],
+    #                                 [20.0, 35.0]]))
+    _X_RANGE = np.float32(np.array([[-12.0, -4.0],
+                                    [-13.0, -6.0],
+                                    [20.0, 32.0]]))
     _TI = np.float32(0.0)
-    _TF = np.float32(1.0)
+    _TF = np.float32(0.2)
     _T_SPAN = np.float32(np.array([_TI, 0.2*_TF, 0.5*_TF, _TF]))
     # _A_TENSOR = torch.tensor(_A)
     _L_TENSOR = torch.tensor(_L)
@@ -123,11 +126,11 @@ class MyConstantsLorentz:
         pdf = np.load(self._FOLDER+"data/pdf_t{:.1f}.npy".format(t))
         return pdf
 
-    def p_sol_monte(self, t=0.0, linespace_num=81, stat_sample=100000000):
+    def p_sol_monte(self, t=0.0, linespace_num=81, stat_sample=100000):
         X = np.random.multivariate_normal(self.MEAN_I, self.COV_I, size=stat_sample).astype(np.float32)
         
         # NOTE: numerical integration to time t
-        dtt = 0.0005
+        dtt = 0.001
         t_span = np.arange(self.TI, t, dtt)
         for i in tqdm(range(stat_sample), desc="Processing samples"):
             x = X[i,:]

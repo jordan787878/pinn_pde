@@ -483,27 +483,27 @@ def check_pnn_result(p_net):
         error_init = pdf_true - pdf_nn
         print(" =result= p_nn(t={:.1f}) normalized error: {:.4f}".format(t, np.max(np.abs(error_init))/p_net.scale))
         
-        # visualization (marginalized to 2 cooridnates)
-        fig, axs = plt.subplots(1, 3, figsize=(10, 6), subplot_kw={'projection': '3d'})
-        ax = axs[0]
-        ax.plot_wireframe(x1_grid[:, :, 0], x2_grid[:, :, 0], np.sum(pdf_true.reshape(grid_points_struct[1].shape), axis=(2))*dx, color="black", linewidth=0.5, alpha=0.5)
-        ax.plot_wireframe(x1_grid[:, :, 0], x2_grid[:, :, 0], np.sum(pdf_nn.reshape(grid_points_struct[1].shape), axis=(2))*dx, color="red", linewidth=0.5, alpha=0.5, linestyle="--")
-        ax.set_xlabel('x'); ax.set_ylabel('y')
-        ax.view_init(45, -135)
+        # # visualization (marginalized to 2 cooridnates)
+        # fig, axs = plt.subplots(1, 3, figsize=(10, 6), subplot_kw={'projection': '3d'})
+        # ax = axs[0]
+        # ax.plot_wireframe(x1_grid[:, :, 0], x2_grid[:, :, 0], np.sum(pdf_true.reshape(grid_points_struct[1].shape), axis=(2))*dx, color="black", linewidth=0.5, alpha=0.5)
+        # ax.plot_wireframe(x1_grid[:, :, 0], x2_grid[:, :, 0], np.sum(pdf_nn.reshape(grid_points_struct[1].shape), axis=(2))*dx, color="red", linewidth=0.5, alpha=0.5, linestyle="--")
+        # ax.set_xlabel('x'); ax.set_ylabel('y')
+        # ax.view_init(45, -135)
 
-        ax = axs[1]
-        ax.plot_wireframe(x2_grid[0, :, :], x3_grid[0, :, :], np.sum(pdf_true.reshape(grid_points_struct[1].shape), axis=(0))*dx, color="black", linewidth=0.5, alpha=0.5)
-        ax.plot_wireframe(x2_grid[0, :, :], x3_grid[0, :, :], np.sum(pdf_nn.reshape(grid_points_struct[1].shape), axis=(0))*dx, color="red", linewidth=0.5, alpha=0.5, linestyle="--")
-        ax.set_xlabel('y'); ax.set_ylabel('z')
-        ax.view_init(45, -135)
+        # ax = axs[1]
+        # ax.plot_wireframe(x2_grid[0, :, :], x3_grid[0, :, :], np.sum(pdf_true.reshape(grid_points_struct[1].shape), axis=(0))*dx, color="black", linewidth=0.5, alpha=0.5)
+        # ax.plot_wireframe(x2_grid[0, :, :], x3_grid[0, :, :], np.sum(pdf_nn.reshape(grid_points_struct[1].shape), axis=(0))*dx, color="red", linewidth=0.5, alpha=0.5, linestyle="--")
+        # ax.set_xlabel('y'); ax.set_ylabel('z')
+        # ax.view_init(45, -135)
 
-        ax = axs[2]
-        ax.plot_wireframe(x1_grid[:, 0, :], x3_grid[:, 0, :], np.sum(pdf_true.reshape(grid_points_struct[1].shape), axis=(1))*dx, color="black", linewidth=0.5, alpha=0.5)
-        ax.plot_wireframe(x1_grid[:, 0, :], x3_grid[:, 0, :], np.sum(pdf_nn.reshape(grid_points_struct[1].shape), axis=(1))*dx, color="red", linewidth=0.5, alpha=0.5, linestyle="--")
-        ax.set_xlabel('x'); ax.set_ylabel('z')
-        ax.view_init(45, -135)
+        # ax = axs[2]
+        # ax.plot_wireframe(x1_grid[:, 0, :], x3_grid[:, 0, :], np.sum(pdf_true.reshape(grid_points_struct[1].shape), axis=(1))*dx, color="black", linewidth=0.5, alpha=0.5)
+        # ax.plot_wireframe(x1_grid[:, 0, :], x3_grid[:, 0, :], np.sum(pdf_nn.reshape(grid_points_struct[1].shape), axis=(1))*dx, color="red", linewidth=0.5, alpha=0.5, linestyle="--")
+        # ax.set_xlabel('x'); ax.set_ylabel('z')
+        # ax.view_init(45, -135)
 
-        plt.show()
+        # plt.show()
         # plt.savefig(constants._FOLDER+'figs/p_vs_pnn.pdf', format='pdf', dpi=300)
         # plt.close()
 
@@ -542,79 +542,79 @@ def check_e1nn_result(e1_net, p_net):
         eSratio = eS / np.max(np.abs(pdf_true))
         eSratio_data.append(eSratio)
 
-        # visualization (marginalized to 2 cooridnates)
-        # E1net plot
-        fig, axs = plt.subplots(1, 3, figsize=(10, 3), subplot_kw={'projection': '3d'})
-        ax = axs[0]
-        ax.plot_wireframe(x1_grid[:, :, 0], x2_grid[:, :, 0], np.sum(e1.reshape(grid_points_struct[1].shape), axis=(2))*dx, 
-                          color="black", linewidth=0.5, alpha=0.7, label=r"e")
-        ax.plot_wireframe(x1_grid[:, :, 0], x2_grid[:, :, 0], np.sum(e1_nn.reshape(grid_points_struct[1].shape), axis=(2))*dx, 
-                          color="red", linewidth=0.2, alpha=0.7, linestyle="--", label=r"$\hat{e}_1$")
-        ax.set_xlabel('x'); ax.set_ylabel('y'); ax.set_zlabel('Error')
-        ax.legend()
-        ax.view_init(20, -135)
+        # # visualization (marginalized to 2 cooridnates)
+        # # E1net plot
+        # fig, axs = plt.subplots(1, 3, figsize=(10, 3), subplot_kw={'projection': '3d'})
+        # ax = axs[0]
+        # ax.plot_wireframe(x1_grid[:, :, 0], x2_grid[:, :, 0], np.sum(e1.reshape(grid_points_struct[1].shape), axis=(2))*dx, 
+        #                   color="black", linewidth=0.5, alpha=0.7, label=r"e")
+        # ax.plot_wireframe(x1_grid[:, :, 0], x2_grid[:, :, 0], np.sum(e1_nn.reshape(grid_points_struct[1].shape), axis=(2))*dx, 
+        #                   color="red", linewidth=0.2, alpha=0.7, linestyle="--", label=r"$\hat{e}_1$")
+        # ax.set_xlabel('x'); ax.set_ylabel('y'); ax.set_zlabel('Error')
+        # ax.legend()
+        # ax.view_init(20, -135)
 
-        ax = axs[1]
-        ax.plot_wireframe(x2_grid[0, :, :], x3_grid[0, :, :], np.sum(e1.reshape(grid_points_struct[1].shape), axis=(0))*dx, color="black", linewidth=0.5, alpha=0.7)
-        ax.plot_wireframe(x2_grid[0, :, :], x3_grid[0, :, :], np.sum(e1_nn.reshape(grid_points_struct[1].shape), axis=(0))*dx, color="red", linewidth=0.2, alpha=0.7, linestyle="--")
-        ax.set_xlabel('y'); ax.set_ylabel('z'); ax.set_zlabel('Error')
-        ax.view_init(20, -135)
-        ax = axs[2]
-        ax.plot_wireframe(x1_grid[:, 0, :], x3_grid[:, 0, :], np.sum(e1.reshape(grid_points_struct[1].shape), axis=(1))*dx, color="black", linewidth=0.5, alpha=0.7)
-        ax.plot_wireframe(x1_grid[:, 0, :], x3_grid[:, 0, :], np.sum(e1_nn.reshape(grid_points_struct[1].shape), axis=(1))*dx, color="red", linewidth=0.2, alpha=0.7, linestyle="--")
-        ax.set_xlabel('x'); ax.set_ylabel('z'); ax.set_zlabel('Error')
-        ax.view_init(20, -135)
+        # ax = axs[1]
+        # ax.plot_wireframe(x2_grid[0, :, :], x3_grid[0, :, :], np.sum(e1.reshape(grid_points_struct[1].shape), axis=(0))*dx, color="black", linewidth=0.5, alpha=0.7)
+        # ax.plot_wireframe(x2_grid[0, :, :], x3_grid[0, :, :], np.sum(e1_nn.reshape(grid_points_struct[1].shape), axis=(0))*dx, color="red", linewidth=0.2, alpha=0.7, linestyle="--")
+        # ax.set_xlabel('y'); ax.set_ylabel('z'); ax.set_zlabel('Error')
+        # ax.view_init(20, -135)
+        # ax = axs[2]
+        # ax.plot_wireframe(x1_grid[:, 0, :], x3_grid[:, 0, :], np.sum(e1.reshape(grid_points_struct[1].shape), axis=(1))*dx, color="black", linewidth=0.5, alpha=0.7)
+        # ax.plot_wireframe(x1_grid[:, 0, :], x3_grid[:, 0, :], np.sum(e1_nn.reshape(grid_points_struct[1].shape), axis=(1))*dx, color="red", linewidth=0.2, alpha=0.7, linestyle="--")
+        # ax.set_xlabel('x'); ax.set_ylabel('z'); ax.set_zlabel('Error')
+        # ax.view_init(20, -135)
 
-        # Reduce white space between subplots and around the figure
-        plt.subplots_adjust(left=0.05, right=0.95, top=0.9, bottom=0.1, wspace=0.1)
-        # Add a text to the top-left corner of the entire figure
-        fig.text(
-            0.05, 0.9, "t={:.1f}".format(t), 
-            fontsize=16, color='black',
-        )
-        plt.show()
+        # # Reduce white space between subplots and around the figure
+        # plt.subplots_adjust(left=0.05, right=0.95, top=0.9, bottom=0.1, wspace=0.1)
+        # # Add a text to the top-left corner of the entire figure
+        # fig.text(
+        #     0.05, 0.9, "t={:.1f}".format(t), 
+        #     fontsize=16, color='black',
+        # )
+        # plt.show()
 
-        # Error bound plot
-        fig, axs = plt.subplots(1, 3, figsize=(10, 3), subplot_kw={'projection': '3d'})
-        ax = axs[0]
-        ax.plot_wireframe(x1_grid[:, :, 0], x2_grid[:, :, 0], np.sum(e1.reshape(grid_points_struct[1].shape), axis=(2))*dx, 
-                          color="black", linewidth=0.5, alpha=0.7, label=r"e")
-        ax.plot_wireframe(x1_grid[:, :, 0], x2_grid[:, :, 0], np.sum(e1_nn.reshape(grid_points_struct[1].shape), axis=(2))*dx, 
-                          color="red", linewidth=0.2   , alpha=0.7, linestyle="--", label=r"$\hat{e}_1$")
-        ax.plot_surface(x1_grid[:, :, 0], x2_grid[:, :, 0], x1_grid[:, :, 0]*0.0 + 2.0*eS, color="green", alpha=0.2, label=r"$e_S$")
-        ax.plot_surface(x1_grid[:, :, 0], x2_grid[:, :, 0], x1_grid[:, :, 0]*0.0 - 2.0*eS, color="green", alpha=0.2)
-        ax.legend()
-        ax.set_xlabel('x'); ax.set_ylabel('y'); ax.set_zlabel('Error')
-        ax.view_init(15, -135)
+        # # Error bound plot
+        # fig, axs = plt.subplots(1, 3, figsize=(10, 3), subplot_kw={'projection': '3d'})
+        # ax = axs[0]
+        # ax.plot_wireframe(x1_grid[:, :, 0], x2_grid[:, :, 0], np.sum(e1.reshape(grid_points_struct[1].shape), axis=(2))*dx, 
+        #                   color="black", linewidth=0.5, alpha=0.7, label=r"e")
+        # ax.plot_wireframe(x1_grid[:, :, 0], x2_grid[:, :, 0], np.sum(e1_nn.reshape(grid_points_struct[1].shape), axis=(2))*dx, 
+        #                   color="red", linewidth=0.2   , alpha=0.7, linestyle="--", label=r"$\hat{e}_1$")
+        # ax.plot_surface(x1_grid[:, :, 0], x2_grid[:, :, 0], x1_grid[:, :, 0]*0.0 + 2.0*eS, color="green", alpha=0.2, label=r"$e_S$")
+        # ax.plot_surface(x1_grid[:, :, 0], x2_grid[:, :, 0], x1_grid[:, :, 0]*0.0 - 2.0*eS, color="green", alpha=0.2)
+        # ax.legend()
+        # ax.set_xlabel('x'); ax.set_ylabel('y'); ax.set_zlabel('Error')
+        # ax.view_init(15, -135)
 
-        ax = axs[1]
-        ax.plot_wireframe(x2_grid[0, :, :], x3_grid[0, :, :], np.sum(e1.reshape(grid_points_struct[1].shape), axis=(0))*dx, color="black", linewidth=0.5, alpha=0.7)
-        ax.plot_wireframe(x2_grid[0, :, :], x3_grid[0, :, :], np.sum(e1_nn.reshape(grid_points_struct[1].shape), axis=(0))*dx, color="red", linewidth=0.2, alpha=0.7, linestyle="--")
-        ax.plot_surface(x2_grid[0, :, :], x3_grid[0, :, :], x2_grid[0, :, :]*0.0 + 2.0*eS, color="green", alpha=0.2)
-        ax.plot_surface(x2_grid[0, :, :], x3_grid[0, :, :], x2_grid[0, :, :]*0.0 - 2.0*eS, color="green", alpha=0.2)
-        ax.set_xlabel('y'); ax.set_ylabel('z'); ax.set_zlabel('Error')
-        ax.view_init(15, -135)
+        # ax = axs[1]
+        # ax.plot_wireframe(x2_grid[0, :, :], x3_grid[0, :, :], np.sum(e1.reshape(grid_points_struct[1].shape), axis=(0))*dx, color="black", linewidth=0.5, alpha=0.7)
+        # ax.plot_wireframe(x2_grid[0, :, :], x3_grid[0, :, :], np.sum(e1_nn.reshape(grid_points_struct[1].shape), axis=(0))*dx, color="red", linewidth=0.2, alpha=0.7, linestyle="--")
+        # ax.plot_surface(x2_grid[0, :, :], x3_grid[0, :, :], x2_grid[0, :, :]*0.0 + 2.0*eS, color="green", alpha=0.2)
+        # ax.plot_surface(x2_grid[0, :, :], x3_grid[0, :, :], x2_grid[0, :, :]*0.0 - 2.0*eS, color="green", alpha=0.2)
+        # ax.set_xlabel('y'); ax.set_ylabel('z'); ax.set_zlabel('Error')
+        # ax.view_init(15, -135)
 
-        ax = axs[2]
-        ax.plot_wireframe(x1_grid[:, 0, :], x3_grid[:, 0, :], np.sum(e1.reshape(grid_points_struct[1].shape), axis=(1))*dx, color="black", linewidth=0.5, alpha=0.7)
-        ax.plot_wireframe(x1_grid[:, 0, :], x3_grid[:, 0, :], np.sum(e1.reshape(grid_points_struct[1].shape), axis=(1))*dx, color="red", linewidth=0.2, alpha=0.7, linestyle="--")
-        ax.plot_surface(x1_grid[:, 0, :], x3_grid[:, 0, :], x1_grid[:, 0, :]*0.0 + 2.0*eS, color="green", alpha=0.2)
-        ax.plot_surface(x1_grid[:, 0, :], x3_grid[:, 0, :], x1_grid[:, 0, :]*0.0 - 2.0*eS, color="green", alpha=0.2)
-        ax.set_xlabel('x'); ax.set_ylabel('z'); ax.set_zlabel('Error')
-        ax.view_init(15, -135)
+        # ax = axs[2]
+        # ax.plot_wireframe(x1_grid[:, 0, :], x3_grid[:, 0, :], np.sum(e1.reshape(grid_points_struct[1].shape), axis=(1))*dx, color="black", linewidth=0.5, alpha=0.7)
+        # ax.plot_wireframe(x1_grid[:, 0, :], x3_grid[:, 0, :], np.sum(e1.reshape(grid_points_struct[1].shape), axis=(1))*dx, color="red", linewidth=0.2, alpha=0.7, linestyle="--")
+        # ax.plot_surface(x1_grid[:, 0, :], x3_grid[:, 0, :], x1_grid[:, 0, :]*0.0 + 2.0*eS, color="green", alpha=0.2)
+        # ax.plot_surface(x1_grid[:, 0, :], x3_grid[:, 0, :], x1_grid[:, 0, :]*0.0 - 2.0*eS, color="green", alpha=0.2)
+        # ax.set_xlabel('x'); ax.set_ylabel('z'); ax.set_zlabel('Error')
+        # ax.view_init(15, -135)
 
-        # Reduce white space between subplots and around the figure
-        plt.subplots_adjust(left=0.05, right=0.95, top=0.9, bottom=0.1, wspace=0.1)
-        # Add a text to the top-left corner of the entire figure
-        fig.text(
-            0.05, 0.9, "t={:.1f}".format(t), 
-            fontsize=16, color='black',
-        )
-        plt.show()
+        # # Reduce white space between subplots and around the figure
+        # plt.subplots_adjust(left=0.05, right=0.95, top=0.9, bottom=0.1, wspace=0.1)
+        # # Add a text to the top-left corner of the entire figure
+        # fig.text(
+        #     0.05, 0.9, "t={:.1f}".format(t), 
+        #     fontsize=16, color='black',
+        # )
+        # plt.show()
 
     print( " =result= max a1      : {:.3f}, var a1: {:.4f}".format(np.max(np.array(a1_data)),
                                                                    np.var(np.array(a1_data))))    
-    print( " =result= min gap     : {:.3f}".format(np.min(np.array(gap_data))))
+    print( " =result= max gap     : {:.3f}, min gap     : {:.3f}".format(np.max(np.array(gap_data)), np.min(np.array(gap_data))))
     print( " =result= max eS_ratio: {:.3f}, avg eS_ratio: {:.3f}".format(np.max(np.array(eSratio_data)),
                                                                          np.mean(np.array(eSratio_data))))
 

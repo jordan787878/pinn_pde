@@ -560,7 +560,7 @@ def check_e1nn_result(e1_net, p_net):
     print("[check] a1_data shape: ", np.array(a1_data).shape)
     print( " =result= max a1      : {:.3f}, var a1: {:.4f}".format(np.max(np.array(a1_data)),
                                                                    np.var(np.array(a1_data))))    
-    print( " =result= min gap     : {:.3f}".format(np.min(np.array(gap_data))))
+    print( " =result= max gap     : {:.3f}, min gap     : {:.3f}".format(np.max(np.array(gap_data)), np.min(np.array(gap_data))))
     print( " =result= max eS_ratio: {:.3f}, avg eS_ratio: {:.3f}".format(np.max(np.array(eSratio_data)),
                                                                          np.mean(np.array(eSratio_data))))
 
