@@ -34,37 +34,31 @@ def diff_opt(x, t, net, verbose=False):
     output = net(x,t)
     output_x = torch.autograd.grad(output, x, grad_outputs=torch.ones_like(output), create_graph=True)[0]
     output_t = torch.autograd.grad(output, t, grad_outputs=torch.ones_like(output), create_graph=True)[0]
-    output_x1 = output_x[:,0].view(-1,1)
-    output_x2 = output_x[:,1].view(-1,1)
-    output_x3 = output_x[:,2].view(-1,1)
+    residual = output_t
+
     f1 = dyn_f1(x).view(-1,1)
     f2 = dyn_f2(x).view(-1,1)
     f3 = dyn_f3(x).view(-1,1)
-    f1_x = torch.autograd.grad(f1, x, grad_outputs=torch.ones_like(f1), create_graph=True)[0]
-    f1_x1 = f1_x[:,0].view(-1,1)
-    f2_x = torch.autograd.grad(f2, x, grad_outputs=torch.ones_like(f2), create_graph=True)[0]
-    f2_x2 = f2_x[:,1].view(-1,1)
-    f3_x = torch.autograd.grad(f3, x, grad_outputs=torch.ones_like(f3), create_graph=True)[0]
-    f3_x3 = f3_x[:,2].view(-1,1)
-    residual = output_t + output_x1*f1 + f1_x1*output \
-                        + output_x2*f2 + f2_x2*output \
-                        + output_x3*f3 + f3_x3*output
+    fs = torch.cat((f1, f2, f3), dim=1)
+
+    for i in range(constants.DIM):
+        fi = fs[:,i].view(-1,1)
+        fi_x = torch.autograd.grad(fi, x, grad_outputs=torch.ones_like(fi), create_graph=True)[0]
+        fi_xi = fi_x[:,i].view(-1,1)
+        residual = residual + output_x[:,i].view(-1,1)*fi + fi_xi*output
     
-    # NOTE (if noise is present) Compute the second derivative (Hessian) of p with respect to x
-    # hessian = []
-    # for i in range(output_x.size(1)):
-    #     grad2 = torch.autograd.grad(output_x[:, i], x, grad_outputs=torch.ones_like(output_x[:, i]), create_graph=True)[0]
-    #     hessian.append(grad2)
-    # output_xx = torch.stack(hessian, dim=-1)
-    # output_x1x1 = output_xx[:, 0, 0].view(-1, 1)
-    # output_x2x2 = output_xx[:, 1, 1].view(-1, 1)
-    # output_x3x3 = output_xx[:, 2, 2].view(-1, 1)
-    # residual = residual - 0.5*(constants.L_TENSOR[0,0]*constants.L_TENSOR[0,0]*output_x1x1 + \
-    #                            constants.L_TENSOR[1,1]*constants.L_TENSOR[1,1]*output_x2x2 + \
-    #                            constants.L_TENSOR[2,2]*constants.L_TENSOR[2,2]*output_x3x3)
+    # (if noise is present) Compute the second derivative (Hessian) of p with respect to x
+    hessian = []
+    for i in range(output_x.size(1)):
+        grad2 = torch.autograd.grad(output_x[:, i], x, grad_outputs=torch.ones_like(output_x[:, i]), create_graph=True)[0]
+        hessian.append(grad2)
+    output_xx = torch.stack(hessian, dim=-1)
+    for i in range(constants.DIM):
+        residual = residual - 0.5*((constants.L_TENSOR[i,i]**2)*output_xx[:, i, i].view(-1,1))
 
     if(verbose):
         print(residual.dtype, residual.shape)
+
     return residual
 
 
@@ -79,32 +73,55 @@ def init_weights_xavier(m):
 
 
 # p_net
+# class Net(nn.Module):
+#     global constants
+#     def __init__(self, scale=1.0): 
+#         neurons = 64
+#         self.scale = scale
+#         super(Net, self).__init__()
+#         self.hidden_layer1 = (nn.Linear(constants.DIM+1,neurons))
+#         self.hidden_layer2 = (nn.Linear(neurons,neurons))
+#         self.hidden_layer3 = (nn.Linear(neurons,neurons))
+#         self.hidden_layer4 = (nn.Linear(neurons,neurons))
+#         self.hidden_layer5 = (nn.Linear(neurons,neurons))
+#         self.output_layer =  (nn.Linear(neurons,1))
+#     def forward(self, x, t):
+#         # _x1 = (x[:,0].view(-1, 1) - 0.5*(constants.X_RANGE[0,0]+constants.X_RANGE[0,1]))/(0.5*(constants.X_RANGE[0,1]-constants.X_RANGE[0,0]))
+#         # _x2 = (x[:,1].view(-1, 1) - 0.5*(constants.X_RANGE[1,0]+constants.X_RANGE[1,1]))/(0.5*(constants.X_RANGE[1,1]-constants.X_RANGE[1,0]))
+#         # _x3 = (x[:,2].view(-1, 1) - 0.5*(constants.X_RANGE[2,0]+constants.X_RANGE[2,1]))/(0.5*(constants.X_RANGE[2,1]-constants.X_RANGE[2,0]))
+#         inputs = torch.cat([x, t],axis=1)
+#         layer1_out = F.gelu((self.hidden_layer1(inputs)))
+#         layer2_out = F.gelu((self.hidden_layer2(layer1_out)))
+#         layer3_out = F.gelu((self.hidden_layer3(layer2_out)))
+#         layer4_out = F.gelu((self.hidden_layer4(layer3_out)))
+#         layer5_out = F.gelu((self.hidden_layer5(layer4_out)))
+#         output = F.softplus( self.output_layer(layer5_out) ) * self.scale
+#         return output
 class Net(nn.Module):
     global constants
-    def __init__(self, scale=1.0): 
-        neurons = 64
-        self.scale = scale
+    def __init__(self, scale=1.0):
         super(Net, self).__init__()
-        self.hidden_layer1 = (nn.Linear(constants.DIM+1,neurons))
-        self.hidden_layer2 = (nn.Linear(neurons,neurons))
-        self.hidden_layer3 = (nn.Linear(neurons,neurons))
-        self.hidden_layer4 = (nn.Linear(neurons,neurons))
-        self.hidden_layer5 = (nn.Linear(neurons,neurons))
-        self.hidden_layer6 = (nn.Linear(neurons,neurons))
-        self.output_layer =  (nn.Linear(neurons,1))
+        self.scale = scale
+        num_hidden_layers=5
+        neurons=32
+        # List to hold layers
+        layers = []
+        # Input layer
+        layers.append(nn.Linear(constants.DIM+1, neurons))
+        # Hidden layers
+        for _ in range(num_hidden_layers):
+            layers.append(nn.Linear(neurons, neurons))
+        # Output layer
+        layers.append(nn.Linear(neurons, 1))
+        # Register all layers
+        self.layers = nn.ModuleList(layers)
     def forward(self, x, t):
-        _x1 = (x[:,0].view(-1, 1) - 0.5*(constants.X_RANGE[0,0]+constants.X_RANGE[0,1]))/(0.5*(constants.X_RANGE[0,1]-constants.X_RANGE[0,0]))
-        _x2 = (x[:,1].view(-1, 1) - 0.5*(constants.X_RANGE[1,0]+constants.X_RANGE[1,1]))/(0.5*(constants.X_RANGE[1,1]-constants.X_RANGE[1,0]))
-        _x3 = (x[:,2].view(-1, 1) - 0.5*(constants.X_RANGE[2,0]+constants.X_RANGE[2,1]))/(0.5*(constants.X_RANGE[2,1]-constants.X_RANGE[2,0]))
-        inputs = torch.cat([_x1, _x2, _x3, t/constants.TF],axis=1)
-        layer1_out = F.gelu((self.hidden_layer1(inputs)))
-        layer2_out = F.gelu((self.hidden_layer2(layer1_out)))
-        layer3_out = F.gelu((self.hidden_layer3(layer2_out)))
-        layer4_out = F.gelu((self.hidden_layer4(layer3_out)))
-        layer5_out = F.gelu((self.hidden_layer5(layer4_out)))
-        layer6_out = F.gelu((self.hidden_layer5(layer5_out)))
-        output = F.softplus( self.output_layer(layer6_out) )
-        return output
+        inputs = torch.cat([x, t/constants.TF], dim=1)
+        out   = F.softplus(self.layers[0](inputs))
+        for layer in self.layers[1:-1]: 
+            out = F.softplus(layer(out))
+        out = F.softplus(self.layers[-1](out)) * self.scale
+        return out
     
 
 def get_ini_samples(num_samples=400):
@@ -160,8 +177,8 @@ def train_p_net(p_net, optimizer, scheduler, mse_cost_function, iterations=40000
     iterations_per_decay = 1000
     loss_history = []
     normalize = p_net.scale
-    N_samples = 2000 # 1000 (base)
-    batch_size = 500
+    N_samples = 1000 # 1000 (base)
+    batch_size = 300
 
     # samples of initial condition
     x_bc, t_bc = get_ini_samples(num_samples=N_samples)
@@ -187,7 +204,7 @@ def train_p_net(p_net, optimizer, scheduler, mse_cost_function, iterations=40000
             mse_u = mse_cost_function(phat_i/normalize, p_i/normalize)
             all_zeros = torch.zeros((len(t),1), dtype=torch.float32, requires_grad=False)
             mse_res = mse_cost_function(res_p, all_zeros)
-            loss_dataset = mse_u + constants.TF*(mse_res)
+            loss_dataset = mse_u + (mse_res)
             loss_history.append(loss_dataset.item())
 
             if(loss_dataset.item() < 1e-4):
@@ -230,7 +247,7 @@ def train_p_net(p_net, optimizer, scheduler, mse_cost_function, iterations=40000
                 phat_i = p_net(x_bc_rar, t_bc_rar)
                 max_error = torch.max(torch.abs(p_i - phat_i))/normalize
                 if(max_error > 5e-3):
-                    max_value, max_index = torch.topk(torch.abs(p_i.squeeze() - phat_i.squeeze()), 20)
+                    max_value, max_index = torch.topk(torch.abs(p_i.squeeze() - phat_i.squeeze()), 5)
                     x_max = x_bc_rar[max_index,:].clone().detach()
                     t_max = t_bc_rar[max_index].clone().detach()
                     x_bc = torch.cat((x_bc, x_max), dim=0)
@@ -240,7 +257,7 @@ def train_p_net(p_net, optimizer, scheduler, mse_cost_function, iterations=40000
                 res_p = diff_opt(x_rar, t_rar, p_net)/normalize
                 max_error= torch.max(torch.abs(res_p))
                 if(max_error > 5e-3):
-                    max_value, max_index = torch.topk(torch.abs(res_p.squeeze()), 20)
+                    max_value, max_index = torch.topk(torch.abs(res_p.squeeze()), 5)
                     x_max = x_rar[max_index,:].clone()
                     t_max = t_rar[max_index].clone()
                     x = torch.cat((x, x_max), dim=0)
@@ -268,14 +285,7 @@ def train_p_net(p_net, optimizer, scheduler, mse_cost_function, iterations=40000
             all_zeros = torch.zeros((len(t_k),1), dtype=torch.float32, requires_grad=False)
             mse_res = mse_cost_function(res_p, all_zeros)
 
-            # Frequnecy Loss
-            res_x = torch.autograd.grad(res_p, x_k, grad_outputs=torch.ones_like(res_p), create_graph=True)[0]
-            res_t = torch.autograd.grad(res_p, t_k, grad_outputs=torch.ones_like(res_p), create_graph=True)[0]
-            res_input = torch.cat([res_x, res_t], axis=1)
-            norm_res_input = torch.norm(res_input, dim=1).view(-1,1)
-            mes_res_g = mse_cost_function(norm_res_input, all_zeros)
-
-            loss = mse_u + constants.TF*(mse_res+mes_res_g)
+            loss = mse_u + mse_res
             loss.backward(retain_graph=True) 
 
         optimizer.step()
@@ -325,22 +335,32 @@ def check_pnn_result(p_net):
         t_tensor = (torch.ones(len(grid_points_tensor), 1, dtype=torch.float32) * t)
         # print("[check] grid points tensor shape type: ", grid_points_tensor.shape, grid_points_tensor.dtype)
         pdf_nn = p_net(grid_points_tensor, t_tensor).detach().numpy()
+
+        if(t == 0.0):
+            pdf_init = constants.p_init(grid_points)
         
         fig, axs = plt.subplots(3, 1, figsize=(8, 6))
         ax = axs[0]
         ax.plot(grid_points_struct[0], np.sum(pdf_true.reshape(x1_grid.shape), axis=(1,2))*dx2*dx3, "black")
         ax.plot(grid_points_struct[0], np.sum(pdf_nn.reshape(x1_grid.shape), axis=(1,2))*dx2*dx3, "r--")
         ax.set_xlim(constants.X_RANGE[0,0], constants.X_RANGE[0,1])
+        if(t == 0.0):
+            ax.plot(grid_points_struct[0], np.sum(pdf_init.reshape(x1_grid.shape), axis=(1,2))*dx2*dx3, "blue")
+
 
         ax = axs[1]
         ax.plot(grid_points_struct[2], np.sum(pdf_true.reshape(x1_grid.shape), axis=(0,2))*dx1*dx3, "black")
         ax.plot(grid_points_struct[2], np.sum(pdf_nn.reshape(x1_grid.shape), axis=(0,2))*dx1*dx3, "r--")
         ax.set_xlim(constants.X_RANGE[1,0], constants.X_RANGE[1,1])
+        if(t == 0.0):
+            ax.plot(grid_points_struct[2], np.sum(pdf_init.reshape(x1_grid.shape), axis=(0,2))*dx1*dx3, "blue")
 
         ax = axs[2]
         ax.plot(grid_points_struct[4], np.sum(pdf_true.reshape(x1_grid.shape), axis=(0,1))*dx1*dx2, "black")
         ax.plot(grid_points_struct[4], np.sum(pdf_nn.reshape(x1_grid.shape), axis=(0,1))*dx1*dx2, "r--")
         ax.set_xlim(constants.X_RANGE[2,0], constants.X_RANGE[2,1])
+        if(t == 0.0):
+            ax.plot(grid_points_struct[4], np.sum(pdf_init.reshape(x1_grid.shape), axis=(0,1))*dx1*dx2, "blue")
 
         plt.show()
 

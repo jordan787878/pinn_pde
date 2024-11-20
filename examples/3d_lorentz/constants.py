@@ -10,18 +10,15 @@ class MyConstantsLorentz:
     _BETA  = np.float32(8/3)
     _SIGMA = np.float32(10.0)
     _RHO =   np.float32(28.0)
-    _L = np.float32(np.diag([0.3, 0.3, 0.3]))
-    _MEAN_I   = np.float32([-6.0, -8.0, 24.0])
+    _L = np.float32(np.diag([0.05, 0.05, 0.05]))
+    _MEAN_I   = np.float32([3.0, 0.1, 0.0])
     _COV_I    = np.float32(np.diag([0.5, 0.5, 0.5]))
-    # _X_RANGE = np.float32(np.array([[-13.0, -2.0],
-    #                                 [-15.0, -2.0],
-    #                                 [20.0, 35.0]]))
-    _X_RANGE = np.float32(np.array([[-12.0, -4.0],
-                                    [-13.0, -6.0],
-                                    [20.0, 32.0]]))
+    _X_RANGE = np.float32(np.array([[0.0, 5.0],
+                                    [-2.0, 8.0],
+                                    [-2.0, 3.0]]))
     _TI = np.float32(0.0)
-    _TF = np.float32(0.2)
-    _T_SPAN = np.float32(np.array([_TI, 0.2*_TF, 0.5*_TF, _TF]))
+    _TF = np.float32(0.01)
+    _T_SPAN = np.float32(np.array([_TI, _TF]))
     # _A_TENSOR = torch.tensor(_A)
     _L_TENSOR = torch.tensor(_L)
 
@@ -90,7 +87,7 @@ class MyConstantsLorentz:
         pdf_eval = pdf_func.pdf(x).reshape(-1,1).astype(x.dtype)
         return pdf_eval
     
-    def prepare_gridpoints(self, grid_num=50):
+    def prepare_gridpoints(self, grid_num=81):
         x1s = np.linspace(self.X_RANGE[0,0], self.X_RANGE[0,1], num=grid_num, endpoint=True).astype(np.float32)
         x2s = np.linspace(self.X_RANGE[1,0], self.X_RANGE[1,1], num=grid_num, endpoint=True).astype(np.float32)
         x3s = np.linspace(self.X_RANGE[2,0], self.X_RANGE[2,1], num=grid_num, endpoint=True).astype(np.float32)
