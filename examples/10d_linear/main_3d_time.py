@@ -653,6 +653,31 @@ def get_e1init_max(p_net):
     return error_init_max
 
 
+def plot_train_loss():
+    global constants
+    path_1 = constants._PATH_PNET_LOSS
+    path_2 = constants._PATH_E1NET_LOSS
+    loss_history_1 = np.load(path_1)
+    loss_history_2 = np.load(path_2)
+    print(loss_history_1)
+    print(loss_history_2)
+    min_loss_1 = min(loss_history_1)
+    min_loss_2 = min(loss_history_2)
+    fig, axs = plt.subplots(2, 1, figsize=(7, 6))
+    axs[0].plot(np.arange(len(loss_history_1)), loss_history_1, "black", linewidth=1.0)
+    axs[0].set_ylim([min_loss_1, 10*min_loss_1])
+    axs[1].plot(np.arange(len(loss_history_2)), loss_history_2, "black", linewidth=1.0)
+    axs[1].set_ylim([min_loss_2, 10*min_loss_2])
+    axs[0].grid(linewidth=0.5)
+    axs[1].grid(linewidth=0.5)
+    axs[1].set_xlabel("epochs")
+    axs[0].set_ylabel("train loss: "+r"$\hat{p}$")
+    axs[1].set_ylabel("train loss: "+r"$\hat{e}_1$")
+    plt.tight_layout()
+    fig.savefig(constants._FOLDER+'figs/train_loss.pdf', format='pdf', dpi=300, bbox_inches='tight')
+    plt.close()
+
+
 def main():
     global constants
     p_net = Net(scale=constants.get_pinit_max())
@@ -676,6 +701,7 @@ def main():
         train_e1_net(e1_net, p_net, optimizer, scheduler, mse_cost_function, iterations=10000); print("e1_net train complete")
     e1_net = pos_e1_net_train(e1_net); e1_net.eval()
     check_e1nn_result(e1_net, p_net)
+    plot_train_loss()
 
 
 if __name__ == "__main__":
