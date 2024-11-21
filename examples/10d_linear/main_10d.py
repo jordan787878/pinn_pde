@@ -510,6 +510,7 @@ def train_e1_net(e1_net, p_net, optimizer, scheduler, mse_cost_function, iterati
                          }, constants._PATH_E1NET)
                 min_loss = loss_dataset.item()
                 FLAG = True
+                np.save(constants._PATH_E1NET_LOSS, np.array(loss_history))
 
             if(FLAG):
                 # random sample points
@@ -644,6 +645,7 @@ def check_e1nn_result(e1_net, p_net):
     N_trials = 1
     gap_data = []
     eSratio_data = []
+    e1ratio_data = []
     a1_data = []
     for t in constants.T_SPAN:
         ptrue_max = 0.0
@@ -669,6 +671,7 @@ def check_e1nn_result(e1_net, p_net):
             gap_data.append(gap)
             eSratio = eS / np.max(np.abs(pdf_true))
             eSratio_data.append(eSratio)
+            e1ratio_data.append( np.max(np.abs(e1))/np.max(np.abs(pdf_true)) )
             if(np.max(np.abs(pdf_true)) > ptrue_max):
                 ptrue_max = np.max(np.abs(pdf_true))
         print("[check] p_true(t) max: {:.6f}".format(ptrue_max))
@@ -679,6 +682,46 @@ def check_e1nn_result(e1_net, p_net):
     print( " =result= max gap     : {:.3f}, min gap     : {:.3f}".format(np.max(np.array(gap_data)), np.min(np.array(gap_data))))
     print( " =result= max eS_ratio: {:.3f}, avg eS_ratio: {:.3f}".format(np.max(np.array(eSratio_data)),
                                                                          np.mean(np.array(eSratio_data))))
+    
+    # visualization
+    fig, axs = plt.subplots(2, 1, figsize=(7, 6))
+    axs[0].plot(constants.T_SPAN, eSratio_data, "green", label=r"$e_S$ (normalized)")
+    axs[0].plot(constants.T_SPAN, e1ratio_data, "black", label=r"$\max|e_1|$ (normalized)")
+    axs[0].set_ylabel("error (normalized)")
+    axs[0].legend(loc="upper left", fontsize=14)
+
+    axs[1].plot(constants.T_SPAN, a1_data, "black")
+    axs[1].set_xlabel("t")
+    axs[1].set_ylabel(r"$\alpha_1$")
+    
+    plt.tight_layout()
+    fig.savefig(constants._FOLDER+'figs/result.pdf', format='pdf', dpi=300, bbox_inches='tight')
+    plt.close()
+
+
+def plot_train_loss():
+    global constants
+    path_1 = constants._PATH_PNET_LOSS
+    path_2 = constants._PATH_E1NET_LOSS
+    loss_history_1 = np.load(path_1)
+    loss_history_2 = np.load(path_2)
+    print(loss_history_1)
+    print(loss_history_2)
+    min_loss_1 = min(loss_history_1)
+    min_loss_2 = min(loss_history_2)
+    fig, axs = plt.subplots(2, 1, figsize=(7, 6))
+    axs[0].plot(np.arange(len(loss_history_1)), loss_history_1, "black", linewidth=1.0)
+    axs[0].set_ylim([min_loss_1, 10*min_loss_1])
+    axs[1].plot(np.arange(len(loss_history_2)), loss_history_2, "black", linewidth=1.0)
+    axs[1].set_ylim([min_loss_2, 10*min_loss_2])
+    axs[0].grid(linewidth=0.5)
+    axs[1].grid(linewidth=0.5)
+    axs[1].set_xlabel("epochs")
+    axs[0].set_ylabel("train loss: "+r"$\hat{p}$")
+    axs[1].set_ylabel("train loss: "+r"$\hat{e}_1$")
+    plt.tight_layout()
+    fig.savefig(constants._FOLDER+'figs/train_loss.pdf', format='pdf', dpi=300, bbox_inches='tight')
+    plt.close()
 
 
 def get_e1init_max(p_net):
@@ -715,15 +758,17 @@ def main():
     if(TRAIN_FLAG):
         train_p_net(p_net, optimizer, scheduler, mse_cost_function, iterations=2000); print("p_net train complete") # 20000 (base)
     p_net = pos_p_net_train(p_net); p_net.eval()
-    check_pnn_result(p_net)
+    # check_pnn_result(p_net)
 
     e1_net.scale = get_e1init_max(p_net)
     mse_cost_function = torch.nn.MSELoss() # Mean squared error
     optimizer = torch.optim.Adam(e1_net.parameters(), lr=1e-3)
     scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.9)
     if(TRAIN_FLAG):
-        train_e1_net(e1_net, p_net, optimizer, scheduler, mse_cost_function, iterations=50000); print("e1_net train complete")
+        train_e1_net(e1_net, p_net, optimizer, scheduler, mse_cost_function, iterations=10430); print("e1_net train complete")
     e1_net = pos_e1_net_train(e1_net); e1_net.eval()
+
+    plot_train_loss()
     check_e1nn_result(e1_net, p_net)
 
 

@@ -518,6 +518,7 @@ def check_e1nn_result(e1_net, p_net):
     x3_grid = grid_points_struct[5]
     
     gap_data = []
+    e1ratio_data = []
     eSratio_data = []
     a1_data = []
     for t in constants.T_SPAN:
@@ -540,7 +541,9 @@ def check_e1nn_result(e1_net, p_net):
         gap = (eS - np.max(np.abs(e1)))/ np.max(np.abs(pdf_true))
         gap_data.append(gap)
         eSratio = eS / np.max(np.abs(pdf_true))
+        e1ratio = np.max(np.abs(e1)) / np.max(np.abs(pdf_true))
         eSratio_data.append(eSratio)
+        e1ratio_data.append(e1ratio)
 
         # # visualization (marginalized to 2 cooridnates)
         # # E1net plot
@@ -617,6 +620,21 @@ def check_e1nn_result(e1_net, p_net):
     print( " =result= max gap     : {:.3f}, min gap     : {:.3f}".format(np.max(np.array(gap_data)), np.min(np.array(gap_data))))
     print( " =result= max eS_ratio: {:.3f}, avg eS_ratio: {:.3f}".format(np.max(np.array(eSratio_data)),
                                                                          np.mean(np.array(eSratio_data))))
+    # visualization
+    fig, axs = plt.subplots(2, 1, figsize=(7, 6))
+    axs[0].plot(constants.T_SPAN, eSratio_data, "green", label=r"$e_S$ (normalized)")
+    axs[0].plot(constants.T_SPAN, e1ratio_data, "black", label=r"$\max|e_1|$ (normalized)")
+    axs[0].set_ylabel("error (normalized)")
+    axs[0].legend(loc="upper left", fontsize=14)
+
+    axs[1].plot(constants.T_SPAN, a1_data, "black")
+    axs[1].set_xlabel("t")
+    axs[1].set_ylabel(r"$\alpha_1$")
+    
+    plt.tight_layout()
+    fig.savefig(constants._FOLDER+'figs/result.pdf', format='pdf', dpi=300, bbox_inches='tight')
+    plt.close()
+
 
 
 def get_e1init_max(p_net):
@@ -679,7 +697,7 @@ def main():
     if(TRAIN_FLAG):
         train_p_net(p_net, optimizer, scheduler, mse_cost_function, iterations=5000); print("p_net train complete")
     p_net = pos_p_net_train(p_net); p_net.eval()
-    check_pnn_result(p_net)
+    # check_pnn_result(p_net)
 
     e1_net.scale = get_e1init_max(p_net)
     mse_cost_function = torch.nn.MSELoss() # Mean squared error

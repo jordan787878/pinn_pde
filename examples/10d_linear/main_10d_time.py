@@ -579,6 +579,7 @@ def check_e1nn_result(e1_net, p_net):
     N_trials = 1
     gap_data = []
     eSratio_data = []
+    e1ratio_data = []
     a1_data = []
     for t in constants.T_SPAN:
         ptrue_max = 0.0
@@ -604,6 +605,7 @@ def check_e1nn_result(e1_net, p_net):
             gap_data.append(gap)
             eSratio = eS / np.max(np.abs(pdf_true))
             eSratio_data.append(eSratio)
+            e1ratio_data.append( np.max(np.abs(e1))/np.max(np.abs(pdf_true)) )
             if(np.max(np.abs(pdf_true)) > ptrue_max):
                 ptrue_max = np.max(np.abs(pdf_true))
         print("[check] p_true(t) max: {:.6f}".format(ptrue_max))
@@ -614,27 +616,21 @@ def check_e1nn_result(e1_net, p_net):
     print( " =result= max gap     : {:.3f}, min gap     : {:.3f}".format(np.max(np.array(gap_data)), np.min(np.array(gap_data))))
     print( " =result= max eS_ratio: {:.3f}, avg eS_ratio: {:.3f}".format(np.max(np.array(eSratio_data)),
                                                                          np.mean(np.array(eSratio_data))))
+    
+    # visualization
+    fig, axs = plt.subplots(2, 1, figsize=(7, 6))
+    axs[0].plot(constants.T_SPAN, eSratio_data, "green", label=r"$e_S$ (normalized)")
+    axs[0].plot(constants.T_SPAN, e1ratio_data, "black", label=r"$\max|e_1|$ (normalized)")
+    axs[0].set_ylabel("error (normalized)")
+    axs[0].legend(loc="upper left", fontsize=14)
 
-
-def get_e1init_max(p_net):
-    global constants
-    grid_points = constants.generate_random_samples()
-    t = constants.TI
-    # print("[check] grid points shape type: ", grid_points.shape, grid_points.dtype)
-    # compute p(true)
-    pdf_true = constants.p_sol(grid_points, t)
-    # print("[check] x1 ranges, true joint pdf shape, type: ", x1s.dtype, pdf_true.shape, pdf_true.dtype)
-    # obtain pdf(nn)
-    grid_points_tensor = torch.tensor(grid_points, dtype=torch.float32, requires_grad=False)
-    t_tensor = (torch.ones(len(grid_points_tensor), 1, dtype=torch.float32) * t)
-    # print("[check] grid points tensor shape type: ", grid_points_tensor.shape, grid_points_tensor.dtype)
-    pdf_nn = p_net(grid_points_tensor, t_tensor).detach().numpy()
-    # print("[check] nn joint pdf shape, type: ", pdf_nn.shape, pdf_nn.dtype)
-    # print-out
-    error_init = pdf_true - pdf_nn
-    error_init_max = np.max(np.abs(error_init))
-    print("[check] e1(t0) max: {:.5f}".format(error_init_max))
-    return error_init_max
+    axs[1].plot(constants.T_SPAN, a1_data, "black")
+    axs[1].set_xlabel("t")
+    axs[1].set_ylabel(r"$\alpha_1$")
+    
+    plt.tight_layout()
+    fig.savefig(constants._FOLDER+'figs/result.pdf', format='pdf', dpi=300, bbox_inches='tight')
+    plt.close()
 
 
 def plot_train_loss():
@@ -662,6 +658,27 @@ def plot_train_loss():
     plt.close()
 
 
+def get_e1init_max(p_net):
+    global constants
+    grid_points = constants.generate_random_samples()
+    t = constants.TI
+    # print("[check] grid points shape type: ", grid_points.shape, grid_points.dtype)
+    # compute p(true)
+    pdf_true = constants.p_sol(grid_points, t)
+    # print("[check] x1 ranges, true joint pdf shape, type: ", x1s.dtype, pdf_true.shape, pdf_true.dtype)
+    # obtain pdf(nn)
+    grid_points_tensor = torch.tensor(grid_points, dtype=torch.float32, requires_grad=False)
+    t_tensor = (torch.ones(len(grid_points_tensor), 1, dtype=torch.float32) * t)
+    # print("[check] grid points tensor shape type: ", grid_points_tensor.shape, grid_points_tensor.dtype)
+    pdf_nn = p_net(grid_points_tensor, t_tensor).detach().numpy()
+    # print("[check] nn joint pdf shape, type: ", pdf_nn.shape, pdf_nn.dtype)
+    # print-out
+    error_init = pdf_true - pdf_nn
+    error_init_max = np.max(np.abs(error_init))
+    print("[check] e1(t0) max: {:.5f}".format(error_init_max))
+    return error_init_max
+
+
 def main():
     global constants
     p_net = Net(scale=constants.get_pinit_max())
@@ -685,8 +702,8 @@ def main():
         train_e1_net(e1_net, p_net, optimizer, scheduler, mse_cost_function, iterations=30000); print("e1_net train complete")
     e1_net = pos_e1_net_train(e1_net); e1_net.eval()
 
-    # check_e1nn_result(e1_net, p_net)
     plot_train_loss()
+    check_e1nn_result(e1_net, p_net)
 
 
 if __name__ == "__main__":
