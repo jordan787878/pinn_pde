@@ -615,12 +615,12 @@ def plot_alphas(p_net, e1_net):
         eS_ratio_list.append(eS_ratio)
         # print(a1, a2, (1-a1), a2, a1*a1, a2*(1+a2))
 
-    # print("a1_list", a1_list)
-    print("[info] max a1: " +str(np.max(np.array(a1_list))) + ", avg a1:" + str(np.mean(np.array(a1_list))))
-    print("[info] max gap: " +str(np.max(np.array(gap_list))) + ", avg gap:" + str(np.mean(np.array(gap_list))))
-    print("[info] max eS_ratio: " +str(np.max(np.array(eS_ratio_list))) + ", avg eS_ratio:" + str(np.mean(np.array(eS_ratio_list))))
-    print("[info] max eS/eB: ", np.max(np.array(e_ratio)))
     a1_list = np.array(a1_list)
+    gap_list = np.array(gap_list)
+    norm_B2_list = eS_ratio_list
+    print("[info] max a1: ", np.round(np.max(a1_list),2), ", avg a1:", np.round(np.mean(a1_list),2), ", std a1:", np.round(np.std(a1_list),3))
+    print("[info] min gap: ", np.round(np.min(gap_list),3), ", avg gap:", np.round(np.mean(gap_list),3))
+    print("[info] avg B2_norm: ", np.round(np.mean(norm_B2_list),2), ", std B2_norm:", np.round(np.std(norm_B2_list),3))
     a2_list = np.array(a2_list)
     cond_1 = (1-a1_list)
     y_1 = a2_list
