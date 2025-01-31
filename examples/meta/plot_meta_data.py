@@ -4,12 +4,13 @@ import seaborn as sns
 from matplotlib.patches import Rectangle
 from matplotlib.ticker import FuncFormatter
 
-DATA_FOLDERS = ["data_1dnonlinear"]
-SYSTEM_LABELS = ['1D-NL']
-N_dataset = 1
+DATA_FOLDERS = ["data_1dnonlinear/",
+                "data_2dpendulum/",]
+SYSTEM_LABELS = ['1D-NL','Pendulum']
+N_dataset = 2
 width = 0.01
-DATA_POINST = [31]
-PLOT_LOSS_THRESHOLD = [0.02]
+DATA_POINST = [31, 38]
+PLOT_LOSS_THRESHOLD = [0.02, 0.1]
 palette = sns.color_palette("viridis", N_dataset)
 
 
@@ -19,7 +20,7 @@ def plot_a1_data(axs, data_folder, number_of_data, plot_color, plot_threshold, s
     y_display = []
     has_labeled = False
     for i in range(1, number_of_data+1):
-        data_i = np.load(data_folder+'/a1_data_'+str(i)+'.npz')
+        data_i = np.load(data_folder+'a1_data_'+str(i)+'.npz')
         loss = data_i['loss']
         if(loss < plot_threshold):
             a1_data   = data_i['a1_data']
