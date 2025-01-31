@@ -1,0 +1,30 @@
+<3D T=1, exp/3d/output_e1=100neuronsTanh/>
+save epoch: 0 ,loss: tensor(0.0883) ,ic:  0.08774 ,res: 0.00054
+save epoch: 1 ,loss: tensor(0.0735) ,ic:  0.07306 ,res: 0.00049
+save epoch: 2 ,loss: tensor(0.0677) ,ic:  0.06719 ,res: 0.00046
+save epoch: 45 ,loss: tensor(0.0642) ,ic:  0.06398 ,res: 0.00022
+save epoch: 86 ,loss: tensor(0.0609) ,ic:  0.06021 ,res: 0.00067
+save epoch: 104 ,loss: tensor(0.0578) ,ic:  0.05667 ,res: 0.00113
+save epoch: 115 ,loss: tensor(0.0548) ,ic:  0.05317 ,res: 0.00164
+save epoch: 123 ,loss: tensor(0.0517) ,ic:  0.04945 ,res: 0.00229
+save epoch: 129 ,loss: tensor(0.0488) ,ic:  0.04572 ,res: 0.00304
+save epoch: 134 ,loss: tensor(0.0458) ,ic:  0.04184 ,res: 0.00392
+save epoch: 138 ,loss: tensor(0.0430) ,ic:  0.03826 ,res: 0.00475
+save epoch: 141 ,loss: tensor(0.0407) ,ic:  0.03521 ,res: 0.00554
+save epoch: 145 ,loss: tensor(0.0383) ,ic:  0.03113 ,res: 0.00720
+save epoch: 149 ,loss: tensor(0.0356) ,ic:  0.02879 ,res: 0.00679
+save epoch: 153 ,loss: tensor(0.0333) ,ic:  0.02564 ,res: 0.00767
+ [check] p0 max: 1.995
+[load pnet model from: exp/3d/output/p_net.pth]
+pnet best epoch:  19889 , loss: tensor(2.1585e-05) , train time: 907.866797208786
+ =result= p_nn(t=0.0) normalized error: 0.0129
+ =result= p_nn(t=0.3) normalized error: 0.0136
+ =result= p_nn(t=0.7) normalized error: 0.0145
+ =result= p_nn(t=1.0) normalized error: 0.0161
+[check] e1(t0) max: 0.02581
+[load pnet model from: exp/3d/output/e1_net.pth]
+e1net best epoch:  29539 , loss: tensor(1.8439e-05) , train time: 2139.2619671821594
+ =result= e_nn(t=0.0) error: 0.0027, eS: 0.0509, a1: 0.105
+ =result= e_nn(t=0.3) error: 0.0050, eS: 0.0536, a1: 0.187
+ =result= e_nn(t=0.7) error: 0.0116, eS: 0.0583, a1: 0.399
+ =result= e_nn(t=1.0) error: 0.0169, eS: 0.0597, a1: 0.567
