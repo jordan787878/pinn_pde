@@ -7,11 +7,14 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib import cm
 from matplotlib.ticker import LinearLocator, FormatStrFormatter
+import matplotlib as mpl
+mpl.rcParams.update(mpl.rcParamsDefault)
 import random
 import torch.nn.functional as F
 from matplotlib.ticker import ScalarFormatter
 import time
 import argparse
+import seaborn as sns
 
 FOLDER = ""
 TRAIN_FLAG = False
@@ -440,8 +443,137 @@ def plot_tight_error_bounds(p_net, e1_net):
     plt.close()
 
 
+# Paper: Fig.1(a)
+def plot_compare_error_bounds(t1s, B2, B1, e1):
+    # Get the last 3 colors from the "hls" palette with 8 colors
+    colors = sns.color_palette("hls", 8)[-3:]  # Indexes 5, 6, 7 (last three)   
+    plt.rcParams.update({
+    # General font settings
+    "font.family": "serif",       # Use sans-serif font for non-math text
+    "font.sans-serif": ["Times New Roman"],  # Prioritize Helvetica (must be installed on your system)
+    "font.size": 32,                   # Base font size for non-math text
+    
+    # Math font settings
+    "mathtext.fontset": "stix",        # STIX fonts for math symbols
+    
+    # Title and label sizes
+    "axes.titlesize": 32,              # Title font size
+    "axes.labelsize": 32,              # Axis label font size
+    
+    # Legend settings
+    "legend.fontsize": 40,             # Legend text size
+    "legend.title_fontsize": 40        # Legend title size (if you use legend titles)
+    })
+    e1 = np.ravel(e1)  # Flatten the array if it's 2D
+    B2 = np.ravel(B2)  # Flatten the array if it's 2D
+    B1 = np.ravel(B1)  # Flatten the array if it's 2D
+    fig, axs = plt.subplots(1, 1, figsize=(16, 9))
+    axs.plot(t1s, e1, color="black", linestyle="--", linewidth=2.0, label='$max_x|e_1(x,t)|$')
+    axs.plot(t1s, B2, color=colors[0], linestyle="-", linewidth=2.0, label='$B_2(t)$')
+    axs.plot(t1s, B1, color=colors[1], linestyle="-", linewidth=2.0, label='$B_1(t)$')
+    axs.fill_between(t1s, e1, B2, color=colors[0], alpha=0.3)
+    axs.fill_between(t1s, B2, B1, color=colors[1], alpha=0.3)
+    axs.legend(loc="upper right", framealpha=0.3)
+    axs.set_xlabel('$t$')
+    axs.set_ylabel('Value$(t)$')
+    axs.grid(True, which='both', linestyle=':', linewidth=0.5)  # Dotted grid
+    plt.tight_layout()
+    plt.savefig(FOLDER+'figs/1dou_compare_error_bounds.pdf', format='pdf', dpi=300)
+    plt.close()
+
+# Paper: Fig.1(b)
+def plot_conditions(t, a, b, threshold_1, threshold_2, lhs_condition3, rhs_condition3):
+    plt.rcParams.update({
+    # General font settings
+    "font.family": "serif",       # Use sans-serif font for non-math text
+    "font.sans-serif": ["Times New Roman"],  # Prioritize Helvetica (must be installed on your system)
+    "font.size": 32,                   # Base font size for non-math text
+    
+    # Math font settings
+    "mathtext.fontset": "stix",        # STIX fonts for math symbols
+    
+    # Title and label sizes
+    "axes.titlesize": 32,              # Title font size
+    "axes.labelsize": 32,              # Axis label font size
+    
+    # Legend settings
+    "legend.fontsize": 32,             # Legend text size
+    "legend.title_fontsize": 32        # Legend title size (if you use legend titles)
+    })
+    # Get the last 3 colors from the "hls" palette with 8 colors
+    colors = sns.color_palette("hls", 8)[-3:]  # Indexes 5, 6, 7 (last three)   
+    # Create a figure with three subplots
+    fig, axs = plt.subplots(3, 1, figsize=(12, 9), sharex=True)
+    # Condition 1: a(t) < 1
+    axs[0].fill_between(t, a, threshold_1, where=(a < 1), color=colors[0], alpha=0.1)
+    axs[0].plot(t, t*0+threshold_1, color=colors[0], linestyle='--', label='1')
+    axs[0].plot(t, a, label='$a_1(t$)', color=colors[0])
+    axs[0].set_ylabel('Value$(t)$')
+    axs[0].legend(ncol=2, loc="upper left", framealpha=0.6)
+    # Condition 2: b(t) < 1 - a(t)
+    axs[1].fill_between(t, b, threshold_2, where=(b < threshold_2), color=colors[1], alpha=0.1)
+    axs[1].plot(t, threshold_2, '--', color=colors[1], label='$1 - a_1(t)$')
+    axs[1].plot(t, b, label='$a_2(t)$', color=colors[1])
+    axs[1].set_ylabel('Value$(t)$')
+    axs[1].legend(ncol=2, loc="upper left", framealpha=0.6)
+    # Condition 3: b(t)(1 + b(t)) < a(t)^2
+    axs[2].fill_between(t, lhs_condition3, rhs_condition3, where=(lhs_condition3 < rhs_condition3), color=colors[2], alpha=0.1)
+    axs[2].plot(t, rhs_condition3, '--', label='$a_1(t)^2$', color=colors[2])
+    axs[2].plot(t, lhs_condition3, label='$a_2(t)(1 + a_2(t))$', color=colors[2])
+    axs[2].set_xlabel('$t$')
+    axs[2].set_ylabel('Value$(t)$')
+    axs[2].legend(ncol=2, loc="upper left", framealpha=0.6)
+    # Format y-ticks to display two decimal places for all subplots
+    for ax in axs.flat:
+        ax.yaxis.set_major_formatter(FormatStrFormatter('%.2f'))
+    # Add dotted grid to each subplot
+    for ax in axs.flat:
+        ax.grid(True, which='both', linestyle=':', linewidth=0.5)  # Dotted grid
+    plt.tight_layout()
+    plt.savefig('figs/1dou_conditions.pdf', format='pdf', dpi=300)
+    plt.close()
+    # plt.show()
+
+# Paper: Fig.1(c)
+def plot_dummy(t1s, B2, B1, e1):
+    # Get the last 3 colors from the "hls" palette with 8 colors
+    colors = sns.color_palette("hls", 8)[-3:]  # Indexes 5, 6, 7 (last three)   
+    plt.rcParams.update({
+    # General font settings
+    "font.family": "serif",       # Use sans-serif font for non-math text
+    "font.sans-serif": ["Times New Roman"],  # Prioritize Helvetica (must be installed on your system)
+    "font.size": 24,                   # Base font size for non-math text
+    
+    # Math font settings
+    "mathtext.fontset": "stix",        # STIX fonts for math symbols
+    
+    # Title and label sizes
+    "axes.titlesize": 24,              # Title font size
+    "axes.labelsize": 24,              # Axis label font size
+    
+    # Legend settings
+    "legend.fontsize": 28,             # Legend text size
+    "legend.title_fontsize": 28        # Legend title size (if you use legend titles)
+    })
+    e1 = np.ravel(e1)  # Flatten the array if it's 2D
+    B2 = np.ravel(B2)  # Flatten the array if it's 2D
+    B1 = np.ravel(B1)  # Flatten the array if it's 2D
+    fig, axs = plt.subplots(1, 1, figsize=(10, 7))
+    axs.plot(t1s, e1, color="black", linestyle="--", linewidth=2.0, label='$max_x|e_1(x,t)|$')
+    axs.plot(t1s, B2, color=colors[0], linestyle="-", linewidth=2.0, label='$B_2(t)$')
+    axs.plot(t1s, B1, color=colors[1], linestyle="-", linewidth=2.0, label='$B_1(t)$')
+    axs.fill_between(t1s, e1, B2, color=colors[0], alpha=0.3)
+    axs.fill_between(t1s, B2, B1, color=colors[1], alpha=0.3)
+    axs.legend(loc="upper right", framealpha=0.3)
+    axs.set_xlabel('$t$')
+    axs.set_ylabel('Value$(t)$')
+    axs.grid(True, which='both', linestyle=':', linewidth=0.5)  # Dotted grid
+    plt.tight_layout()
+    plt.savefig(FOLDER+'figs/1dou_dummy.pdf', format='pdf', dpi=300)
+    plt.close()
+
+
 def plot_alphas(p_net, e1_net):
-    plt.rcParams['font.size'] = 18
     x = np.arange(x_low, x_hig+0.005, 0.005).reshape(-1,1)
     pt_x = Variable(torch.from_numpy(x).float(), requires_grad=True).to(device)
     t1s = np.arange(1.0, 3.0+0.01, 0.01)
@@ -495,59 +627,34 @@ def plot_alphas(p_net, e1_net):
     cond_2 = a1_list**2
     y_2 = a2_list*(1+a2_list)
 
-    plt.figure(figsize=(6, 6))
-    plt.plot(t1s, eB_list, color="blue", linestyle=":", linewidth=1.0, label=r"$e_B(t)$")
-    plt.plot(t1s, eS_list, color="green", linestyle="-", linewidth=1.0, label=r"$e_S(t)$")
-    plt.plot(t1s, e1_list, color="black", linestyle="--", linewidth=1.0, label=r"$\max_x|e(x,t)|$")
-    plt.legend(loc="upper right", framealpha=0.3, fontsize=26)
-    # plt.grid(linewidth=0.5)
-    plt.xlabel("t")
-    # plt.title("Error Bounds")
-    plt.tight_layout()
-    plt.savefig(FOLDER+'figs/error_and_conditions_1.pdf', format='pdf', dpi=300)
-    plt.close()
+    plot_compare_error_bounds(t1s, eB_list, eS_list, e1_list)
 
-    plt.figure(figsize=(6, 6))
-    # plt.plot(t1s, t1s*0+1.0, color="black", linestyle="-", linewidth=1.0, label="1")
-    plt.plot(t1s, a1_list, color="black", linestyle="--", linewidth=1.0, label=r"$\alpha_1$")
-    plt.legend(loc="upper right", framealpha=0.3, fontsize=26)
-    # plt.grid(linewidth=0.5)
-    # plt.title("Condition 1: "+r"$\alpha_1<1$")
-    plt.xlabel("t")
-    plt.tight_layout()
-    plt.savefig(FOLDER+'figs/error_and_conditions_2.pdf', format='pdf', dpi=300)
-    plt.close()
-    
-    plt.figure(figsize=(6, 6))
-    plt.plot(t1s, cond_1, color="red", linewidth=1.0, linestyle="-", label=r"$1-\alpha_1$")
-    plt.plot(t1s, y_1, color="black", linewidth=1.0, linestyle="--", label=r"$\alpha_2$")
-    plt.legend(loc="upper left", bbox_to_anchor=(0.4, 0.8), framealpha=0.3, fontsize=26)
-    # plt.grid(linewidth=0.5)
-    plt.xlabel("t")
-    # plt.title("Condition 2: "+r"$\alpha_2 < 1-\alpha_1$")
-    plt.tight_layout()
-    plt.savefig(FOLDER+'figs/error_and_conditions_3.pdf', format='pdf', dpi=300)
-    plt.close()
-    # axs[1,0].text(0.01, 0.98, "condition 2: "+r"$\alpha_2 < 1-\alpha_1$", 
-    #               transform=axs[1,0].transAxes, verticalalignment='top', fontsize=8,
-    #               bbox=dict(facecolor='white', edgecolor='black', boxstyle='round,pad=0.2'))
+    plot_conditions(t1s, a1_list, a2_list, 1, 1-a1_list, a2_list*(1+a2_list), a1_list**2)
 
-    plt.figure(figsize=(6, 6))
-    plt.plot(t1s, cond_2, color="red", linewidth=1.0, linestyle="-", label=r"$\alpha_1^2$")
-    plt.plot(t1s, y_2, color="black", linewidth=1.0, linestyle="--", label=r"$\alpha_2(1+\alpha_2)$")
-    plt.legend(loc="upper right", framealpha=0.3, fontsize=26)
-    # plt.grid(linewidth=0.5)
-    plt.xlabel("t")
-    # plt.title("Condition 3: "+r"$\alpha_2(1+\alpha_2) <\alpha_1^2$")
-    plt.tight_layout()
-    plt.savefig(FOLDER+'figs/error_and_conditions_4.pdf', format='pdf', dpi=300)
-    plt.close()
+    # plot_dummy(t1s, eB_list, eS_list, e1_list)
 
-    # axs[1,1].text(0.01, 0.98, "condition 3: "+r"$\alpha_2(1+\alpha_2) <\alpha_1^2$", 
-    #               transform=axs[1,1].transAxes, verticalalignment='top', fontsize=8,
-    #               bbox=dict(facecolor='white', edgecolor='black', boxstyle='round,pad=0.2'))
+    # plt.figure(figsize=(6, 6))
+    # plt.plot(t1s, a1_list, color="black", linestyle="--", linewidth=1.0, label=r"$\alpha_1$")
+    # plt.legend(loc="upper right", framealpha=0.3, fontsize=26)
+    # plt.xlabel("t")
     # plt.tight_layout()
-    # fig.savefig(FOLDER+'figs/error_and_conditions.pdf', format='pdf', dpi=300)
+    # plt.savefig(FOLDER+'figs/error_and_conditions_2.pdf', format='pdf', dpi=300)
+    # plt.close()
+    # plt.figure(figsize=(6, 6))
+    # plt.plot(t1s, cond_1, color="red", linewidth=1.0, linestyle="-", label=r"$1-\alpha_1$")
+    # plt.plot(t1s, y_1, color="black", linewidth=1.0, linestyle="--", label=r"$\alpha_2$")
+    # plt.legend(loc="upper left", bbox_to_anchor=(0.4, 0.8), framealpha=0.3, fontsize=26)
+    # plt.xlabel("t")
+    # plt.tight_layout()
+    # plt.savefig(FOLDER+'figs/error_and_conditions_3.pdf', format='pdf', dpi=300)
+    # plt.close()
+    # plt.figure(figsize=(6, 6))
+    # plt.plot(t1s, cond_2, color="red", linewidth=1.0, linestyle="-", label=r"$\alpha_1^2$")
+    # plt.plot(t1s, y_2, color="black", linewidth=1.0, linestyle="--", label=r"$\alpha_2(1+\alpha_2)$")
+    # plt.legend(loc="upper right", framealpha=0.3, fontsize=26)
+    # plt.xlabel("t")
+    # plt.tight_layout()
+    # plt.savefig(FOLDER+'figs/error_and_conditions_4.pdf', format='pdf', dpi=300)
     # plt.close()
 
 
@@ -676,12 +783,11 @@ def main():
         train_e1_net(e1_net, optimizer, mse_cost_function, p_net, max_abs_e1_x_0, scheduler_e1_model); print("e1_net train complete")
     e1_net = pos_e1_net_train(e1_net, PATH=FOLDER+"output/e1_net.pt", PATH_LOSS=FOLDER+"output/e1_net_train_loss.npy")
 
-    plot_tight_error_bounds(p_net, e1_net)
-    plot_train_loss(FOLDER+"output/p_net_train_loss.npy", FOLDER+"output/e1_net_train_loss.npy")
+    # plot_tight_error_bounds(p_net, e1_net)
+    # plot_train_loss(FOLDER+"output/p_net_train_loss.npy", FOLDER+"output/e1_net_train_loss.npy")
     plot_alphas(p_net, e1_net)
-    plot_p_surface(p_net)
-    plot_e1_surface(p_net, e1_net)
-
+    # plot_p_surface(p_net)
+    # plot_e1_surface(p_net, e1_net)
     print("[complete 1d OU]")
 
 
