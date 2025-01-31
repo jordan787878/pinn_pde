@@ -5,12 +5,13 @@ from matplotlib.patches import Rectangle
 from matplotlib.ticker import FuncFormatter
 
 DATA_FOLDERS = ["data_1dnonlinear/",
-                "data_2dpendulum/",]
-SYSTEM_LABELS = ['1D-NL','Pendulum']
-N_dataset = 2
+                "data_2dpendulum/",
+                "data_2dduffing/"]
+SYSTEM_LABELS = ['1D-NL','Pendulum',"2D-Duffing"]
+N_dataset = 3
 width = 0.01
-DATA_POINST = [31, 38]
-PLOT_LOSS_THRESHOLD = [0.02, 0.1]
+DATA_POINST = [30, 37, 21]
+PLOT_LOSS_THRESHOLD = [0.02, 0.1, 0.1]
 palette = sns.color_palette("viridis", N_dataset)
 
 
@@ -18,28 +19,38 @@ def plot_a1_data(axs, data_folder, number_of_data, plot_color, plot_threshold, s
     # load data
     x_display = []
     y_display = []
+    y_low = []
+    y_hig = []
+    y_max = []
     has_labeled = False
     for i in range(1, number_of_data+1):
         data_i = np.load(data_folder+'a1_data_'+str(i)+'.npz')
         loss = data_i['loss']
         if(loss < plot_threshold):
             a1_data   = data_i['a1_data']
-            axs.scatter(loss, np.max(a1_data), s=15, color=plot_color)
             x_center = loss
-            x_l = x_center/(10**width)
-            x_r = x_center*(10**width)
-            axs.plot([x_l, x_r], [np.mean(a1_data), np.mean(a1_data)], color=plot_color, linewidth=1)
-            if(has_labeled == False):
-                axs.plot([x_l, x_r], [np.mean(a1_data), np.mean(a1_data)], color=plot_color, linewidth=1, label=sys_label)
-                has_labeled = True
-            axs.add_patch(Rectangle((x_l, np.mean(a1_data)-np.std(a1_data)), x_r-x_l, 2*np.std(a1_data),
-                edgecolor = plot_color,
-                facecolor = 'none',
-                fill=False,
-                lw=1))
+            y_center = np.mean(a1_data)
+            # axs.scatter(loss, np.max(a1_data), s=15, color=plot_color)
+            # x_center = loss
+            # x_l = x_center/(10**width)
+            # x_r = x_center*(10**width)
+            # axs.plot([x_l, x_r], [np.mean(a1_data), np.mean(a1_data)], color=plot_color, linewidth=1)
+            # if(has_labeled == False):
+            #     axs.plot([x_l, x_r], [np.mean(a1_data), np.mean(a1_data)], color=plot_color, linewidth=1, label=sys_label)
+            #     has_labeled = True
+            # axs.add_patch(Rectangle((x_l, np.mean(a1_data)-np.std(a1_data)), x_r-x_l, 2*np.std(a1_data),
+            #     edgecolor = plot_color,
+            #     facecolor = 'none',
+            #     fill=False,
+            #     lw=1))
             x_display.append(x_center)
             y_display.append(np.mean(a1_data))
-    axs.plot(x_display, y_display, color=plot_color, linestyle=":", linewidth=1.0)
+            y_low.append(y_center-np.std(a1_data))
+            y_hig.append(y_center+np.std(a1_data))
+            y_max.append(np.max(a1_data))
+    axs.plot(x_display, y_display, color=plot_color, marker="o", linestyle="-", linewidth=1.0, label=sys_label)
+    axs.fill_between(x_display, y_low, y_hig, color=plot_color, alpha=0.4)
+    axs.fill_between(x_display, y_hig, y_max, color=plot_color, alpha=0.2)
 
 
 def main():

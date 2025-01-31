@@ -10,6 +10,7 @@ from constants import MyConstantsDuffing
 import argparse
 from torch.utils.data import Dataset, DataLoader
 
+FOLDER_INTERMED = "../meta/data_2dduffing/"
 MONTE_FLAG = False
 TRAIN_FLAG = False
 constants = MyConstantsDuffing()
@@ -316,6 +317,10 @@ def train_e1_net(e1_net, p_net, optimizer, scheduler, mse_cost_function, iterati
     # RAR
     S = 10000
     FLAG = 0
+
+    # Save intermediate enet
+    save_count = 1
+    save_loss = 10.0
     
     start_time = time.time()
 
@@ -348,6 +353,13 @@ def train_e1_net(e1_net, p_net, optimizer, scheduler, mse_cost_function, iterati
                          }, constants._PATH_E1NET)
                 min_loss = loss_dataset.item()
                 FLAG += 1
+
+            # save intermediate results
+            if(loss.item() < 0.75*save_loss):
+                a1_data = compute_stat(p_net, e1_net)
+                np.savez(FOLDER_INTERMED+'a1_data_'+str(save_count)+'.npz', loss=loss.item(), a1_data=a1_data)
+                save_count = save_count + 1
+                save_loss = loss.item()
 
             if(FLAG > 2):
                 # random sample points
@@ -409,6 +421,8 @@ def train_e1_net(e1_net, p_net, optimizer, scheduler, mse_cost_function, iterati
         # Exponential learning rate decay
         if (epoch + 1) % iterations_per_decay == 0:
             scheduler.step()
+    a1_data = compute_stat(p_net, e1_net)
+    np.savez(FOLDER_INTERMED+'a1_data_'+str(save_count)+'.npz', loss=loss.item(), a1_data=a1_data)
     np.save(constants._PATH_E1NET_LOSS, np.array(loss_history))
 
 
@@ -462,12 +476,12 @@ def check_pnn_result(p_net):
     dx2 = grid_points_struct[2][1] - grid_points_struct[2][0]
     x1_grid = grid_points_struct[1]
     x2_grid = grid_points_struct[3]
-    print("[check] x1_grid x2_grid x3_grid shape: ", x1_grid.shape, x1_grid.dtype)
+    # print("[check] x1_grid x2_grid x3_grid shape: ", x1_grid.shape, x1_grid.dtype)
     for t in constants.T_SPAN:
-        print("[check] t=",t)
+        # print("[check] t=",t)
         # load true pdf(t)
         pdf_true = constants.load_p_sol_monte(t)
-        print("[check] pdf_true dtype: ", pdf_true.dtype)
+        # print("[check] pdf_true dtype: ", pdf_true.dtype)
         grid_points_tensor = torch.tensor(grid_points, dtype=torch.float32, requires_grad=False)
         t_tensor = (torch.ones(len(grid_points_tensor), 1, dtype=torch.float32) * t)
         # print("[check] grid points tensor shape type: ", grid_points_tensor.shape, grid_points_tensor.dtype)
@@ -480,9 +494,9 @@ def check_pnn_result(p_net):
         ax.plot_wireframe(x1_grid, x2_grid, pdf_nn.reshape(x1_grid.shape), 
                           color="red", linewidth=1.0, alpha=0.7, label=r"\hat{p}")
         plt.show()
+
         # if(t == 0.0):
         #     pdf_init = constants.p_init(grid_points)
-        
         # fig, axs = plt.subplots(3, 1, figsize=(8, 6))
         # ax = axs[0]
         # ax.plot(grid_points_struct[0], np.sum(pdf_true.reshape(x1_grid.shape), axis=(1,2))*dx2*dx3, "black")
@@ -490,23 +504,19 @@ def check_pnn_result(p_net):
         # ax.set_xlim(constants.X_RANGE[0,0], constants.X_RANGE[0,1])
         # if(t == 0.0):
         #     ax.plot(grid_points_struct[0], np.sum(pdf_init.reshape(x1_grid.shape), axis=(1,2))*dx2*dx3, "b:")
-
         # ax = axs[1]
         # ax.plot(grid_points_struct[2], np.sum(pdf_true.reshape(x1_grid.shape), axis=(0,2))*dx1*dx3, "black")
         # ax.plot(grid_points_struct[2], np.sum(pdf_nn.reshape(x1_grid.shape), axis=(0,2))*dx1*dx3, "r--")
         # ax.set_xlim(constants.X_RANGE[1,0], constants.X_RANGE[1,1])
         # if(t == 0.0):
         #     ax.plot(grid_points_struct[2], np.sum(pdf_init.reshape(x1_grid.shape), axis=(0,2))*dx1*dx3, "b:")
-
         # ax = axs[2]
         # ax.plot(grid_points_struct[4], np.sum(pdf_true.reshape(x1_grid.shape), axis=(0,1))*dx1*dx2, "black")
         # ax.plot(grid_points_struct[4], np.sum(pdf_nn.reshape(x1_grid.shape), axis=(0,1))*dx1*dx2, "r--")
         # ax.set_xlim(constants.X_RANGE[2,0], constants.X_RANGE[2,1])
         # if(t == 0.0):
         #     ax.plot(grid_points_struct[4], np.sum(pdf_init.reshape(x1_grid.shape), axis=(0,1))*dx1*dx2, "b:")
-
         # plt.show()
-
         # # NOTE
         # if(t > 0.0):
         #     return
@@ -524,7 +534,6 @@ def check_pnn_result(p_net):
         # # print-out
         # error_init = pdf_true - pdf_nn
         # print(" =result= p_nn(t={:.1f}) normalized error: {:.4f}".format(t, np.max(np.abs(error_init))/p_net.scale))
-        
         # # visualization (marginalized to 2 cooridnates)
         # fig, axs = plt.subplots(1, 3, figsize=(10, 6), subplot_kw={'projection': '3d'})
         # ax = axs[0]
@@ -532,21 +541,41 @@ def check_pnn_result(p_net):
         # ax.plot_wireframe(x1_grid[:, :, 0], x2_grid[:, :, 0], np.sum(pdf_nn.reshape(grid_points_struct[1].shape), axis=(2))*dx, color="red", linewidth=0.5, alpha=0.5, linestyle="--")
         # ax.set_xlabel('x'); ax.set_ylabel('y')
         # ax.view_init(45, -135)
-
         # ax = axs[1]
         # ax.plot_wireframe(x2_grid[0, :, :], x3_grid[0, :, :], np.sum(pdf_true.reshape(grid_points_struct[1].shape), axis=(0))*dx, color="black", linewidth=0.5, alpha=0.5)
         # ax.plot_wireframe(x2_grid[0, :, :], x3_grid[0, :, :], np.sum(pdf_nn.reshape(grid_points_struct[1].shape), axis=(0))*dx, color="red", linewidth=0.5, alpha=0.5, linestyle="--")
         # ax.set_xlabel('y'); ax.set_ylabel('z')
         # ax.view_init(45, -135)
-
         # ax = axs[2]
         # ax.plot_wireframe(x1_grid[:, 0, :], x3_grid[:, 0, :], np.sum(pdf_true.reshape(grid_points_struct[1].shape), axis=(1))*dx, color="black", linewidth=0.5, alpha=0.5)
         # ax.plot_wireframe(x1_grid[:, 0, :], x3_grid[:, 0, :], np.sum(pdf_nn.reshape(grid_points_struct[1].shape), axis=(1))*dx, color="red", linewidth=0.5, alpha=0.5, linestyle="--")
         # ax.set_xlabel('x'); ax.set_ylabel('z')
         # ax.view_init(45, -135)
-
         # plt.savefig(constants._FOLDER+'figs/p_vs_pnn.pdf', format='pdf', dpi=300)
         # plt.close()
+
+
+def compute_stat(p_net, e1_net):
+    global constants
+    grid_points_struct = constants.load_gridpoints_from_monte()
+    grid_points = grid_points_struct[-1]
+    x1_grid = grid_points_struct[1]
+    x2_grid = grid_points_struct[3]
+    a1_data = []
+    for t in constants.T_SPAN:
+        # print("[check] t=",t)
+        # load true pdf(t)
+        pdf_true = constants.load_p_sol_monte(t)
+        # print("[check] pdf_true dtype: ", pdf_true.dtype)
+        grid_points_tensor = torch.tensor(grid_points, dtype=torch.float32, requires_grad=False)
+        t_tensor = (torch.ones(len(grid_points_tensor), 1, dtype=torch.float32) * t)
+        # print("[check] grid points tensor shape type: ", grid_points_tensor.shape, grid_points_tensor.dtype)
+        pdf_nn = p_net(grid_points_tensor, t_tensor).detach().numpy()
+        e1 = pdf_true - pdf_nn.reshape(x1_grid.shape)
+        e1_nn = e1_net(grid_points_tensor, t_tensor).detach().numpy()
+        a1 = np.max(np.abs(e1.reshape(-1,1) - e1_nn))/ np.max(np.abs(e1_nn))
+        a1_data.append(a1)
+    return np.array(a1_data)
 
 
 def check_e1nn_result(e1_net, p_net):
@@ -560,10 +589,10 @@ def check_e1nn_result(e1_net, p_net):
     gap_data = []
     print("[check] x1_grid x2_grid x3_grid shape: ", x1_grid.shape, x1_grid.dtype)
     for t in constants.T_SPAN:
-        print("[check] t=",t)
+        # print("[check] t=",t)
         # load true pdf(t)
         pdf_true = constants.load_p_sol_monte(t)
-        print("[check] pdf_true dtype: ", pdf_true.dtype)
+        # print("[check] pdf_true dtype: ", pdf_true.dtype)
         grid_points_tensor = torch.tensor(grid_points, dtype=torch.float32, requires_grad=False)
         t_tensor = (torch.ones(len(grid_points_tensor), 1, dtype=torch.float32) * t)
         # print("[check] grid points tensor shape type: ", grid_points_tensor.shape, grid_points_tensor.dtype)
@@ -579,21 +608,21 @@ def check_e1nn_result(e1_net, p_net):
         eS_ratio_data.append(eS_ratio)
         gap = (eS - np.max(np.abs(e1)))/ np.max(np.abs(pdf_true))
         gap_data.append(gap)
-        print("=result= a1: {:.3f}, eS_ratio: {:.3f}, max(e1): {:.3f}, eS: {:.3f}".format(a1, eS_ratio, np.max(np.abs(e1)), eS))
 
-        fig, axs = plt.subplots(1, 1, figsize=(8, 6), subplot_kw={'projection': '3d'})
-        ax = axs
-        ax.plot_wireframe(x1_grid, x2_grid, e1.reshape(x1_grid.shape), 
-                          color="black", linewidth=0.5, alpha=0.7, label=r"e_1")
-        ax.plot_wireframe(x1_grid, x2_grid, e1_nn.reshape(x1_grid.shape), 
-                          color="red", linewidth=1.0, alpha=0.7, label=r"\hat{e}_1")
-        plt.show()
-    print("[check] a1_data shape: ", np.array(a1_data).shape)
-    print( " =result= max a1      : {:.3f}, var a1: {:.4f}".format(np.max(np.array(a1_data)),
-                                                                   np.var(np.array(a1_data))))    
-    print( " =result= min gap     : {:.3f}, max gap     : {:.3f}".format(np.min(np.array(gap_data)), np.max(np.array(gap_data))))
-    print( " =result= max eS_ratio: {:.3f}, avg eS_ratio: {:.3f}".format(np.max(np.array(eS_ratio_data)),
-                                                                         np.mean(np.array(eS_ratio_data))))
+        # plot functions
+        # fig, axs = plt.subplots(1, 1, figsize=(8, 6), subplot_kw={'projection': '3d'})
+        # ax = axs
+        # ax.plot_wireframe(x1_grid, x2_grid, e1.reshape(x1_grid.shape), 
+        #                   color="black", linewidth=0.5, alpha=0.7, label=r"e_1")
+        # ax.plot_wireframe(x1_grid, x2_grid, e1_nn.reshape(x1_grid.shape), 
+        #                   color="red", linewidth=1.0, alpha=0.7, label=r"\hat{e}_1")
+        # plt.show()
+    a1_list = np.array(a1_data)
+    gap_list = np.array(gap_data)
+    norm_B2_list = eS_ratio_data
+    print("[info] max a1: ", np.round(np.max(a1_list),2), ", avg a1:", np.round(np.mean(a1_list),2), ", std a1:", np.round(np.std(a1_list),3))
+    print("[info] min gap: ", np.round(np.min(gap_list),3), ", avg gap:", np.round(np.mean(gap_list),3))
+    print("[info] avg B2_norm: ", np.round(np.mean(norm_B2_list),2), ", std B2_norm:", np.round(np.std(norm_B2_list),3))
 
 
 def get_e1init_max(p_net):
@@ -613,7 +642,7 @@ def get_e1init_max(p_net):
     # print-out
     error_init = pdf_true - pdf_nn
     error_init_max = np.max(np.abs(error_init))
-    print("[check] e1(t0) max: {:.5f}".format(error_init_max))
+    # print("[check] e1(t0) max: {:.5f}".format(error_init_max))
     return error_init_max
 
 
@@ -631,8 +660,8 @@ def main():
     mse_cost_function = torch.nn.MSELoss() # Mean squared error
     optimizer = torch.optim.Adam(p_net.parameters(), lr=1e-3)
     scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.9)
-    if(TRAIN_FLAG):
-        train_p_net(p_net, optimizer, scheduler, mse_cost_function, iterations=1000); print("p_net train complete")
+    if(False):
+        train_p_net(p_net, optimizer, scheduler, mse_cost_function, iterations=999); print("p_net train complete")
     p_net = pos_p_net_train(p_net); p_net.eval()
     check_pnn_result(p_net)
 
@@ -641,7 +670,7 @@ def main():
     optimizer = torch.optim.Adam(e1_net.parameters(), lr=1e-3)
     scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.9)
     if(TRAIN_FLAG):
-        train_e1_net(e1_net, p_net, optimizer, scheduler, mse_cost_function, iterations=50000); print("e1_net train complete")
+        train_e1_net(e1_net, p_net, optimizer, scheduler, mse_cost_function, iterations=15005); print("e1_net train complete")
     e1_net = pos_e1_net_train(e1_net); e1_net.eval()
     check_e1nn_result(e1_net, p_net)
 
