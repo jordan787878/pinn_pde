@@ -13,8 +13,8 @@ DATA_FOLDERS = ["data_1dnonlinear/",
 SYSTEM_LABELS = ['1D-NL','2D-Pendulum',"2D-Duffing","3D-TVOU","7D-TVOU","10D-TVOU"]
 N_dataset = len(DATA_FOLDERS)
 width = 0.01
-DATA_POINST = [30, 37, 21, 19, 13, 10]
-PLOT_LOSS_THRESHOLD = [0.1, 0.3, 0.1, 0.5, 0.2, 0.2]
+DATA_POINST = [30, 37, 21, 19, 13, 14]
+PLOT_LOSS_THRESHOLD = [0.1, 0.3, 0.1, 0.5, 0.2, 0.4]
 palette = sns.color_palette("muted", N_dataset)
 
 

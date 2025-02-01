@@ -600,7 +600,7 @@ def compute_stat(p_net, e1_net):
     global constants
     a1_data = []
     for t in constants.T_SPAN:
-        grid_points = constants.generate_random_samples(num_samples=100000)
+        grid_points = constants.generate_random_samples(num_samples=10000000)
         # print("[check] grid points shape type: ", grid_points.shape, grid_points.dtype)
         # compute p(true)
         pdf_true = constants.p_sol(grid_points, t)
@@ -626,7 +626,7 @@ def check_e1nn_result(e1_net, p_net):
     e1ratio_data = []
     a1_data = []
     for t in constants.T_SPAN:
-        grid_points = constants.generate_random_samples(num_samples=100000)
+        grid_points = constants.generate_random_samples(num_samples=10000000)
         # print("[check] grid points shape type: ", grid_points.shape, grid_points.dtype)
         # compute p(true)
         pdf_true = constants.p_sol(grid_points, t)
@@ -716,7 +716,7 @@ def get_e1init_max(p_net):
 
 def process_intermediate():
     global constants
-    N_models = 9
+    N_models = 13
     p_net = Net()
     e1_net = E1Net()
     p_net = pos_p_net_train(p_net); p_net.eval()
