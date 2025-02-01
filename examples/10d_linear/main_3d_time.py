@@ -12,6 +12,7 @@ from torch.utils.data import Dataset, DataLoader
 import plotly.graph_objects as go
 
 
+FOLDER_INTERMED = "../meta/data_3dtvou/"
 TRAIN_FLAG = False
 constants = MyConstants3D_Time()
 # Set a fixed seed for reproducibility
@@ -21,15 +22,15 @@ np.random.seed(1)
 
 def dyn_f1(x, t):
     global constants
-    exp_t_cubed = torch.exp(-t.view(-1, 1)**3)
-    A_t = constants.A_TENSOR + constants.DA_TENSOR * exp_t_cubed.view(-1, 1, 1)
+    sin_t = torch.sin(t.view(-1, 1))
+    A_t = constants.A_TENSOR + constants.DA_TENSOR * sin_t.view(-1, 1, 1)
     result = A_t[:,0,0]*x[:,0] + A_t[:,0,1]*x[:,1] + A_t[:,0,2]*x[:,2]
     return result
 
 def dyn_f2(x, t):
     global constants
-    exp_t_cubed = torch.exp(-t.view(-1, 1)**3)
-    A_t = constants.A_TENSOR + constants.DA_TENSOR * exp_t_cubed.view(-1, 1, 1)
+    sin_t = torch.sin(t.view(-1, 1))
+    A_t = constants.A_TENSOR + constants.DA_TENSOR * sin_t.view(-1, 1, 1)
     result = A_t[:,1,0]*x[:,0] + A_t[:,1,1]*x[:,1] + A_t[:,1,2]*x[:,2]
     return result
     # global constants
@@ -37,8 +38,8 @@ def dyn_f2(x, t):
 
 def dyn_f3(x, t):
     global constants
-    exp_t_cubed = torch.exp(-t.view(-1, 1)**3)
-    A_t = constants.A_TENSOR + constants.DA_TENSOR * exp_t_cubed.view(-1, 1, 1)
+    sin_t = torch.sin(t.view(-1, 1))
+    A_t = constants.A_TENSOR + constants.DA_TENSOR * sin_t.view(-1, 1, 1)
     result = A_t[:,2,0]*x[:,0] + A_t[:,2,1]*x[:,1] + A_t[:,2,2]*x[:,2]
     return result
     # global constants
@@ -334,6 +335,10 @@ def train_e1_net(e1_net, p_net, optimizer, scheduler, mse_cost_function, iterati
     # RAR
     S = 10000
     FLAG = False
+
+    # Save intermediate enet
+    save_count = 1
+    save_loss = 10.0
     
     start_time = time.time()
 
@@ -366,6 +371,13 @@ def train_e1_net(e1_net, p_net, optimizer, scheduler, mse_cost_function, iterati
                          }, constants._PATH_E1NET)
                 min_loss = loss_dataset.item()
                 FLAG = True
+
+            # save intermediate results
+            if(loss_dataset.item() < 0.75*save_loss):
+                a1_data = compute_stat(p_net, e1_net)
+                np.savez(FOLDER_INTERMED+'a1_data_'+str(save_count)+'.npz', loss=loss.item(), a1_data=a1_data)
+                save_count = save_count + 1
+                save_loss = loss_dataset.item()
 
             if(FLAG):
                 # random sample points
@@ -428,6 +440,9 @@ def train_e1_net(e1_net, p_net, optimizer, scheduler, mse_cost_function, iterati
         if (epoch + 1) % iterations_per_decay == 0:
             scheduler.step()
     np.save(constants._PATH_E1NET_LOSS, np.array(loss_history))
+    e1_net = pos_e1_net_train(e1_net); e1_net.eval()
+    a1_data = compute_stat(p_net, e1_net)
+    np.savez(FOLDER_INTERMED+'a1_data_'+str(save_count)+'.npz', loss=loss.item(), a1_data=a1_data)
 
 
 def pos_p_net_train(p_net):
@@ -480,7 +495,7 @@ def check_pnn_result(p_net):
     x1_grid = grid_points_struct[1]
     x2_grid = grid_points_struct[3]
     x3_grid = grid_points_struct[5]
-    print("[check] x1_grid x2_grid x3_grid shape: ", x1_grid.shape, x2_grid.shape, x3_grid.shape)
+    # print("[check] x1_grid x2_grid x3_grid shape: ", x1_grid.shape, x2_grid.shape, x3_grid.shape)
     for t in constants.T_SPAN:
         # print("[check] grid points shape type: ", grid_points.shape, grid_points.dtype)
         # compute p(true)
@@ -494,31 +509,54 @@ def check_pnn_result(p_net):
         # print("[check] nn joint pdf shape, type: ", pdf_nn.shape, pdf_nn.dtype)
         # print-out
         error_init = pdf_true - pdf_nn
-        print(" =result= p_nn(t={:.1f}) normalized error: {:.4f}".format(t, np.max(np.abs(error_init))/p_net.scale))
+        # print(" =result= p_nn(t={:.1f}) normalized error: {:.4f}".format(t, np.max(np.abs(error_init))/p_net.scale))
         
-        # # visualization (marginalized to 2 cooridnates)
-        # fig, axs = plt.subplots(1, 3, figsize=(10, 6), subplot_kw={'projection': '3d'})
-        # ax = axs[0]
-        # ax.plot_wireframe(x1_grid[:, :, 0], x2_grid[:, :, 0], np.sum(pdf_true.reshape(grid_points_struct[1].shape), axis=(2))*dx, color="black", linewidth=0.5, alpha=0.5)
-        # ax.plot_wireframe(x1_grid[:, :, 0], x2_grid[:, :, 0], np.sum(pdf_nn.reshape(grid_points_struct[1].shape), axis=(2))*dx, color="red", linewidth=0.5, alpha=0.5, linestyle="--")
-        # ax.set_xlabel('x'); ax.set_ylabel('y')
-        # ax.view_init(45, -135)
+        # visualization (marginalized to 2 cooridnates)
+        fig, axs = plt.subplots(1, 3, figsize=(10, 6), subplot_kw={'projection': '3d'})
+        ax = axs[0]
+        ax.plot_wireframe(x1_grid[:, :, 0], x2_grid[:, :, 0], np.sum(pdf_true.reshape(grid_points_struct[1].shape), axis=(2))*dx, color="black", linewidth=0.5, alpha=0.5)
+        ax.plot_wireframe(x1_grid[:, :, 0], x2_grid[:, :, 0], np.sum(pdf_nn.reshape(grid_points_struct[1].shape), axis=(2))*dx, color="red", linewidth=0.5, alpha=0.5, linestyle="--")
+        ax.set_xlabel('x'); ax.set_ylabel('y')
+        ax.view_init(45, -135)
 
-        # ax = axs[1]
-        # ax.plot_wireframe(x2_grid[0, :, :], x3_grid[0, :, :], np.sum(pdf_true.reshape(grid_points_struct[1].shape), axis=(0))*dx, color="black", linewidth=0.5, alpha=0.5)
-        # ax.plot_wireframe(x2_grid[0, :, :], x3_grid[0, :, :], np.sum(pdf_nn.reshape(grid_points_struct[1].shape), axis=(0))*dx, color="red", linewidth=0.5, alpha=0.5, linestyle="--")
-        # ax.set_xlabel('y'); ax.set_ylabel('z')
-        # ax.view_init(45, -135)
+        ax = axs[1]
+        ax.plot_wireframe(x2_grid[0, :, :], x3_grid[0, :, :], np.sum(pdf_true.reshape(grid_points_struct[1].shape), axis=(0))*dx, color="black", linewidth=0.5, alpha=0.5)
+        ax.plot_wireframe(x2_grid[0, :, :], x3_grid[0, :, :], np.sum(pdf_nn.reshape(grid_points_struct[1].shape), axis=(0))*dx, color="red", linewidth=0.5, alpha=0.5, linestyle="--")
+        ax.set_xlabel('y'); ax.set_ylabel('z')
+        ax.view_init(45, -135)
 
-        # ax = axs[2]
-        # ax.plot_wireframe(x1_grid[:, 0, :], x3_grid[:, 0, :], np.sum(pdf_true.reshape(grid_points_struct[1].shape), axis=(1))*dx, color="black", linewidth=0.5, alpha=0.5)
-        # ax.plot_wireframe(x1_grid[:, 0, :], x3_grid[:, 0, :], np.sum(pdf_nn.reshape(grid_points_struct[1].shape), axis=(1))*dx, color="red", linewidth=0.5, alpha=0.5, linestyle="--")
-        # ax.set_xlabel('x'); ax.set_ylabel('z')
-        # ax.view_init(45, -135)
-
+        ax = axs[2]
+        ax.plot_wireframe(x1_grid[:, 0, :], x3_grid[:, 0, :], np.sum(pdf_true.reshape(grid_points_struct[1].shape), axis=(1))*dx, color="black", linewidth=0.5, alpha=0.5)
+        ax.plot_wireframe(x1_grid[:, 0, :], x3_grid[:, 0, :], np.sum(pdf_nn.reshape(grid_points_struct[1].shape), axis=(1))*dx, color="red", linewidth=0.5, alpha=0.5, linestyle="--")
+        ax.set_xlabel('x'); ax.set_ylabel('z')
+        ax.view_init(45, -135)
         # plt.show()
-        # plt.savefig(constants._FOLDER+'figs/p_vs_pnn.pdf', format='pdf', dpi=300)
-        # plt.close()
+        plt.savefig(constants._FOLDER+'figs/p_vs_pnn.pdf', format='pdf', dpi=300)
+        plt.close()
+
+
+def compute_stat(p_net, e1_net):
+    global constants
+    grid_points_struct = constants.prepare_gridpoints(grid_num=100)
+    grid_points = grid_points_struct[-1]
+    a1_data = []
+    for t in constants.T_SPAN:
+        # print("[check] grid points shape type: ", grid_points.shape, grid_points.dtype)
+        # compute p(true)
+        pdf_true = constants.p_sol(grid_points, t)
+        # print("[check] x1 ranges, true joint pdf shape, type: ", x1s.dtype, pdf_true.shape, pdf_true.dtype)
+        # obtain pdf(nn)
+        grid_points_tensor = torch.tensor(grid_points, dtype=torch.float32, requires_grad=False)
+        t_tensor = (torch.ones(len(grid_points_tensor), 1, dtype=torch.float32) * t)
+        # print("[check] grid points tensor shape type: ", grid_points_tensor.shape, grid_points_tensor.dtype)
+        pdf_nn = p_net(grid_points_tensor, t_tensor).detach().numpy()
+        # print("[check] nn joint pdf shape, type: ", pdf_nn.shape, pdf_nn.dtype)
+        e1 = pdf_true - pdf_nn
+        e1_nn = e1_net(grid_points_tensor, t_tensor).detach().numpy()
+        e2 = e1 - e1_nn
+        a1 = np.max(np.abs(e2))/np.max(np.abs(e1_nn))
+        a1_data.append(a1)
+    return np.array(a1_data)
 
 
 def check_e1nn_result(e1_net, p_net):
@@ -558,113 +596,113 @@ def check_e1nn_result(e1_net, p_net):
         eSratio_data.append(eSratio)
         e1ratio_data.append(e1ratio)
 
-        # # 3D visualization (p)
-        fig = go.Figure(data=go.Volume(
-            x=x1_grid.flatten(), y=x2_grid.flatten(), z=x3_grid.flatten(),
-            value= (pdf_true.reshape(x1_grid.shape)).flatten(),
-            isomin=0.0,
-            isomax=2.0,
-            opacity=0.1,
-            surface_count=15,
-            coloraxis="coloraxis" 
-            ))
-        fig.update_layout(
-            title=r"$p$",  # Title of the plot
-            title_x=0.5,  # Center the title
-            title_y=0.9,  # Center the title
-            margin=dict(
-                l=0,  # Left margin
-                r=0,  # Right margin
-                t=10,  # Top margin
-                b=50  # Increase bottom margin
-            ),
-            coloraxis=dict(
-                colorscale="plasma",  # Choose your desired colorscale
-                colorbar=dict(
-                    x=0.8,  # Move colorbar towards the right
-                    y=0.5,   # Center colorbar vertically
-                    xanchor='left',  # Anchor colorbar to the left
-                    yanchor='middle',  # Anchor colorbar to the middle
-                    thickness=10,  # Reduce the thickness of the colorbar (default is 20)
-                    tickfont=dict(size=10),  # Reduce font size of colorbar ticks
-                    # tickvals=[-0.03, -0.01, 0, 0.01, 0.03],  # Adjust tick values to control tick placement
-                    # ticktext=['-0.03', '-0.01', '0', '0.01', '0.03'],  # Optional: Custom tick labels
-                    len=0.6,
-                )
-            ),
-            scene=dict(
-                xaxis=dict(
-                    title="x1",  # Set label for X-axis
-                    titlefont=dict(size=14),  # Set font size for X-axis label
-                ),
-                yaxis=dict(
-                    title="x2",  # Set label for Y-axis
-                    titlefont=dict(size=14),  # Set font size for Y-axis label
-                ),
-                zaxis=dict(
-                    title="x3",  # Set label for Z-axis
-                    titlefont=dict(size=14),  # Set font size for Z-axis label
-                ),
-                camera=dict(
-                    eye=dict(x=-1.5, y=-1.5, z=1.5)  # Set the camera position (eye position)
-                )
-            )
-        )
-        fig.write_image(constants._FOLDER+'figs/p_t'+str(t)+'.pdf')
+        # # # 3D visualization (p)
+        # fig = go.Figure(data=go.Volume(
+        #     x=x1_grid.flatten(), y=x2_grid.flatten(), z=x3_grid.flatten(),
+        #     value= (pdf_true.reshape(x1_grid.shape)).flatten(),
+        #     isomin=0.0,
+        #     isomax=2.0,
+        #     opacity=0.1,
+        #     surface_count=15,
+        #     coloraxis="coloraxis" 
+        #     ))
+        # fig.update_layout(
+        #     title=r"$p$",  # Title of the plot
+        #     title_x=0.5,  # Center the title
+        #     title_y=0.9,  # Center the title
+        #     margin=dict(
+        #         l=0,  # Left margin
+        #         r=0,  # Right margin
+        #         t=10,  # Top margin
+        #         b=50  # Increase bottom margin
+        #     ),
+        #     coloraxis=dict(
+        #         colorscale="plasma",  # Choose your desired colorscale
+        #         colorbar=dict(
+        #             x=0.8,  # Move colorbar towards the right
+        #             y=0.5,   # Center colorbar vertically
+        #             xanchor='left',  # Anchor colorbar to the left
+        #             yanchor='middle',  # Anchor colorbar to the middle
+        #             thickness=10,  # Reduce the thickness of the colorbar (default is 20)
+        #             tickfont=dict(size=10),  # Reduce font size of colorbar ticks
+        #             # tickvals=[-0.03, -0.01, 0, 0.01, 0.03],  # Adjust tick values to control tick placement
+        #             # ticktext=['-0.03', '-0.01', '0', '0.01', '0.03'],  # Optional: Custom tick labels
+        #             len=0.6,
+        #         )
+        #     ),
+        #     scene=dict(
+        #         xaxis=dict(
+        #             title="x1",  # Set label for X-axis
+        #             titlefont=dict(size=14),  # Set font size for X-axis label
+        #         ),
+        #         yaxis=dict(
+        #             title="x2",  # Set label for Y-axis
+        #             titlefont=dict(size=14),  # Set font size for Y-axis label
+        #         ),
+        #         zaxis=dict(
+        #             title="x3",  # Set label for Z-axis
+        #             titlefont=dict(size=14),  # Set font size for Z-axis label
+        #         ),
+        #         camera=dict(
+        #             eye=dict(x=-1.5, y=-1.5, z=1.5)  # Set the camera position (eye position)
+        #         )
+        #     )
+        # )
+        # fig.write_image(constants._FOLDER+'figs/p_t'+str(t)+'.pdf')
 
-        # 3D visualization (phat)
-        fig = go.Figure(data=go.Volume(
-            x=x1_grid.flatten(), y=x2_grid.flatten(), z=x3_grid.flatten(),
-            value= (pdf_nn.reshape(x1_grid.shape)).flatten(),
-            isomin=0.0,
-            isomax=2.0,
-            opacity=0.1,
-            surface_count=15,
-            coloraxis="coloraxis" 
-            ))
-        fig.update_layout(
-            title=r"$\hat{p}$",  # Title of the plot
-            title_x=0.5,  # Center the title
-            title_y=0.9,  # Center the title
-            margin=dict(
-                l=0,  # Left margin
-                r=0,  # Right margin
-                t=10,  # Top margin
-                b=50  # Increase bottom margin
-            ),
-            coloraxis=dict(
-                colorscale="plasma",  # Choose your desired colorscale
-                colorbar=dict(
-                    x=0.8,  # Move colorbar towards the right
-                    y=0.5,   # Center colorbar vertically
-                    xanchor='left',  # Anchor colorbar to the left
-                    yanchor='middle',  # Anchor colorbar to the middle
-                    thickness=10,  # Reduce the thickness of the colorbar (default is 20)
-                    tickfont=dict(size=10),  # Reduce font size of colorbar ticks
-                    # tickvals=[-0.03, -0.01, 0, 0.01, 0.03],  # Adjust tick values to control tick placement
-                    # ticktext=['-0.03', '-0.01', '0', '0.01', '0.03'],  # Optional: Custom tick labels
-                    len=0.6,
-                )
-            ),
-            scene=dict(
-                xaxis=dict(
-                    title="x1",  # Set label for X-axis
-                    titlefont=dict(size=14),  # Set font size for X-axis label
-                ),
-                yaxis=dict(
-                    title="x2",  # Set label for Y-axis
-                    titlefont=dict(size=14),  # Set font size for Y-axis label
-                ),
-                zaxis=dict(
-                    title="x3",  # Set label for Z-axis
-                    titlefont=dict(size=14),  # Set font size for Z-axis label
-                ),
-                camera=dict(
-                    eye=dict(x=-1.5, y=-1.5, z=1.5)  # Set the camera position (eye position)
-                )
-            )
-        )
-        fig.write_image(constants._FOLDER+'figs/phat_t'+str(t)+'.pdf')
+        # # 3D visualization (phat)
+        # fig = go.Figure(data=go.Volume(
+        #     x=x1_grid.flatten(), y=x2_grid.flatten(), z=x3_grid.flatten(),
+        #     value= (pdf_nn.reshape(x1_grid.shape)).flatten(),
+        #     isomin=0.0,
+        #     isomax=2.0,
+        #     opacity=0.1,
+        #     surface_count=15,
+        #     coloraxis="coloraxis" 
+        #     ))
+        # fig.update_layout(
+        #     title=r"$\hat{p}$",  # Title of the plot
+        #     title_x=0.5,  # Center the title
+        #     title_y=0.9,  # Center the title
+        #     margin=dict(
+        #         l=0,  # Left margin
+        #         r=0,  # Right margin
+        #         t=10,  # Top margin
+        #         b=50  # Increase bottom margin
+        #     ),
+        #     coloraxis=dict(
+        #         colorscale="plasma",  # Choose your desired colorscale
+        #         colorbar=dict(
+        #             x=0.8,  # Move colorbar towards the right
+        #             y=0.5,   # Center colorbar vertically
+        #             xanchor='left',  # Anchor colorbar to the left
+        #             yanchor='middle',  # Anchor colorbar to the middle
+        #             thickness=10,  # Reduce the thickness of the colorbar (default is 20)
+        #             tickfont=dict(size=10),  # Reduce font size of colorbar ticks
+        #             # tickvals=[-0.03, -0.01, 0, 0.01, 0.03],  # Adjust tick values to control tick placement
+        #             # ticktext=['-0.03', '-0.01', '0', '0.01', '0.03'],  # Optional: Custom tick labels
+        #             len=0.6,
+        #         )
+        #     ),
+        #     scene=dict(
+        #         xaxis=dict(
+        #             title="x1",  # Set label for X-axis
+        #             titlefont=dict(size=14),  # Set font size for X-axis label
+        #         ),
+        #         yaxis=dict(
+        #             title="x2",  # Set label for Y-axis
+        #             titlefont=dict(size=14),  # Set font size for Y-axis label
+        #         ),
+        #         zaxis=dict(
+        #             title="x3",  # Set label for Z-axis
+        #             titlefont=dict(size=14),  # Set font size for Z-axis label
+        #         ),
+        #         camera=dict(
+        #             eye=dict(x=-1.5, y=-1.5, z=1.5)  # Set the camera position (eye position)
+        #         )
+        #     )
+        # )
+        # fig.write_image(constants._FOLDER+'figs/phat_t'+str(t)+'.pdf')
 
         # 3D visualization (e1)
         # fig = go.Figure(data=go.Volume(
@@ -719,7 +757,6 @@ def check_e1nn_result(e1_net, p_net):
         #     )
         # )
         # fig.write_image(constants._FOLDER+'figs/e_t'+str(t)+'.pdf')
-
         # # 3D visualization (e1hat)
         # fig = go.Figure(data=go.Volume(
         #     x=x1_grid.flatten(), y=x2_grid.flatten(), z=x3_grid.flatten(),
@@ -773,7 +810,6 @@ def check_e1nn_result(e1_net, p_net):
         #     )
         # )
         # fig.write_image(constants._FOLDER+'figs/ehat_t'+str(t)+'.pdf')
-
         # # visualization (marginalized to 2 cooridnates)
         # # E1net plot
         # fig, axs = plt.subplots(1, 3, figsize=(10, 3), subplot_kw={'projection': '3d'})
@@ -803,7 +839,6 @@ def check_e1nn_result(e1_net, p_net):
         #     fontsize=16, color='black',
         # )
         # plt.show()
-
         # # Error bound plot
         # fig, axs = plt.subplots(1, 3, figsize=(10, 3), subplot_kw={'projection': '3d'})
         # ax = axs[0]
@@ -816,7 +851,6 @@ def check_e1nn_result(e1_net, p_net):
         # ax.legend()
         # ax.set_xlabel('x'); ax.set_ylabel('y'); ax.set_zlabel('Error')
         # ax.view_init(15, -135)
-
         # ax = axs[1]
         # ax.plot_wireframe(x2_grid[0, :, :], x3_grid[0, :, :], np.sum(e1.reshape(grid_points_struct[1].shape), axis=(0))*dx, color="black", linewidth=0.5, alpha=0.7)
         # ax.plot_wireframe(x2_grid[0, :, :], x3_grid[0, :, :], np.sum(e1_nn.reshape(grid_points_struct[1].shape), axis=(0))*dx, color="red", linewidth=0.2, alpha=0.7, linestyle="--")
@@ -824,7 +858,6 @@ def check_e1nn_result(e1_net, p_net):
         # ax.plot_surface(x2_grid[0, :, :], x3_grid[0, :, :], x2_grid[0, :, :]*0.0 - 2.0*eS, color="green", alpha=0.2)
         # ax.set_xlabel('y'); ax.set_ylabel('z'); ax.set_zlabel('Error')
         # ax.view_init(15, -135)
-
         # ax = axs[2]
         # ax.plot_wireframe(x1_grid[:, 0, :], x3_grid[:, 0, :], np.sum(e1.reshape(grid_points_struct[1].shape), axis=(1))*dx, color="black", linewidth=0.5, alpha=0.7)
         # ax.plot_wireframe(x1_grid[:, 0, :], x3_grid[:, 0, :], np.sum(e1.reshape(grid_points_struct[1].shape), axis=(1))*dx, color="red", linewidth=0.2, alpha=0.7, linestyle="--")
@@ -842,26 +875,32 @@ def check_e1nn_result(e1_net, p_net):
         # )
         # plt.show()
 
-    print( " =result= max a1      : {:.3f}, var a1: {:.4f}".format(np.max(np.array(a1_data)),
-                                                                   np.var(np.array(a1_data))))    
-    print( " =result= max gap     : {:.3f}, min gap     : {:.3f}".format(np.max(np.array(gap_data)), np.min(np.array(gap_data))))
-    print( " =result= max eS_ratio: {:.3f}, avg eS_ratio: {:.3f}".format(np.max(np.array(eSratio_data)),
-                                                                         np.mean(np.array(eSratio_data))))
+    a1_list = np.array(a1_data)
+    gap_list = np.array(gap_data)
+    norm_B2_list = eSratio_data
+    print("[info] max a1: ", np.round(np.max(a1_list),2), ", avg a1:", np.round(np.mean(a1_list),2), ", std a1:", np.round(np.std(a1_list),3))
+    print("[info] min gap: ", np.round(np.min(gap_list),3), ", avg gap:", np.round(np.mean(gap_list),3))
+    print("[info] avg B2_norm: ", np.round(np.mean(norm_B2_list),2), ", std B2_norm:", np.round(np.std(norm_B2_list),3))
+    # print( " =result= max a1      : {:.3f}, var a1: {:.4f}".format(np.max(np.array(a1_data)),
+    #                                                                np.var(np.array(a1_data))))    
+    # print( " =result= max gap     : {:.3f}, min gap     : {:.3f}".format(np.max(np.array(gap_data)), np.min(np.array(gap_data))))
+    # print( " =result= max eS_ratio: {:.3f}, avg eS_ratio: {:.3f}".format(np.max(np.array(eSratio_data)),
+    #                                                                      np.mean(np.array(eSratio_data))))
     
     # visualization
-    fig, axs = plt.subplots(2, 1, figsize=(7, 6))
-    axs[0].plot(constants.T_SPAN, eSratio_data, "green", label=r"$e_S$ (normalized)")
-    axs[0].plot(constants.T_SPAN, e1ratio_data, "black", label=r"$\max|e_1|$ (normalized)")
-    axs[0].set_ylabel("error (normalized)")
-    axs[0].legend(loc="upper left", fontsize=14)
+    # fig, axs = plt.subplots(2, 1, figsize=(7, 6))
+    # axs[0].plot(constants.T_SPAN, eSratio_data, "green", label=r"$e_S$ (normalized)")
+    # axs[0].plot(constants.T_SPAN, e1ratio_data, "black", label=r"$\max|e_1|$ (normalized)")
+    # axs[0].set_ylabel("error (normalized)")
+    # axs[0].legend(loc="upper left", fontsize=14)
 
-    axs[1].plot(constants.T_SPAN, a1_data, "black")
-    axs[1].set_xlabel("t")
-    axs[1].set_ylabel(r"$\alpha_1$")
+    # axs[1].plot(constants.T_SPAN, a1_data, "black")
+    # axs[1].set_xlabel("t")
+    # axs[1].set_ylabel(r"$\alpha_1$")
     
-    plt.tight_layout()
-    fig.savefig(constants._FOLDER+'figs/result.pdf', format='pdf', dpi=300, bbox_inches='tight')
-    plt.close()
+    # plt.tight_layout()
+    # fig.savefig(constants._FOLDER+'figs/result.pdf', format='pdf', dpi=300, bbox_inches='tight')
+    # plt.close()
 
 
 def get_e1init_max(p_net):
@@ -892,8 +931,8 @@ def plot_train_loss():
     path_2 = constants._PATH_E1NET_LOSS
     loss_history_1 = np.load(path_1)
     loss_history_2 = np.load(path_2)
-    print(loss_history_1)
-    print(loss_history_2)
+    # print(loss_history_1)
+    # print(loss_history_2)
     min_loss_1 = min(loss_history_1)
     min_loss_2 = min(loss_history_2)
     fig, axs = plt.subplots(2, 1, figsize=(7, 6))
@@ -922,16 +961,16 @@ def main():
     optimizer = torch.optim.Adam(p_net.parameters(), lr=1e-3)
     scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.9)
     if(TRAIN_FLAG):
-        train_p_net(p_net, optimizer, scheduler, mse_cost_function, iterations=5000); print("p_net train complete")
+        train_p_net(p_net, optimizer, scheduler, mse_cost_function, iterations=1000); print("p_net train complete")
     p_net = pos_p_net_train(p_net); p_net.eval()
-    # check_pnn_result(p_net)
+    check_pnn_result(p_net)
 
     e1_net.scale = get_e1init_max(p_net)
     mse_cost_function = torch.nn.MSELoss() # Mean squared error
     optimizer = torch.optim.Adam(e1_net.parameters(), lr=1e-3)
     scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.9)
     if(TRAIN_FLAG):
-        train_e1_net(e1_net, p_net, optimizer, scheduler, mse_cost_function, iterations=10000); print("e1_net train complete")
+        train_e1_net(e1_net, p_net, optimizer, scheduler, mse_cost_function, iterations=5000); print("e1_net train complete")
     e1_net = pos_e1_net_train(e1_net); e1_net.eval()
     check_e1nn_result(e1_net, p_net)
     plot_train_loss()

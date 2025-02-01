@@ -11,6 +11,7 @@ import argparse
 from torch.utils.data import Dataset, DataLoader
 
 
+FOLDER_INTERMED = "../meta/data_10dtvou/"
 TRAIN_FLAG = False
 constants = MyConstants10D_Time() #(testing non singular 5D A, will turn to 7D later)
 # Set a fixed seed for reproducibility
@@ -21,8 +22,8 @@ np.random.seed(1)
 def dyn_f1(x, t):
     global constants
     result = torch.zeros(x.shape[0])
-    exp_t_cubed = torch.exp(-t.view(-1, 1)**3)
-    A_t = constants.A_TENSOR + constants.DA_TENSOR * exp_t_cubed.view(-1, 1, 1)
+    sin_t = torch.sin(t.view(-1, 1))
+    A_t = constants.A_TENSOR + constants.DA_TENSOR * sin_t.view(-1, 1, 1)
     for i in range(constants.DIM):
         result = result + A_t[:,0,i]*x[:,i]
     return result
@@ -30,8 +31,8 @@ def dyn_f1(x, t):
 def dyn_f2(x, t):
     global constants
     result = torch.zeros(x.shape[0])
-    exp_t_cubed = torch.exp(-t.view(-1, 1)**3)
-    A_t = constants.A_TENSOR + constants.DA_TENSOR * exp_t_cubed.view(-1, 1, 1)
+    sin_t = torch.sin(t.view(-1, 1))
+    A_t = constants.A_TENSOR + constants.DA_TENSOR * sin_t.view(-1, 1, 1)
     for i in range(constants.DIM):
         result = result + A_t[:,1,i]*x[:,i]
     return result
@@ -39,8 +40,8 @@ def dyn_f2(x, t):
 def dyn_f3(x, t):
     global constants
     result = torch.zeros(x.shape[0])
-    exp_t_cubed = torch.exp(-t.view(-1, 1)**3)
-    A_t = constants.A_TENSOR + constants.DA_TENSOR * exp_t_cubed.view(-1, 1, 1)
+    sin_t = torch.sin(t.view(-1, 1))
+    A_t = constants.A_TENSOR + constants.DA_TENSOR * sin_t.view(-1, 1, 1)
     for i in range(constants.DIM):
         result = result + A_t[:,2,i]*x[:,i]
     return result
@@ -48,8 +49,8 @@ def dyn_f3(x, t):
 def dyn_f4(x, t):
     global constants
     result = torch.zeros(x.shape[0])
-    exp_t_cubed = torch.exp(-t.view(-1, 1)**3)
-    A_t = constants.A_TENSOR + constants.DA_TENSOR * exp_t_cubed.view(-1, 1, 1)
+    sin_t = torch.sin(t.view(-1, 1))
+    A_t = constants.A_TENSOR + constants.DA_TENSOR * sin_t.view(-1, 1, 1)
     for i in range(constants.DIM):
         result = result + A_t[:,3,i]*x[:,i]
     return result
@@ -57,8 +58,8 @@ def dyn_f4(x, t):
 def dyn_f5(x, t):
     global constants
     result = torch.zeros(x.shape[0])
-    exp_t_cubed = torch.exp(-t.view(-1, 1)**3)
-    A_t = constants.A_TENSOR + constants.DA_TENSOR * exp_t_cubed.view(-1, 1, 1)
+    sin_t = torch.sin(t.view(-1, 1))
+    A_t = constants.A_TENSOR + constants.DA_TENSOR * sin_t.view(-1, 1, 1)
     for i in range(constants.DIM):
         result = result + A_t[:,4,i]*x[:,i]
     return result
@@ -66,8 +67,8 @@ def dyn_f5(x, t):
 def dyn_f6(x, t):
     global constants
     result = torch.zeros(x.shape[0])
-    exp_t_cubed = torch.exp(-t.view(-1, 1)**3)
-    A_t = constants.A_TENSOR + constants.DA_TENSOR * exp_t_cubed.view(-1, 1, 1)
+    sin_t = torch.sin(t.view(-1, 1))
+    A_t = constants.A_TENSOR + constants.DA_TENSOR * sin_t.view(-1, 1, 1)
     for i in range(constants.DIM):
         result = result + A_t[:,5,i]*x[:,i]
     return result
@@ -75,8 +76,8 @@ def dyn_f6(x, t):
 def dyn_f7(x, t):
     global constants
     result = torch.zeros(x.shape[0])
-    exp_t_cubed = torch.exp(-t.view(-1, 1)**3)
-    A_t = constants.A_TENSOR + constants.DA_TENSOR * exp_t_cubed.view(-1, 1, 1)
+    sin_t = torch.sin(t.view(-1, 1))
+    A_t = constants.A_TENSOR + constants.DA_TENSOR * sin_t.view(-1, 1, 1)
     for i in range(constants.DIM):
         result = result + A_t[:,6,i]*x[:,i]
     return result
@@ -84,8 +85,8 @@ def dyn_f7(x, t):
 def dyn_f8(x, t):
     global constants
     result = torch.zeros(x.shape[0])
-    exp_t_cubed = torch.exp(-t.view(-1, 1)**3)
-    A_t = constants.A_TENSOR + constants.DA_TENSOR * exp_t_cubed.view(-1, 1, 1)
+    sin_t = torch.sin(t.view(-1, 1))
+    A_t = constants.A_TENSOR + constants.DA_TENSOR * sin_t.view(-1, 1, 1)
     for i in range(constants.DIM):
         result = result + A_t[:,7,i]*x[:,i]
     return result
@@ -93,8 +94,8 @@ def dyn_f8(x, t):
 def dyn_f9(x, t):
     global constants
     result = torch.zeros(x.shape[0])
-    exp_t_cubed = torch.exp(-t.view(-1, 1)**3)
-    A_t = constants.A_TENSOR + constants.DA_TENSOR * exp_t_cubed.view(-1, 1, 1)
+    sin_t = torch.sin(t.view(-1, 1))
+    A_t = constants.A_TENSOR + constants.DA_TENSOR * sin_t.view(-1, 1, 1)
     for i in range(constants.DIM):
         result = result + A_t[:,8,i]*x[:,i]
     return result
@@ -102,8 +103,8 @@ def dyn_f9(x, t):
 def dyn_f10(x, t):
     global constants
     result = torch.zeros(x.shape[0])
-    exp_t_cubed = torch.exp(-t.view(-1, 1)**3)
-    A_t = constants.A_TENSOR + constants.DA_TENSOR * exp_t_cubed.view(-1, 1, 1)
+    sin_t = torch.sin(t.view(-1, 1))
+    A_t = constants.A_TENSOR + constants.DA_TENSOR * sin_t.view(-1, 1, 1)
     for i in range(constants.DIM):
         result = result + A_t[:,9,i]*x[:,i]
     return result
@@ -162,7 +163,7 @@ def init_weights_xavier(m):
 class Net(nn.Module):
     global constants
     def __init__(self, scale=1.0): 
-        neurons = 32
+        neurons = 50
         self.scale = scale
         super(Net, self).__init__()
         self.hidden_layer1 = (nn.Linear(constants.DIM+1,neurons))
@@ -170,6 +171,7 @@ class Net(nn.Module):
         self.hidden_layer3 = (nn.Linear(neurons,neurons))
         self.hidden_layer4 = (nn.Linear(neurons,neurons))
         self.hidden_layer5 = (nn.Linear(neurons,neurons))
+        self.hidden_layer6 = (nn.Linear(neurons,neurons))
         self.output_layer =  (nn.Linear(neurons,1))
     def forward(self, x, t):
         inputs = torch.cat([x,t],axis=1)
@@ -178,7 +180,8 @@ class Net(nn.Module):
         layer3_out = F.gelu((self.hidden_layer3(layer2_out)))
         layer4_out = F.gelu((self.hidden_layer4(layer3_out)))
         layer5_out = F.gelu((self.hidden_layer5(layer4_out)))
-        output = F.softplus( self.output_layer(layer5_out) )
+        layer6_out = F.gelu((self.hidden_layer6(layer5_out)))
+        output = F.softplus( self.output_layer(layer6_out) )
         return output
     
 
@@ -186,7 +189,7 @@ class Net(nn.Module):
 class E1Net(nn.Module):
     global constants
     def __init__(self, scale=1.0): 
-        neurons = 32
+        neurons = 50
         self.scale = scale
         super(E1Net, self).__init__()
         self.hidden_layer1 = (nn.Linear(constants.DIM+1,neurons))
@@ -194,6 +197,7 @@ class E1Net(nn.Module):
         self.hidden_layer3 = (nn.Linear(neurons,neurons))
         self.hidden_layer4 = (nn.Linear(neurons,neurons))
         self.hidden_layer5 = (nn.Linear(neurons,neurons))
+        self.hidden_layer6 = (nn.Linear(neurons,neurons))
         self.output_layer =  (nn.Linear(neurons,1))
         self.activation = nn.GELU()
     def forward(self, x, t):
@@ -203,7 +207,8 @@ class E1Net(nn.Module):
         layer3_out = self.activation((self.hidden_layer3(layer2_out)))
         layer4_out = self.activation((self.hidden_layer4(layer3_out)))
         layer5_out = self.activation((self.hidden_layer5(layer4_out)))
-        output = self.output_layer(layer5_out)
+        layer6_out = self.activation((self.hidden_layer6(layer5_out)))
+        output = self.output_layer(layer6_out)
         output = self.scale * output
         return output
     
@@ -275,7 +280,7 @@ def train_p_net(p_net, optimizer, scheduler, mse_cost_function, iterations=40000
     iterations_per_decay = 1000
     loss_history = []
     normalize = p_net.scale
-    N_samples = 1000 # 1000 (base)
+    N_samples = 300
     batch_size = 300
 
     # samples of initial condition
@@ -287,7 +292,7 @@ def train_p_net(p_net, optimizer, scheduler, mse_cost_function, iterations=40000
     data_loader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
 
     # RAR
-    S = 10000
+    S = 30000
     FLAG = False
     
     start_time = time.time()
@@ -345,7 +350,7 @@ def train_p_net(p_net, optimizer, scheduler, mse_cost_function, iterations=40000
                 phat_i = p_net(x_bc_rar, t_bc_rar)
                 max_error = torch.max(torch.abs(p_i - phat_i))/normalize
                 if(max_error > 5e-3):
-                    max_value, max_index = torch.topk(torch.abs(p_i.squeeze() - phat_i.squeeze()), 20)
+                    max_value, max_index = torch.topk(torch.abs(p_i.squeeze() - phat_i.squeeze()), 10)
                     x_max = x_bc_rar[max_index,:].clone().detach()
                     t_max = t_bc_rar[max_index].clone().detach()
                     x_bc = torch.cat((x_bc, x_max), dim=0)
@@ -355,7 +360,7 @@ def train_p_net(p_net, optimizer, scheduler, mse_cost_function, iterations=40000
                 res_p = diff_opt(x_rar, t_rar, p_net)/normalize
                 max_error= torch.max(torch.abs(res_p))
                 if(max_error > 5e-3):
-                    max_value, max_index = torch.topk(torch.abs(res_p.squeeze()), 20)
+                    max_value, max_index = torch.topk(torch.abs(res_p.squeeze()), 10)
                     x_max = x_rar[max_index,:].clone()
                     t_max = t_rar[max_index].clone()
                     x = torch.cat((x, x_max), dim=0)
@@ -399,7 +404,7 @@ def train_e1_net(e1_net, p_net, optimizer, scheduler, mse_cost_function, iterati
     iterations_per_decay = 1000
     loss_history = []
     normalize = e1_net.scale
-    N_samples = 150 # 1000 (base)
+    N_samples = 300
     batch_size = 300
 
     # samples of initial condition
@@ -411,8 +416,12 @@ def train_e1_net(e1_net, p_net, optimizer, scheduler, mse_cost_function, iterati
     data_loader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
 
     # RAR
-    S = 10000
+    S = 30000
     FLAG = False
+
+    # Save intermediate enet
+    save_count = 1
+    save_loss = 10.0
     
     start_time = time.time()
 
@@ -442,9 +451,22 @@ def train_e1_net(e1_net, p_net, optimizer, scheduler, mse_cost_function, iterati
                         'loss': loss_dataset.data,
                         'train_time': train_time,
                         'scale': e1_net.scale
-                         }, constants._PATH_E1NET)
+                         }, constants._PATH_E1NET+".pth")
                 min_loss = loss_dataset.item()
                 FLAG = True
+
+            if(loss_dataset.item() < 0.75*save_loss):
+                torch.save({
+                        'epoch': epoch,
+                        'model_state_dict': e1_net.state_dict(),
+                        'optimizer_state_dict': optimizer.state_dict(),
+                        'loss': loss_dataset.data,
+                        'train_time': train_time,
+                        'scale': e1_net.scale
+                         }, constants._PATH_E1NET+"-"+str(save_count)+".pth")
+                save_count = save_count + 1
+                save_loss = loss_dataset.item()
+
 
             if(FLAG):
                 # random sample points
@@ -460,7 +482,7 @@ def train_e1_net(e1_net, p_net, optimizer, scheduler, mse_cost_function, iterati
                 res_e = diff_opt(x_rar, t_rar, e1_net)/normalize
                 max_error = torch.max(torch.abs(e_i - ehat_i))/normalize
                 if(max_error > 5e-3):
-                    max_value, max_index = torch.topk(torch.abs(e_i.squeeze() - ehat_i.squeeze()), 20)
+                    max_value, max_index = torch.topk(torch.abs(e_i.squeeze() - ehat_i.squeeze()), 10)
                     x_max = x_bc_rar[max_index,:].clone().detach()
                     t_max = t_bc_rar[max_index].clone().detach()
                     x_bc = torch.cat((x_bc, x_max), dim=0)
@@ -469,7 +491,7 @@ def train_e1_net(e1_net, p_net, optimizer, scheduler, mse_cost_function, iterati
                 # add residual points
                 max_error= torch.max(torch.abs(res_e + res_p))
                 if(max_error > 5e-3):
-                    max_value, max_index = torch.topk(torch.abs(res_e.squeeze() + res_p.squeeze()), 20)
+                    max_value, max_index = torch.topk(torch.abs(res_e.squeeze() + res_p.squeeze()), 10)
                     x_max = x_rar[max_index,:].clone()
                     t_max = t_rar[max_index].clone()
                     x = torch.cat((x, x_max), dim=0)
@@ -532,7 +554,7 @@ def pos_p_net_train(p_net):
 
 def pos_e1_net_train(e1_net):
     print("[load e1net model from: "+ constants._PATH_E1NET)
-    checkpoint = torch.load(constants._PATH_E1NET)
+    checkpoint = torch.load(constants._PATH_E1NET+".pth")
     e1_net.load_state_dict(checkpoint['model_state_dict'])
     e1_net.scale = checkpoint['scale']
     epoch = checkpoint['epoch']
@@ -553,7 +575,7 @@ def pos_e1_net_train(e1_net):
 
 def check_pnn_result(p_net):
     global constants
-    grid_points = constants.generate_random_samples(num_samples=1000000)
+    grid_points = constants.generate_random_samples(num_samples=100000)
     for t in constants.T_SPAN:
         # print("[check] grid points shape type: ", grid_points.shape, grid_points.dtype)
         # compute p(true)
@@ -574,63 +596,78 @@ def check_pnn_result(p_net):
         # plt.show()
 
 
+def compute_stat(p_net, e1_net):
+    global constants
+    a1_data = []
+    for t in constants.T_SPAN:
+        grid_points = constants.generate_random_samples(num_samples=100000)
+        # print("[check] grid points shape type: ", grid_points.shape, grid_points.dtype)
+        # compute p(true)
+        pdf_true = constants.p_sol(grid_points, t)
+        # obtain pdf(nn)
+        grid_points_tensor = torch.tensor(grid_points, dtype=torch.float32, requires_grad=False)
+        t_tensor = torch.ones(len(grid_points_tensor), 1, dtype=torch.float32) * t
+        # print("[check] grid points tensor shape type: ", grid_points_tensor.shape, grid_points_tensor.dtype)
+        pdf_nn = p_net(grid_points_tensor, t_tensor).detach().numpy()
+        # print("[check] pdf_true, pdf_nn shape dtype:", pdf_true.shape, pdf_true.dtype, 
+        #                                                pdf_nn.shape, pdf_nn.dtype)
+        e1 = pdf_true - pdf_nn
+        e1_nn = e1_net(grid_points_tensor, t_tensor).detach().numpy()
+        e2 = e1 - e1_nn
+        a1 = np.max(np.abs(e2)) / np.max(np.abs(e1_nn))
+        a1_data.append(a1)
+    return np.array(a1_data)
+
+
 def check_e1nn_result(e1_net, p_net):
     global constants
-    N_trials = 1
     gap_data = []
     eSratio_data = []
     e1ratio_data = []
     a1_data = []
     for t in constants.T_SPAN:
-        ptrue_max = 0.0
-        for j in range(N_trials):
-            grid_points = constants.generate_random_samples(num_samples=10000000)
-            # print("[check] grid points shape type: ", grid_points.shape, grid_points.dtype)
-            # compute p(true)
-            pdf_true = constants.p_sol(grid_points, t)
-            # obtain pdf(nn)
-            grid_points_tensor = torch.tensor(grid_points, dtype=torch.float32, requires_grad=False)
-            t_tensor = torch.ones(len(grid_points_tensor), 1, dtype=torch.float32) * t
-            # print("[check] grid points tensor shape type: ", grid_points_tensor.shape, grid_points_tensor.dtype)
-            pdf_nn = p_net(grid_points_tensor, t_tensor).detach().numpy()
-            # print("[check] pdf_true, pdf_nn shape dtype:", pdf_true.shape, pdf_true.dtype, 
-            #                                                pdf_nn.shape, pdf_nn.dtype)
-            e1 = pdf_true - pdf_nn
-            e1_nn = e1_net(grid_points_tensor, t_tensor).detach().numpy()
-            e2 = e1 - e1_nn
-            eS = 2.0*np.max(np.abs(e1_nn))
-            a1 = np.max(np.abs(e2)) / np.max(np.abs(e1_nn))
-            a1_data.append(a1)
-            gap = (eS - np.max(np.abs(e1)))/ np.max(np.abs(pdf_true))
-            gap_data.append(gap)
-            eSratio = eS / np.max(np.abs(pdf_true))
-            eSratio_data.append(eSratio)
-            e1ratio_data.append( np.max(np.abs(e1))/np.max(np.abs(pdf_true)) )
-            if(np.max(np.abs(pdf_true)) > ptrue_max):
-                ptrue_max = np.max(np.abs(pdf_true))
-        print("[check] p_true(t) max: {:.6f}".format(ptrue_max))
+        grid_points = constants.generate_random_samples(num_samples=100000)
+        # print("[check] grid points shape type: ", grid_points.shape, grid_points.dtype)
+        # compute p(true)
+        pdf_true = constants.p_sol(grid_points, t)
+        # obtain pdf(nn)
+        grid_points_tensor = torch.tensor(grid_points, dtype=torch.float32, requires_grad=False)
+        t_tensor = torch.ones(len(grid_points_tensor), 1, dtype=torch.float32) * t
+        # print("[check] grid points tensor shape type: ", grid_points_tensor.shape, grid_points_tensor.dtype)
+        pdf_nn = p_net(grid_points_tensor, t_tensor).detach().numpy()
+        # print("[check] pdf_true, pdf_nn shape dtype:", pdf_true.shape, pdf_true.dtype, 
+        #                                                pdf_nn.shape, pdf_nn.dtype)
+        e1 = pdf_true - pdf_nn
+        e1_nn = e1_net(grid_points_tensor, t_tensor).detach().numpy()
+        e2 = e1 - e1_nn
+        eS = 2.0*np.max(np.abs(e1_nn))
+        a1 = np.max(np.abs(e2)) / np.max(np.abs(e1_nn))
+        a1_data.append(a1)
+        gap = (eS - np.max(np.abs(e1)))/ np.max(np.abs(pdf_true))
+        gap_data.append(gap)
+        eSratio = eS / np.max(np.abs(pdf_true))
+        eSratio_data.append(eSratio)
+        e1ratio_data.append( np.max(np.abs(e1))/np.max(np.abs(pdf_true)) )
         
-    print("[check] a1_data shape: ", np.array(a1_data).shape)
-    print( " =result= max a1      : {:.3f}, var a1: {:.4f}".format(np.max(np.array(a1_data)),
-                                                                   np.var(np.array(a1_data))))    
-    print( " =result= max gap     : {:.3f}, min gap     : {:.3f}".format(np.max(np.array(gap_data)), np.min(np.array(gap_data))))
-    print( " =result= max eS_ratio: {:.3f}, avg eS_ratio: {:.3f}".format(np.max(np.array(eSratio_data)),
-                                                                         np.mean(np.array(eSratio_data))))
+    a1_list = np.array(a1_data)
+    gap_list = np.array(gap_data)
+    norm_B2_list = eSratio_data
+    print("[info] max a1: ", np.round(np.max(a1_list),2), ", avg a1:", np.round(np.mean(a1_list),2), ", std a1:", np.round(np.std(a1_list),3))
+    print("[info] min gap: ", np.round(np.min(gap_list),3), ", avg gap:", np.round(np.mean(gap_list),3))
+    print("[info] avg B2_norm: ", np.round(np.mean(norm_B2_list),2), ", std B2_norm:", np.round(np.std(norm_B2_list),3))
     
-    # visualization
-    fig, axs = plt.subplots(2, 1, figsize=(7, 6))
-    axs[0].plot(constants.T_SPAN, eSratio_data, "green", label=r"$e_S$ (normalized)")
-    axs[0].plot(constants.T_SPAN, e1ratio_data, "black", label=r"$\max|e_1|$ (normalized)")
-    axs[0].set_ylabel("error (normalized)")
-    axs[0].legend(loc="upper left", fontsize=14)
-
-    axs[1].plot(constants.T_SPAN, a1_data, "black")
-    axs[1].set_xlabel("t")
-    axs[1].set_ylabel(r"$\alpha_1$")
-    
-    plt.tight_layout()
-    fig.savefig(constants._FOLDER+'figs/result.pdf', format='pdf', dpi=300, bbox_inches='tight')
-    plt.close()
+    # # visualization
+    # fig, axs = plt.subplots(2, 1, figsize=(7, 6))
+    # axs[0].plot(constants.T_SPAN, eSratio_data, "green", label=r"$e_S$ (normalized)")
+    # axs[0].plot(constants.T_SPAN, e1ratio_data, "black", label=r"$\max|e_1|$ (normalized)")
+    # axs[0].set_ylabel("error (normalized)")
+    # axs[0].legend(loc="upper left", fontsize=14)
+    # axs[1].plot(constants.T_SPAN, a1_data, "black")
+    # axs[1].set_xlabel("t")
+    # axs[1].set_ylabel(r"$\alpha_1$")
+    # plt.tight_layout()
+    # fig.savefig(constants._FOLDER+'figs/result.pdf', format='pdf', dpi=300, bbox_inches='tight')
+    # plt.close()
 
 
 def plot_train_loss():
@@ -639,8 +676,6 @@ def plot_train_loss():
     path_2 = constants._PATH_E1NET_LOSS
     loss_history_1 = np.load(path_1)
     loss_history_2 = np.load(path_2)
-    print(loss_history_1)
-    print(loss_history_2)
     min_loss_1 = min(loss_history_1)
     min_loss_2 = min(loss_history_2)
     fig, axs = plt.subplots(2, 1, figsize=(7, 6))
@@ -679,6 +714,29 @@ def get_e1init_max(p_net):
     return error_init_max
 
 
+def process_intermediate():
+    global constants
+    N_models = 9
+    p_net = Net()
+    e1_net = E1Net()
+    p_net = pos_p_net_train(p_net); p_net.eval()
+    for i in range(1,N_models+1):
+        checkpoint = torch.load(constants._PATH_E1NET+"-"+str(i)+".pth")
+        e1_net.load_state_dict(checkpoint['model_state_dict'])
+        e1_net.scale = checkpoint['scale']
+        loss = checkpoint['loss']
+        a1_data = compute_stat(p_net, e1_net)
+        np.savez(FOLDER_INTERMED+'a1_data_'+str(i)+'.npz', loss=loss.item(), a1_data=a1_data)
+        # print(loss, " ", np.max(a1_data))
+    # last model
+    checkpoint = torch.load(constants._PATH_E1NET+".pth")
+    e1_net.load_state_dict(checkpoint['model_state_dict'])
+    e1_net.scale = checkpoint['scale']
+    loss = checkpoint['loss']
+    a1_data = compute_stat(p_net, e1_net)
+    np.savez(FOLDER_INTERMED+'a1_data_'+str(N_models+1)+'.npz', loss=loss.item(), a1_data=a1_data)
+
+
 def main():
     global constants
     p_net = Net(scale=constants.get_pinit_max())
@@ -690,7 +748,7 @@ def main():
     optimizer = torch.optim.Adam(p_net.parameters(), lr=1e-3)
     scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.9)
     if(TRAIN_FLAG):
-        train_p_net(p_net, optimizer, scheduler, mse_cost_function, iterations=5000); print("p_net train complete") # 20000 (base)
+        train_p_net(p_net, optimizer, scheduler, mse_cost_function, iterations=2000); print("p_net train complete") # 20000 (base)
     p_net = pos_p_net_train(p_net); p_net.eval()
     check_pnn_result(p_net)
 
@@ -699,7 +757,7 @@ def main():
     optimizer = torch.optim.Adam(e1_net.parameters(), lr=1e-3)
     scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.9)
     if(TRAIN_FLAG):
-        train_e1_net(e1_net, p_net, optimizer, scheduler, mse_cost_function, iterations=30000); print("e1_net train complete")
+        train_e1_net(e1_net, p_net, optimizer, scheduler, mse_cost_function, iterations=10000); print("e1_net train complete")
     e1_net = pos_e1_net_train(e1_net); e1_net.eval()
 
     plot_train_loss()
@@ -712,5 +770,8 @@ if __name__ == "__main__":
     args = parser.parse_args()
     # Set the TRAIN_FLAG
     TRAIN_FLAG = args.train
-    main()
+    if(TRAIN_FLAG == 2):
+        process_intermediate()
+    else:
+        main()
 

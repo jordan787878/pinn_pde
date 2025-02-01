@@ -421,8 +421,6 @@ def train_e1_net(e1_net, p_net, optimizer, scheduler, mse_cost_function, iterati
         # Exponential learning rate decay
         if (epoch + 1) % iterations_per_decay == 0:
             scheduler.step()
-    a1_data = compute_stat(p_net, e1_net)
-    np.savez(FOLDER_INTERMED+'a1_data_'+str(save_count)+'.npz', loss=loss.item(), a1_data=a1_data)
     np.save(constants._PATH_E1NET_LOSS, np.array(loss_history))
 
 
