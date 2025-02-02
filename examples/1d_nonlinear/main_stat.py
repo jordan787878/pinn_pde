@@ -39,7 +39,7 @@ t0 = 0.0
 T_end = 5.0
 t1s = [0.5, 1.0, 2.0, 3.0, 4.0, 5.0]
 
-datas = ["data1/"]
+datas = ["10+8_samples/"]
 S = 30000
 pnet_terminate = 1e-4
 enet_terminate = 1e-5
