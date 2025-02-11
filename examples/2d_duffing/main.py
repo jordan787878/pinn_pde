@@ -9,6 +9,8 @@ import time
 from constants import MyConstantsDuffing
 import argparse
 from torch.utils.data import Dataset, DataLoader
+import seaborn as sns
+from matplotlib.ticker import LinearLocator, FormatStrFormatter, ScalarFormatter
 
 FOLDER_INTERMED = "../meta/data_2dduffing/"
 MONTE_FLAG = False
@@ -644,6 +646,294 @@ def get_e1init_max(p_net):
     return error_init_max
 
 
+def plot_train_loss(path_1, path_2):
+    loss_history_1 = np.load(path_1)
+    min_loss_1 = min(loss_history_1)
+    loss_history_2 = np.load(path_2)
+    min_loss_2 = min(loss_history_2)
+
+    plt.rcParams.update({
+    # General font settings
+    "font.family": "serif",       # Use sans-serif font for non-math text
+    "font.sans-serif": ["Times New Roman"],  # Prioritize Helvetica (must be installed on your system)
+    "font.size": 22,                   # Base font size for non-math text
+    
+    # Math font settings
+    "mathtext.fontset": "stix",        # STIX fonts for math symbols
+    
+    # Title and label sizes
+    "axes.titlesize": 22,              # Title font size
+    "axes.labelsize": 22,              # Axis label font size
+    
+    # Legend settings
+    "legend.fontsize": 20,             # Legend text size
+    "legend.title_fontsize": 20        # Legend title size (if you use legend titles)
+    })
+    # Get the last 3 colors from the "hls" palette with 8 colors
+    colors = sns.color_palette("muted", 2)
+
+    fig, axs = plt.subplots(1, 2, figsize=(16, 9))
+    axs[0].plot(np.arange(len(loss_history_1)), loss_history_1, color="black", linewidth=1.0)
+    axs[0].set_ylim([min_loss_1, 10*min_loss_1])
+    axs[1].plot(np.arange(len(loss_history_2)), loss_history_2, color="black", linewidth=1.0)
+    axs[1].set_ylim([min_loss_2, 10*min_loss_2])
+    axs[0].set_xlabel("iterations")
+    axs[1].set_xlabel("iterations")
+    axs[0].set_ylabel("train loss: "+r"$\hat{p}$")
+    axs[1].set_ylabel("train loss: "+r"$\hat{e}_1$")
+    axs[0].grid(True, which='both', linestyle=':', linewidth=0.5)  # Dotted grid
+    axs[1].grid(True, which='both', linestyle=':', linewidth=0.5)  # Dotted grid
+    plt.tight_layout()
+    fig.savefig('exp/1/figs/2dduff_trainloss.pdf', format='pdf', dpi=300, bbox_inches='tight', pad_inches=0.0)
+    plt.close()
+
+
+def show_p_net_results(p_net):
+    global constants
+    grid_points_struct = constants.load_gridpoints_from_monte()
+    grid_points = grid_points_struct[-1]
+    dx1 = grid_points_struct[0][1] - grid_points_struct[0][0]
+    dx2 = grid_points_struct[2][1] - grid_points_struct[2][0]
+    x1_grid = grid_points_struct[1]
+    x2_grid = grid_points_struct[3]
+    t1s = constants._T_SPAN
+    x_low = constants.X_RANGE[0,0]
+    x_hig = constants.X_RANGE[0,1]
+
+    plt.rcParams.update({
+    # General font settings
+    "font.family": "serif",       # Use sans-serif font for non-math text
+    "font.sans-serif": ["Times New Roman"],  # Prioritize Helvetica (must be installed on your system)
+    "font.size": 18,                   # Base font size for non-math text
+    
+    # Math font settings
+    "mathtext.fontset": "stix",        # STIX fonts for math symbols
+    
+    # Title and label sizes
+    "axes.titlesize": 18,              # Title font size
+    "axes.labelsize": 18,              # Axis label font size
+    
+    # Legend settings
+    "legend.fontsize": 18,             # Legend text size
+    "legend.title_fontsize": 18        # Legend title size (if you use legend titles)
+    })
+
+    # plot p_net vs p
+    all_p = []
+    for t1 in t1s:
+        p = constants.load_p_sol_monte(t1)
+        all_p.append(p)
+    all_p = np.concatenate(all_p)  # Combine all p values
+    vmin = np.min(all_p)
+    vmax = np.max(all_p)
+
+    fig = plt.figure(figsize=(10, 5))
+    gs = fig.add_gridspec(2, 6, width_ratios=[1]*5 + [0.05], wspace=0.2)
+    # Create subplot grid (2x5) for the plots
+    axs = [fig.add_subplot(gs[i, j]) for i in range(2) for j in range(5)]
+    # Create a subplot for the colorbar spanning the height of the grid
+    cax = fig.add_subplot(gs[:, -1])
+   
+    # Define ticks
+    ticks_values = [-2, 0, 2]
+    ticks_labels = ['-2','0','2']
+    for i, ax in enumerate(axs):
+        ax.set_xticks([])
+        ax.set_yticks([])
+        if(i <= 4):
+            t1 = t1s[i]
+            p = constants.load_p_sol_monte(t1)
+            cp = ax.imshow(p, extent=[x_low, x_hig, x_low, x_hig], cmap='viridis', aspect='equal', origin='lower',
+                           vmin=vmin, vmax=vmax)
+            ax.set_title("t="+str(t1))
+            if(i == 0):
+                ax.set_ylabel(r"$x_2$")
+                ax.set_yticks(ticks_values, ticks_labels, fontsize=14)
+        else:
+            t1 = t1s[i-5]
+            grid_points_tensor = torch.tensor(grid_points, dtype=torch.float32, requires_grad=False)
+            t_tensor = (torch.ones(len(grid_points_tensor), 1, dtype=torch.float32) * t1)
+            # print("[check] grid points tensor shape type: ", grid_points_tensor.shape, grid_points_tensor.dtype)
+            p_hat_numpy = p_net(grid_points_tensor, t_tensor).detach().numpy().reshape(x1_grid.shape)
+            cp = ax.imshow(p_hat_numpy, extent=[x_low, x_hig, x_low, x_hig], cmap='viridis', aspect='equal', origin='lower',
+                            vmin=vmin, vmax=vmax)
+            ax.set_xlabel(r"$x_1$")
+            ax.set_xticks(ticks_values, ticks_labels, fontsize=14)
+            if(i == 5):
+                ax.set_ylabel(r"$x_2$")
+                ax.set_yticks(ticks_values, ticks_labels, fontsize=14)
+    # Add the colorbar to the colorbar subplot
+    cbar = fig.colorbar(cp, cax=cax, orientation='vertical')
+    cbar.ax.yaxis.set_major_formatter(FormatStrFormatter('%.1f'))
+    # Add a box with text at the top-left corner of the figure
+    fig.text(0.01, 0.87, r"$p(x,t)$", bbox={'facecolor': 'white', 'alpha': 0.5, 'pad': 5})
+    fig.text(0.01, 0.47, r"$\hat{p}(x,t)$", bbox={'facecolor': 'white', 'alpha': 0.5, 'pad': 5})
+    fig.subplots_adjust(left=0.07, right=0.92, bottom=0.1, top=0.87, wspace=0.4, hspace=0.1)
+    plt.savefig(constants._FOLDER+'figs/2dduff_phatresult.pdf', format='pdf', dpi=300, bbox_inches='tight', pad_inches=0.0)
+    plt.close()
+
+
+def show_e1_net_results(p_net, e1_net):
+    global constants
+    grid_points_struct = constants.load_gridpoints_from_monte()
+    grid_points = grid_points_struct[-1]
+    dx1 = grid_points_struct[0][1] - grid_points_struct[0][0]
+    dx2 = grid_points_struct[2][1] - grid_points_struct[2][0]
+    x1_grid = grid_points_struct[1]
+    x2_grid = grid_points_struct[3]
+    t1s = constants._T_SPAN
+    x_low = constants.X_RANGE[0,0]
+    x_hig = constants.X_RANGE[0,1]
+
+    plt.rcParams.update({
+    # General font settings
+    "font.family": "serif",       # Use sans-serif font for non-math text
+    "font.sans-serif": ["Times New Roman"],  # Prioritize Helvetica (must be installed on your system)
+    "font.size": 18,                   # Base font size for non-math text
+    
+    # Math font settings
+    "mathtext.fontset": "stix",        # STIX fonts for math symbols
+    
+    # Title and label sizes
+    "axes.titlesize": 18,              # Title font size
+    "axes.labelsize": 18,              # Axis label font size
+    
+    # Legend settings
+    "legend.fontsize": 18,             # Legend text size
+    "legend.title_fontsize": 18        # Legend title size (if you use legend titles)
+    })
+
+    # plot e1net vs e1
+    e1_all = []
+    e1hat_all = []
+    for t1 in t1s:
+        p = constants.load_p_sol_monte(t1)
+        grid_points_tensor = torch.tensor(grid_points, dtype=torch.float32, requires_grad=False)
+        t_tensor = (torch.ones(len(grid_points_tensor), 1, dtype=torch.float32) * t1)
+        p_hat_numpy = p_net(grid_points_tensor, t_tensor).detach().numpy().reshape(x1_grid.shape)
+        e1 = p - p_hat_numpy
+        e1_all.append(e1)
+        e1_hat_numpy = e1_net(grid_points_tensor, t_tensor).detach().numpy().reshape(x1_grid.shape)
+        e1hat_all.append(e1_hat_numpy)
+    e1_all = np.concatenate(e1_all)
+    e1hat_all = np.concatenate(e1hat_all)
+    vmin = np.min(e1_all)
+    vmax = np.max(e1_all)
+    B1_max = 2.0*np.max(np.abs(e1hat_all))
+
+    # Define ticks
+    ticks_values = [-2, 0, 2]
+    ticks_labels = ['-2','0','2']
+
+    fig = plt.figure(figsize=(10, 5))
+    gs = fig.add_gridspec(2, 6, width_ratios=[1]*5 + [0.05], wspace=0.2)
+    # Create subplot grid (2x5) for the plots
+    axs = [fig.add_subplot(gs[i, j]) for i in range(2) for j in range(5)]
+    # Create a subplot for the colorbar spanning the height of the grid
+    cax = fig.add_subplot(gs[:, -1])
+    for i, ax in enumerate(axs):
+        ax.set_xticks([])
+        ax.set_yticks([])
+        if(i <= 4):
+            t1 = t1s[i]
+            p = constants.load_p_sol_monte(t1)
+            grid_points_tensor = torch.tensor(grid_points, dtype=torch.float32, requires_grad=False)
+            t_tensor = (torch.ones(len(grid_points_tensor), 1, dtype=torch.float32) * t1)
+            p_hat_numpy = p_net(grid_points_tensor, t_tensor).detach().numpy().reshape(x1_grid.shape)
+            e1 = p - p_hat_numpy
+            cp = ax.imshow(e1, extent=[x_low, x_hig, x_low, x_hig], cmap='inferno', aspect='equal', origin='lower',
+                           vmin=vmin, vmax=vmax)
+            ax.set_title("t="+str(t1))
+            if(i == 0):
+                ax.set_ylabel(r"$x_2$")
+                ax.set_yticks(ticks_values, ticks_labels, fontsize=14)
+        else:
+            t1 = t1s[i-5]
+            p = constants.load_p_sol_monte(t1)
+            grid_points_tensor = torch.tensor(grid_points, dtype=torch.float32, requires_grad=False)
+            t_tensor = (torch.ones(len(grid_points_tensor), 1, dtype=torch.float32) * t1)
+            p_hat_numpy = p_net(grid_points_tensor, t_tensor).detach().numpy().reshape(x1_grid.shape)
+            e1 = p - p_hat_numpy
+            print("check: ", np.min(e1))
+            e1_hat = e1_net(grid_points_tensor, t_tensor).detach().numpy().reshape(x1_grid.shape)
+            cp = ax.imshow(e1_hat, extent=[x_low, x_hig, x_low, x_hig], cmap='inferno', aspect='equal', origin='lower',
+                            vmin=vmin, vmax=vmax)
+            alpha = max(abs(e1.reshape(-1,1) - e1_hat.reshape(-1,1))) / max(abs(e1_hat.reshape(-1,1)))
+            alpha = alpha[0]
+            print("t: ",t1, ", a1: {:.3f}".format(alpha))
+            ax.set_xlabel(r"$x_1$")
+            ax.set_xticks(ticks_values, ticks_labels, fontsize=14)
+            ax.set_title(r"$\alpha_1=$"+str(np.round(alpha,2)))
+            if(i == 5):
+                ax.set_ylabel(r"$x_2$")
+                ax.set_yticks(ticks_values, ticks_labels, fontsize=14)
+                
+    # Add the colorbar to the colorbar subplot
+    cbar = fig.colorbar(cp, cax=cax, orientation='vertical')
+    cbar.ax.yaxis.set_major_formatter(FormatStrFormatter('%.1f'))
+    # Add a box with text at the top-left corner of the figure
+    fig.text(0.01, 0.87, r"$e_1(x,t)$", bbox={'facecolor': 'white', 'alpha': 0.5, 'pad': 5})
+    fig.text(0.01, 0.47, r"$\hat{e}_1(x,t)$", bbox={'facecolor': 'white', 'alpha': 0.5, 'pad': 5})
+    fig.subplots_adjust(left=0.07, right=0.92, bottom=0.1, top=0.87, wspace=0.4, hspace=0.1)
+    plt.savefig(constants._FOLDER+'figs/2dduff_e1hatresult.pdf', format='pdf', dpi=300, bbox_inches='tight', pad_inches=0.0)
+    plt.close()
+
+    # Paper: error bound plot
+    plt.rcParams.update({
+    # General font settings
+    "font.family": "serif",       # Use sans-serif font for non-math text
+    "font.sans-serif": ["Times New Roman"],  # Prioritize Helvetica (must be installed on your system)
+    "font.size": 14,                   # Base font size for non-math text
+    
+    # Math font settings
+    "mathtext.fontset": "stix",        # STIX fonts for math symbols
+    
+    # Title and label sizes
+    "axes.titlesize": 14,              # Title font size
+    "axes.labelsize": 14,              # Axis label font size
+    
+    # Legend settings
+    "legend.fontsize": 14,             # Legend text size
+    "legend.title_fontsize": 14        # Legend title size (if you use legend titles)
+    })
+    N_dataset = 3
+    palette = sns.color_palette("dark", N_dataset)
+
+    num_stride = 6
+    fig, axs = plt.subplots(1, 5, figsize=(16, 12), subplot_kw={'projection': '3d'})
+    for i in range(len(t1s)):
+        ax = axs[i]
+        t1 = t1s[i]
+        pdf_true =constants.load_p_sol_monte(t1)
+        grid_points_tensor = torch.tensor(grid_points, dtype=torch.float32, requires_grad=False)
+        t_tensor = (torch.ones(len(grid_points_tensor), 1, dtype=torch.float32) * t1)
+        pdf_nn = p_net(grid_points_tensor, t_tensor).detach().numpy()
+        e1 = pdf_true - pdf_nn.reshape(x1_grid.shape)
+        e1_hat = e1_net(grid_points_tensor, t_tensor).data.cpu().numpy()
+        B1 = 2*np.max(np.abs(e1_hat).ravel())
+        ax.plot_wireframe(x1_grid, x2_grid, np.abs(e1), 
+                      color=palette[0], linewidth=0.7, alpha=1.0, 
+                      rstride=num_stride, cstride=num_stride, label=r"$|e_1|$")
+        ax.plot_wireframe(x1_grid, x2_grid, np.abs(e1_hat.reshape(x1_grid.shape)), 
+                        color=palette[1], linewidth=0.7, alpha=1.0, 
+                        rstride=num_stride, cstride=num_stride, label=r"$|\hat{e}_1|$")
+        ax.plot_surface(x1_grid, x2_grid, e1*0.0 + B1, color=palette[2], alpha=0.3, label=r"$B_1$")
+        ax.view_init(25,-30)
+        # ax.set_title("t="+str(t_eval))
+        ax.set_xlabel(r"$x_1$", fontsize=14)
+        ax.set_ylabel(r"$x_2$", fontsize=14)
+        if(i == 0):
+            ax.legend(loc='lower right', bbox_to_anchor=(0.32, 0.60), fontsize=16)  
+        ax.text2D(0.98, 0.75, "Error", transform=ax.transAxes)
+        ax.text2D(0.45, 0.90,  "t="+str(t1), transform=ax.transAxes)
+        ax.set_yticks(ticks_values, ticks_labels, fontsize=14)
+        ax.set_xticks(ticks_values, ticks_labels, fontsize=14)
+        ax.set_zlim([0,1.05*B1_max])
+    fig.subplots_adjust(left=0.02, right=0.98, bottom=0.15, top=0.9, wspace=0.25, hspace=0.3)
+    plt.savefig(constants._FOLDER+'figs/2dduff_errorbound.pdf', format='pdf', dpi=300, bbox_inches='tight', pad_inches=0.0)
+    plt.close()
+
+
 def main():
     global constants
     if(MONTE_FLAG):
@@ -658,10 +948,10 @@ def main():
     mse_cost_function = torch.nn.MSELoss() # Mean squared error
     optimizer = torch.optim.Adam(p_net.parameters(), lr=1e-3)
     scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.9)
-    if(False):
+    if(TRAIN_FLAG):
         train_p_net(p_net, optimizer, scheduler, mse_cost_function, iterations=999); print("p_net train complete")
     p_net = pos_p_net_train(p_net); p_net.eval()
-    check_pnn_result(p_net)
+    # check_pnn_result(p_net)
 
     e1_net.scale = get_e1init_max(p_net)
     mse_cost_function = torch.nn.MSELoss() # Mean squared error
@@ -670,7 +960,13 @@ def main():
     if(TRAIN_FLAG):
         train_e1_net(e1_net, p_net, optimizer, scheduler, mse_cost_function, iterations=15005); print("e1_net train complete")
     e1_net = pos_e1_net_train(e1_net); e1_net.eval()
-    check_e1nn_result(e1_net, p_net)
+    # check_e1nn_result(e1_net, p_net)
+
+    # plot_train_loss(path_1="exp/1/output/p_net_train_loss.npy", path_2="exp/1/output/e1_net_train_loss.npy")
+    show_p_net_results(p_net)
+    show_e1_net_results(p_net, e1_net)
+
+    
 
 
 

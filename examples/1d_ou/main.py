@@ -365,7 +365,27 @@ def plot_tight_error_bounds(p_net, e1_net):
     fig.savefig(FOLDER+'figs/e2hat_result.pdf', format='pdf', dpi=300)
     plt.close()
     
-    fig, axs = plt.subplots(3, 1, figsize=(5, 6))
+    # paper
+    colors = sns.color_palette("Set2", 3)
+    plt.rcParams.update({
+    # General font settings
+    "font.family": "serif",       # Use sans-serif font for non-math text
+    "font.sans-serif": ["Times New Roman"],  # Prioritize Helvetica (must be installed on your system)
+    "font.size": 22,                   # Base font size for non-math text
+    
+    # Math font settings
+    "mathtext.fontset": "stix",        # STIX fonts for math symbols
+    
+    # Title and label sizes
+    "axes.titlesize": 22,              # Title font size
+    "axes.labelsize": 22,              # Axis label font size
+    
+    # Legend settings
+    "legend.fontsize": 20,             # Legend text size
+    "legend.title_fontsize": 20        # Legend title size (if you use legend titles)
+    })
+
+    fig, axs = plt.subplots(3, 1, figsize=(10, 8), sharex=True)
     for i in range(3):
         t1 = t1s[i]
         pt_t1 = Variable(torch.from_numpy(0*x+t1).float(), requires_grad=True).to(device)
@@ -380,25 +400,25 @@ def plot_tight_error_bounds(p_net, e1_net):
         eB = np.round(eB, 4)
         eL = 2*max(abs(e1_hat))[0]
         eL = np.round(eL,3)
+        axs[i].plot(x, p, color="black", linestyle="-", linewidth=2.0, label=r"$p$")
+        axs[i].plot(x, phat, linestyle="--", color="red", linewidth=2.0, label=r"$\hat{p}$")
+        axs[i].fill_between(x.reshape(-1), y1=phat.reshape(-1)+eL, y2=phat.reshape(-1)-eL, color=colors[0], alpha=0.5, label=r"$B_1$")
+        axs[i].fill_between(x.reshape(-1), y1=phat.reshape(-1)+eB, y2=phat.reshape(-1)-eB, color=colors[1], alpha=0.5, label=r"$B_2$")
         if i == 0:
-            axs[i].plot(x, p, color=colors[i], linestyle="-", linewidth=1.0, label=r"$p$")
-            axs[i].plot(x, phat, linestyle="--", color = "red", linewidth=1.0, label=r"$\hat{p}$")
-            axs[i].fill_between(x.reshape(-1), y1=phat.reshape(-1)+eL, y2=phat.reshape(-1)-eL, color="green", alpha=0.3, label=r"$e_S$")
-            axs[i].legend(loc="lower left", fontsize=18, framealpha=0.6)
-        else:
-            axs[i].plot(x, p, color=colors[i], linestyle="-", linewidth=1.0)
-            axs[i].plot(x, phat, linestyle="--", color = "red", linewidth=1.0)
-            axs[i].fill_between(x.reshape(-1), y1=phat.reshape(-1)+eL, y2=phat.reshape(-1)-eL, color="green", alpha=0.3)
-        if i < 2:
-            axs[i].set_xticks([])
+            axs[i].legend(ncol=2, loc="lower left", bbox_to_anchor=(0.0, 0.25))
         axs[i].set_ylim([0, 0.75])
-        axs[i].text(0.01, 0.98, "t="+str(t1)+", "+r"$e_S=$"+str(eL), transform=axs[i].transAxes, verticalalignment='top', fontsize=18)
-        axs[i].set_xlim([-3,3])
+        axs[i].set_xlim([-2.5,3])
+        axs[i].text(0.01, 0.98, "t="+str(t1), transform=axs[i].transAxes, verticalalignment='top', fontsize=18)
         axs[i].set_ylabel("PDF")
-        axs[i].yaxis.set_major_formatter(FormatStrFormatter('%.2f'))
-    axs[2].set_xlabel("x")
-    plt.tight_layout(pad=0.3, h_pad=0.3)
-    fig.savefig(FOLDER+'figs/error_bounds_result.pdf', format='pdf', dpi=300)
+    axs[2].set_xlabel(r"$x$")
+    # Format y-ticks to display two decimal places for all subplots
+    for ax in axs.flat:
+        ax.yaxis.set_major_formatter(FormatStrFormatter('%.1f'))
+    # Add dotted grid to each subplot
+    for ax in axs.flat:
+        ax.grid(True, which='both', linestyle=':', linewidth=0.5)  # Dotted grid
+    plt.tight_layout()
+    fig.savefig(FOLDER+'figs/1dl_errorboundsresult.pdf', format='pdf', dpi=300, bbox_inches='tight', pad_inches=0.0)
     plt.close()
 
     fig, axs = plt.subplots(3, 1, figsize=(5, 6))
@@ -446,39 +466,40 @@ def plot_tight_error_bounds(p_net, e1_net):
 # Paper: Fig.1(a)
 def plot_compare_error_bounds(t1s, B2, B1, e1):
     # Get the last 3 colors from the "hls" palette with 8 colors
-    colors = sns.color_palette("hls", 8)[-3:]  # Indexes 5, 6, 7 (last three)   
+    # colors = sns.color_palette("hls", 8)[-3:]  # Indexes 5, 6, 7 (last three)   
+    colors = sns.color_palette("muted", 3)
     plt.rcParams.update({
     # General font settings
     "font.family": "serif",       # Use sans-serif font for non-math text
     "font.sans-serif": ["Times New Roman"],  # Prioritize Helvetica (must be installed on your system)
-    "font.size": 32,                   # Base font size for non-math text
+    "font.size": 22,                   # Base font size for non-math text
     
     # Math font settings
     "mathtext.fontset": "stix",        # STIX fonts for math symbols
     
     # Title and label sizes
-    "axes.titlesize": 32,              # Title font size
-    "axes.labelsize": 32,              # Axis label font size
+    "axes.titlesize": 22,              # Title font size
+    "axes.labelsize": 22,              # Axis label font size
     
     # Legend settings
-    "legend.fontsize": 40,             # Legend text size
-    "legend.title_fontsize": 40        # Legend title size (if you use legend titles)
+    "legend.fontsize": 20,             # Legend text size
+    "legend.title_fontsize": 20        # Legend title size (if you use legend titles)
     })
     e1 = np.ravel(e1)  # Flatten the array if it's 2D
     B2 = np.ravel(B2)  # Flatten the array if it's 2D
     B1 = np.ravel(B1)  # Flatten the array if it's 2D
-    fig, axs = plt.subplots(1, 1, figsize=(16, 9))
+    fig, axs = plt.subplots(1, 1, figsize=(5, 6))
     axs.plot(t1s, e1, color="black", linestyle="--", linewidth=2.0, label='$max_x|e_1(x,t)|$')
-    axs.plot(t1s, B2, color=colors[0], linestyle="-", linewidth=2.0, label='$B_2(t)$')
-    axs.plot(t1s, B1, color=colors[1], linestyle="-", linewidth=2.0, label='$B_1(t)$')
-    axs.fill_between(t1s, e1, B2, color=colors[0], alpha=0.3)
-    axs.fill_between(t1s, B2, B1, color=colors[1], alpha=0.3)
+    axs.plot(t1s, B2, color=colors[1], linestyle="-", linewidth=2.0, label='$B_2(t)$')
+    axs.plot(t1s, B1, color=colors[0], linestyle="-", linewidth=2.0, label='$B_1(t)$')
+    axs.fill_between(t1s, e1, B2, color=colors[1], alpha=0.1)
+    axs.fill_between(t1s, B2, B1, color=colors[0], alpha=0.1)
     axs.legend(loc="upper right", framealpha=0.3)
     axs.set_xlabel('$t$')
     axs.set_ylabel('Value$(t)$')
     axs.grid(True, which='both', linestyle=':', linewidth=0.5)  # Dotted grid
     plt.tight_layout()
-    plt.savefig(FOLDER+'figs/1dou_compare_error_bounds.pdf', format='pdf', dpi=300)
+    plt.savefig(FOLDER+'figs/1dou_compare_error_bounds.pdf', format='pdf', dpi=300, bbox_inches='tight', pad_inches=0.0)
     plt.close()
 
 # Paper: Fig.1(b)
@@ -487,23 +508,23 @@ def plot_conditions(t, a, b, threshold_1, threshold_2, lhs_condition3, rhs_condi
     # General font settings
     "font.family": "serif",       # Use sans-serif font for non-math text
     "font.sans-serif": ["Times New Roman"],  # Prioritize Helvetica (must be installed on your system)
-    "font.size": 32,                   # Base font size for non-math text
+    "font.size": 22,                   # Base font size for non-math text
     
     # Math font settings
     "mathtext.fontset": "stix",        # STIX fonts for math symbols
     
     # Title and label sizes
-    "axes.titlesize": 32,              # Title font size
-    "axes.labelsize": 32,              # Axis label font size
+    "axes.titlesize": 22,              # Title font size
+    "axes.labelsize": 22,              # Axis label font size
     
     # Legend settings
-    "legend.fontsize": 32,             # Legend text size
-    "legend.title_fontsize": 32        # Legend title size (if you use legend titles)
+    "legend.fontsize": 20,             # Legend text size
+    "legend.title_fontsize": 20        # Legend title size (if you use legend titles)
     })
     # Get the last 3 colors from the "hls" palette with 8 colors
-    colors = sns.color_palette("hls", 8)[-3:]  # Indexes 5, 6, 7 (last three)   
+    colors = sns.color_palette("muted", 3)
     # Create a figure with three subplots
-    fig, axs = plt.subplots(3, 1, figsize=(12, 9), sharex=True)
+    fig, axs = plt.subplots(3, 1, figsize=(7, 6), sharex=True)
     # Condition 1: a(t) < 1
     axs[0].fill_between(t, a, threshold_1, where=(a < 1), color=colors[0], alpha=0.1)
     axs[0].plot(t, t*0+threshold_1, color=colors[0], linestyle='--', label='1')
@@ -530,47 +551,9 @@ def plot_conditions(t, a, b, threshold_1, threshold_2, lhs_condition3, rhs_condi
     for ax in axs.flat:
         ax.grid(True, which='both', linestyle=':', linewidth=0.5)  # Dotted grid
     plt.tight_layout()
-    plt.savefig('figs/1dou_conditions.pdf', format='pdf', dpi=300)
+    plt.savefig('figs/1dou_conditions.pdf', format='pdf', dpi=300, bbox_inches='tight', pad_inches=0.0)
     plt.close()
     # plt.show()
-
-# Paper: Fig.1(c)
-def plot_dummy(t1s, B2, B1, e1):
-    # Get the last 3 colors from the "hls" palette with 8 colors
-    colors = sns.color_palette("hls", 8)[-3:]  # Indexes 5, 6, 7 (last three)   
-    plt.rcParams.update({
-    # General font settings
-    "font.family": "serif",       # Use sans-serif font for non-math text
-    "font.sans-serif": ["Times New Roman"],  # Prioritize Helvetica (must be installed on your system)
-    "font.size": 24,                   # Base font size for non-math text
-    
-    # Math font settings
-    "mathtext.fontset": "stix",        # STIX fonts for math symbols
-    
-    # Title and label sizes
-    "axes.titlesize": 24,              # Title font size
-    "axes.labelsize": 24,              # Axis label font size
-    
-    # Legend settings
-    "legend.fontsize": 28,             # Legend text size
-    "legend.title_fontsize": 28        # Legend title size (if you use legend titles)
-    })
-    e1 = np.ravel(e1)  # Flatten the array if it's 2D
-    B2 = np.ravel(B2)  # Flatten the array if it's 2D
-    B1 = np.ravel(B1)  # Flatten the array if it's 2D
-    fig, axs = plt.subplots(1, 1, figsize=(10, 7))
-    axs.plot(t1s, e1, color="black", linestyle="--", linewidth=2.0, label='$max_x|e_1(x,t)|$')
-    axs.plot(t1s, B2, color=colors[0], linestyle="-", linewidth=2.0, label='$B_2(t)$')
-    axs.plot(t1s, B1, color=colors[1], linestyle="-", linewidth=2.0, label='$B_1(t)$')
-    axs.fill_between(t1s, e1, B2, color=colors[0], alpha=0.3)
-    axs.fill_between(t1s, B2, B1, color=colors[1], alpha=0.3)
-    axs.legend(loc="upper right", framealpha=0.3)
-    axs.set_xlabel('$t$')
-    axs.set_ylabel('Value$(t)$')
-    axs.grid(True, which='both', linestyle=':', linewidth=0.5)  # Dotted grid
-    plt.tight_layout()
-    plt.savefig(FOLDER+'figs/1dou_dummy.pdf', format='pdf', dpi=300)
-    plt.close()
 
 
 def plot_alphas(p_net, e1_net):
@@ -663,23 +646,64 @@ def plot_train_loss(path_1, path_2):
     min_loss_1 = min(loss_history_1)
     loss_history_2 = np.load(path_2)
     min_loss_2 = min(loss_history_2)
-    fig, axs = plt.subplots(2, 1, figsize=(7, 6))
-    axs[0].plot(np.arange(len(loss_history_1)), loss_history_1, "black", linewidth=1.0)
+
+    plt.rcParams.update({
+    # General font settings
+    "font.family": "serif",       # Use sans-serif font for non-math text
+    "font.sans-serif": ["Times New Roman"],  # Prioritize Helvetica (must be installed on your system)
+    "font.size": 22,                   # Base font size for non-math text
+    
+    # Math font settings
+    "mathtext.fontset": "stix",        # STIX fonts for math symbols
+    
+    # Title and label sizes
+    "axes.titlesize": 22,              # Title font size
+    "axes.labelsize": 22,              # Axis label font size
+    
+    # Legend settings
+    "legend.fontsize": 20,             # Legend text size
+    "legend.title_fontsize": 20        # Legend title size (if you use legend titles)
+    })
+    # Get the last 3 colors from the "hls" palette with 8 colors
+    colors = sns.color_palette("muted", 2)
+
+    fig, axs = plt.subplots(1, 2, figsize=(16, 9))
+    axs[0].plot(np.arange(len(loss_history_1)), loss_history_1, color="black", linewidth=1.0)
     axs[0].set_ylim([min_loss_1, 10*min_loss_1])
-    axs[1].plot(np.arange(len(loss_history_2)), loss_history_2, "black", linewidth=1.0)
+    axs[1].plot(np.arange(len(loss_history_2)), loss_history_2, color="black", linewidth=1.0)
     axs[1].set_ylim([min_loss_2, 10*min_loss_2])
-    axs[0].grid(linewidth=0.5)
-    axs[1].grid(linewidth=0.5)
-    axs[1].set_xlabel("epochs")
+    axs[0].set_xlabel("iterations")
+    axs[1].set_xlabel("iterations")
     axs[0].set_ylabel("train loss: "+r"$\hat{p}$")
     axs[1].set_ylabel("train loss: "+r"$\hat{e}_1$")
+    axs[0].grid(True, which='both', linestyle=':', linewidth=0.5)  # Dotted grid
+    axs[1].grid(True, which='both', linestyle=':', linewidth=0.5)  # Dotted grid
     plt.tight_layout()
-    fig.savefig(FOLDER+'figs/train_loss.pdf', format='pdf', dpi=300, bbox_inches='tight')
+    fig.savefig(FOLDER+'figs/1dl_trainloss.pdf', format='pdf', dpi=300, bbox_inches='tight', pad_inches=0.0)
     plt.close()
 
 
 def plot_p_surface(p_net, num=100):
-    plt.rcParams['font.size'] = 18
+
+    plt.rcParams.update({
+    # General font settings
+    "font.family": "serif",       # Use sans-serif font for non-math text
+    "font.sans-serif": ["Times New Roman"],  # Prioritize Helvetica (must be installed on your system)
+    "font.size": 18,                   # Base font size for non-math text
+    # "figure.autolayout": True,
+    
+    # Math font settings
+    "mathtext.fontset": "stix",        # STIX fonts for math symbols
+    
+    # Title and label sizes
+    "axes.titlesize": 18,              # Title font size
+    "axes.labelsize": 18,              # Axis label font size
+    
+    # Legend settings
+    "legend.fontsize": 18,             # Legend text size
+    "legend.title_fontsize": 18        # Legend title size (if you use legend titles)
+    })
+
     t1s = [1.0, 2.0, 3.0]
     x = np.linspace(x_low, x_hig, num=num)
     t = np.linspace(t0, T_end, num=num)
@@ -693,9 +717,9 @@ def plot_p_surface(p_net, num=100):
         p_true = p_exact(x, x*0+t1)
         p_list.append(p_true)
 
-    fig = plt.figure(figsize=(6,6))
+    fig = plt.figure(figsize=(8,6))
     ax = fig.add_subplot(111, projection='3d')
-    ax.plot_surface(x_mesh, t_mesh, phat, cmap='viridis', alpha=0.7, label=r"$\hat{p}$")
+    ax.plot_surface(x_mesh, t_mesh, phat, cmap='viridis', alpha=0.8, label=r"$\hat{p}$")
     z_max = 1.5*np.max(np.abs(phat))
     for i in range(len(t1s)):
         t1 = t1s[i]
@@ -704,18 +728,38 @@ def plot_p_surface(p_net, num=100):
             ax.plot(x, t1_monte, p_list[i], color="black", label=r"$p$")
         else:
             ax.plot(x, t1_monte, p_list[i], color="black")
-
-    ax.set_xlabel("x"); ax.set_ylabel("t"); ax.set_zlabel("  PDF")
-    ax.legend(loc='upper left', bbox_to_anchor=(0.1, 0.85), fontsize=18)
-    y_ticks = np.array([1, 2, 3])  # Example y-tick positions
-    ax.set_yticks(y_ticks)  # Set the positions of the y-ticks
     ax.view_init(20, -50)
-    plt.subplots_adjust(left=0.00, right=0.90, top=1.0, bottom=0.0)
-    # plt.tight_layout()
-    fig.savefig(FOLDER+'figs/phat_surface_plot.pdf', format='pdf', dpi=300)
+    ax.set_xlabel(r'$x$')
+    ax.set_ylabel(r'$t$')
+    ax.text2D(0.94, 0.77, "PDF", transform=ax.transAxes)
+    ax.zaxis.set_major_formatter(FormatStrFormatter('%.1f'))
+    ax.legend(loc='lower right', bbox_to_anchor=(0.32, 0.60))  
+    plt.tight_layout()
+    plt.savefig(FOLDER+'figs/1dl_phatsurface.pdf', format='pdf', dpi=300, bbox_inches='tight', pad_inches=0.0)
+    plt.close()
 
 
 def plot_e1_surface(p_net, e1_net, num=100):
+
+    plt.rcParams.update({
+    # General font settings
+    "font.family": "serif",       # Use sans-serif font for non-math text
+    "font.sans-serif": ["Times New Roman"],  # Prioritize Helvetica (must be installed on your system)
+    "font.size": 18,                   # Base font size for non-math text
+    # "figure.autolayout": True,
+    
+    # Math font settings
+    "mathtext.fontset": "stix",        # STIX fonts for math symbols
+    
+    # Title and label sizes
+    "axes.titlesize": 18,              # Title font size
+    "axes.labelsize": 18,              # Axis label font size
+    
+    # Legend settings
+    "legend.fontsize": 18,             # Legend text size
+    "legend.title_fontsize": 18        # Legend title size (if you use legend titles)
+    })
+
     t1s = [1.0, 2.0, 3.0]
     x = np.linspace(x_low, x_hig, num=num)
     t = np.linspace(t0, T_end, num=num)
@@ -734,9 +778,9 @@ def plot_e1_surface(p_net, e1_net, num=100):
         e1 = p_monte - p_hat
         e1_list.append(e1)
 
-    fig = plt.figure(figsize=(6,6))
+    fig = plt.figure(figsize=(8,6))
     ax = fig.add_subplot(111, projection='3d')
-    ax.plot_surface(x_mesh, t_mesh, e1hat, cmap='viridis', alpha=0.7, label=r"$\hat{e}_1$")
+    ax.plot_surface(x_mesh, t_mesh, e1hat, cmap='inferno', alpha=0.8, label=r"$\hat{e}_1$")
     # z_max = 1.2*np.max(np.abs(e1hat))
     # ax.scatter(x_samples, t_samples, t_samples*0+z_max, marker="x", color="black", s=0.02, label='Data Points')
     for i in range(len(t1s)):
@@ -746,18 +790,15 @@ def plot_e1_surface(p_net, e1_net, num=100):
             ax.plot(x_monte, t1_monte, e1_list[i], color="black", label=r"$e_1$")
         else:
             ax.plot(x_monte, t1_monte, e1_list[i], color="black")
-    # Set z-ticks to scientific notation
-    ax.zaxis.set_major_formatter(ScalarFormatter(useMathText=True))
-    ax.zaxis.get_major_formatter().set_powerlimits((-2, 2))  # Use scientific notation if value is outside this range
-    y_ticks = np.array([1, 2, 3])  # Example y-tick positions
-    ax.set_yticks(y_ticks)  # Set the positions of the y-ticks
-    ax.set_xlabel("x"); ax.set_ylabel("t"); ax.set_zlabel("e")
-    ax.legend(loc='upper left', bbox_to_anchor=(0.1, 0.85), fontsize=18)
-    y_ticks = np.array([1, 2, 3])  # Example y-tick positions
-    ax.set_yticks(y_ticks)  # Set the positions of the y-ticks
     ax.view_init(20, -50)
-    plt.subplots_adjust(left=0.00, right=0.90, top=1.0, bottom=0.0)
-    fig.savefig(FOLDER+'figs/e1hat_surface_plot.pdf', format='pdf', dpi=300)
+    ax.set_xlabel(r'$x$')
+    ax.set_ylabel(r'$t$')
+    ax.text2D(0.94, 0.77, "Error", transform=ax.transAxes)
+    ax.zaxis.set_major_formatter(FormatStrFormatter('%.2f'))
+    ax.legend(loc='lower right', bbox_to_anchor=(0.32, 0.60))  
+    plt.tight_layout()
+    plt.savefig(FOLDER+'figs/1dl_e1hatsurface.pdf', format='pdf', dpi=300, bbox_inches='tight', pad_inches=0.0)
+    plt.close()
 
 
 def main():
@@ -767,6 +808,8 @@ def main():
     p_net.apply(init_weights)
     e1_net = E1Net().to(device)
     e1_net.apply(init_weights)
+
+    print(p_net)
 
     p_net.scale = get_p_normalize()
     optimizer = torch.optim.Adam(p_net.parameters())
@@ -783,9 +826,9 @@ def main():
         train_e1_net(e1_net, optimizer, mse_cost_function, p_net, max_abs_e1_x_0, scheduler_e1_model); print("e1_net train complete")
     e1_net = pos_e1_net_train(e1_net, PATH=FOLDER+"output/e1_net.pt", PATH_LOSS=FOLDER+"output/e1_net_train_loss.npy")
 
-    # plot_tight_error_bounds(p_net, e1_net)
-    # plot_train_loss(FOLDER+"output/p_net_train_loss.npy", FOLDER+"output/e1_net_train_loss.npy")
-    plot_alphas(p_net, e1_net)
+    plot_tight_error_bounds(p_net, e1_net)
+    plot_train_loss(FOLDER+"output/p_net_train_loss.npy", FOLDER+"output/e1_net_train_loss.npy")
+    # plot_alphas(p_net, e1_net)
     # plot_p_surface(p_net)
     # plot_e1_surface(p_net, e1_net)
     print("[complete 1d OU]")

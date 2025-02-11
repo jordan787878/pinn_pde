@@ -13,6 +13,7 @@ import time
 import argparse
 import seaborn as sns
 from matplotlib.patches import Rectangle
+from scipy.stats import norm
 
 FOLDER = "exp1/main_stat/"
 DATA_FOLDER = "exp1/data/"
@@ -669,11 +670,42 @@ def show_results_old(pnet, enet):
     plt.close()
 
 
+def gaussian_mixture_pdf_1d(x, weights, means, covariances):
+    """
+    Computes the probability density function (PDF) of a 1D Gaussian Mixture Model (GMM)
+    over an array of x values.
+
+    Parameters:
+    - x: np.ndarray, shape (num_points,), the points at which to evaluate the PDF
+    - weights: np.ndarray, shape (N,), mixture weights (sum to 1)
+    - means: np.ndarray, shape (N,), means of the Gaussians
+    - covariances: np.ndarray, shape (N,), variances (not covariance matrices in 1D)
+
+    Returns:
+    - np.ndarray: The total PDF values at each x point (shape: (num_points,))
+    """
+    N = len(weights)  # Number of Gaussian components
+    total_pdf = np.zeros_like(x)  # Initialize the PDF array
+    for k in range(N):
+        # Compute 1D Gaussian PDF for each component
+        pdf_k = norm.pdf(x, loc=means[k], scale=np.sqrt(covariances[k]))  
+        total_pdf += weights[k] * pdf_k  # Weighted sum
+    return total_pdf
+
+
 def show_results(pnet, enet):
     plt.rcParams['font.size'] = 18
     x = np.load(DATA_FOLDER + datas[0] + "xsim.npy").reshape(-1,1)
+    dx = x[1] - x[0]
+    print(x.shape)
     pt_x = Variable(torch.from_numpy(x).float(), requires_grad=True).to(device)
     limit_margin = 0.1
+
+    # load gmm data
+    gmm = np.load(DATA_FOLDER+"others/1dnonlinear_gmm.npz")
+    gmm_means = gmm["arr1"]
+    gmm_covs  = gmm["arr2"]
+    gmm_weights = gmm["arr3"]
 
     # Create a ScalarFormatter object
     formatter = ScalarFormatter()
@@ -681,6 +713,7 @@ def show_results(pnet, enet):
 
     p_monte_list = []
     p_hat_list = []
+    p_gmm_list = []
     e1_list = []
     e1_hat_list = []
     e2_list = []
@@ -688,11 +721,13 @@ def show_results(pnet, enet):
     p_res_list = []
     e_res_list = []
     e2_res_list = []
-    t1s = [1.0, 3.0, 5.0]
-    for t1 in t1s:
+    t1s = [0.0, 3.0, 5.0]
+    for i, t1 in enumerate(t1s):
         p_monte = np.load(DATA_FOLDER + datas[0] + "psim_t" + str(t1) + ".npy").reshape(-1, 1)
         # if(t1 == 0.0): p_monte = p_init(x)
         p_monte_list.append(p_monte)
+        p_gmm = gaussian_mixture_pdf_1d(x, gmm_weights, gmm_means[:,i], gmm_covs[:,i]) # constant gmm_weights over time
+        p_gmm_list.append(p_gmm)
         pt_t1 = Variable(torch.from_numpy(x*0+t1).float(), requires_grad=True).to(device)
         phat = pnet(pt_x, pt_t1)
         ehat = enet(pt_x, pt_t1)[:,0].view(-1,1)
@@ -716,52 +751,56 @@ def show_results(pnet, enet):
         e_res_list.append(eres)
         # e2_res_list.append(e2res)
 
+    plt.rcParams.update({
+    # General font settings
+    "font.family": "serif",       # Use sans-serif font for non-math text
+    "font.sans-serif": ["Times New Roman"],  # Prioritize Helvetica (must be installed on your system)
+    "font.size": 20,                   # Base font size for non-math text
+    
+    # Math font settings
+    "mathtext.fontset": "stix",        # STIX fonts for math symbols
+    
+    # Title and label sizes
+    "axes.titlesize": 20,              # Title font size
+    "axes.labelsize": 20,              # Axis label font size
+    
+    # Legend settings
+    "legend.fontsize": 20,             # Legend text size
+    "legend.title_fontsize": 20        # Legend title size (if you use legend titles)
+    })
+
+    fig, axs = plt.subplots(3, 1, figsize=(7, 6), sharex=True)
+    N_dataset = 5
+    palette = sns.color_palette("muted", N_dataset)
     global_max = float('-inf')
     for i, (phat) in enumerate(zip(p_hat_list)):
         max_value = np.max(np.abs(phat))
         global_max = max(global_max, max_value)
-    fig, axs = plt.subplots(3, 1, figsize=(5, 6))
-    for i, (p_monte, p_hat, e1_hat) in enumerate(zip(p_monte_list, p_hat_list, e1_hat_list)):
-        # if i == 0:
-        #     ax1 = axs[0,0]
-        #     ax1.set_ylabel("PDF")
-        # if i == 1:
-        #     ax1 = axs[1,0]
-        #     ax1.set_ylabel("PDF")
-        # if i == 2:
-        #     ax1 = axs[2,0]
-        #     ax1.set_xlabel("x")
-        #     ax1.set_ylabel("PDF")
-        # if i == 3:
-        #     ax1 = axs[0,1]
-        # if i == 4:
-        #     ax1 = axs[1,1]
-        # if i == 5:
-        #     ax1 = axs[2,1]
-        #     ax1.set_xlabel("x")
+    for i, (p_monte, p_hat, p_gmm, e1_hat) in enumerate(zip(p_monte_list, p_hat_list, p_gmm_list, e1_hat_list)):
         eL = 2.0 * np.max(np.abs(e1_hat)); eL = np.round(eL, 3)
         ax1 = axs[i]
-        ax1.plot(x, p_monte, "black", linewidth = 1.0, label=r"$p$")
-        ax1.plot(x, p_hat, "red", linewidth = 1.0, linestyle="--", label=r"$\hat{p}$")
+        ax1.plot(x, p_monte, color="black", linewidth = 2.0, label=r"$p$")
+        ax1.plot(x, p_hat, color="red", linewidth = 1.5, linestyle="--", label=r"$\hat{p}$")
+        # ax1.plot(x[::6], p_hat[::6], color=palette[1], linewidth = 0.0, linestyle="-", marker="o", markersize=5, label=r"$\hat{p}$")
         ax1.fill_between(x.reshape(-1), y1=p_hat.reshape(-1)+eL, y2=p_hat.reshape(-1)-eL, 
-                            color="green", alpha=0.3, label=r"$e_S$")
+                         color=palette[2], alpha=0.5, label=r"$B_1$")
+        ax1.plot(x, p_gmm, color="blue", linewidth = 1.5, linestyle="--", label=r"$\tilde{p}_{GM}$")
+        # ax1.plot(x[::6], p_gmm[::6], color=palette[4], linewidth = 0.0, linestyle="-", marker="x", markersize=8, label=r"$\tilde{p}_{GM}$")
+        print("[check] mean: ", np.sum(x*p_monte)*dx, np.sum(x*p_gmm)*dx)
         if i == 0:
-            ax1.legend(loc="upper right")
-        if i < 2:
-            ax1.set_xticks([])
+            ax1.legend(loc="upper right", ncol=2, fontsize=20)
         if i == 2:
             ax1.set_xlabel("x")
-        ax1.set_xlim([x_low, x_hig])
+        ax1.set_xlim([-5, 5])
         ax1.set_ylim(0.0, global_max+limit_margin)
-        # ax1.grid(True, which='both', linestyle='-', linewidth=0.5)
-        ax1.text(0.01, 0.98, r"$t:$ "+str(t1s[i]) + r", $e_S:$ "+str(eL), 
+        ax1.set_ylabel('PDF')
+        ax1.text(0.01, 0.98, r"$t:$ "+str(t1s[i]), 
                  transform=axs[i].transAxes, verticalalignment='top', fontsize=18)
-        # Set y-axis to scientific notation
-        yScalarFormatter = ScalarFormatterClass(useMathText=True)
-        yScalarFormatter.set_powerlimits((0,0))
-        ax1.yaxis.set_major_formatter(yScalarFormatter)
+    for ax in axs.flat:
+        ax.grid(True, which='both', linestyle=':', linewidth=0.5)  # Dotted grid
     plt.tight_layout(pad=0.2, h_pad=0.1)
-    fig.savefig(FOLDER+'figs/phat_eS.pdf', format='pdf', dpi=300)
+    # plt.tight_layout()
+    fig.savefig(FOLDER+'figs/phat_eS.pdf', format='pdf', dpi=300, bbox_inches='tight', pad_inches=0.0)
     plt.close()
 
     global_max = float('-inf')
@@ -815,7 +854,7 @@ def show_results(pnet, enet):
         yScalarFormatter.set_powerlimits((0,0))
         ax1.yaxis.set_major_formatter(yScalarFormatter)
     plt.tight_layout(pad=0.2, h_pad=0.1)
-    fig.savefig(FOLDER+'figs/e1hat_eS.pdf', format='pdf', dpi=300)
+    fig.savefig(FOLDER+'figs/e1hat_eS.pdf', format='pdf', dpi=300, bbox_inches='tight', pad_inches=0.0)
     plt.close()
 
     # global_max = float('-inf')
@@ -969,7 +1008,7 @@ def plot_a1_data(data_folder=FOLDER, number_of_data=12):
     "legend.title_fontsize": 20        # Legend title size (if you use legend titles)
     })
 
-    fig, axs = plt.subplots(1, 1, figsize=(8, 6))
+    fig, axs = plt.subplots(1, 1, figsize=(7, 6))
     width = 0.01
     # load data
     for i in range(1, number_of_data+1):
@@ -1019,9 +1058,25 @@ def plot_p_monte():
 
 
 def plot_p_surface(p_net, num=100):
-    plt.rcParams['font.size'] = 18
-    # x_samples = np.load(FOLDER+"output/p_xsamples.npy")
-    # t_samples = np.load(FOLDER+"output/p_tsamples.npy")
+    plt.rcParams.update({
+    # General font settings
+    "font.family": "serif",       # Use sans-serif font for non-math text
+    "font.sans-serif": ["Times New Roman"],  # Prioritize Helvetica (must be installed on your system)
+    "font.size": 18,                   # Base font size for non-math text
+    # "figure.autolayout": True,
+    
+    # Math font settings
+    "mathtext.fontset": "stix",        # STIX fonts for math symbols
+    
+    # Title and label sizes
+    "axes.titlesize": 18,              # Title font size
+    "axes.labelsize": 18,              # Axis label font size
+    
+    # Legend settings
+    "legend.fontsize": 18,             # Legend text size
+    "legend.title_fontsize": 18        # Legend title size (if you use legend titles)
+    })
+
     x = np.linspace(x_low, x_hig, num=num)
     t = np.linspace(t0, T_end, num=num)
     x_mesh, t_mesh = np.meshgrid(x,t)
@@ -1032,11 +1087,12 @@ def plot_p_surface(p_net, num=100):
     p_list = []
     x_monte = np.load(DATA_FOLDER + datas[0] + "xsim.npy").reshape(-1,1)
     pt_x_monte = Variable(torch.from_numpy(x_monte).float(), requires_grad=True).to(device)
+    t1s = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]
     for t1 in t1s:
         p_monte = np.load(DATA_FOLDER + datas[0] + "psim_t" + str(t1) + ".npy").reshape(-1, 1)
         p_list.append(p_monte)
 
-    fig = plt.figure(figsize=(6,6))
+    fig = plt.figure(figsize=(8,6))
     ax = fig.add_subplot(111, projection='3d')
     ax.plot_surface(x_mesh, t_mesh, phat, cmap='viridis', alpha=0.8, label=r"$\hat{p}$")
     # z_max = 1.5*np.max(np.abs(phat))
@@ -1049,17 +1105,37 @@ def plot_p_surface(p_net, num=100):
         else:
             ax.plot(x_monte, t1_monte, p_list[i], color="black")
 
-    ax.set_xlabel("x"); ax.set_ylabel("t"); ax.set_zlabel("  PDF")
-    ax.legend(loc='upper left', bbox_to_anchor=(0.1, 0.9), fontsize=18)
-    y_ticks = np.array([0, 1, 2, 3, 4, 5])  # Example y-tick positions
-    ax.set_yticks(y_ticks)  # Set the positions of the y-ticks
-    ax.view_init(20, -60)
-    plt.subplots_adjust(left=0.00, right=0.90, top=1.0, bottom=0.0)
-    fig.savefig(FOLDER+'figs/phat_surface_plot.pdf', format='pdf', dpi=300)
+    ax.view_init(20, -50)
+    ax.set_xlabel(r'$x$')
+    ax.set_ylabel(r'$t$')
+    ax.text2D(0.94, 0.77, "PDF", transform=ax.transAxes)
+    ax.zaxis.set_major_formatter(FormatStrFormatter('%.1f'))
+    ax.legend(loc='lower right', bbox_to_anchor=(0.6, 0.60))  
+    plt.tight_layout()
+    plt.savefig(FOLDER+'figs/1dnl_phatsurface.pdf', format='pdf', dpi=300, bbox_inches='tight', pad_inches=0.0)
+    plt.close()
 
 
 def plot_e1_surface(p_net, e1_net, num=100):
-    plt.rcParams['font.size'] = 18
+    plt.rcParams.update({
+    # General font settings
+    "font.family": "serif",       # Use sans-serif font for non-math text
+    "font.sans-serif": ["Times New Roman"],  # Prioritize Helvetica (must be installed on your system)
+    "font.size": 18,                   # Base font size for non-math text
+    # "figure.autolayout": True,
+    
+    # Math font settings
+    "mathtext.fontset": "stix",        # STIX fonts for math symbols
+    
+    # Title and label sizes
+    "axes.titlesize": 18,              # Title font size
+    "axes.labelsize": 18,              # Axis label font size
+    
+    # Legend settings
+    "legend.fontsize": 18,             # Legend text size
+    "legend.title_fontsize": 18        # Legend title size (if you use legend titles)
+    })
+
     # x_samples = np.load(FOLDER+"output/e1_xsamples.npy")
     # t_samples = np.load(FOLDER+"output/e1_tsamples.npy")
     x = np.linspace(x_low, x_hig, num=num)
@@ -1072,6 +1148,7 @@ def plot_e1_surface(p_net, e1_net, num=100):
     e1_list = []
     x_monte = np.load(DATA_FOLDER + datas[0] + "xsim.npy").reshape(-1,1)
     pt_x_monte = Variable(torch.from_numpy(x_monte).float(), requires_grad=True).to(device)
+    t1s = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]
     for t1 in t1s:
         p_monte = np.load(DATA_FOLDER + datas[0] + "psim_t" + str(t1) + ".npy").reshape(-1, 1)
         pt_t1_monte = Variable(torch.from_numpy(x_monte*0+t1).float(), requires_grad=True).to(device)
@@ -1079,11 +1156,9 @@ def plot_e1_surface(p_net, e1_net, num=100):
         e1 = p_monte - p_hat
         e1_list.append(e1)
 
-    fig = plt.figure(figsize=(6,6))
+    fig = plt.figure(figsize=(8,6))
     ax = fig.add_subplot(111, projection='3d')
-    ax.plot_surface(x_mesh, t_mesh, e1hat, cmap='viridis', alpha=0.6, label=r"$\hat{e}_1$")
-    # z_max = 1.2*np.max(np.abs(e1hat))
-    # ax.scatter(x_samples, t_samples, t_samples*0+z_max, marker="x", color="black", s=0.02, label='Data Points')
+    ax.plot_surface(x_mesh, t_mesh, e1hat, cmap='inferno', alpha=0.6, label=r"$\hat{e}_1$")
     for i in range(len(t1s)):
         t1 = t1s[i]
         t1_monte = x_monte*0 + t1
@@ -1092,17 +1167,15 @@ def plot_e1_surface(p_net, e1_net, num=100):
         else:
             ax.plot(x_monte, t1_monte, e1_list[i], color="black")
 
-    # Set z-ticks to scientific notation
-    ax.zaxis.set_major_formatter(ScalarFormatter(useMathText=True))
-    ax.zaxis.get_major_formatter().set_powerlimits((-2, 2))  # Use scientific notation if value is outside this range
-
-    ax.set_xlabel("x"); ax.set_ylabel("t"); ax.set_zlabel(" e")
-    ax.legend(loc='upper left', bbox_to_anchor=(0.1, 0.9), fontsize=18)
-    y_ticks = np.array([0, 1, 2, 3, 4, 5])  # Example y-tick positions
-    ax.set_yticks(y_ticks)  # Set the positions of the y-ticks
-    ax.view_init(20, -60)
-    plt.subplots_adjust(left=0.00, right=0.90, top=1.0, bottom=0.0)
-    fig.savefig(FOLDER+'figs/e1hat_surface_plot.pdf', format='pdf', dpi=300)
+    ax.view_init(20, -50)
+    ax.set_xlabel(r'$x$')
+    ax.set_ylabel(r'$t$')
+    ax.text2D(0.94, 0.77, "Error", transform=ax.transAxes)
+    ax.zaxis.set_major_formatter(FormatStrFormatter('%.2f'))
+    ax.legend(loc='lower right', bbox_to_anchor=(0.5, 0.65))  
+    plt.tight_layout()
+    plt.savefig(FOLDER+'figs/1dnl_e1hatsurface.pdf', format='pdf', dpi=300, bbox_inches='tight', pad_inches=0.0)
+    plt.close()
 
 
 def plot_pres_surface(p_net, num=100):
@@ -1166,18 +1239,40 @@ def plot_train_loss(path_1, path_2):
     min_loss_1 = min(loss_history_1)
     loss_history_2 = np.load(path_2)
     min_loss_2 = min(loss_history_2)
-    fig, axs = plt.subplots(2, 1, figsize=(7, 6))
-    axs[0].plot(np.arange(len(loss_history_1)), loss_history_1, "black", linewidth=1.0)
+
+    plt.rcParams.update({
+    # General font settings
+    "font.family": "serif",       # Use sans-serif font for non-math text
+    "font.sans-serif": ["Times New Roman"],  # Prioritize Helvetica (must be installed on your system)
+    "font.size": 22,                   # Base font size for non-math text
+    
+    # Math font settings
+    "mathtext.fontset": "stix",        # STIX fonts for math symbols
+    
+    # Title and label sizes
+    "axes.titlesize": 22,              # Title font size
+    "axes.labelsize": 22,              # Axis label font size
+    
+    # Legend settings
+    "legend.fontsize": 20,             # Legend text size
+    "legend.title_fontsize": 20        # Legend title size (if you use legend titles)
+    })
+    # Get the last 3 colors from the "hls" palette with 8 colors
+    colors = sns.color_palette("muted", 2)
+
+    fig, axs = plt.subplots(1, 2, figsize=(16, 9))
+    axs[0].plot(np.arange(len(loss_history_1)), loss_history_1, color="black", linewidth=1.0)
     axs[0].set_ylim([min_loss_1, 10*min_loss_1])
-    axs[1].plot(np.arange(len(loss_history_2)), loss_history_2, "black", linewidth=1.0)
+    axs[1].plot(np.arange(len(loss_history_2)), loss_history_2, color="black", linewidth=1.0)
     axs[1].set_ylim([min_loss_2, 10*min_loss_2])
-    axs[0].grid(linewidth=0.5)
-    axs[1].grid(linewidth=0.5)
-    axs[1].set_xlabel("epochs")
+    axs[0].set_xlabel("iterations")
+    axs[1].set_xlabel("iterations")
     axs[0].set_ylabel("train loss: "+r"$\hat{p}$")
     axs[1].set_ylabel("train loss: "+r"$\hat{e}_1$")
+    axs[0].grid(True, which='both', linestyle=':', linewidth=0.5)  # Dotted grid
+    axs[1].grid(True, which='both', linestyle=':', linewidth=0.5)  # Dotted grid
     plt.tight_layout()
-    fig.savefig(FOLDER+'figs/train_loss.pdf', format='pdf', dpi=300, bbox_inches='tight')
+    fig.savefig(FOLDER+'figs/1dnl_trainloss.pdf', format='pdf', dpi=300, bbox_inches='tight', pad_inches=0.0)
     plt.close()
 
 
@@ -1206,15 +1301,15 @@ def main():
     e_model = load_trained_model(e_model, PATH=FOLDER+"output/e1_net.pth", PATH_LOSS=FOLDER+"output/e1_net_train_loss.npy")
     e_model.eval()
 
-    show_table(p_model, e_model)
+    # show_table(p_model, e_model)
     show_results(p_model, e_model)
     # plot_a1_data()
-    # plot_p_surface(p_model)
+    plot_p_surface(p_model)
     # plot_pres_surface(p_model)
-    # plot_e1_surface(p_model, e_model)
+    plot_e1_surface(p_model, e_model)
     # plot_e1res_surface(p_model, e_model)
-    # plot_train_loss(FOLDER+"output/p_net_train_loss.npy", 
-    #                 FOLDER+"output/e1_net_train_loss.npy")
+    plot_train_loss(FOLDER+"output/p_net_train_loss.npy", 
+                    FOLDER+"output/e1_net_train_loss.npy")
 
 
 if __name__ == "__main__":

@@ -678,18 +678,38 @@ def plot_train_loss():
     loss_history_2 = np.load(path_2)
     min_loss_1 = min(loss_history_1)
     min_loss_2 = min(loss_history_2)
-    fig, axs = plt.subplots(2, 1, figsize=(7, 6))
-    axs[0].plot(np.arange(len(loss_history_1)), loss_history_1, "black", linewidth=1.0)
+
+    plt.rcParams.update({
+    # General font settings
+    "font.family": "serif",       # Use sans-serif font for non-math text
+    "font.sans-serif": ["Times New Roman"],  # Prioritize Helvetica (must be installed on your system)
+    "font.size": 22,                   # Base font size for non-math text
+    
+    # Math font settings
+    "mathtext.fontset": "stix",        # STIX fonts for math symbols
+    
+    # Title and label sizes
+    "axes.titlesize": 22,              # Title font size
+    "axes.labelsize": 22,              # Axis label font size
+    
+    # Legend settings
+    "legend.fontsize": 20,             # Legend text size
+    "legend.title_fontsize": 20        # Legend title size (if you use legend titles)
+    })
+
+    fig, axs = plt.subplots(1, 2, figsize=(16, 9))
+    axs[0].plot(np.arange(len(loss_history_1)), loss_history_1, color="black", linewidth=1.0)
     axs[0].set_ylim([min_loss_1, 10*min_loss_1])
-    axs[1].plot(np.arange(len(loss_history_2)), loss_history_2, "black", linewidth=1.0)
+    axs[1].plot(np.arange(len(loss_history_2)), loss_history_2, color="black", linewidth=1.0)
     axs[1].set_ylim([min_loss_2, 10*min_loss_2])
-    axs[0].grid(linewidth=0.5)
-    axs[1].grid(linewidth=0.5)
-    axs[1].set_xlabel("epochs")
+    axs[0].set_xlabel("iterations")
+    axs[1].set_xlabel("iterations")
     axs[0].set_ylabel("train loss: "+r"$\hat{p}$")
     axs[1].set_ylabel("train loss: "+r"$\hat{e}_1$")
+    axs[0].grid(True, which='both', linestyle=':', linewidth=0.5)  # Dotted grid
+    axs[1].grid(True, which='both', linestyle=':', linewidth=0.5)  # Dotted grid
     plt.tight_layout()
-    fig.savefig(constants._FOLDER+'figs/train_loss.pdf', format='pdf', dpi=300, bbox_inches='tight')
+    fig.savefig(constants._FOLDER+'/figs/10dtvou_trainloss.pdf', format='pdf', dpi=300, bbox_inches='tight', pad_inches=0.0)
     plt.close()
 
 
@@ -750,7 +770,7 @@ def main():
     if(TRAIN_FLAG):
         train_p_net(p_net, optimizer, scheduler, mse_cost_function, iterations=2000); print("p_net train complete") # 20000 (base)
     p_net = pos_p_net_train(p_net); p_net.eval()
-    check_pnn_result(p_net)
+    # check_pnn_result(p_net)
 
     e1_net.scale = get_e1init_max(p_net)
     mse_cost_function = torch.nn.MSELoss() # Mean squared error
@@ -761,7 +781,7 @@ def main():
     e1_net = pos_e1_net_train(e1_net); e1_net.eval()
 
     plot_train_loss()
-    check_e1nn_result(e1_net, p_net)
+    # check_e1nn_result(e1_net, p_net)
 
 
 if __name__ == "__main__":

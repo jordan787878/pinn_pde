@@ -72,7 +72,7 @@ def main():
     "legend.title_fontsize": 20        # Legend title size (if you use legend titles)
     })
 
-    fig, axs = plt.subplots(1, 1, figsize=(10, 7))
+    fig, axs = plt.subplots(1, 1, figsize=(8, 6))
 
     for i in range(N_dataset):
         plot_a1_data(axs, DATA_FOLDERS[i], DATA_POINST[i], palette[i], PLOT_LOSS_THRESHOLD[i], SYSTEM_LABELS[i])
@@ -98,7 +98,7 @@ def main():
     plt.gca().xaxis.set_major_formatter(FuncFormatter(scientific_formatter))
     plt.gca().invert_xaxis()
     plt.tight_layout()
-    plt.savefig('meta_plot.pdf', format='pdf', dpi=300)
+    plt.savefig('meta_plot.pdf', format='pdf', dpi=300, bbox_inches='tight', pad_inches=0.0)
     plt.close()
 
 

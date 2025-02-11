@@ -596,284 +596,220 @@ def check_e1nn_result(e1_net, p_net):
         eSratio_data.append(eSratio)
         e1ratio_data.append(e1ratio)
 
-        # # # 3D visualization (p)
-        # fig = go.Figure(data=go.Volume(
-        #     x=x1_grid.flatten(), y=x2_grid.flatten(), z=x3_grid.flatten(),
-        #     value= (pdf_true.reshape(x1_grid.shape)).flatten(),
-        #     isomin=0.0,
-        #     isomax=2.0,
-        #     opacity=0.1,
-        #     surface_count=15,
-        #     coloraxis="coloraxis" 
-        #     ))
-        # fig.update_layout(
-        #     title=r"$p$",  # Title of the plot
-        #     title_x=0.5,  # Center the title
-        #     title_y=0.9,  # Center the title
-        #     margin=dict(
-        #         l=0,  # Left margin
-        #         r=0,  # Right margin
-        #         t=10,  # Top margin
-        #         b=50  # Increase bottom margin
-        #     ),
-        #     coloraxis=dict(
-        #         colorscale="plasma",  # Choose your desired colorscale
-        #         colorbar=dict(
-        #             x=0.8,  # Move colorbar towards the right
-        #             y=0.5,   # Center colorbar vertically
-        #             xanchor='left',  # Anchor colorbar to the left
-        #             yanchor='middle',  # Anchor colorbar to the middle
-        #             thickness=10,  # Reduce the thickness of the colorbar (default is 20)
-        #             tickfont=dict(size=10),  # Reduce font size of colorbar ticks
-        #             # tickvals=[-0.03, -0.01, 0, 0.01, 0.03],  # Adjust tick values to control tick placement
-        #             # ticktext=['-0.03', '-0.01', '0', '0.01', '0.03'],  # Optional: Custom tick labels
-        #             len=0.6,
-        #         )
-        #     ),
-        #     scene=dict(
-        #         xaxis=dict(
-        #             title="x1",  # Set label for X-axis
-        #             titlefont=dict(size=14),  # Set font size for X-axis label
-        #         ),
-        #         yaxis=dict(
-        #             title="x2",  # Set label for Y-axis
-        #             titlefont=dict(size=14),  # Set font size for Y-axis label
-        #         ),
-        #         zaxis=dict(
-        #             title="x3",  # Set label for Z-axis
-        #             titlefont=dict(size=14),  # Set font size for Z-axis label
-        #         ),
-        #         camera=dict(
-        #             eye=dict(x=-1.5, y=-1.5, z=1.5)  # Set the camera position (eye position)
-        #         )
-        #     )
-        # )
-        # fig.write_image(constants._FOLDER+'figs/p_t'+str(t)+'.pdf')
+        # # 3D visualization (p)
+        fig = go.Figure(data=go.Volume(
+            x=x1_grid.flatten(), y=x2_grid.flatten(), z=x3_grid.flatten(),
+            value= (pdf_true.reshape(x1_grid.shape)).flatten(),
+            isomin=0.0,
+            isomax=2.0,
+            opacity=0.1,
+            surface_count=15,
+            coloraxis="coloraxis" 
+            ))
+        fig.update_layout(
+            title=r"$p$",  # Title of the plot
+            title_x=0.5,  # Center the title
+            title_y=0.9,  # Center the title
+            margin=dict(
+                l=0,  # Left margin
+                r=0,  # Right margin
+                t=0,  # Top margin
+                b=0  # Increase bottom margin
+            ),
+            coloraxis=dict(
+                colorscale="plasma",  # Choose your desired colorscale
+                colorbar=dict(
+                    x=0.8,  # Move colorbar towards the right
+                    y=0.5,   # Center colorbar vertically
+                    xanchor='left',  # Anchor colorbar to the left
+                    yanchor='middle',  # Anchor colorbar to the middle
+                    thickness=10,  # Reduce the thickness of the colorbar (default is 20)
+                    tickfont=dict(size=10),  # Reduce font size of colorbar ticks
+                    # tickvals=[-0.03, -0.01, 0, 0.01, 0.03],  # Adjust tick values to control tick placement
+                    # ticktext=['-0.03', '-0.01', '0', '0.01', '0.03'],  # Optional: Custom tick labels
+                    len=0.6,
+                )
+            ),
+            scene=dict(
+                xaxis=dict(
+                    title="x1",  # Set label for X-axis
+                    titlefont=dict(size=14),  # Set font size for X-axis label
+                ),
+                yaxis=dict(
+                    title="x2",  # Set label for Y-axis
+                    titlefont=dict(size=14),  # Set font size for Y-axis label
+                ),
+                zaxis=dict(
+                    title="x3",  # Set label for Z-axis
+                    titlefont=dict(size=14),  # Set font size for Z-axis label
+                ),
+                camera=dict(
+                    eye=dict(x=-1.5, y=-1.5, z=1.5)  # Set the camera position (eye position)
+                )
+            )
+        )
+        fig.write_image(constants._FOLDER+'figs/p_t'+str(t)+'.pdf')
 
-        # # 3D visualization (phat)
-        # fig = go.Figure(data=go.Volume(
-        #     x=x1_grid.flatten(), y=x2_grid.flatten(), z=x3_grid.flatten(),
-        #     value= (pdf_nn.reshape(x1_grid.shape)).flatten(),
-        #     isomin=0.0,
-        #     isomax=2.0,
-        #     opacity=0.1,
-        #     surface_count=15,
-        #     coloraxis="coloraxis" 
-        #     ))
-        # fig.update_layout(
-        #     title=r"$\hat{p}$",  # Title of the plot
-        #     title_x=0.5,  # Center the title
-        #     title_y=0.9,  # Center the title
-        #     margin=dict(
-        #         l=0,  # Left margin
-        #         r=0,  # Right margin
-        #         t=10,  # Top margin
-        #         b=50  # Increase bottom margin
-        #     ),
-        #     coloraxis=dict(
-        #         colorscale="plasma",  # Choose your desired colorscale
-        #         colorbar=dict(
-        #             x=0.8,  # Move colorbar towards the right
-        #             y=0.5,   # Center colorbar vertically
-        #             xanchor='left',  # Anchor colorbar to the left
-        #             yanchor='middle',  # Anchor colorbar to the middle
-        #             thickness=10,  # Reduce the thickness of the colorbar (default is 20)
-        #             tickfont=dict(size=10),  # Reduce font size of colorbar ticks
-        #             # tickvals=[-0.03, -0.01, 0, 0.01, 0.03],  # Adjust tick values to control tick placement
-        #             # ticktext=['-0.03', '-0.01', '0', '0.01', '0.03'],  # Optional: Custom tick labels
-        #             len=0.6,
-        #         )
-        #     ),
-        #     scene=dict(
-        #         xaxis=dict(
-        #             title="x1",  # Set label for X-axis
-        #             titlefont=dict(size=14),  # Set font size for X-axis label
-        #         ),
-        #         yaxis=dict(
-        #             title="x2",  # Set label for Y-axis
-        #             titlefont=dict(size=14),  # Set font size for Y-axis label
-        #         ),
-        #         zaxis=dict(
-        #             title="x3",  # Set label for Z-axis
-        #             titlefont=dict(size=14),  # Set font size for Z-axis label
-        #         ),
-        #         camera=dict(
-        #             eye=dict(x=-1.5, y=-1.5, z=1.5)  # Set the camera position (eye position)
-        #         )
-        #     )
-        # )
-        # fig.write_image(constants._FOLDER+'figs/phat_t'+str(t)+'.pdf')
+        # 3D visualization (phat)
+        fig = go.Figure(data=go.Volume(
+            x=x1_grid.flatten(), y=x2_grid.flatten(), z=x3_grid.flatten(),
+            value= (pdf_nn.reshape(x1_grid.shape)).flatten(),
+            isomin=0.0,
+            isomax=2.0,
+            opacity=0.1,
+            surface_count=15,
+            coloraxis="coloraxis" 
+            ))
+        fig.update_layout(
+            title=r"$\hat{p}$",  # Title of the plot
+            title_x=0.5,  # Center the title
+            title_y=0.9,  # Center the title
+            margin=dict(
+                l=0,  # Left margin
+                r=0,  # Right margin
+                t=10,  # Top margin
+                b=50  # Increase bottom margin
+            ),
+            coloraxis=dict(
+                colorscale="plasma",  # Choose your desired colorscale
+                colorbar=dict(
+                    x=0.8,  # Move colorbar towards the right
+                    y=0.5,   # Center colorbar vertically
+                    xanchor='left',  # Anchor colorbar to the left
+                    yanchor='middle',  # Anchor colorbar to the middle
+                    thickness=10,  # Reduce the thickness of the colorbar (default is 20)
+                    tickfont=dict(size=10),  # Reduce font size of colorbar ticks
+                    # tickvals=[-0.03, -0.01, 0, 0.01, 0.03],  # Adjust tick values to control tick placement
+                    # ticktext=['-0.03', '-0.01', '0', '0.01', '0.03'],  # Optional: Custom tick labels
+                    len=0.6,
+                )
+            ),
+            scene=dict(
+                xaxis=dict(
+                    title="x1",  # Set label for X-axis
+                    titlefont=dict(size=14),  # Set font size for X-axis label
+                ),
+                yaxis=dict(
+                    title="x2",  # Set label for Y-axis
+                    titlefont=dict(size=14),  # Set font size for Y-axis label
+                ),
+                zaxis=dict(
+                    title="x3",  # Set label for Z-axis
+                    titlefont=dict(size=14),  # Set font size for Z-axis label
+                ),
+                camera=dict(
+                    eye=dict(x=-1.5, y=-1.5, z=1.5)  # Set the camera position (eye position)
+                )
+            )
+        )
+        fig.write_image(constants._FOLDER+'figs/phat_t'+str(t)+'.pdf')
 
-        # 3D visualization (e1)
-        # fig = go.Figure(data=go.Volume(
-        #     x=x1_grid.flatten(), y=x2_grid.flatten(), z=x3_grid.flatten(),
-        #     value= (e1.reshape(x1_grid.shape)).flatten(),
-        #     isomin=-0.03,
-        #     isomax=0.04,
-        #     opacity=0.1 ,
-        #     surface_count=15,
-        #     coloraxis="coloraxis" 
-        #     ))
-        # fig.update_layout(
-        #     title=r"$e_1$",  # Title of the plot
-        #     title_x=0.5,  # Center the title
-        #     title_y=0.9,  # Center the title
-        #     margin=dict(
-        #         l=0,  # Left margin
-        #         r=0,  # Right margin
-        #         t=10,  # Top margin
-        #         b=50  # Increase bottom margin
-        #     ),
-        #     coloraxis=dict(
-        #         colorscale="rainbow",  # Choose your desired colorscale
-        #         colorbar=dict(
-        #             x=0.8,  # Move colorbar towards the right
-        #             y=0.5,   # Center colorbar vertically
-        #             xanchor='left',  # Anchor colorbar to the left
-        #             yanchor='middle',  # Anchor colorbar to the middle
-        #             thickness=10,  # Reduce the thickness of the colorbar (default is 20)
-        #             tickfont=dict(size=10),  # Reduce font size of colorbar ticks
-        #             tickvals=[-0.03, -0.01, 0, 0.01, 0.03],  # Adjust tick values to control tick placement
-        #             ticktext=['-0.03', '-0.01', '0', '0.01', '0.03'],  # Optional: Custom tick labels
-        #             len=0.6,
-        #         )
-        #     ),
-        #     scene=dict(
-        #         xaxis=dict(
-        #             title="x1",  # Set label for X-axis
-        #             titlefont=dict(size=14),  # Set font size for X-axis label
-        #         ),
-        #         yaxis=dict(
-        #             title="x2",  # Set label for Y-axis
-        #             titlefont=dict(size=14),  # Set font size for Y-axis label
-        #         ),
-        #         zaxis=dict(
-        #             title="x3",  # Set label for Z-axis
-        #             titlefont=dict(size=14),  # Set font size for Z-axis label
-        #         ),
-        #         camera=dict(
-        #             eye=dict(x=-1.5, y=-1.5, z=1.5)  # Set the camera position (eye position)
-        #         )
-        #     )
-        # )
-        # fig.write_image(constants._FOLDER+'figs/e_t'+str(t)+'.pdf')
-        # # 3D visualization (e1hat)
-        # fig = go.Figure(data=go.Volume(
-        #     x=x1_grid.flatten(), y=x2_grid.flatten(), z=x3_grid.flatten(),
-        #     value= (e1_nn.reshape(x1_grid.shape)).flatten(),
-        #     isomin=-0.03,
-        #     isomax=0.04,
-        #     opacity=0.1 ,
-        #     surface_count=15,
-        #     coloraxis="coloraxis" 
-        #     ))
-        # fig.update_layout(
-        #     title=r"$\hat{e}_1$",  # Title of the plot
-        #     title_x=0.5,  # Center the title
-        #     title_y=0.9,  # Center the title
-        #     margin=dict(
-        #         l=0,  # Left margin
-        #         r=0,  # Right margin
-        #         t=10,  # Top margin
-        #         b=50  # Increase bottom margin
-        #     ),
-        #     coloraxis=dict(
-        #         colorscale="rainbow",  # Choose your desired colorscale
-        #         colorbar=dict(
-        #             x=0.8,  # Move colorbar towards the right
-        #             y=0.5,   # Center colorbar vertically
-        #             xanchor='left',  # Anchor colorbar to the left
-        #             yanchor='middle',  # Anchor colorbar to the middle
-        #             thickness=10,  # Reduce the thickness of the colorbar (default is 20)
-        #             tickfont=dict(size=10),  # Reduce font size of colorbar ticks
-        #             tickvals=[-0.03, -0.01, 0, 0.01, 0.03],  # Adjust tick values to control tick placement
-        #             ticktext=['-0.03', '-0.01', '0', '0.01', '0.03'],  # Optional: Custom tick labels
-        #             len=0.6,
-        #         )
-        #     ),
-        #     scene=dict(
-        #         xaxis=dict(
-        #             title="x1",  # Set label for X-axis
-        #             titlefont=dict(size=14),  # Set font size for X-axis label
-        #         ),
-        #         yaxis=dict(
-        #             title="x2",  # Set label for Y-axis
-        #             titlefont=dict(size=14),  # Set font size for Y-axis label
-        #         ),
-        #         zaxis=dict(
-        #             title="x3",  # Set label for Z-axis
-        #             titlefont=dict(size=14),  # Set font size for Z-axis label
-        #         ),
-        #         camera=dict(
-        #             eye=dict(x=-1.5, y=-1.5, z=1.5)  # Set the camera position (eye position)
-        #         )
-        #     )
-        # )
-        # fig.write_image(constants._FOLDER+'figs/ehat_t'+str(t)+'.pdf')
-        # # visualization (marginalized to 2 cooridnates)
-        # # E1net plot
-        # fig, axs = plt.subplots(1, 3, figsize=(10, 3), subplot_kw={'projection': '3d'})
-        # ax = axs[0]
-        # ax.plot_wireframe(x1_grid[:, :, 0], x2_grid[:, :, 0], np.sum(e1.reshape(grid_points_struct[1].shape), axis=(2))*dx, 
-        #                   color="black", linewidth=0.5, alpha=0.7, label=r"e")
-        # ax.plot_wireframe(x1_grid[:, :, 0], x2_grid[:, :, 0], np.sum(e1_nn.reshape(grid_points_struct[1].shape), axis=(2))*dx, 
-        #                   color="red", linewidth=0.2, alpha=0.7, linestyle="--", label=r"$\hat{e}_1$")
-        # ax.set_xlabel('x'); ax.set_ylabel('y'); ax.set_zlabel('Error')
-        # ax.legend()
-        # ax.view_init(20, -135)
-        # ax = axs[1]
-        # ax.plot_wireframe(x2_grid[0, :, :], x3_grid[0, :, :], np.sum(e1.reshape(grid_points_struct[1].shape), axis=(0))*dx, color="black", linewidth=0.5, alpha=0.7)
-        # ax.plot_wireframe(x2_grid[0, :, :], x3_grid[0, :, :], np.sum(e1_nn.reshape(grid_points_struct[1].shape), axis=(0))*dx, color="red", linewidth=0.2, alpha=0.7, linestyle="--")
-        # ax.set_xlabel('y'); ax.set_ylabel('z'); ax.set_zlabel('Error')
-        # ax.view_init(20, -135)
-        # ax = axs[2]
-        # ax.plot_wireframe(x1_grid[:, 0, :], x3_grid[:, 0, :], np.sum(e1.reshape(grid_points_struct[1].shape), axis=(1))*dx, color="black", linewidth=0.5, alpha=0.7)
-        # ax.plot_wireframe(x1_grid[:, 0, :], x3_grid[:, 0, :], np.sum(e1_nn.reshape(grid_points_struct[1].shape), axis=(1))*dx, color="red", linewidth=0.2, alpha=0.7, linestyle="--")
-        # ax.set_xlabel('x'); ax.set_ylabel('z'); ax.set_zlabel('Error')
-        # ax.view_init(20, -135)
-        # # Reduce white space between subplots and around the figure
-        # plt.subplots_adjust(left=0.05, right=0.95, top=0.9, bottom=0.1, wspace=0.1)
-        # # Add a text to the top-left corner of the entire figure
-        # fig.text(
-        #     0.05, 0.9, "t={:.1f}".format(t), 
-        #     fontsize=16, color='black',
-        # )
-        # plt.show()
-        # # Error bound plot
-        # fig, axs = plt.subplots(1, 3, figsize=(10, 3), subplot_kw={'projection': '3d'})
-        # ax = axs[0]
-        # ax.plot_wireframe(x1_grid[:, :, 0], x2_grid[:, :, 0], np.sum(e1.reshape(grid_points_struct[1].shape), axis=(2))*dx, 
-        #                   color="black", linewidth=0.5, alpha=0.7, label=r"e")
-        # ax.plot_wireframe(x1_grid[:, :, 0], x2_grid[:, :, 0], np.sum(e1_nn.reshape(grid_points_struct[1].shape), axis=(2))*dx, 
-        #                   color="red", linewidth=0.2   , alpha=0.7, linestyle="--", label=r"$\hat{e}_1$")
-        # ax.plot_surface(x1_grid[:, :, 0], x2_grid[:, :, 0], x1_grid[:, :, 0]*0.0 + 2.0*eS, color="green", alpha=0.2, label=r"$e_S$")
-        # ax.plot_surface(x1_grid[:, :, 0], x2_grid[:, :, 0], x1_grid[:, :, 0]*0.0 - 2.0*eS, color="green", alpha=0.2)
-        # ax.legend()
-        # ax.set_xlabel('x'); ax.set_ylabel('y'); ax.set_zlabel('Error')
-        # ax.view_init(15, -135)
-        # ax = axs[1]
-        # ax.plot_wireframe(x2_grid[0, :, :], x3_grid[0, :, :], np.sum(e1.reshape(grid_points_struct[1].shape), axis=(0))*dx, color="black", linewidth=0.5, alpha=0.7)
-        # ax.plot_wireframe(x2_grid[0, :, :], x3_grid[0, :, :], np.sum(e1_nn.reshape(grid_points_struct[1].shape), axis=(0))*dx, color="red", linewidth=0.2, alpha=0.7, linestyle="--")
-        # ax.plot_surface(x2_grid[0, :, :], x3_grid[0, :, :], x2_grid[0, :, :]*0.0 + 2.0*eS, color="green", alpha=0.2)
-        # ax.plot_surface(x2_grid[0, :, :], x3_grid[0, :, :], x2_grid[0, :, :]*0.0 - 2.0*eS, color="green", alpha=0.2)
-        # ax.set_xlabel('y'); ax.set_ylabel('z'); ax.set_zlabel('Error')
-        # ax.view_init(15, -135)
-        # ax = axs[2]
-        # ax.plot_wireframe(x1_grid[:, 0, :], x3_grid[:, 0, :], np.sum(e1.reshape(grid_points_struct[1].shape), axis=(1))*dx, color="black", linewidth=0.5, alpha=0.7)
-        # ax.plot_wireframe(x1_grid[:, 0, :], x3_grid[:, 0, :], np.sum(e1.reshape(grid_points_struct[1].shape), axis=(1))*dx, color="red", linewidth=0.2, alpha=0.7, linestyle="--")
-        # ax.plot_surface(x1_grid[:, 0, :], x3_grid[:, 0, :], x1_grid[:, 0, :]*0.0 + 2.0*eS, color="green", alpha=0.2)
-        # ax.plot_surface(x1_grid[:, 0, :], x3_grid[:, 0, :], x1_grid[:, 0, :]*0.0 - 2.0*eS, color="green", alpha=0.2)
-        # ax.set_xlabel('x'); ax.set_ylabel('z'); ax.set_zlabel('Error')
-        # ax.view_init(15, -135)
-
-        # # Reduce white space between subplots and around the figure
-        # plt.subplots_adjust(left=0.05, right=0.95, top=0.9, bottom=0.1, wspace=0.1)
-        # # Add a text to the top-left corner of the entire figure
-        # fig.text(
-        #     0.05, 0.9, "t={:.1f}".format(t), 
-        #     fontsize=16, color='black',
-        # )
-        # plt.show()
+        # # 3D visualization (e1)
+        fig = go.Figure(data=go.Volume(
+            x=x1_grid.flatten(), y=x2_grid.flatten(), z=x3_grid.flatten(),
+            value= (e1.reshape(x1_grid.shape)).flatten(),
+            isomin=-0.03,
+            isomax=0.04,
+            opacity=0.1 ,
+            surface_count=15,
+            coloraxis="coloraxis" 
+            ))
+        fig.update_layout(
+            title=r"$e_1$",  # Title of the plot
+            title_x=0.5,  # Center the title
+            title_y=0.9,  # Center the title
+            margin=dict(
+                l=0,  # Left margin
+                r=0,  # Right margin
+                t=10,  # Top margin
+                b=50  # Increase bottom margin
+            ),
+            coloraxis=dict(
+                colorscale="rainbow",  # Choose your desired colorscale
+                colorbar=dict(
+                    x=0.8,  # Move colorbar towards the right
+                    y=0.5,   # Center colorbar vertically
+                    xanchor='left',  # Anchor colorbar to the left
+                    yanchor='middle',  # Anchor colorbar to the middle
+                    thickness=10,  # Reduce the thickness of the colorbar (default is 20)
+                    tickfont=dict(size=10),  # Reduce font size of colorbar ticks
+                    tickvals=[-0.03, -0.01, 0, 0.01, 0.03],  # Adjust tick values to control tick placement
+                    ticktext=['-0.03', '-0.01', '0', '0.01', '0.03'],  # Optional: Custom tick labels
+                    len=0.6,
+                )
+            ),
+            scene=dict(
+                xaxis=dict(
+                    title="x1",  # Set label for X-axis
+                    titlefont=dict(size=14),  # Set font size for X-axis label
+                ),
+                yaxis=dict(
+                    title="x2",  # Set label for Y-axis
+                    titlefont=dict(size=14),  # Set font size for Y-axis label
+                ),
+                zaxis=dict(
+                    title="x3",  # Set label for Z-axis
+                    titlefont=dict(size=14),  # Set font size for Z-axis label
+                ),
+                camera=dict(
+                    eye=dict(x=-1.5, y=-1.5, z=1.5)  # Set the camera position (eye position)
+                )
+            )
+        )
+        fig.write_image(constants._FOLDER+'figs/e_t'+str(t)+'.pdf')
+        # 3D visualization (e1hat)
+        fig = go.Figure(data=go.Volume(
+            x=x1_grid.flatten(), y=x2_grid.flatten(), z=x3_grid.flatten(),
+            value= (e1_nn.reshape(x1_grid.shape)).flatten(),
+            isomin=-0.03,
+            isomax=0.04,
+            opacity=0.1 ,
+            surface_count=15,
+            coloraxis="coloraxis" 
+            ))
+        fig.update_layout(
+            title=r"$\hat{e}_1$",  # Title of the plot
+            title_x=0.5,  # Center the title
+            title_y=0.9,  # Center the title
+            margin=dict(
+                l=0,  # Left margin
+                r=0,  # Right margin
+                t=10,  # Top margin
+                b=50  # Increase bottom margin
+            ),
+            coloraxis=dict(
+                colorscale="rainbow",  # Choose your desired colorscale
+                colorbar=dict(
+                    x=0.8,  # Move colorbar towards the right
+                    y=0.5,   # Center colorbar vertically
+                    xanchor='left',  # Anchor colorbar to the left
+                    yanchor='middle',  # Anchor colorbar to the middle
+                    thickness=10,  # Reduce the thickness of the colorbar (default is 20)
+                    tickfont=dict(size=10),  # Reduce font size of colorbar ticks
+                    tickvals=[-0.03, -0.01, 0, 0.01, 0.03],  # Adjust tick values to control tick placement
+                    ticktext=['-0.03', '-0.01', '0', '0.01', '0.03'],  # Optional: Custom tick labels
+                    len=0.6,
+                )
+            ),
+            scene=dict(
+                xaxis=dict(
+                    title="x1",  # Set label for X-axis
+                    titlefont=dict(size=14),  # Set font size for X-axis label
+                ),
+                yaxis=dict(
+                    title="x2",  # Set label for Y-axis
+                    titlefont=dict(size=14),  # Set font size for Y-axis label
+                ),
+                zaxis=dict(
+                    title="x3",  # Set label for Z-axis
+                    titlefont=dict(size=14),  # Set font size for Z-axis label
+                ),
+                camera=dict(
+                    eye=dict(x=-1.5, y=-1.5, z=1.5)  # Set the camera position (eye position)
+                )
+            )
+        )
+        fig.write_image(constants._FOLDER+'figs/ehat_t'+str(t)+'.pdf')
 
     a1_list = np.array(a1_data)
     gap_list = np.array(gap_data)
@@ -881,26 +817,6 @@ def check_e1nn_result(e1_net, p_net):
     print("[info] max a1: ", np.round(np.max(a1_list),2), ", avg a1:", np.round(np.mean(a1_list),2), ", std a1:", np.round(np.std(a1_list),3))
     print("[info] min gap: ", np.round(np.min(gap_list),3), ", avg gap:", np.round(np.mean(gap_list),3))
     print("[info] avg B2_norm: ", np.round(np.mean(norm_B2_list),2), ", std B2_norm:", np.round(np.std(norm_B2_list),3))
-    # print( " =result= max a1      : {:.3f}, var a1: {:.4f}".format(np.max(np.array(a1_data)),
-    #                                                                np.var(np.array(a1_data))))    
-    # print( " =result= max gap     : {:.3f}, min gap     : {:.3f}".format(np.max(np.array(gap_data)), np.min(np.array(gap_data))))
-    # print( " =result= max eS_ratio: {:.3f}, avg eS_ratio: {:.3f}".format(np.max(np.array(eSratio_data)),
-    #                                                                      np.mean(np.array(eSratio_data))))
-    
-    # visualization
-    # fig, axs = plt.subplots(2, 1, figsize=(7, 6))
-    # axs[0].plot(constants.T_SPAN, eSratio_data, "green", label=r"$e_S$ (normalized)")
-    # axs[0].plot(constants.T_SPAN, e1ratio_data, "black", label=r"$\max|e_1|$ (normalized)")
-    # axs[0].set_ylabel("error (normalized)")
-    # axs[0].legend(loc="upper left", fontsize=14)
-
-    # axs[1].plot(constants.T_SPAN, a1_data, "black")
-    # axs[1].set_xlabel("t")
-    # axs[1].set_ylabel(r"$\alpha_1$")
-    
-    # plt.tight_layout()
-    # fig.savefig(constants._FOLDER+'figs/result.pdf', format='pdf', dpi=300, bbox_inches='tight')
-    # plt.close()
 
 
 def get_e1init_max(p_net):
@@ -931,22 +847,40 @@ def plot_train_loss():
     path_2 = constants._PATH_E1NET_LOSS
     loss_history_1 = np.load(path_1)
     loss_history_2 = np.load(path_2)
-    # print(loss_history_1)
-    # print(loss_history_2)
     min_loss_1 = min(loss_history_1)
     min_loss_2 = min(loss_history_2)
-    fig, axs = plt.subplots(2, 1, figsize=(7, 6))
-    axs[0].plot(np.arange(len(loss_history_1)), loss_history_1, "black", linewidth=1.0)
+
+    plt.rcParams.update({
+    # General font settings
+    "font.family": "serif",       # Use sans-serif font for non-math text
+    "font.sans-serif": ["Times New Roman"],  # Prioritize Helvetica (must be installed on your system)
+    "font.size": 22,                   # Base font size for non-math text
+    
+    # Math font settings
+    "mathtext.fontset": "stix",        # STIX fonts for math symbols
+    
+    # Title and label sizes
+    "axes.titlesize": 22,              # Title font size
+    "axes.labelsize": 22,              # Axis label font size
+    
+    # Legend settings
+    "legend.fontsize": 20,             # Legend text size
+    "legend.title_fontsize": 20        # Legend title size (if you use legend titles)
+    })
+
+    fig, axs = plt.subplots(1, 2, figsize=(16, 9))
+    axs[0].plot(np.arange(len(loss_history_1)), loss_history_1, color="black", linewidth=1.0)
     axs[0].set_ylim([min_loss_1, 10*min_loss_1])
-    axs[1].plot(np.arange(len(loss_history_2)), loss_history_2, "black", linewidth=1.0)
+    axs[1].plot(np.arange(len(loss_history_2)), loss_history_2, color="black", linewidth=1.0)
     axs[1].set_ylim([min_loss_2, 10*min_loss_2])
-    axs[0].grid(linewidth=0.5)
-    axs[1].grid(linewidth=0.5)
-    axs[1].set_xlabel("epochs")
+    axs[0].set_xlabel("iterations")
+    axs[1].set_xlabel("iterations")
     axs[0].set_ylabel("train loss: "+r"$\hat{p}$")
     axs[1].set_ylabel("train loss: "+r"$\hat{e}_1$")
+    axs[0].grid(True, which='both', linestyle=':', linewidth=0.5)  # Dotted grid
+    axs[1].grid(True, which='both', linestyle=':', linewidth=0.5)  # Dotted grid
     plt.tight_layout()
-    fig.savefig(constants._FOLDER+'figs/train_loss.pdf', format='pdf', dpi=300, bbox_inches='tight')
+    fig.savefig(constants._FOLDER+'/figs/3dtvou_trainloss.pdf', format='pdf', dpi=300, bbox_inches='tight', pad_inches=0.0)
     plt.close()
 
 
@@ -963,7 +897,7 @@ def main():
     if(TRAIN_FLAG):
         train_p_net(p_net, optimizer, scheduler, mse_cost_function, iterations=1000); print("p_net train complete")
     p_net = pos_p_net_train(p_net); p_net.eval()
-    check_pnn_result(p_net)
+    # check_pnn_result(p_net)
 
     e1_net.scale = get_e1init_max(p_net)
     mse_cost_function = torch.nn.MSELoss() # Mean squared error
@@ -973,6 +907,7 @@ def main():
         train_e1_net(e1_net, p_net, optimizer, scheduler, mse_cost_function, iterations=5000); print("e1_net train complete")
     e1_net = pos_e1_net_train(e1_net); e1_net.eval()
     check_e1nn_result(e1_net, p_net)
+    
     plot_train_loss()
 
 

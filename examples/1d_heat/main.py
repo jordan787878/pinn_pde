@@ -50,9 +50,9 @@ def res_func(x,t, net, verbose=False):
 # p_net
 class Net(nn.Module):
     def __init__(self):
-        neurons = 64
+        neurons = 32
         super(Net, self).__init__()
-        self.hidden_layer1 = spectral_norm(nn.Linear(2,neurons))
+        self.hidden_layer1 = (nn.Linear(2,neurons)) #spectral_norm(nn.Linear(2,neurons))
         self.hidden_layer2 = (nn.Linear(neurons,neurons))
         self.hidden_layer3 = (nn.Linear(neurons,neurons))
         self.output_layer =  (nn.Linear(neurons,1))
@@ -197,7 +197,7 @@ def show_p_net_results(p_net):
 
 class E1Net(nn.Module):
     def __init__(self, scale=1.0):
-        neurons = 100
+        neurons = 50
         self.scale = scale
         super(E1Net, self).__init__()
         self.hidden_layer1 = (nn.Linear(2,neurons))
@@ -453,8 +453,26 @@ def show_uniform_bound(p_net, e1_net):
 
 
 def plot_p_surface(p_net, num=100):
-    plt.rcParams['font.size'] = 18
-    t1s = [0.0, 0.5, 1.0]
+    plt.rcParams.update({
+    # General font settings
+    "font.family": "serif",       # Use sans-serif font for non-math text
+    "font.sans-serif": ["Times New Roman"],  # Prioritize Helvetica (must be installed on your system)
+    "font.size": 18,                   # Base font size for non-math text
+    # "figure.autolayout": True,
+    
+    # Math font settings
+    "mathtext.fontset": "stix",        # STIX fonts for math symbols
+    
+    # Title and label sizes
+    "axes.titlesize": 18,              # Title font size
+    "axes.labelsize": 18,              # Axis label font size
+    
+    # Legend settings
+    "legend.fontsize": 18,             # Legend text size
+    "legend.title_fontsize": 18        # Legend title size (if you use legend titles)
+    })
+
+    t1s = [0.0, 0.25, 0.5, 0.75, 1.0]
     x = np.linspace(x_low, x_hig, num=num)
     t = np.linspace(t0, T_end, num=num)
     x_mesh, t_mesh = np.meshgrid(x,t)
@@ -467,10 +485,9 @@ def plot_p_surface(p_net, num=100):
         p_true = p_sol(x, x*0+t1)
         p_list.append(p_true)
 
-    fig = plt.figure(figsize=(6,6))
+    fig = plt.figure(figsize=(8,6))
     ax = fig.add_subplot(111, projection='3d')
-    ax.plot_surface(x_mesh, t_mesh, phat, cmap='viridis', alpha=0.7, label=r"$\hat{u}$")
-    z_max = 1.5*np.max(np.abs(phat))
+    ax.plot_surface(x_mesh, t_mesh, phat, cmap='viridis', alpha=0.8, label=r"$\hat{u}$")
     for i in range(len(t1s)):
         t1 = t1s[i]
         t1_monte = x*0 + t1
@@ -479,20 +496,19 @@ def plot_p_surface(p_net, num=100):
         else:
             ax.plot(x, t1_monte, p_list[i], color="black")
 
-    ax.set_xlabel("x"); ax.set_ylabel("t"); #ax.set_zlabel("PDF")
-    ax.legend(loc='upper left', bbox_to_anchor=(0.1, 0.85), fontsize=18)
-    x_ticks = np.array([-1, 0, 1])  # Example y-tick positions
-    ax.set_xticks(x_ticks)  # Set the positions of the y-ticks
-    ax.view_init(20, 150)
-    plt.subplots_adjust(left=0.05, right=0.90, top=0.92, bottom=0.08)
-    # plt.show()
-    fig.savefig('figs/phat_surface_plot.pdf', format='pdf', dpi=300)
+    ax.view_init(20, -50)
+    ax.set_xlabel(r'$x$')
+    ax.set_ylabel(r'$t$')
+    ax.text2D(0.98, 0.77, "u", transform=ax.transAxes)
+    ax.zaxis.set_major_formatter(FormatStrFormatter('%.1f'))
+    ax.legend(loc='lower right', bbox_to_anchor=(0.6, 0.65))  
+    plt.tight_layout()
+    plt.savefig('figs/1dheat_phatsurface.pdf', format='pdf', dpi=300, bbox_inches='tight', pad_inches=0.0)
     plt.close()
 
 
 def plot_e1_surface(p_net, e1_net, num=100):
-    plt.rcParams['font.size'] = 18
-    t1s = [0.0, 0.5, 1.0]
+    t1s = [0.0, 0.25, 0.5, 0.75, 1.0]
     x = np.linspace(x_low, x_hig, num=num)
     t = np.linspace(t0, T_end, num=num)
     x_mesh, t_mesh = np.meshgrid(x,t)
@@ -510,30 +526,44 @@ def plot_e1_surface(p_net, e1_net, num=100):
         e1 = p_monte - p_hat
         e1_list.append(e1)
 
-    fig = plt.figure(figsize=(6,6))
+    plt.rcParams.update({
+    # General font settings
+    "font.family": "serif",       # Use sans-serif font for non-math text
+    "font.sans-serif": ["Times New Roman"],  # Prioritize Helvetica (must be installed on your system)
+    "font.size": 18,                   # Base font size for non-math text
+    # "figure.autolayout": True,
+    
+    # Math font settings
+    "mathtext.fontset": "stix",        # STIX fonts for math symbols
+    
+    # Title and label sizes
+    "axes.titlesize": 18,              # Title font size
+    "axes.labelsize": 18,              # Axis label font size
+    
+    # Legend settings
+    "legend.fontsize": 18,             # Legend text size
+    "legend.title_fontsize": 18        # Legend title size (if you use legend titles)
+    })
+
+    fig = plt.figure(figsize=(8,6))
     ax = fig.add_subplot(111, projection='3d')
-    ax.plot_surface(x_mesh, t_mesh, e1hat, cmap='viridis', alpha=0.7, label=r"$\hat{e}_1$")
-    # z_max = 1.2*np.max(np.abs(e1hat))
-    # ax.scatter(x_samples, t_samples, t_samples*0+z_max, marker="x", color="black", s=0.02, label='Data Points')
+    ax.plot_surface(x_mesh, t_mesh, e1hat, cmap='inferno', alpha=0.6, label=r"$\hat{e}_1$")
     for i in range(len(t1s)):
         t1 = t1s[i]
         t1_monte = x_monte*0 + t1
         if(i == 0):
-            ax.plot(x_monte, t1_monte, e1_list[i], color="black", label=r"$e$")
+            ax.plot(x_monte, t1_monte, e1_list[i], color="black", label=r"$e_1$")
         else:
             ax.plot(x_monte, t1_monte, e1_list[i], color="black")
-    # Set z-ticks to scientific notation
-    ax.zaxis.set_major_formatter(ScalarFormatter(useMathText=True))
-    ax.zaxis.get_major_formatter().set_powerlimits((-2, 2))  # Use scientific notation if value is outside this range
-    x_ticks = np.array([-1, 0, 1])  # Example y-tick positions
-    ax.set_xticks(x_ticks)  # Set the positions of the y-ticks
-    ax.legend(loc='upper left', bbox_to_anchor=(0.1, 0.85), fontsize=18)
-    ax.set_xlabel("x")
-    ax.set_ylabel("t")
-    ax.set_zlabel("Error")
-    ax.view_init(20, 150)
-    plt.subplots_adjust(left=0.05, right=0.9, top=0.92, bottom=0.08)
-    fig.savefig('figs/e1hat_surface_plot.pdf', format='pdf', dpi=300)
+
+    ax.view_init(20, -50)
+    ax.set_xlabel(r'$x$')
+    ax.set_ylabel(r'$t$')
+    ax.text2D(0.94, 0.77, "Error", transform=ax.transAxes)
+    ax.zaxis.set_major_formatter(FormatStrFormatter('%.2f'))
+    ax.legend(loc='lower right', bbox_to_anchor=(0.5, 0.65))  
+    plt.tight_layout()
+    plt.savefig('figs/1dheat_e1hatsurface.pdf', format='pdf', dpi=300, bbox_inches='tight', pad_inches=0.0)
     plt.close()
 
 
@@ -542,21 +572,39 @@ def plot_train_loss(path_1, path_2):
     min_loss_1 = min(loss_history_1)
     loss_history_2 = np.load(path_2)
     min_loss_2 = min(loss_history_2)
-    # print(loss_history_2)
-    fig, axs = plt.subplots(2, 1, figsize=(7, 6))
-    axs[0].plot(np.arange(len(loss_history_1)), loss_history_1, "black", linewidth=1.0)
+
+    plt.rcParams.update({
+    # General font settings
+    "font.family": "serif",       # Use sans-serif font for non-math text
+    "font.sans-serif": ["Times New Roman"],  # Prioritize Helvetica (must be installed on your system)
+    "font.size": 22,                   # Base font size for non-math text
+    
+    # Math font settings
+    "mathtext.fontset": "stix",        # STIX fonts for math symbols
+    
+    # Title and label sizes
+    "axes.titlesize": 22,              # Title font size
+    "axes.labelsize": 22,              # Axis label font size
+    
+    # Legend settings
+    "legend.fontsize": 20,             # Legend text size
+    "legend.title_fontsize": 20        # Legend title size (if you use legend titles)
+    })
+
+    fig, axs = plt.subplots(1, 2, figsize=(16, 9))
+    axs[0].plot(np.arange(len(loss_history_1)), loss_history_1, color="black", linewidth=1.0)
     axs[0].set_ylim([min_loss_1, 10*min_loss_1])
-    axs[1].plot(np.arange(len(loss_history_2)), loss_history_2, "black", linewidth=1.0)
+    axs[1].plot(np.arange(len(loss_history_2)), loss_history_2, color="black", linewidth=1.0)
     axs[1].set_ylim([min_loss_2, 10*min_loss_2])
-    axs[0].grid(linewidth=0.5)
-    axs[1].grid(linewidth=0.5)
-    axs[1].set_xlabel("epochs")
+    axs[0].set_xlabel("iterations")
+    axs[1].set_xlabel("iterations")
     axs[0].set_ylabel("train loss: "+r"$\hat{p}$")
     axs[1].set_ylabel("train loss: "+r"$\hat{e}_1$")
+    axs[0].grid(True, which='both', linestyle=':', linewidth=0.5)  # Dotted grid
+    axs[1].grid(True, which='both', linestyle=':', linewidth=0.5)  # Dotted grid
     plt.tight_layout()
-    fig.savefig('figs/train_loss.pdf', format='pdf', dpi=300, bbox_inches='tight')
+    fig.savefig('figs/1dheat_trainloss.pdf', format='pdf', dpi=300, bbox_inches='tight', pad_inches=0.0)
     plt.close()
-
 
 def show_enet_res(p_net, e1_net):
     t1s = [0.2, 0.6, 1.0]
@@ -626,7 +674,7 @@ def main():
     mse_cost_function = torch.nn.MSELoss() # Mean squared error
     optimizer = torch.optim.Adam(p_net.parameters())
     start_time = time.time()
-    train_p_net(p_net, optimizer, mse_cost_function, iterations=10000); print("p_net train complete")
+    # train_p_net(p_net, optimizer, mse_cost_function, iterations=2000); print("p_net train complete")
     time_train_p = time.time() - start_time
     p_net = pos_p_net_train(p_net, PATH="output/p_net.pt", PATH_LOSS="output/p_net_train_loss.npy"); p_net.eval()
     max_abs_e1_t0 = show_p_net_results(p_net)
@@ -638,7 +686,7 @@ def main():
     optimizer = torch.optim.Adam(e1_net.parameters(), lr=1e-3);   # test_e1_res(e1_net, p_net)
     scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.9)
     start_time = time.time()
-    train_e1_net(e1_net, optimizer, scheduler, mse_cost_function, p_net, max_abs_e1_t0, iterations=10000); print("e1_net train complete")
+    # train_e1_net(e1_net, optimizer, scheduler, mse_cost_function, p_net, max_abs_e1_t0, iterations=10000); print("e1_net train complete")
     time_train_e = time.time() - start_time
     e1_net = pos_e1_net_train(e1_net, PATH="output/e1_net.pt", PATH_LOSS="output/e1_net_train_loss.npy"); e1_net.eval()
     show_e1_results(p_net, e1_net)
