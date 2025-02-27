@@ -1,4 +1,5 @@
 import numpy as np
+import torch
 
 class Case2_4D_Constants:
     """
@@ -132,5 +133,34 @@ class Case2_4D_Constants:
         print("X2_RANGE: ", self.X2_RANGE)
         print("X3_RANGE: ", self.X3_RANGE)
         print("X4_RANGE: ", self.X4_RANGE)
+
+    def sample_init_points(self, N_samples):
+        _x_bc_normal = np.random.multivariate_normal(self.N_MEAN_I, self.N_COV_I, size=N_samples).astype(np.float32)
+        _x_bc_normal = torch.tensor(_x_bc_normal, dtype=torch.float32, requires_grad=False)
+        _x_bc = np.column_stack([
+            np.random.uniform(self.X1_RANGE[0], self.X1_RANGE[1], N_samples),
+            np.random.uniform(self.X2_RANGE[0], self.X2_RANGE[1], N_samples),
+            np.random.uniform(self.X3_RANGE[0], self.X3_RANGE[1], N_samples),
+            np.random.uniform(self.X4_RANGE[0], self.X4_RANGE[1], N_samples),
+        ])
+        _x_bc = torch.tensor(_x_bc, dtype=torch.float32, requires_grad=False)
+        x_bc = torch.cat((_x_bc_normal, _x_bc), dim=0)
+        t_bc = (torch.ones(len(x_bc), 1) * self.TI)
+        return x_bc, t_bc
+    
+    def sample_res_points(self, N_samples):
+        _x_normal = np.random.multivariate_normal(self.N_MEAN_I, self.N_COV_I, size=N_samples).astype(np.float32)
+        _x_normal = torch.tensor(_x_normal, dtype=torch.float32, requires_grad=True)
+        _x = np.column_stack([
+            np.random.uniform(self.X1_RANGE[0], self.X1_RANGE[1], N_samples),
+            np.random.uniform(self.X2_RANGE[0], self.X2_RANGE[1], N_samples),
+            np.random.uniform(self.X3_RANGE[0], self.X3_RANGE[1], N_samples),
+            np.random.uniform(self.X4_RANGE[0], self.X4_RANGE[1], N_samples),
+        ])
+        _x = torch.tensor(_x, dtype=torch.float32, requires_grad=True)
+        x = torch.cat((_x_normal, _x), dim=0)
+        t = np.random.uniform(self.TI, self.TF/self.T, len(x)),
+        t = torch.tensor(t, dtype=torch.float32, requires_grad=True).view(-1,1)
+        return x, t
     
     
