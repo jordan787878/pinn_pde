@@ -159,7 +159,7 @@ class Case2_4D_Constants:
         ])
         _x = torch.tensor(_x, dtype=torch.float32, requires_grad=True)
         x = torch.cat((_x_normal, _x), dim=0)
-        t = np.random.uniform(self.TI, self.TF/self.T, len(x)),
+        t = np.random.uniform(self.TI, self.TF/self.T, len(x))
         t = torch.tensor(t, dtype=torch.float32, requires_grad=True).view(-1,1)
         return x, t
     

@@ -5,14 +5,17 @@ import time
 from scipy.stats import norm, multivariate_normal
 from scipy.interpolate import griddata
 from constants import Case2_4D_Constants
-from util import rnsphere_to_sphere, sphere_to_rnsphere, sphere_to_cartesian, cartesian_to_sphere, RV2COE, true_to_mean_anomaly, solve_kepler, COE2RV
+from util import rnsphere_to_sphere, sphere_to_rnsphere, sphere_to_cartesian, cartesian_to_sphere, RV2COE, true_to_mean_anomaly, solve_kepler, COE2RV, set_publication_style
 
 DATA_FOLDER = "data/"
 constants = Case2_4D_Constants()
 np.random.seed(0)
 
+# Compute Time of 10^8 samples
+# [10985.15 10279.26 10203.24 10229.59 10386.13 17258.86]
 
-def p_sol_monte(t=0.0, linespace_num=100, stat_sample=100000):
+
+def p_sol_monte(t=0.0, linespace_num=51, stat_sample=10000000):
     global constants
     X_four_dim = np.random.multivariate_normal(constants.N_MEAN_I, constants.N_COV_I, size=stat_sample).astype(np.float32)
 
@@ -26,7 +29,7 @@ def p_sol_monte(t=0.0, linespace_num=100, stat_sample=100000):
     
     # convert rns to cartesian
     X_cart = sphere_to_cartesian(rnsphere_to_sphere(X, constants.TI, constants), reduced_to_four_dim=True)
-    for i in range(stat_sample):
+    for i in tqdm(range(stat_sample), desc="Processing samples"):
         _a, _e, _i, _RAAN, _w, _nu, _lonper = RV2COE(X_cart[i,:], constants.MU_EARTH)
         _m = true_to_mean_anomaly(_e, _nu)
         _m = _m + np.sqrt(constants.MU_EARTH/_a**3) * constants.T * t
@@ -110,6 +113,46 @@ def get_p_init_max():
     return p_init_max
 
 
+def propagate_samples(t=0.2, dtt=1e-4, stat_sample=1):
+    global constants
+    X_four_dim = np.random.multivariate_normal(constants.N_MEAN_I, constants.N_COV_I, size=stat_sample).astype(np.float32)
+    # append constant theta' = 0.5pi/THETA, theta'_dot = 0.0
+    X = np.zeros((stat_sample, 6))
+    X[:,0] = X_four_dim[:,0]
+    X[:,1] = np.ones((stat_sample,)) * 0.5 * np.float32(np.pi) / constants.THETA
+    X[:,2] = X_four_dim[:,1]
+    X[:,3] = X_four_dim[:,2]
+    X[:,5] = X_four_dim[:,3]
+    # convert rns to sphere
+    kf = int(t/dtt)
+    for i in range(stat_sample):
+        x = X[i, :]
+        # ode45 propogate the X_sph(t)
+        for k in range(kf):
+            x = x + dyn_normsph(x) * dtt # + g*dw
+        X[i, :] = x
+    return X
+
+
+def dyn_normsph(x):
+    # normalized spherical coordinate dynamics
+    global constants
+    r = x[0]
+    th = x[1]
+    phi = x[2]
+    vr = x[3]
+    vth = x[4]
+    vphi = x[5]
+    f1 = vr
+    f2 = 0.0 # (constants)
+    f3 = vphi
+    aux = constants.W + constants.PHI/constants.T * vphi
+    f4 = constants.T**2 * r * aux**2 - constants.T**2 * constants.MU_EARTH /(constants.R**3 * r**2) # + J2
+    f5 = 0.0 # (constants)
+    f6 = -2*constants.T/(r * constants.PHI) * vr * aux
+    return np.array([f1, f2, f3, f4, f5, f6])
+
+
 def test_monte_accuracy():
     """
     marginalize the joint pdf to a single coordinate, and compare it to the true analytical pdf at init time
@@ -117,6 +160,7 @@ def test_monte_accuracy():
     1. using the univariate normal
     2. first compute the joint pdf (on the meshgrid) using multivariate normal, then marginalize
     """
+    set_publication_style()
     global constants
     print("[test] pdf(monte) accuracy at t=0")
 
@@ -146,56 +190,47 @@ def test_monte_accuracy():
             pdf_test = np.sum(joint_pdf_true, axis=(1,2,3)) * dx2 * dx3 * dx4
             ax = axs[0,0]
             x_axis = x1s
+            ax.set_xlabel(r"$r'$")
+            ax.set_ylabel(r"$p(r',t_0)$")
         elif(j == 1):
             marginalize_pdf = np.sum(pdf, axis=(0,2,3)) * dx1 * dx3 * dx4
             marginalize_pdf_true = norm.pdf(x2s, loc=constants.N_MEAN_I[1], scale=constants._N_COV_I[1,1]**0.5)
             pdf_test = np.sum(joint_pdf_true, axis=(0,2,3)) * dx1 * dx3 * dx4
             ax = axs[1,0]
             x_axis = x2s
+            ax.set_xlabel(r"$\phi'$")
+            ax.set_ylabel(r"$p(\phi',t_0)$")
         elif(j == 2):
             marginalize_pdf = np.sum(pdf, axis=(0,1,3)) * dx1 * dx2 * dx4
             marginalize_pdf_true = norm.pdf(x3s, loc=constants.N_MEAN_I[2], scale=constants._N_COV_I[2,2]**0.5)
             pdf_test = np.sum(joint_pdf_true, axis=(0,1,3)) * dx1 * dx2 * dx4
             ax = axs[0,1]
             x_axis = x3s
+            ax.set_xlabel(r"$v'_r$")
+            ax.set_ylabel(r"$p(v'_r,t_0)$")
         else:
             marginalize_pdf = np.sum(pdf, axis=(0,1,2)) * dx1 * dx2 * dx3
             marginalize_pdf_true = norm.pdf(x4s, loc=constants.N_MEAN_I[3], scale=constants._N_COV_I[3,3]**0.5)
             pdf_test = np.sum(joint_pdf_true, axis=(0,1,2)) * dx1 * dx2 * dx3
             ax = axs[1,1]
             x_axis = x4s
-        ax.plot(x_axis, marginalize_pdf_true, "black", label="analytical (marginal)")
-        ax.plot(x_axis, pdf_test, "g:", label="analytical (from joint)")
-        ax.plot(x_axis, marginalize_pdf, "b--", label="monte")
+            ax.set_xlabel(r"$v_{\phi}'$")
+            ax.set_xlabel(r"$p(v_{\phi}', t_0)$")
+        # ax.plot(x_axis, marginalize_pdf_true, "black", label="analytical (marginal)")
+        ax.plot(x_axis, pdf_test, "k--", label="analytical", linewidth=2, alpha=0.7)
+        ax.plot(x_axis, marginalize_pdf, "b:", label="monte", marker='o', markersize=4, linewidth=1, alpha=0.8)
         ax.legend()
+    # plt.show()
+    # Save the figure as a high-quality PDF file
+    plt.savefig("figs/figure.pdf", format="pdf", dpi=300, bbox_inches="tight")
     plt.show()
-
-
-# def test_propagate_using_oe(t_prime=0.0):
-#     global constants
-#     X = np.random.multivariate_normal(constants.N_MEAN_I, constants.N_COV_I, size=1).astype(np.float32)
-#     # normalize spherical 4d to cartesian 6d
-#     X_cart = normspherical4d_to_cartesian(X, 0.0, constants)
-#     for i in range(1):
-#         _a, _e, _i, _RAAN, _w, _nu, _lonper = RV2COE(X_cart[i,:], constants.MU_EARTH)
-#         _m = true_to_mean_anomaly(_e, _nu)
-#         print(X[i,:])
-#         print(X_cart[i,:])
-#         print(_a, _e, _i, _RAAN, _w, _nu, _lonper)
-#         print(_m)
-#         _m = _m + np.sqrt(constants.MU_EARTH/_a**3) * constants.T * t_prime
-#         _nu = solve_kepler(_e, _m)
-#         x_cart_t = COE2RV(_a, _e, _i, _RAAN, _w, _nu, _lonper, constants.MU_EARTH)
-#         print(_m, _nu)
-#         print(x_cart_t)
-#         x_t = cartesian_to_normspherical4d(x_cart_t.reshape(1,-1), t_prime, constants)
-#         print(x_t)
 
 
 def test_monte_spherical_pdf_Nrphi():
     """
     marginalize the pdf of normalize spherical to [r,phi]
     """
+    set_publication_style()
     global constants
     for t_prime in constants.T_PRIME_SPAN:
         print("[test] pdf(monte) marginalized to rphi at t=", t_prime)
@@ -206,6 +241,10 @@ def test_monte_spherical_pdf_Nrphi():
         x4s = np.load(DATA_FOLDER+"x4s.npy")
         pdf_monte = np.load(DATA_FOLDER+"pdf_t{:.3f}.npy".format(t_prime))
         print("[check] x1s, pdf(monte) data type: ", x1s.dtype, pdf_monte.dtype)
+
+        samples = np.load(DATA_FOLDER+"X_t{:.3f}.npy".format(t_prime))
+        r_samples = samples[:,0]
+        phi_samples = samples[:,2]
 
         dx3 = x3s[1] - x3s[0]
         dx4 = x4s[1] - x4s[0]
@@ -218,13 +257,16 @@ def test_monte_spherical_pdf_Nrphi():
 
         # Plotting the contour plot
         plt.figure(figsize=(8, 6))
-        cp = plt.contourf(x1_grid, x2_grid, pdf_monte_Nrphi, levels=30, cmap="viridis")
+        cp = plt.contourf(x1_grid, x2_grid, pdf_monte_Nrphi, levels=30, cmap="viridis", alpha=0.8)
         # Adding color bar
         plt.colorbar(cp)
+        # scatter samples of (r, phi) on to the plot
+        plt.scatter(r_samples, phi_samples, s=8, c='white', edgecolor='black', alpha=1.0, label='Samples')
         # Adding labels and title
-        plt.xlabel('x1')
-        plt.ylabel('x2')
-        plt.title('Contour plot of pdf_monte_rphi_prime')
+        plt.xlabel(r"$r'$")
+        plt.ylabel(r"$\phi'$")
+        plt.title(r"$p(r',\phi')$ from MC and 200 Samples at t="+str(np.round(t_prime,2))+"T")
+        plt.legend()
         plt.show()
 
 
@@ -233,6 +275,7 @@ def test_monte_cartesian_pdf_xy():
     convert the normalize spherical pdf to pdf(x,y)
     the contour plot is not exact, since we use interpolation to create x,y grid and p(x,y) on this grid
     """
+    set_publication_style()
     global constants
     # Create the contour plot
     plt.figure(figsize=(8, 6))
@@ -273,37 +316,60 @@ def test_monte_cartesian_pdf_xy():
                                      np.linspace(y.min(), y.max(), 100))
         # Interpolate scattered data onto the grid
         grid_z = griddata((x, y), z, (grid_x, grid_y), method='cubic')
-        cp = plt.contourf(grid_x, grid_y, grid_z, levels=15, cmap="viridis")  # Filled contour plot
+        cp = plt.contourf(grid_x, grid_y, grid_z, levels=15, cmap="viridis", alpha=0.9)  # Filled contour plot
         # plt.colorbar(cp)  # Add a colorbar to indicate the values
+
+        samples = np.load(DATA_FOLDER+"X_t{:.3f}.npy".format(t_prime))
+        r_samples = samples[1:30,0]*constants.R
+        phi_samples = samples[1:30,2]*constants.PHI + constants.W*constants.T*t_prime
+        x_samples = r_samples * np.cos(phi_samples)
+        y_samples = r_samples * np.sin(phi_samples)
+        if(t_prime == 0.0):
+            plt.scatter(x_samples, y_samples, s=3, c='white', linewidths=0.2, edgecolor='red', alpha=0.9, label='Samples')
+        else:
+            plt.scatter(x_samples, y_samples, s=3, c='white', linewidths=0.2, edgecolor='red', alpha=0.9)
+
     # Labels and title
     plt.axis('equal')
     plt.xlabel('X, m')
     plt.ylabel('Y, m')
-    plt.title('pdf_monte(x,y) over T='+str(constants.TF)+' sec.')
-    # Show the plot
+    plt.title('p(x,y) from MC and (30) Samples over 0.2T')
+    plt.legend()
+    plt.savefig("figs/figure1.pdf", format="pdf", dpi=300, bbox_inches="tight")
     plt.show()
-
       
 
-def main():
-    # # Generate data
+def generate_data():
+    mc_time = []
     for t_prime in constants.T_PRIME_SPAN:
-        x1s, x2s, x3s, x4s, pdf = p_sol_monte(t=t_prime, linespace_num=51, stat_sample=10000000)   
+        start_time = time.time()
+        x1s, x2s, x3s, x4s, pdf = p_sol_monte(t=t_prime, linespace_num=51, stat_sample=100000000)   
+        mc_time.append(time.time() - start_time)
         np.save(DATA_FOLDER+"pdf_t{:.3f}.npy".format(t_prime), pdf)
         if t_prime == 0.0:
             np.save(DATA_FOLDER+"x1s.npy", x1s)
             np.save(DATA_FOLDER+"x2s.npy", x2s)
             np.save(DATA_FOLDER+"x3s.npy", x3s)
             np.save(DATA_FOLDER+"x4s.npy", x4s)
+    print("MC time (sec): ", np.round(np.array(mc_time),2) )
 
-    # # Testing functions
-    test_monte_accuracy()
 
-    # # [obsolete] test_propagate_using_oe(t_prime=constants.TF/constants.T)
+def generate_samples():
+    for t_prime in constants.T_PRIME_SPAN:
+        X = propagate_samples(t_prime, stat_sample=200)
+        np.save(DATA_FOLDER+"X_t{:.3f}.npy".format(t_prime), X)
+    
 
-    # test_monte_spherical_pdf_Nrphi()
+def main():
+    # # [Generate data] # #
+    generate_data()
+    # generate_samples()
 
-    test_monte_cartesian_pdf_xy()
+    # # [Testing functions] # #
+    # test_monte_accuracy()
+
+    test_monte_spherical_pdf_Nrphi()
+    # test_monte_cartesian_pdf_xy()
     
 
 

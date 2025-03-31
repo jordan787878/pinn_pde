@@ -1,5 +1,34 @@
 import numpy as np
 from scipy.optimize import fsolve
+import matplotlib as mpl
+
+def set_publication_style():
+    """
+    Configure matplotlib's rcParams for publication-ready plots.
+    Adjusts figure size, font sizes, line widths, tick styles, and grid properties.
+    """
+    mpl.rcParams.update({
+        'figure.figsize': (8, 6),
+        'savefig.dpi': 300,
+        'axes.titlesize': 16,       # Slightly larger title size
+        'axes.labelsize': 14,       # Increase axis label size
+        'axes.linewidth': 1.2,      # Thinner axes lines
+        'lines.linewidth': 2.5,     # Thicker plot lines for clarity
+        'lines.markersize': 8,
+        'xtick.labelsize': 12,      # Slightly smaller tick labels
+        'ytick.labelsize': 12,
+        'xtick.direction': 'in',
+        'ytick.direction': 'in',
+        'xtick.major.size': 4,      # Adjust tick length
+        'ytick.major.size': 4,
+        'legend.fontsize': 12,
+        'grid.linestyle': '--',
+        'grid.linewidth': 0.8,
+        'grid.color': '0.8',        # Light gray grid lines
+        'font.family': 'serif',
+        'font.serif': ['Times New Roman', 'Times', 'DejaVu Serif'],
+        'figure.autolayout': True   # Enable automatic layout adjustment
+    })
 
 
 def sphere_to_cartesian(input_array, reduced_to_four_dim=False):
