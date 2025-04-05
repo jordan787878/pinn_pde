@@ -24,8 +24,8 @@ from monte import p_init, get_p_init_max
 from pnet_models import PNet
 
 
-DATA_FOLDER = "data/"
 PNET_PATH = "output/p_net_reg.pth"
+DATA_FOLDER = "data/"
 device = "cpu"
 TRAIN_FLAG = False
 constants = Case2_4D_Constants()
@@ -48,7 +48,7 @@ def dyn_f3(x):
 def dyn_f4(x):
     return -2*constants.T*x[:,2]*(constants.W + constants.PHI * x[:,3]/constants.T)/(x[:,0]*constants.PHI)
 
-def diff_opt_p(x, t, p_net, verbose=False):
+def diff_opt_p(x, t, p_net, beta=1.0, verbose=False):
     output = p_net(x,t)
     output_x = torch.autograd.grad(output, x, grad_outputs=torch.ones_like(output), create_graph=True)[0]
     output_t = torch.autograd.grad(output, t, grad_outputs=torch.ones_like(output), create_graph=True)[0]
@@ -62,7 +62,7 @@ def diff_opt_p(x, t, p_net, verbose=False):
     f4 = dyn_f4(x).view(-1,1)
     f4_x = torch.autograd.grad(f4, x, grad_outputs=torch.ones_like(f4), create_graph=True)[0]
     f4_x4 = f4_x[:,3].view(-1,1)
-    residual = output_t + output_x1*f1 + output_x2*f2 + output_x3*f3 + output_x4*f4 + f4_x4*output
+    residual = output_t + beta*(output_x1*f1 + output_x2*f2 + output_x3*f3 + output_x4*f4 + f4_x4*output)
     # print(residual.dtype)
     return residual
 
@@ -98,28 +98,37 @@ def train_p_net(p_net, optimizer, scheduler, mse_cost_function, iterations=40000
         p_i = p_init(x_bc.detach().numpy())
         p_i = torch.tensor(p_i, dtype=torch.float32, requires_grad=False)
         phat_i = p_net(x_bc, t_bc)
+        ic = (p_i - phat_i)/normalize
         mse_u = mse_cost_function(phat_i/normalize, p_i.detach()/normalize)
 
         # Loss based on PDE
         res_p = diff_opt_p(x, t, p_net)/normalize
         all_zeros = torch.zeros((len(t),1), dtype=torch.float32, requires_grad=False).to(device)
         mse_res = mse_cost_function(res_p, all_zeros)
-        # # # Define a small scale for perturbation
-        # # epsilon = 1e-1
-        # # N_jj = 10
-        # # for j in range(N_jj):
-        # #     z = x + torch.randn_like(x) * epsilon
-        # #     res_p = res_p + diff_opt_p(z, t, p_net)/normalize
-        # # mse_res = mse_cost_function(res_p/(N_jj+1), all_zeros)
-        res_x = torch.autograd.grad(res_p, x, grad_outputs=torch.ones_like(res_p), create_graph=True)[0]
-        res_t = torch.autograd.grad(res_p, t, grad_outputs=torch.ones_like(res_p), create_graph=True)[0]
-        tv_x = (res_x ** 2).sum(dim=1, keepdim=True)  # shape: (N, 1)
-        tv_t = (res_t ** 2).sum(dim=1, keepdim=True)  # shape: (N, 1)
-        tv_loss = torch.mean(tv_x + tv_t)
-        w_reg = 1e-2
+        
+        # TV_loss by random perturbation (epsilon)
+        epsilon = 1e-1
+        z_bc = x_bc + torch.randn_like(x_bc) * epsilon
+        p_i = p_init(z_bc.detach().numpy())
+        p_i = torch.tensor(p_i, dtype=torch.float32, requires_grad=False)
+        phat_i = p_net(z_bc, t_bc)
+        ic_z = (p_i - phat_i)/normalize
+        tv_loss_ic = mse_cost_function(ic_z, ic)
+
+        z = x + torch.randn_like(x) * epsilon
+        res_z = diff_opt_p(z, t, p_net)/normalize
+        tau = t + torch.randn_like(t) * 0.05
+        res_tau = diff_opt_p(x, tau, p_net)/normalize
+        tv_loss = mse_cost_function(res_z, res_p) + mse_cost_function(res_tau, res_p)
+            
+        # res_x = torch.autograd.grad(res_p, x, grad_outputs=torch.ones_like(res_p), create_graph=True)[0]
+        # res_t = torch.autograd.grad(res_p, t, grad_outputs=torch.ones_like(res_p), create_graph=True)[0]
+        # tv_x = (res_x ** 2).sum(dim=1, keepdim=True)  # shape: (N, 1)
+        # tv_t = (res_t ** 2).sum(dim=1, keepdim=True)  # shape: (N, 1)
+        # tv_loss = torch.mean(tv_x + tv_t)
 
         # Loss Function
-        loss = mse_u + mse_res + w_reg*tv_loss
+        loss = mse_u + tv_loss_ic + mse_res + tv_loss
         loss_history.append(loss.item())
 
         # Save the min loss model
@@ -127,7 +136,7 @@ def train_p_net(p_net, optimizer, scheduler, mse_cost_function, iterations=40000
             train_time = time.time() - start_time
             print("save epoch:", epoch, ",loss:", loss.data, 
                   ",ic:", mse_u.data, ",res:", mse_res.data,
-                  ",tv:", tv_loss.data
+                  ",tv:", tv_loss_ic.data, tv_loss.data
                    )
             torch.save({
                     'epoch': epoch, 'model_state_dict': p_net.state_dict(),
@@ -199,258 +208,6 @@ def load_trained_model(net, path, method="old"):
     return net
 
 
-def check_pdfnn_marginalize(p_net, t=0.0):
-    """
-    marginalize the joint pdf to a single coordinate, and compare it to the true analytical pdf at init time
-    the true analytical pdf is obtained by 2 ways (but equivalent)
-    1. using the univariate normal
-    2. first compute the joint pdf (on the meshgrid) using multivariate normal, then marginalize
-    """
-    global constants
-    print("[result] pdf_nn vs monte (or analytical at t=TI)")
-
-    # load p(monte)
-    x1s = np.load(DATA_FOLDER+"x1s.npy")
-    x2s = np.load(DATA_FOLDER+"x2s.npy")
-    x3s = np.load(DATA_FOLDER+"x3s.npy")
-    x4s = np.load(DATA_FOLDER+"x4s.npy")
-    pdf_monte = np.load(DATA_FOLDER+"pdf_t{:.3f}.npy".format(t))
-    print("[check] monte joint pdf shape, type: ", pdf_monte.shape, pdf_monte.dtype)
-
-    # prepare grid points 
-    x1_grid, x2_grid, x3_grid, x4_grid = np.meshgrid(x1s, x2s, x3s, x4s, indexing="ij") # the indexing is very important
-    grid_points = np.vstack([x1_grid.ravel(), x2_grid.ravel(), x3_grid.ravel(), x4_grid.ravel()]).T
-    print("[check] grid points shape type: ", grid_points.shape, grid_points.dtype)
-    
-    # if t == 0.0, obtain analytical p(true)
-    if(t == 0.0):
-        pdf_true = p_init(grid_points).reshape(x1_grid.shape)
-        print("[check] x1 ranges, true joint pdf shape, type: ", x1s.dtype, pdf_true.shape, pdf_true.dtype)
-
-    # obtain pdf(nn)
-    grid_points_tensor = torch.tensor(grid_points, dtype=torch.float32, requires_grad=False)
-    t_tensor = (torch.ones(len(grid_points_tensor), 1, dtype=torch.float32) * t).to(device)
-    print("[check] grid points tensor shape type: ", grid_points_tensor.shape, grid_points_tensor.dtype)
-    pdf_nn = p_net(grid_points_tensor, t_tensor).detach().numpy().reshape(x1_grid.shape)
-    print("[check] nn joint pdf shape, type: ", pdf_nn.shape, pdf_nn.dtype)
-    
-    dx1 = x1s[1] - x1s[0]
-    dx2 = x2s[1] - x2s[0]
-    dx3 = x3s[1] - x3s[0]
-    dx4 = x4s[1] - x4s[0]
-
-    # create figure
-    fig, axs = plt.subplots(2, 2, figsize=(10, 8))
-    for j in range(4):
-        if(j == 0):
-            ax = axs[0,0]
-            x_axis = x1s
-            marginalize_pdf_monte = np.sum(pdf_monte, axis=(1,2,3)) * dx2 * dx3 * dx4
-            marginalize_pdf_nn = np.sum(pdf_nn, axis=(1,2,3)) * dx2 * dx3 * dx4
-            ax.plot(x_axis, marginalize_pdf_monte, "blue", label="monte")
-            ax.plot(x_axis, marginalize_pdf_nn, "r--", label="nn")
-            ax.set_ylim(0.0, constants.MAX_PX1)
-            ax.set_ylabel(r"$r$")
-            if(t == 0.0):
-                # marginalize_pdf_true = norm.pdf(x1s, loc=constants.N_MEAN_I[0], scale=constants._N_COV_I[0,0]**0.5)
-                marginalize_pdf_true = np.sum(pdf_true, axis=(1,2,3)) * dx2 * dx3 * dx4
-                ax.plot(x_axis, marginalize_pdf_true, "black", label="analytical")
-        elif(j == 1):
-            ax = axs[0,1]
-            x_axis = x2s
-            marginalize_pdf_monte = np.sum(pdf_monte, axis=(0,2,3)) * dx1 * dx3 * dx4
-            marginalize_pdf_nn = np.sum(pdf_nn, axis=(0,2,3)) * dx1 * dx3 * dx4
-            ax.plot(x_axis, marginalize_pdf_monte, "blue", label="monte")
-            ax.plot(x_axis, marginalize_pdf_nn, "r--", label="nn")
-            ax.set_ylim(0.0, constants.MAX_PX2)
-            ax.set_ylabel(r"$\phi$")
-            if(t == 0.0):
-                    # marginalize_pdf_true = norm.pdf(x1s, loc=constants.N_MEAN_I[0], scale=constants._N_COV_I[0,0]**0.5)
-                    marginalize_pdf_true = np.sum(pdf_true, axis=(0,2,3)) * dx1 * dx3 * dx4
-                    ax.plot(x_axis, marginalize_pdf_true, "black", label="analytical")
-        elif(j == 2):
-            ax = axs[1,0]
-            x_axis = x3s
-            marginalize_pdf_monte = np.sum(pdf_monte, axis=(0,1,3)) * dx1 * dx2 * dx4
-            marginalize_pdf_nn = np.sum(pdf_nn, axis=(0,1,3)) * dx1 * dx2 * dx4
-            ax.plot(x_axis, marginalize_pdf_monte, "blue", label="monte")
-            ax.plot(x_axis, marginalize_pdf_nn, "r--", label="nn")
-            ax.set_ylim(0.0, constants.MAX_PX3)
-            ax.set_ylabel(r"$v_r$")
-            if(t == 0.0):
-                    # marginalize_pdf_true = norm.pdf(x1s, loc=constants.N_MEAN_I[0], scale=constants._N_COV_I[0,0]**0.5)
-                    marginalize_pdf_true = np.sum(pdf_true, axis=(0,1,3)) * dx1 * dx2 * dx4
-                    ax.plot(x_axis, marginalize_pdf_true, "black", label="analytical")
-        else:
-            ax = axs[1,1]
-            x_axis = x4s
-            marginalize_pdf_monte = np.sum(pdf_monte, axis=(0,1,2)) * dx1 * dx2 * dx3
-            marginalize_pdf_nn = np.sum(pdf_nn, axis=(0,1,2)) * dx1 * dx2 * dx3
-            ax.plot(x_axis, marginalize_pdf_monte, "blue", label="monte")
-            ax.plot(x_axis, marginalize_pdf_nn, "r--", label="nn")
-            ax.set_ylim(0.0, constants.MAX_PX4)
-            ax.set_ylabel(r"$v_\phi$")
-            if(t == 0.0):
-                    # marginalize_pdf_true = norm.pdf(x1s, loc=constants.N_MEAN_I[0], scale=constants._N_COV_I[0,0]**0.5)
-                    marginalize_pdf_true = np.sum(pdf_true, axis=(0,1,2)) * dx1 * dx2 * dx3
-                    ax.plot(x_axis, marginalize_pdf_true, "black", label="analytical")
-        ax.legend()
-    plt.show()
-
-
-def test_nn_cartesian_pdf_xy(p_net):
-    """
-    convert the normalize spherical pdf_nn to pdf_nn(x,y)
-    the contour plot is not exact, since we use interpolation to create x,y grid and pdf_nn(x,y) on this grid
-    """
-    global constants
-    # Create the contour plot
-    plt.figure(figsize=(8, 6))
-    for t_prime in constants.T_PRIME_SPAN:
-        print("[test] pdf(nn) marginalized to xy at t'=", t_prime)
-        x1s = np.load(DATA_FOLDER+"x1s.npy")
-        x2s = np.load(DATA_FOLDER+"x2s.npy")
-        x3s = np.load(DATA_FOLDER+"x3s.npy")
-        x4s = np.load(DATA_FOLDER+"x4s.npy")
-
-        # obtain pdf_nn on the domain
-        x1_grid, x2_grid, x3_grid, x4_grid = np.meshgrid(x1s, x2s, x3s, x4s, indexing="ij") # the indexing is very important
-        grid_points = np.vstack([x1_grid.ravel(), x2_grid.ravel(), x3_grid.ravel(), x4_grid.ravel()]).T
-        grid_points_tensor = torch.tensor(grid_points, dtype=torch.float32, requires_grad=False)
-        t_tensor = (torch.ones(len(grid_points_tensor), 1, dtype=torch.float32) * t_prime).to(device)
-        pdf_nn = p_net(grid_points_tensor, t_tensor).detach().numpy().reshape(x1_grid.shape)
-
-        dx3 = x3s[1] - x3s[0]
-        dx4 = x4s[1] - x4s[0]
-
-        # marginalize to spherical position (r, phi)
-        pdf_nn_Nrphi =  np.sum(pdf_nn, axis=(2,3)) * dx3 * dx4
-
-        # convert pdf
-        pdf_nn_rphi_data = np.empty((0,4))
-        x1_grid, x2_grid =  np.meshgrid(x1s, x2s, indexing="ij") # the indexing is very important
-        for i in range(len(x1_grid)):
-            for j in range(len(x2_grid)):
-                # extract [r', phi', p(r',phi')]
-                Nr = x1_grid[i,j]
-                Nphi = x2_grid[i,j]
-                r = Nr*constants.R
-                phi = Nphi*constants.PHI + constants.W*constants.T*t_prime
-                t = constants.T*t_prime
-                pdf_nn_rphi_data = np.vstack((pdf_nn_rphi_data, np.array([r, phi, t, pdf_nn_Nrphi[i,j]/(constants.R*constants.PHI)])))
-
-        # convert pdf(r,phi) to pdf(x,y)
-        x = pdf_nn_rphi_data[:, 0] * np.cos(pdf_nn_rphi_data[:, 1])  
-        y = pdf_nn_rphi_data[:, 0] * np.sin(pdf_nn_rphi_data[:, 1])
-        r = pdf_nn_rphi_data[:, 0]
-        z_nn = pdf_nn_rphi_data[:, 3]/(r**2)  
-        # Define the grid where you want to plot the contours
-        grid_x, grid_y = np.meshgrid(np.linspace(x.min(), x.max(), 100),  # Adjust 100 to get finer resolution
-                                     np.linspace(y.min(), y.max(), 100))
-        # Interpolate scattered data onto the grid
-        grid_z_nn = griddata((x, y), z_nn, (grid_x, grid_y), method='cubic')
-        cp = plt.contourf(grid_x, grid_y, grid_z_nn, levels=15, cmap="viridis", alpha=1.0)  # Filled contour plot
-        # plt.colorbar(cp)  # Add a colorbar to indicate the values
-    # Labels and title
-    plt.axis('equal')
-    plt.xlabel('X, m')
-    plt.ylabel('Y, m')
-    plt.title('pdf_nn(x,y) over T='+str(constants.TF)+' sec.')
-    plt.show()
-
-
-def check_pdfnn_cartesian_wrt_monte(p_net):
-    """
-    convert the normalize spherical pdf_nn to pdf_nn(x,y)
-    and compare it with respect to pdf_monte(x,y)
-    the surface plot is not exact, since we use interpolation to create x,y grid and pdf_nn(x,y) on this grid
-    """
-    global constants
-    # Create a figure
-    fig = plt.figure(figsize=(10, 8))
-    ax = fig.add_subplot(111, projection='3d')
-
-    for t_prime in constants.T_PRIME_SPAN:
-        print("[test] pdf(nn) marginalized to xy at t'=", t_prime)
-        x1s = np.load(DATA_FOLDER+"x1s.npy")
-        x2s = np.load(DATA_FOLDER+"x2s.npy")
-        x3s = np.load(DATA_FOLDER+"x3s.npy")
-        x4s = np.load(DATA_FOLDER+"x4s.npy")
-        # load pdf_monte on the domain
-        pdf_monte = np.load(DATA_FOLDER+"pdf_t{:.3f}.npy".format(t_prime))
-
-        # obtain pdf_nn on the domain
-        x1_grid, x2_grid, x3_grid, x4_grid = np.meshgrid(x1s, x2s, x3s, x4s, indexing="ij") # the indexing is very important
-        grid_points = np.vstack([x1_grid.ravel(), x2_grid.ravel(), x3_grid.ravel(), x4_grid.ravel()]).T
-        grid_points_tensor = torch.tensor(grid_points, dtype=torch.float32, requires_grad=False)
-        t_tensor = (torch.ones(len(grid_points_tensor), 1, dtype=torch.float32) * t_prime).to(device)
-        pdf_nn = p_net(grid_points_tensor, t_tensor).detach().numpy().reshape(x1_grid.shape)
-
-        dx1 = x1s[1] - x1s[0] # dr'
-        dx2 = x2s[1] - x2s[0] # dphi'
-        dx3 = x3s[1] - x3s[0]
-        dx4 = x4s[1] - x4s[0]
-
-        # marginalize to spherical position (r, phi)
-        pdf_nn_Nrphi =  np.sum(pdf_nn, axis=(2,3)) * dx3 * dx4
-        pdf_mo_Nrphi =  np.sum(pdf_monte, axis=(2,3)) * dx3 * dx4
-
-        sum_p_nn = np.sum(pdf_nn_Nrphi) * dx1 * dx2
-        print("[check] sum p_nn (N-sphere): ", sum_p_nn)
-
-        # convert pdf(r, phi)
-        # NOTE: I store the area = "dr*(r*dphi)" associated to each pdf
-        pdf_nn_rphi_data = np.empty((0,5))
-        pdf_mo_rphi_data = np.empty((0,4))
-        x1_grid, x2_grid =  np.meshgrid(x1s, x2s, indexing="ij") # the indexing is very important
-        for i in range(len(x1_grid)):
-            for j in range(len(x2_grid)):
-                # extract [r', phi', p(r',phi')]
-                Nr = x1_grid[i,j]
-                Nphi = x2_grid[i,j]
-                r = Nr*constants.R
-                phi = Nphi*constants.PHI + constants.W*constants.T*t_prime
-                t = constants.T*t_prime
-                pdf_nn_rphi_data = np.vstack((pdf_nn_rphi_data, np.array([r, phi, t, pdf_nn_Nrphi[i,j]/(constants.R*constants.PHI), (dx1*constants.R)*(r*dx2*constants.PHI)])))
-                pdf_mo_rphi_data = np.vstack((pdf_mo_rphi_data, np.array([r, phi, t, pdf_mo_Nrphi[i,j]/(constants.R*constants.PHI)])))
-
-        # convert pdf(r,phi) to pdf(x,y)
-        x = pdf_nn_rphi_data[:, 0] * np.cos(pdf_nn_rphi_data[:, 1]) 
-        y = pdf_nn_rphi_data[:, 0] * np.sin(pdf_nn_rphi_data[:, 1])
-        r = pdf_nn_rphi_data[:, 0]
-        z_nn = pdf_nn_rphi_data[:, 3]/(r) # see derivation of the factor (1/r) in Nov 7 notes
-        z_mo = pdf_mo_rphi_data[:, 3]/(r) 
-
-        _p_test = (np.sum(pdf_nn_Nrphi)/(constants.R*constants.PHI)) * (dx1*constants.R * dx2*constants.PHI)
-        __p_test = np.sum(z_nn * pdf_nn_rphi_data[:, 4])
-        ___p_test = np.sum(z_mo * pdf_nn_rphi_data[:, 4])
-        print("[check] p_monte in (x,y) {:.2f} & p_nn sum in (r,phi) {:.2f} and (x,y) {:.2f}".format(___p_test, _p_test, __p_test))
-
-        # visualize p(x,y) using interpolation
-        _grid_resolution = 70
-        grid_x, grid_y = np.meshgrid(np.linspace(x.min(), x.max(), _grid_resolution), np.linspace(y.min(), y.max(), _grid_resolution), indexing="ij")
-        # Interpolate scattered data onto the grid
-        grid_z_nn = griddata((x, y), z_nn, (grid_x, grid_y), method='cubic')
-        grid_z_mo = griddata((x, y), z_mo, (grid_x, grid_y), method='cubic')
-
-        if(t_prime == 0.0):
-            surf1 = ax.plot_surface(grid_x, grid_y, grid_z_nn, color="none", rstride=3, cstride=3, edgecolor='red',  linewidth=0.5, linestyle="--", label="NN")
-            surf2 = ax.plot_surface(grid_x, grid_y, grid_z_mo, color="none", rstride=3, cstride=3, edgecolor='blue', linewidth=0.5, label="Monte")
-        else:
-            surf1 = ax.plot_surface(grid_x, grid_y, grid_z_nn, color="none", rstride=3, cstride=3, edgecolor='red',  linewidth=0.5, linestyle="--")
-            surf2 = ax.plot_surface(grid_x, grid_y, grid_z_mo, color="none", rstride=3, cstride=3, edgecolor='blue', linewidth=0.5)
-        # Optional: Add a color bar
-        # fig.colorbar(surf, ax=ax, shrink=0.5, aspect=5)
-    # Labels and title
-    ax.legend()
-    ax.set_xlabel('X, m')
-    ax.set_ylabel('Y, m')
-    ax.set_zlabel('PDF Value')
-    ax.set_title(f'3D Surface Plot of PDF over t='+str(constants.TF))
-    # Show the plot
-    plt.show()
-
-
 def main():
     global constants
     p_net = PNet().to(device)
@@ -469,7 +226,8 @@ def main():
     # for t_prime in constants.T_PRIME_SPAN:
     #    check_pdfnn_marginalize(p_net, t=t_prime)
     # test_nn_cartesian_pdf_xy(p_net)
-    check_pdfnn_cartesian_wrt_monte(p_net)
+    # check_pdf_Nrphi(p_net)
+    # check_pdfnn_cartesian_wrt_monte(p_net)
 
 
 if __name__ == "__main__":

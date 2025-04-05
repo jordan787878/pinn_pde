@@ -13,13 +13,14 @@ import time
 from scipy.interpolate import griddata
 import argparse
 from constants import Case2_4D_Constants
-from monte import p_init, get_p_init_max
-from main_train_pnet import diff_opt_p
+from monte import p_init, get_p_init_max, p_init_perturb
+from main_train_pnetreg import diff_opt_p
 from main_train_pnet_gmm import PNet_GMM
 from pnet_models import PNet
 from e1net_models import E1Net
 
-
+# standard training
+E1NET_PATH = "output/e1_net.pth"
 DATA_FOLDER = "data/"
 device = "cpu"
 TRAIN_FLAG = False
@@ -42,7 +43,7 @@ def train_model(e1_net, p_net, optimizer, scheduler, mse_cost_function, iteratio
     min_loss = np.inf
     iterations_per_decay = 1000
     loss_history = []
-    normalize = 0.010610391
+    normalize = 0.02914694
 
     N0_samples = 2000
     Nr_samples = 2000
@@ -61,19 +62,28 @@ def train_model(e1_net, p_net, optimizer, scheduler, mse_cost_function, iteratio
         # Loss based on boundary conditions
         p_i = p_init(x_bc.detach().numpy())
         p_i = torch.tensor(p_i, dtype=torch.float32, requires_grad=False)
-        phat_i = p_net(x_bc, t_bc).to(device).detach()
+        phat_i = p_net(x_bc, t_bc).to(device)
         e_i = p_i - phat_i
         ehat_i = e1_net(x_bc, t_bc).to(device)
         mse_u = mse_cost_function(ehat_i/normalize, e_i.detach()/normalize)
 
         # Loss based on PDE
-        res_p = diff_opt_p(x, t, p_net)/normalize
-        res_e = diff_opt_p(x, t, e1_net)/normalize
-        # res = res_e + res_p.detach()
-        # all_zeros = torch.zeros((len(t),1), dtype=torch.float32, requires_grad=False).to(device)
-        mse_res = mse_cost_function(res_e, -res_p)
+        res_p = diff_opt_p(x, t, p_net)
+        res_e = diff_opt_p(x, t, e1_net)
+        mse_res = mse_cost_function(res_e/normalize, -res_p.detach()/normalize)
 
-        loss = mse_u + mse_res #+ w_reg*tv_loss
+        # tv
+        # epsilon = 1e-1
+        # z_bc = x_bc + torch.randn_like(x_bc) * epsilon
+        # p_i = p_init(z_bc.detach().numpy())
+        # p_i = torch.tensor(p_i, dtype=torch.float32, requires_grad=False)
+        # phat_i = p_net(z_bc, t_bc).to(device)
+        # e_i = p_i - phat_i
+        # ehat_i = e1_net(z_bc, t_bc).to(device)
+        # ic_z = e_i - ehat_i
+        # tv_loss_ic = mse_cost_function(ic_z/normalize, ic/normalize)
+
+        loss = mse_u + 1e-1*mse_res
         loss_history.append(loss.item())
 
         # Save the min loss model
@@ -81,7 +91,7 @@ def train_model(e1_net, p_net, optimizer, scheduler, mse_cost_function, iteratio
             train_time = time.time() - start_time
             print("save epoch:", epoch, ",loss:", loss.data, 
                   ",ic:", mse_u.data,   ",res:", mse_res.data,
-                #   ",tv:",tv_loss.data
+                #   ",tv:",tv_loss_ic.data
                    )
             torch.save({
                     'epoch': epoch,
@@ -89,7 +99,7 @@ def train_model(e1_net, p_net, optimizer, scheduler, mse_cost_function, iteratio
                     'optimizer_state_dict': optimizer.state_dict(),
                     'loss_history': loss_history,
                     'train_time': train_time,
-                    }, "output/e1_net.pth")
+                    }, E1NET_PATH)
             min_loss = loss.data
             FLAG = True
 
@@ -193,6 +203,8 @@ def check_train_results(e1_net, p_net, t=0.0):
     t_tensor = (torch.ones(len(grid_points_tensor), 1, dtype=torch.float32) * t).to(device)
     # print("[check] grid points tensor shape type: ", grid_points_tensor.shape, grid_points_tensor.dtype)
     pdf_nn = p_net(grid_points_tensor, t_tensor).detach().numpy().reshape(x1_grid.shape)
+    # if(t == 0): # [test]
+    #     pdf_nn = p_init_perturb(grid_points).reshape(x1_grid.shape)
     # print("[check] nn joint pdf shape, type: ", pdf_nn.shape, pdf_nn.dtype)
     e1_nn  = e1_net(grid_points_tensor, t_tensor).detach().numpy().reshape(x1_grid.shape)
     e1 = pdf_true - pdf_nn
@@ -202,13 +214,17 @@ def check_train_results(e1_net, p_net, t=0.0):
     a1 = np.max(np.abs(e1_vec - e1_nn_vec)) / np.max(np.abs(e1_nn_vec))
     print("a1 (t=", np.round(t,2),"): ", np.round(a1,3))
     # print(E_x1, E_x2, E_x3, E_x4)
-    print(np.max(np.abs(e1_vec)), np.max(np.abs(e1_nn_vec)))
     max_e1 = np.max(np.abs(e1_vec))
+    max_e1_nn = np.max(np.abs(e1_nn_vec))
+    print(max_e1, max_e1_nn)
+    B1 = 2.0 * max_e1_nn 
 
     idx_plot = np.arange(1, 1+len(e1_vec))
     plt.figure
     plt.plot(idx_plot, e1_vec, "black")
-    plt.plot(idx_plot, e1_nn_vec, "b--")
+    plt.plot(idx_plot, e1_nn_vec, "b--", linewidth=0.2)
+    plt.fill_between(idx_plot, y1=0.0*idx_plot+B1, y2=0.0*idx_plot-B1, 
+                         color="green", alpha=0.3, label=r"$B$")
     plt.show()
 
     return max_e1
@@ -490,8 +506,8 @@ def main():
     optimizer = torch.optim.Adam(e1_net.parameters(), lr=1e-3)
     scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.95)
     if(TRAIN_FLAG):
-        train_model(e1_net, p_net, optimizer, scheduler, mse_cost_function, iterations=50000); print("e1_net train complete")
-    e1_net = load_trained_model(e1_net, path="output/e1_net.pth", method="new"); e1_net.eval()
+        train_model(e1_net, p_net, optimizer, scheduler, mse_cost_function, iterations=300000); print("e1_net train complete")
+    e1_net = load_trained_model(e1_net, path=E1NET_PATH, method="new"); e1_net.eval()
 
     ### Post-process ###
     for t_prime in constants.T_PRIME_SPAN:

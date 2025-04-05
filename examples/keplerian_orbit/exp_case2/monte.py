@@ -7,12 +7,12 @@ from scipy.interpolate import griddata
 from constants import Case2_4D_Constants
 from util import rnsphere_to_sphere, sphere_to_rnsphere, sphere_to_cartesian, cartesian_to_sphere, RV2COE, true_to_mean_anomaly, solve_kepler, COE2RV, set_publication_style
 
-DATA_FOLDER = "data/"
+DATA_FOLDER = "data/" # 10^8 samples
+# Compute Time of 10^8 samples
+# [10985.15 10279.26 10203.24 10229.59 10386.13 17258.86*]
+
 constants = Case2_4D_Constants()
 np.random.seed(0)
-
-# Compute Time of 10^8 samples
-# [10985.15 10279.26 10203.24 10229.59 10386.13 17258.86]
 
 
 def p_sol_monte(t=0.0, linespace_num=51, stat_sample=10000000):
@@ -96,6 +96,17 @@ def p_init(x):
     """
     global constants
     pdf_func = multivariate_normal(mean=constants.N_MEAN_I, cov=constants. N_COV_I)
+    pdf_eval = pdf_func.pdf(x).reshape(-1,1).astype(x.dtype)
+    return pdf_eval
+
+
+def p_init_perturb(x):
+    """
+    x is numpy array of shape (N x 4), N is the sample size
+    """
+    global constants
+    perturb = 1.05
+    pdf_func = multivariate_normal(mean=perturb*constants.N_MEAN_I, cov=constants. N_COV_I)
     pdf_eval = pdf_func.pdf(x).reshape(-1,1).astype(x.dtype)
     return pdf_eval
 
@@ -226,7 +237,7 @@ def test_monte_accuracy():
     plt.show()
 
 
-def test_monte_spherical_pdf_Nrphi():
+def test_monte_spherical_pdf_Nrphi(data_folder):
     """
     marginalize the pdf of normalize spherical to [r,phi]
     """
@@ -235,11 +246,11 @@ def test_monte_spherical_pdf_Nrphi():
     for t_prime in constants.T_PRIME_SPAN:
         print("[test] pdf(monte) marginalized to rphi at t=", t_prime)
 
-        x1s = np.load(DATA_FOLDER+"x1s.npy")
-        x2s = np.load(DATA_FOLDER+"x2s.npy")
-        x3s = np.load(DATA_FOLDER+"x3s.npy")
-        x4s = np.load(DATA_FOLDER+"x4s.npy")
-        pdf_monte = np.load(DATA_FOLDER+"pdf_t{:.3f}.npy".format(t_prime))
+        x1s = np.load(data_folder+"x1s.npy")
+        x2s = np.load(data_folder+"x2s.npy")
+        x3s = np.load(data_folder+"x3s.npy")
+        x4s = np.load(data_folder+"x4s.npy")
+        pdf_monte = np.load(data_folder+"pdf_t{:.3f}.npy".format(t_prime))
         print("[check] x1s, pdf(monte) data type: ", x1s.dtype, pdf_monte.dtype)
 
         samples = np.load(DATA_FOLDER+"X_t{:.3f}.npy".format(t_prime))
@@ -339,18 +350,18 @@ def test_monte_cartesian_pdf_xy():
     plt.show()
       
 
-def generate_data():
+def generate_data(data_folder, N_samples):
     mc_time = []
     for t_prime in constants.T_PRIME_SPAN:
         start_time = time.time()
-        x1s, x2s, x3s, x4s, pdf = p_sol_monte(t=t_prime, linespace_num=51, stat_sample=100000000)   
+        x1s, x2s, x3s, x4s, pdf = p_sol_monte(t=t_prime, linespace_num=51, stat_sample=N_samples)   
         mc_time.append(time.time() - start_time)
-        np.save(DATA_FOLDER+"pdf_t{:.3f}.npy".format(t_prime), pdf)
+        np.save(data_folder+"pdf_t{:.3f}.npy".format(t_prime), pdf)
         if t_prime == 0.0:
-            np.save(DATA_FOLDER+"x1s.npy", x1s)
-            np.save(DATA_FOLDER+"x2s.npy", x2s)
-            np.save(DATA_FOLDER+"x3s.npy", x3s)
-            np.save(DATA_FOLDER+"x4s.npy", x4s)
+            np.save(data_folder+"x1s.npy", x1s)
+            np.save(data_folder+"x2s.npy", x2s)
+            np.save(data_folder+"x3s.npy", x3s)
+            np.save(data_folder+"x4s.npy", x4s)
     print("MC time (sec): ", np.round(np.array(mc_time),2) )
 
 
@@ -362,13 +373,13 @@ def generate_samples():
 
 def main():
     # # [Generate data] # #
-    generate_data()
+    generate_data("data/1e+7/", 10000000)
     # generate_samples()
 
     # # [Testing functions] # #
     # test_monte_accuracy()
 
-    test_monte_spherical_pdf_Nrphi()
+    # test_monte_spherical_pdf_Nrphi("data/1e+6/")
     # test_monte_cartesian_pdf_xy()
     
 

@@ -3,16 +3,14 @@ import torch.nn as nn
 import torch.nn.functional as F
 from constants import Case2_4D_Constants
 
-
 constants = Case2_4D_Constants()
-
 
 class PNet(nn.Module):
     global constants
     def __init__(self, scale=1.0): 
-        neurons = 32
-        self.scale = scale
         super(PNet, self).__init__()
+        neurons = 50
+        self.scale = scale
         self.hidden_layer1 = (nn.Linear(5,neurons))
         self.hidden_layer2 = (nn.Linear(neurons,neurons))
         self.hidden_layer3 = (nn.Linear(neurons,neurons))
@@ -31,5 +29,5 @@ class PNet(nn.Module):
         layer3_out = ((self.hidden_layer3(layer2_out)))
         layer4_out = F.softplus((self.hidden_layer4(layer3_out)))
         layer5_out = ((self.hidden_layer5(layer4_out)))
-        output = self.scale * F.softplus(self.output_layer(layer5_out + layer1_out))
+        output = F.softplus(self.output_layer(layer5_out + layer1_out)) * self.scale
         return output

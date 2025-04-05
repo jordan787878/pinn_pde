@@ -368,7 +368,7 @@ def generate_samples():
 
 def main():
     # # [Generate data] # #
-    generate_data()
+    # generate_data()
     # generate_samples()
 
     # # [Testing functions] # #

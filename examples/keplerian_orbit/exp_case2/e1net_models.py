@@ -31,22 +31,22 @@ class E1Net(nn.Module):
         self.hidden_layer5 = (nn.Linear(neurons,neurons))
         self.hidden_layer6 = (nn.Linear(neurons,neurons))
         self.hidden_layer7 = (nn.Linear(neurons,neurons))
-        self.hidden_layer8 = (nn.Linear(neurons,neurons))
-        self.hidden_layer9 = (nn.Linear(neurons,neurons))
+        # self.hidden_layer8 = (nn.Linear(neurons,neurons))
+        # self.hidden_layer9 = (nn.Linear(neurons,neurons))
         self.output_layer =  (nn.Linear(neurons,1))
 
     def forward(self, x, t):
         inputs = normalize_inputs(x, t, constants)
         layer1_out = ((self.hidden_layer1(inputs)))
-        layer2_out = F.softplus((self.hidden_layer2(layer1_out)))
+        layer2_out = F.gelu((self.hidden_layer2(layer1_out)))   
         layer3_out = ((self.hidden_layer3(layer2_out)))
-        layer4_out = F.softplus((self.hidden_layer4(layer3_out)))
-        layer5_out = ((self.hidden_layer5(layer4_out)))
-        layer6_out = F.softplus((self.hidden_layer6(layer5_out)))
+        layer4_out = F.gelu((self.hidden_layer4(layer3_out)))
+        layer5_out = ((self.hidden_layer5(layer4_out))) 
+        layer6_out = F.gelu((self.hidden_layer6(layer5_out)))
         layer7_out = ((self.hidden_layer7(layer6_out)))
-        layer8_out = F.softplus((self.hidden_layer8(layer7_out)))
-        layer9_out = ((self.hidden_layer9(layer8_out)))
-        output = (self.output_layer(layer9_out + layer1_out)) * 0.010610391
+        # layer8_out = F.gelu((self.hidden_layer8(layer7_out)))
+        # layer9_out = ((self.hidden_layer9(layer8_out)))
+        output = (self.output_layer(layer7_out + layer1_out)) * self.scale
         return output
 
 

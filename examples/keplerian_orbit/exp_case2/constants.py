@@ -1,5 +1,6 @@
 import numpy as np
 import torch
+from scipy.stats import qmc
 
 class Case2_4D_Constants:
     """
@@ -161,6 +162,78 @@ class Case2_4D_Constants:
         x = torch.cat((_x_normal, _x), dim=0)
         t = np.random.uniform(self.TI, self.TF/self.T, len(x))
         t = torch.tensor(t, dtype=torch.float32, requires_grad=True).view(-1,1)
+        return x, t
+    
+    # [new]
+    def sample_init_points_seq(self, N_samples, T_seq):
+        _x_bc_normal = np.random.multivariate_normal(self.N_MEAN_I, self.N_COV_I, size=N_samples).astype(np.float32)
+        _x_bc_normal = torch.tensor(_x_bc_normal, dtype=torch.float32, requires_grad=False)
+        _x_bc = np.column_stack([
+            np.random.uniform(self.X1_RANGE[0], self.X1_RANGE[1], N_samples),
+            np.random.uniform(self.X2_RANGE[0], self.X2_RANGE[1], N_samples),
+            np.random.uniform(self.X3_RANGE[0], self.X3_RANGE[1], N_samples),
+            np.random.uniform(self.X4_RANGE[0], self.X4_RANGE[1], N_samples),
+        ])
+        _x_bc = torch.tensor(_x_bc, dtype=torch.float32, requires_grad=False)
+
+        # sobol sequence 
+        lower_bounds = np.array([self.X1_RANGE[0], self.X2_RANGE[0], self.X3_RANGE[0], self.X4_RANGE[0]])
+        upper_bounds = np.array([self.X1_RANGE[1], self.X2_RANGE[1], self.X3_RANGE[1], self.X4_RANGE[1]])
+        # Create a Sobol sequence sampler for 4 dimensions
+        sobol_sampler = qmc.Sobol(d=4, scramble=True)
+        # Generate samples in the unit hypercube [0, 1]^4
+        samples_unit = sobol_sampler.random(1024)
+        # Scale the samples to the specified ranges for each dimension
+        _x_bc_sol = qmc.scale(samples_unit, lower_bounds, upper_bounds)
+        _x_bc_sol = torch.tensor(_x_bc_sol, dtype=torch.float32, requires_grad=False)
+
+        x_bc = torch.cat((_x_bc_normal, _x_bc, _x_bc_sol), dim=0)
+        t_bc = (torch.ones(len(x_bc), 1) * T_seq[0]/self.T)
+        return x_bc, t_bc
+    
+    
+    def sample_res_points_seq(self, N_samples, T_seq):
+        _x_normal = np.random.multivariate_normal(self.N_MEAN_I, self.N_COV_I, size=N_samples).astype(np.float32)
+        _x_normal = torch.tensor(_x_normal, dtype=torch.float32, requires_grad=True)
+        _x = np.column_stack([
+            np.random.uniform(self.X1_RANGE[0], self.X1_RANGE[1], N_samples),
+            np.random.uniform(self.X2_RANGE[0], self.X2_RANGE[1], N_samples),
+            np.random.uniform(self.X3_RANGE[0], self.X3_RANGE[1], N_samples),
+            np.random.uniform(self.X4_RANGE[0], self.X4_RANGE[1], N_samples),
+        ])
+        _x = torch.tensor(_x, dtype=torch.float32, requires_grad=True)
+        
+        # sobol sequence 
+        lower_bounds = np.array([self.X1_RANGE[0], self.X2_RANGE[0], self.X3_RANGE[0], self.X4_RANGE[0]])
+        upper_bounds = np.array([self.X1_RANGE[1], self.X2_RANGE[1], self.X3_RANGE[1], self.X4_RANGE[1]])
+        # Create a Sobol sequence sampler for 4 dimensions
+        sobol_sampler = qmc.Sobol(d=4, scramble=True)
+        # Generate samples in the unit hypercube [0, 1]^4
+        samples_unit = sobol_sampler.random(1024)
+        # Scale the samples to the specified ranges for each dimension
+        _x_sol = qmc.scale(samples_unit, lower_bounds, upper_bounds)
+        _x_sol = torch.tensor(_x_sol, dtype=torch.float32, requires_grad=True)
+        x = torch.cat((_x_normal, _x, _x_sol), dim=0)
+        
+        portion_of_time_boundary = 0.05
+        N_total = len(x)
+        # Number of boundary samples (20% of total)
+        N_boundary = int(portion_of_time_boundary * N_total)
+        N_internal = N_total - N_boundary
+        # Half boundary samples at T_seq[0], half at T_seq[1]
+        N_boundary_half = N_boundary // 2
+        # Boundary samples
+        t_boundary_start = np.full(N_boundary_half, T_seq[0]/self.T)
+        t_boundary_end = np.full(N_boundary - N_boundary_half, T_seq[1]/self.T)
+        # Internal uniform samples
+        t_internal = np.random.uniform(T_seq[0]/self.T, T_seq[1]/self.T, N_internal)
+        # Combine boundary and internal samples
+        t_combined = np.concatenate([t_boundary_start, t_boundary_end, t_internal])
+        # Shuffle the combined samples
+        np.random.shuffle(t_combined)
+        # Convert to tensor
+        t = torch.tensor(t_combined, dtype=torch.float32, requires_grad=True).view(-1, 1)
+
         return x, t
     
     

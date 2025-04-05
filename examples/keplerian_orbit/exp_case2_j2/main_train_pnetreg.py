@@ -43,12 +43,12 @@ def dyn_f2(x):
 
 def dyn_f3(x):
     global constants
-    return constants.T**2 *x[:,0] *(constants.W +constants.PHI *x[:,3]/constants.T)**2 -constants.T**2 *constants.MU_EARTH/(constants.R**3 * x[:,0]**2)
+    return constants.T**2 *x[:,0] *(constants.W +constants.PHI *x[:,3]/constants.T)**2 -constants.T**2 *constants.MU_EARTH/(constants.R**3 * x[:,0]**2) + constants.J2_VR/(x[:,0]**4)
 
 def dyn_f4(x):
     return -2*constants.T*x[:,2]*(constants.W + constants.PHI * x[:,3]/constants.T)/(x[:,0]*constants.PHI)
 
-def diff_opt_p(x, t, p_net, verbose=False):
+def diff_opt_p(x, t, p_net, beta=1.0, verbose=False):
     output = p_net(x,t)
     output_x = torch.autograd.grad(output, x, grad_outputs=torch.ones_like(output), create_graph=True)[0]
     output_t = torch.autograd.grad(output, t, grad_outputs=torch.ones_like(output), create_graph=True)[0]
@@ -62,7 +62,7 @@ def diff_opt_p(x, t, p_net, verbose=False):
     f4 = dyn_f4(x).view(-1,1)
     f4_x = torch.autograd.grad(f4, x, grad_outputs=torch.ones_like(f4), create_graph=True)[0]
     f4_x4 = f4_x[:,3].view(-1,1)
-    residual = output_t + output_x1*f1 + output_x2*f2 + output_x3*f3 + output_x4*f4 + f4_x4*output
+    residual = output_t + beta*(output_x1*f1 + output_x2*f2 + output_x3*f3 + output_x4*f4 + f4_x4*output)
     # print(residual.dtype)
     return residual
 
@@ -87,41 +87,39 @@ def train_p_net(p_net, optimizer, scheduler, mse_cost_function, iterations=40000
 
     # RAR
     S = 30000
-    RAR_eps = 5e-3
+    RAR_eps = 1e-1
     FLAG = False
     
     start_time = time.time()
     for epoch in range(iterations):
         optimizer.zero_grad()
+        
+        # curriculum training
+        if(epoch <= 5000):
+            beta = np.float32(epoch/5000)
+        else:
+            beta = np.float32(1.0)
 
         # Loss based on boundary conditions
         p_i = p_init(x_bc.detach().numpy())
         p_i = torch.tensor(p_i, dtype=torch.float32, requires_grad=False)
-        phat_i = p_net(x_bc, t_bc).to(device)
+        phat_i = p_net(x_bc, t_bc)
         mse_u = mse_cost_function(phat_i/normalize, p_i.detach()/normalize)
 
         # Loss based on PDE
-        res_p = diff_opt_p(x, t, p_net)/normalize
+        res_p = diff_opt_p(x, t, p_net, beta=beta)
         all_zeros = torch.zeros((len(t),1), dtype=torch.float32, requires_grad=False).to(device)
-        mse_res = mse_cost_function(res_p, all_zeros)
-        # # Define a small scale for perturbation
-        # epsilon = 1e-1
-        # N_jj = 10
-        # for j in range(N_jj):
-        #     z = x + torch.randn_like(x) * epsilon
-        #     res_p = res_p + diff_opt_p(z, t, p_net)/normalize
-        # mse_res = mse_cost_function(res_p/(N_jj+1), all_zeros)
+        mse_res = mse_cost_function(res_p/normalize, all_zeros)
 
         # # 1) Compute the gradient of res_p with respect to x.
-        res_grad = torch.autograd.grad(
-            outputs=res_p,
-            inputs=x,
-            grad_outputs=torch.ones_like(res_p),  # ensure proper broadcasting
-            create_graph=True
-        )[0]  # res_grad will be a tensor of shape (N, 4)
-        grad_norm = (res_grad ** 2).sum(dim=1, keepdim=True)  # shape: (N, 1)
-        tv_loss = torch.mean((grad_norm)**2)
-
+        # res_grad = torch.autograd.grad(
+        #     outputs=res_p,
+        #     inputs=x,
+        #     grad_outputs=torch.ones_like(res_p),  # ensure proper broadcasting
+        #     create_graph=True
+        # )[0]  # res_grad will be a tensor of shape (N, 4)
+        # grad_norm = (res_grad ** 2).sum(dim=1, keepdim=True)  # shape: (N, 1)
+        # tv_loss = torch.mean((grad_norm)**2)
         # # Frequnecy Loss
         # res_x = torch.autograd.grad(res_p, x, grad_outputs=torch.ones_like(res_p), create_graph=True)[0]
         # res_t = torch.autograd.grad(res_p, t, grad_outputs=torch.ones_like(res_p), create_graph=True)[0]
@@ -130,8 +128,8 @@ def train_p_net(p_net, optimizer, scheduler, mse_cost_function, iterations=40000
         # mse_res_grad = mse_cost_function(res_grad, all_zeros)
 
         # Loss Function
-        w_reg = 1e-3
-        loss = mse_u + mse_res + w_reg*tv_loss
+        # w_reg = 1e-3
+        loss = mse_u + mse_res
         loss_history.append(loss.item())
 
         # Save the min loss model
@@ -139,7 +137,7 @@ def train_p_net(p_net, optimizer, scheduler, mse_cost_function, iterations=40000
             train_time = time.time() - start_time
             print("save epoch:", epoch, ",loss:", loss.data, 
                   ",ic:", mse_u.data, ",res:", mse_res.data,
-                  ",res g:", tv_loss.data
+                #   ",tv:", tv_loss.data
                    )
             torch.save({
                     'epoch': epoch, 'model_state_dict': p_net.state_dict(),
@@ -209,6 +207,51 @@ def load_trained_model(net, path, method="old"):
     # plt.savefig("figs/pnet_loss_history.pdf", format='pdf', dpi=300)
     # plt.close()
     return net
+
+
+def check_pdf_Nrphi(p_net):
+    """
+    marginalize the pdf of normalize spherical to [r,phi]
+    """
+    global constants
+    for t_prime in constants.T_PRIME_SPAN:
+        print("[test] pdf(NN) marginalized to rphi at t=", t_prime)
+        x1s = np.load(DATA_FOLDER+"x1s.npy")
+        x2s = np.load(DATA_FOLDER+"x2s.npy")
+        x3s = np.load(DATA_FOLDER+"x3s.npy")
+        x4s = np.load(DATA_FOLDER+"x4s.npy")
+        # pdf_monte = np.load(DATA_FOLDER+"pdf_t{:.3f}.npy".format(t_prime))
+        # print("[check] x1s, pdf(monte) data type: ", x1s.dtype, pdf_monte.dtype)
+        x1_grid, x2_grid, x3_grid, x4_grid = np.meshgrid(x1s, x2s, x3s, x4s, indexing="ij") # the indexing is very important
+        grid_points = np.vstack([x1_grid.ravel(), x2_grid.ravel(), x3_grid.ravel(), x4_grid.ravel()]).T
+        grid_points_tensor = torch.tensor(grid_points, dtype=torch.float32, requires_grad=False)
+        t_tensor = (torch.ones(len(grid_points_tensor), 1, dtype=torch.float32) * t_prime).to(device)
+        pdf_nn = p_net(grid_points_tensor, t_tensor).detach().numpy().reshape(x1_grid.shape)
+
+        samples = np.load(DATA_FOLDER+"X_t{:.3f}.npy".format(t_prime))
+        r_samples = samples[:,0]
+        phi_samples = samples[:,2]
+
+        dx3 = x3s[1] - x3s[0]
+        dx4 = x4s[1] - x4s[0]
+
+        # pdf_monte_Nrphi =  np.sum(pdf_monte, axis=(2,3)) * dx3 * dx4
+        pdf_nn_Nrphi = np.sum(pdf_nn, axis=(2,3)) * dx3 * dx4
+        x1_grid, x2_grid =  np.meshgrid(x1s, x2s, indexing="ij") # the indexing is very important
+
+        # Plotting the contour plot
+        plt.figure(figsize=(8, 6))
+        cp = plt.contourf(x1_grid, x2_grid, pdf_nn_Nrphi, levels=30, cmap="viridis", alpha=0.8)
+        # Adding color bar
+        plt.colorbar(cp)
+        # scatter samples of (r, phi) on to the plot
+        plt.scatter(r_samples, phi_samples, s=8, c='white', edgecolor='black', alpha=1.0, label='Samples')
+        # Adding labels and title
+        plt.xlabel(r"$r'$")
+        plt.ylabel(r"$\phi'$")
+        plt.title(r"$p(r',\phi')$"+ "from NN and 200 Samples at t="+str(np.round(t_prime,2))+"T")
+        plt.legend()
+        plt.show()
 
 
 def check_pdfnn_marginalize(p_net, t=0.0):
@@ -480,6 +523,7 @@ def main():
     # for t_prime in constants.T_PRIME_SPAN:
     #    check_pdfnn_marginalize(p_net, t=t_prime)
     # test_nn_cartesian_pdf_xy(p_net)
+    check_pdf_Nrphi(p_net)
     check_pdfnn_cartesian_wrt_monte(p_net)
 
 

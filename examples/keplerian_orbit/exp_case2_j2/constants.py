@@ -26,6 +26,7 @@ class Case2_4D_Constants:
                                     1e+3/(_R/_T)**2,
                                     1e-12/(_PHI/_T)**2]))
     _J2 = np.float32(1.0826e-3)
+    _J2_VR = 2.0*(3*_T**2 * _J2 * _MU_EARTH * _R_EARTH**2)/(2*_R**5)
     # Domain of TF = 0.1*T
     # _X1_RANGE = np.float32(np.array([20.1, 22.1]))
     # _X2_RANGE = np.float32(np.array([-2.2, 2.2]))
@@ -93,6 +94,10 @@ class Case2_4D_Constants:
         return self._J2
     
     @property
+    def J2_VR(self):
+        return self._J2_VR
+    
+    @property
     def X1_RANGE(self):
         return self._X1_RANGE
     
@@ -127,6 +132,7 @@ class Case2_4D_Constants:
     @property
     def T_PRIME_SPAN(self):
         return self._T_PRIME_SPAN
+    
     
     def test_printout(self):
         print("MU_EARTH: ", self.MU_EARTH)

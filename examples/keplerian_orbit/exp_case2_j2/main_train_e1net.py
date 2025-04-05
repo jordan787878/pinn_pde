@@ -14,7 +14,7 @@ from scipy.interpolate import griddata
 import argparse
 from constants import Case2_4D_Constants
 from monte import p_init, get_p_init_max
-from main_train_pnet import diff_opt_p
+from main_train_pnetreg import diff_opt_p
 # from main_train_pnet_gmm import PNet_GMM
 from pnet_models import PNet
 from e1net_models import E1Net
