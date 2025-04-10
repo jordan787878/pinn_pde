@@ -1,5 +1,6 @@
 import cvxpy as cp
 import numpy as np
+import torch
 from scipy.stats import norm
 import matplotlib.pyplot as plt
 from scipy.stats import multivariate_normal
@@ -53,11 +54,35 @@ def test_optimize_probability_mass_normal_p0():
         constraints += [p[i] >= p0[i] - B,
                         p[i] <= p0[i] + B]
         
-    # Define smoothness penalty: we penalize squared differences between adjacent p values.
-    smoothness_penalty = cp.sum_squares(p[1:] - p[:-1])
+    # Add linear (piecewise) smoothness constraints:
+    c1 = 1.0
+    for i in range(1, n-1):
+        # Enforce: |p[i]-p[i-1]| <= c1 * dx
+        constraints += [  (p[i+1] - 2*p[i] + p[i-1])/(dx*dx) <= c1,
+                         -(p[i+1] - 2*p[i] + p[i-1])/(dx*dx) <= c1]
+    # delta = 1
+    # boundary_indices = set()
+    # lower_boundary = sub_idx[0]
+    # upper_boundary = sub_idx[-1]
+    # # Add indices near the lower boundary.
+    # for i in range(lower_boundary - delta, lower_boundary + delta + 1):
+    #     if i >= 1 and i <= n - 2:
+    #         boundary_indices.add(i)
+    # # Add indices near the upper boundary.
+    # for i in range(upper_boundary - delta, upper_boundary + delta + 1):
+    #     if i >= 1 and i <= n - 2:
+    #         boundary_indices.add(i)
+    
+    # # Impose the second difference constraints only on these boundary indices.
+    # for i in sorted(boundary_indices):
+    #     constraints += [
+    #         (p[i+1] - 2 * p[i] + p[i-1]) / (dx**2) <= c1,
+    #         -(p[i+1] - 2 * p[i] + p[i-1]) / (dx**2) <= c1
+    #     ]
     
     # Objective: maximize the total probability mass over the subset x_sub.
-    objective = cp.Maximize(cp.sum(p[sub_idx]) * dx - lambda_reg * smoothness_penalty)
+    # (We removed the penalization term previously added for smoothness.)
+    objective = cp.Maximize(cp.sum(p[sub_idx]) * dx)
     
     # Set up and solve the problem.
     prob = cp.Problem(objective, constraints)
@@ -444,7 +469,7 @@ def test_optimize_probability_mass_multivariate_normal_p0_4d_vectorized():
 
 
 if __name__ == '__main__':
-    # test_optimize_probability_mass_normal_p0()
+    test_optimize_probability_mass_normal_p0()
     # test_optimize_probability_mass_multivariate_normal_p0()
     # test_optimize_probability_mass_multivariate_normal_p0_4d()
-    test_optimize_probability_mass_multivariate_normal_p0_4d_vectorized()
+    # test_optimize_probability_mass_multivariate_normal_p0_4d_vectorized()

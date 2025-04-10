@@ -287,7 +287,6 @@ def get_max_e1_init(p_net, data_folder, constants):
     return max_e1
 
 
-
 # def check_pdfnn_marginalize(p_net, t=0.0):
 #     """
 #     marginalize the joint pdf to a single coordinate, and compare it to the true analytical pdf at init time

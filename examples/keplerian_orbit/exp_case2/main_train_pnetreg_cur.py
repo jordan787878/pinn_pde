@@ -211,8 +211,8 @@ def main():
     # for t_prime in constants.T_PRIME_SPAN:
     #     tv, tv_nn = compute_total_variation(t_prime, "data/", "data/1e+7/", p_net)
     #     print(tv, tv_nn)
-    # check_pdf_Nrphi(p_net, constants, DATA_FOLDER)
-    check_pdfnn_cartesian_wrt_monte(p_net, constants, "data/")
+    check_pdf_Nrphi(p_net, constants, DATA_FOLDER)
+    # check_pdfnn_cartesian_wrt_monte(p_net, constants, "data/")
 
     # # check_pdfnn_marginalize(p_net, t=t_prime)
     # # test_nn_cartesian_pdf_xy(p_net)

@@ -24,6 +24,7 @@ parent_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 if parent_dir not in sys.path:
     sys.path.insert(0, parent_dir)
 from post.post_exp_cas2 import check_train_results, load_trained_model, get_max_e1_init
+from post.post_unit_linear_program import compute_prob_event
 
 
 # curriculum training
@@ -183,10 +184,9 @@ def main():
     e1_net = load_trained_model(e1_net, path=E1NET_PATH, method="new"); e1_net.eval()
 
     ### Post-process ###
-    for t_prime in constants.T_PRIME_SPAN:
-        if(t_prime >= 0.5*constants.TF/constants.T):
-            check_train_results(e1_net, p_net, t_prime, DATA_FOLDER, constants)
-
+    # for t_prime in constants.T_PRIME_SPAN:
+    #     if(t_prime >= 0.5*constants.TF/constants.T):
+    #         check_train_results(e1_net, p_net, t_prime, DATA_FOLDER, constants)
     # for t_prime in constants.T_PRIME_SPAN:
     #    check_pdfnn_marginalize(p_net, t=t_prime)
     # test_nn_cartesian_pdf_xy(p_net, model_name="p_net")
