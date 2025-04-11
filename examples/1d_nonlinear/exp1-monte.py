@@ -5,6 +5,7 @@ from matplotlib import cm
 import random
 from tqdm import tqdm
 import warnings
+import time
 
 
 DATA_FOLDER = "exp1/data/10+6_samples/"
@@ -67,6 +68,8 @@ def p_sol_monte(linespace_num=200, stat_sample=100000000):
     bin_indices_x1 = np.digitize(X_last, bins_x1) - 1
     # Initialize the frequency array
     frequency = np.zeros((len(bins_x1) - 1, 1))
+
+    start_time = time.time()
     # Count the occurrences in each 2D bin
     for i in range(stat_sample):
         if 0 <= bin_indices_x1[i] < frequency.shape[0]:
@@ -75,8 +78,8 @@ def p_sol_monte(linespace_num=200, stat_sample=100000000):
     frequency = frequency / stat_sample
     dx = bins_x1[1]-bins_x1[0]
     frequency = frequency/(dx**n_d)
-    np.save(DATA_FOLDER+"psim_t"+str(0.0)+".npy", frequency)
-    np.save(DATA_FOLDER+"xsim.npy", midpoints_x1)
+    # np.save(DATA_FOLDER+"psim_t"+str(0.0)+".npy", frequency)
+    # np.save(DATA_FOLDER+"xsim.npy", midpoints_x1)
 
     # Vectorized simulation of the SDE
     for step in tqdm(range(1, num_steps + 1), desc="Simulating samples"):
@@ -103,12 +106,14 @@ def p_sol_monte(linespace_num=200, stat_sample=100000000):
             frequency = frequency / stat_sample
             dx = bins_x1[1]-bins_x1[0]
             frequency = frequency/(dx**n_d)
-            np.save(DATA_FOLDER+"psim_t"+str(t_k)+".npy", frequency)
+    comp_time = time.time() - start_time
+    print("MC time (sec): ", comp_time)
+            # np.save(DATA_FOLDER+"psim_t"+str(t_k)+".npy", frequency)
 
 
 def main():
     # exp1/data
-    p_sol_monte(linespace_num=200, stat_sample=1000000)
+    p_sol_monte(linespace_num=200, stat_sample=100000000)
 
 
 if __name__ == "__main__":

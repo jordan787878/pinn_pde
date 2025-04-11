@@ -3,6 +3,7 @@ import torch
 from scipy.stats import multivariate_normal
 from scipy.linalg import expm
 from tqdm import tqdm
+import time
 
 
 class MyConstantsDuffing:
@@ -101,7 +102,10 @@ class MyConstantsDuffing:
 
     def construct_p_sol(self):
         for t in self.T_SPAN:
+            start_time = time.time()
             x1s, x2s, pdf = self.p_sol_monte(t)
+            comp_time = time.time() - start_time
+            print("MC time (sec): ", comp_time)
             np.save(self._FOLDER+"data/pdf_t{:.1f}.npy".format(t), pdf)
             if(t == 0):
                 np.save(self._FOLDER+"data/x1s.npy", x1s)
@@ -118,7 +122,7 @@ class MyConstantsDuffing:
         pdf = np.load(self._FOLDER+"data/pdf_t{:.1f}.npy".format(t))
         return pdf
 
-    def p_sol_monte(self, t=0.0, linespace_num=81, stat_sample=10000000):
+    def p_sol_monte(self, t=0.0, linespace_num=81, stat_sample=int(20000000)):
         # Sample from multivariate normal distribution
         X = np.random.multivariate_normal(self.MEAN_I, self.COV_I, size=stat_sample).astype(np.float32)
         

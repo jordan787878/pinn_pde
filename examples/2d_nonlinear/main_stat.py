@@ -73,6 +73,7 @@ def p_init_torch(x):
 
 
 def p_sol_monte(t1=ti, linespace_num=50, stat_sample=50000):
+    start_time = time.time()
     dtt = 0.01
     t_span = np.arange(ti, t1, dtt)
     mean = mu_0
@@ -113,6 +114,8 @@ def p_sol_monte(t1=ti, linespace_num=50, stat_sample=50000):
     midpoints_x1 = (bins_x1[:-1] + bins_x1[1:]) / 2
     midpoints_x2 = (bins_x2[:-1] + bins_x2[1:]) / 2
     X_grid, Y_grid = np.meshgrid(midpoints_x1, midpoints_x2)
+    comp_time = time.time() - start_time
+    print("MC time (sec): ", comp_time)
     return X_grid, Y_grid, frequency_2d, midpoints_x1
 
 
@@ -1266,7 +1269,7 @@ def plot_paper(p_net, e1_net, t_eval=1.0):
     fig, axs = plt.subplots(1, 1, figsize=(9, 6), subplot_kw={'projection': '3d'})
     ax = axs
     num_stride = 5
-    ax.plot_surface(x1_grid, x2_grid, pdf_nn.reshape(x1_grid.shape), cmap='viridis', alpha=0.6, label=r"$\hat{p}_1$")
+    ax.plot_surface(x1_grid, x2_grid, pdf_nn.reshape(x1_grid.shape), cmap='viridis', alpha=0.6, label=r"$\hat{p}$")
     ax.plot_wireframe(x1_grid, x2_grid, pdf_true.reshape(x1_grid.shape), 
                       color="black", linewidth=1.5, alpha=1.0, 
                       rstride=num_stride, cstride=num_stride, label=r"$p$")
@@ -1310,7 +1313,8 @@ def plot_paper(p_net, e1_net, t_eval=1.0):
 
 
 def main():
-    # test_p_sol_monte(stat_sample=100000000)
+    # test_p_sol_monte(stat_sample=20000000)
+
     mse_cost_function = torch.nn.MSELoss() # Mean squared error
 
     p_net = Net().to(device)
@@ -1326,7 +1330,7 @@ def main():
         train_p_net(p_net, optimizer, scheduler, mse_cost_function, max_pi, iterations=15000); print("p_net train complete")
     p_net = pos_p_net_train(p_net, PATH=FOLDER+"output/p_net.pth", PATH_LOSS=FOLDER+"output/p_net_train_loss.npy"); p_net.eval()
     print("[load pnet model from: "+FOLDER+"output/p_net.pth]")
-    show_p_net_results(p_net)
+    # show_p_net_results(p_net)
 
     max_abe_e1_ti = get_e1net_scale(p_net)
     e1_net.scale = max_abe_e1_ti
@@ -1336,7 +1340,7 @@ def main():
         train_e1_net(e1_net, optimizer, scheduler, mse_cost_function, p_net, max_abe_e1_ti, iterations=40000); print("e1_net train complete")
     e1_net = pos_e1_net_train(e1_net, PATH=FOLDER+"output/e1_net.pth", PATH_LOSS=FOLDER+"output/e1_net_train_loss.npy"); e1_net.eval()
     print("[load e1net model from: "+FOLDER+"output/e1_net.pth]")
-    show_e1_net_results(p_net ,e1_net)
+    # show_e1_net_results(p_net ,e1_net)
     # show_table(p_net, e1_net)
     # plot_train_loss(FOLDER+"output/p_net_train_loss.npy", FOLDER+"output/e1_net_train_loss.npy")
     # plot_results_at_one_time(3.0, p_net, e1_net)

@@ -936,8 +936,9 @@ def show_e1_net_results(p_net, e1_net):
 
 def main():
     global constants
-    if(MONTE_FLAG):
-        constants.construct_p_sol()
+    # if(MONTE_FLAG):
+    constants.construct_p_sol()
+    return
 
     p_net = Net(scale=constants.get_pinit_max())
     e1_net = E1Net()

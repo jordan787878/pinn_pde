@@ -629,7 +629,9 @@ def check_e1nn_result(e1_net, p_net):
         grid_points = constants.generate_random_samples(num_samples=10000000)
         # print("[check] grid points shape type: ", grid_points.shape, grid_points.dtype)
         # compute p(true)
+        start_time = time.time()
         pdf_true = constants.p_sol(grid_points, t)
+        print("N.I. time (sec): ", time.time() - start_time)
         # obtain pdf(nn)
         grid_points_tensor = torch.tensor(grid_points, dtype=torch.float32, requires_grad=False)
         t_tensor = torch.ones(len(grid_points_tensor), 1, dtype=torch.float32) * t
@@ -779,9 +781,8 @@ def main():
     if(TRAIN_FLAG):
         train_e1_net(e1_net, p_net, optimizer, scheduler, mse_cost_function, iterations=10000); print("e1_net train complete")
     e1_net = pos_e1_net_train(e1_net); e1_net.eval()
-
+    check_e1nn_result(e1_net, p_net)
     plot_train_loss()
-    # check_e1nn_result(e1_net, p_net)
 
 
 if __name__ == "__main__":
