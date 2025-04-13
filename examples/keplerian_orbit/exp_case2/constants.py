@@ -236,4 +236,15 @@ class Case2_4D_Constants:
 
         return x, t
     
+
+    def sample_points(self, N_samples, bounds):
+        _x_bc = np.column_stack([
+            np.random.uniform(bounds[0,0], bounds[0,1], N_samples),
+            np.random.uniform(bounds[1,0], bounds[1,1], N_samples),
+            np.random.uniform(bounds[2,0], bounds[2,1], N_samples),
+            np.random.uniform(bounds[3,0], bounds[3,1], N_samples),
+        ])
+        _x_bc = torch.tensor(_x_bc, dtype=torch.float32, requires_grad=False)
+        return _x_bc
+    
     

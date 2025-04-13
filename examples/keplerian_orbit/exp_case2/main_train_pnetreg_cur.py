@@ -29,8 +29,8 @@ if parent_dir not in sys.path:
 from post.post_exp_cas2 import check_pdf_Nrphi, check_pdfnn_cartesian_wrt_monte, load_trained_model, compute_total_variation
 
 
-PNET_PATH = "output/v2/p_net.pth"
-PNET_INTER_PATH = "output/v2/p_net_"
+PNET_PATH = "output/v1/p_net.pth"
+PNET_INTER_PATH = "output/v1/p_net_"
 DATA_FOLDER = "data/"
 device = "cpu"
 TRAIN_FLAG = False
@@ -95,7 +95,8 @@ def train_p_net(p_net, optimizer, scheduler, mse_cost_function, iterations=40000
     S = 30000
     RAR_eps = 1e-1
     FLAG = False
-    beta = np.float32(0.0)
+    # beta = np.float32(0.0)
+    beta = np.float32(1.0)
     FLAG_SAVE_INTER = 0
     INTER_COUNT = 0
     
@@ -122,7 +123,7 @@ def train_p_net(p_net, optimizer, scheduler, mse_cost_function, iterations=40000
         tv_loss = torch.mean(tv_t)
 
         # Loss Function
-        loss = mse_u + mse_res + 1e-2 * tv_loss
+        loss = mse_u + mse_res + 0.0 * tv_loss
         loss_history.append(loss.item())
 
         # Save the min loss model
@@ -211,7 +212,8 @@ def main():
     # for t_prime in constants.T_PRIME_SPAN:
     #     tv, tv_nn = compute_total_variation(t_prime, "data/", "data/1e+7/", p_net)
     #     print(tv, tv_nn)
-    check_pdf_Nrphi(p_net, constants, DATA_FOLDER)
+    # 2. distribution plots
+    # check_pdf_Nrphi(p_net, constants, DATA_FOLDER)
     # check_pdfnn_cartesian_wrt_monte(p_net, constants, "data/")
 
     # # check_pdfnn_marginalize(p_net, t=t_prime)

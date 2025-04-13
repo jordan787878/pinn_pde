@@ -5,6 +5,24 @@ from scipy.interpolate import griddata
 from scipy.stats import norm, multivariate_normal
 
 
+def set_publication_plot_style(font_family='Times New Roman', font_size=18):
+    """
+    Update Matplotlib settings to use publication-ready fonts.
+
+    Parameters:
+        font_family (str): Font family to be used for all texts.
+        font_size (int): Base font size for labels, titles, legends, and ticks.
+    """
+    plt.rcParams['font.family'] = font_family
+    plt.rcParams['font.size'] = font_size
+    plt.rcParams['axes.labelsize'] = font_size
+    plt.rcParams['axes.titlesize'] = font_size
+    plt.rcParams['xtick.labelsize'] = font_size
+    plt.rcParams['ytick.labelsize'] = font_size
+    plt.rcParams['legend.fontsize'] = font_size
+    plt.rcParams['figure.titlesize'] = font_size
+
+
 def p_init_better(x, mean, cov):
     """
     x is numpy array of shape (N x 4), N is the sample size
@@ -15,15 +33,15 @@ def p_init_better(x, mean, cov):
 
 
 def load_trained_model(net, path, method="old"):
-    print("[load pnet model from: "+ path)
+    print("[load model from: "+ path)
     checkpoint = torch.load(path)
     net.load_state_dict(checkpoint['model_state_dict'])
     epoch = checkpoint['epoch']
     if(method == "new"):
         loss_history = np.array(checkpoint['loss_history'])
-        print("pnet best epoch: ", epoch, ", min loss:", np.min(loss_history), ", train time:", checkpoint['train_time'])
+        print("best epoch: ", epoch, ", min loss:", np.min(loss_history), ", train time:", checkpoint['train_time'])
     else:
-        print("pnet best epoch: ", epoch, ", min loss:", checkpoint['loss'], ", train time:", checkpoint['train_time'])
+        print("best epoch: ", epoch, ", min loss:", checkpoint['loss'], ", train time:", checkpoint['train_time'])
     # keys = p_net.state_dict().keys()
     # for k in keys:
     #     l2_norm = torch.norm(p_net.state_dict()[k], p=2)
@@ -38,6 +56,46 @@ def load_trained_model(net, path, method="old"):
     # plt.savefig("figs/pnet_loss_history.pdf", format='pdf', dpi=300)
     # plt.close()
     return net
+
+
+# Paper
+def plot_train_loss(path):
+    set_publication_plot_style()
+    print("[load pnet model from: "+ path)
+    checkpoint = torch.load(path)
+    loss_history = np.array(checkpoint['loss_history'])
+    # Create a figure and plot the loss history.
+    fig = plt.figure(figsize=(8, 6))
+    plt.plot(loss_history, color='black')
+
+    # Define epochs at which to scatter points and their corresponding labels
+    # scatter_epochs = np.array([9, 4287, 17264, 49579]) # phat
+    # scatter_epochs = np.array([92, 261, 2181, 49219]) # e1hat_seq1
+    scatter_epochs = np.array([51, 299, 4540, 47055]) # e1hat_seq2
+    scatter_labels = ['a', 'b', 'c', 'd']
+
+    # For this example, we'll assume loss_history has enough entries;
+    # in practice, ensure that your loss_history length exceeds the maximum epoch in scatter_epochs.
+    # Extract the loss values at these epochs
+    scatter_losses = loss_history[scatter_epochs]
+
+    # Scatter the points using red markers
+    plt.scatter(scatter_epochs, scatter_losses, color='blue', s=50, zorder=5)
+
+    # Annotate each scatter point with its label (offset the text to avoid overlap)
+    for epoch, loss_val, label in zip(scatter_epochs, scatter_losses, scatter_labels):
+        plt.annotate(label, (epoch, loss_val), textcoords="offset points", xytext=(-12,-12),
+                    fontsize=18, color='blue')
+
+    plt.yscale('log')
+    plt.xlabel("Epoch")
+    plt.ylabel("Loss (log10 scale)")
+    plt.grid(True)
+    plt.tight_layout(pad=0.2)
+    fig.savefig("figs/v2e1hat_seq2_loss.pdf", format='pdf')
+    # Display the plot.
+    plt.show()
+
 
 
 def check_pdf_Nrphi(p_net, constants, DATA_FOLDER):

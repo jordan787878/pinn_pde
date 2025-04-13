@@ -352,16 +352,23 @@ def test_monte_cartesian_pdf_xy():
 
 def generate_data(data_folder, N_samples):
     mc_time = []
-    for t_prime in constants.T_PRIME_SPAN:
+
+    t_span = simple_interpolate(constants.T_PRIME_SPAN)
+    t_span = simple_interpolate(t_span)
+    idx = [7, 9, 10, 11, 13]
+    t_span = t_span[idx]
+    print(t_span)
+
+    for t_prime in t_span:
         start_time = time.time()
         x1s, x2s, x3s, x4s, pdf = p_sol_monte(t=t_prime, linespace_num=51, stat_sample=N_samples)   
         mc_time.append(time.time() - start_time)
         np.save(data_folder+"pdf_t{:.3f}.npy".format(t_prime), pdf)
-        if t_prime == 0.0:
-            np.save(data_folder+"x1s.npy", x1s)
-            np.save(data_folder+"x2s.npy", x2s)
-            np.save(data_folder+"x3s.npy", x3s)
-            np.save(data_folder+"x4s.npy", x4s)
+        # if t_prime == 0.0:
+        #     np.save(data_folder+"x1s.npy", x1s)
+        #     np.save(data_folder+"x2s.npy", x2s)
+        #     np.save(data_folder+"x3s.npy", x3s)
+        #     np.save(data_folder+"x4s.npy", x4s)
     print("MC time (sec): ", np.round(np.array(mc_time),2) )
 
 
@@ -369,11 +376,37 @@ def generate_samples():
     for t_prime in constants.T_PRIME_SPAN:
         X = propagate_samples(t_prime, stat_sample=200)
         np.save(DATA_FOLDER+"X_t{:.3f}.npy".format(t_prime), X)
+
+
+def simple_interpolate(arr):
+    """
+    Given a 1D numpy array, return a new array that inserts the average
+    of each pair of adjacent elements between them.
+    
+    For example:
+    If arr = [0.0, 0.4, 0.8]
+    then the result will be [0.0, 0.2, 0.4, 0.6, 0.8]
+    """
+    # Number of original elements
+    n = len(arr)
+    # New array length will be (2*n - 1)
+    new_arr = np.empty(2 * n - 1, dtype=arr.dtype)
+    
+    # Place the original values in the even indices of the new array
+    new_arr[0::2] = arr
+    
+    # Calculate averages and place in the odd indices
+    new_arr[1::2] = (arr[:-1] + arr[1:]) * 0.5
+    
+    return new_arr
+
     
 
 def main():
     # # [Generate data] # #
+    # generate_data("data/1e+7/", 10000000)
     generate_data("data/1e+7/", 10000000)
+
     # generate_samples()
 
     # # [Testing functions] # #
