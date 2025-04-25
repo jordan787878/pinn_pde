@@ -3,14 +3,12 @@ import torch
 import torch.nn as nn
 import torch.nn.init as init
 import torch.nn.functional as F
-from torch.autograd import Variable
 import matplotlib.pyplot as plt
 import time
 from scipy.interpolate import griddata
-import argparse
-from constants import Case2_4D_Constants
+from utilities.constants import Case2_4D_Constants
 from monte import p_init, get_p_init_max
-from pnet_models import PNet
+from pnet_models import PNet, PNet_FO
 from e1net_models import E1Net
 import sys
 import os
@@ -18,7 +16,7 @@ import os
 parent_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 if parent_dir not in sys.path:
     sys.path.insert(0, parent_dir)
-from post.post_exp_cas2 import check_train_results, load_trained_model, get_max_e1_init, plot_train_loss
+from utilities.post_exp_cas2 import check_train_results, load_trained_model, get_max_e1_init, plot_train_loss
 import cvxpy as cp
 import scipy.sparse as sp
 from matplotlib.patches import Patch
@@ -26,6 +24,10 @@ import matplotlib.ticker as mticker
 import seaborn as sns
 import torch.optim as optim
 import torch.distributions as D
+import math
+from mpl_toolkits.mplot3d.art3d import Poly3DCollection
+from torch.distributions import Categorical, MultivariateNormal, MixtureSameFamily
+
 
 """
 select the NN models in output/
@@ -295,8 +297,13 @@ def set_and_visual_target_app1(p_net, constants, show_plot=False):
     the surface plot is not exact, since we use interpolation to create x,y grid and pdf_nn(x,y) on this grid
     """
     # specify a fixedtarget region in spherical coordinate
+    ## tar1
     target_r = np.array([21.3, 21.8])*constants.R
     target_ph = np.array([-3.5, 1.5])*constants.PHI + constants.W*constants.T*(0.1)
+
+    ## tar2
+    # target_r = np.array([21.3, 21.8])*constants.R
+    # target_ph = np.array([-3.5, 1.5])*constants.PHI + constants.W*constants.T*(0.19)
 
     if(show_plot):
         # Create a figure with a black background
@@ -416,7 +423,7 @@ def set_and_visual_target_app1(p_net, constants, show_plot=False):
         ax.set_title(f'3D Surface Plot of PDF over t='+str(constants.TF))
         # Save the figure as a PDF, with minimal extra margins and no clipping of labels
         plt.tight_layout(pad=0.3)
-        fig.savefig("figs/target_X.pdf", format='pdf')
+        # fig.savefig("figs/target_X.pdf", format='pdf')
         plt.show()
 
     return target_r, target_ph
@@ -432,7 +439,7 @@ def compute_prob_event_monte(target_r, targer_ph, t, N_monte=4, data_folder="dat
         [constants._X4_RANGE[0], constants._X4_RANGE[1]]
     ])
 
-    # 1e+8, 1e+7, 1e+6, 1e+5
+    # [1e+8, 1e+7, 1e+6, 1e+5]
     pr_list = []
     mc_folders = ["data/", "data/1e+7/", "data/1e+6/", "data/1e+5/"]
 
@@ -522,9 +529,9 @@ def compute_prob_event(target_r, targer_ph, t, p_net, e1_net_seq1, e1_net_seq2, 
         return 0.0
     else: 
         # # (1.0) only phat
-        p0_flat = p0.flatten()
-        pr = np.sum(p0_flat[mask_flat])*dV
-        return pr
+        # p0_flat = p0.flatten()
+        # pr = np.sum(p0_flat[mask_flat])*dV
+        # return pr
     
         # (1.1) naive: integral (phat + B1) dx
         # p0_flat = p0.flatten()
@@ -532,34 +539,32 @@ def compute_prob_event(target_r, targer_ph, t, p_net, e1_net_seq1, e1_net_seq2, 
         # return pr
 
         # (2.0) linear program
-        # Flatten p0 and mask to vector form.
-        p0_flat = p0.flatten()
-        # Decision variable: p_vec is now a vector of length N.
-        p_vec = cp.Variable(N)
-        # Constraints.
-        constraints = [
-            cp.sum(p_vec) * dV == 1,  # total mass constraint.
-            p_vec >= 0,                              # non-negativity.
-            p_vec >= p0_flat - B,                      # lower bound.
-            p_vec <= p0_flat + B                       # upper bound.
-        ]
-
-        # Objective: maximize probability mass in target region minus smoothness penalty.
-        objective = cp.Maximize(
-            cp.sum(cp.multiply(p_vec, mask_flat)) * dV #- lambda_reg * smoothness_penalty
-        )
-        # Set up and solve the problem.
-        prob = cp.Problem(objective, constraints)
-        result = prob.solve()
-        pr = np.sum(p_vec.value[mask_flat]) * dV
-        # print("NN+Error Upper Bound value (target region):", pr2)
-        # print("Total mass (should be 1):", np.sum(p_vec.value) * dV)
-        return pr
-
-        # (3.0) Learning
         # p0_flat = p0.flatten()
-        # pr = compute_Pr_Guass(t, target_region, p_net, p0_flat, mask_flat, grid_points_tensor, dV, B)
+        # # Decision variable: p_vec is now a vector of length N.
+        # p_vec = cp.Variable(N)
+        # # Constraints.
+        # constraints = [
+        #     cp.sum(p_vec) * dV == 1,  # total mass constraint.
+        #     p_vec >= 0,                              # non-negativity.
+        #     p_vec >= p0_flat - B,                      # lower bound.
+        #     p_vec <= p0_flat + B                       # upper bound.
+        # ]
+        # # Objective: maximize probability mass in target region minus smoothness penalty.
+        # objective = cp.Maximize(
+        #     cp.sum(cp.multiply(p_vec, mask_flat)) * dV #- lambda_reg * smoothness_penalty
+        # )
+        # # Set up and solve the problem.
+        # prob = cp.Problem(objective, constraints)
+        # result = prob.solve()
+        # pr = np.sum(p_vec.value[mask_flat]) * dV
+        # print("NN+Error Upper Bound value (target region):", pr)
+        # print("Total mass (should be 1):", np.sum(p_vec.value) * dV)
         # return pr
+
+        # (3.0) FO
+        p0_flat = p0.flatten()
+        pr, model = compute_Pr_Guass(t, target_region, p_net, p0_flat, mask_flat, grid_points_tensor, dV, B)
+        return pr
 
 
 def app1(p_net, e1_net_seq1, e1_net_seq2):
@@ -569,10 +574,8 @@ def app1(p_net, e1_net_seq1, e1_net_seq2):
     target_r, target_phi = set_and_visual_target_app1(p_net, constants, show_plot=False)
 
     # Define a t_span to evaluate Pr(Event)
-    # t_span = [constants.T_PRIME_SPAN[2]]
-    t_span = simple_interpolate(constants.T_PRIME_SPAN)
-    t_span = simple_interpolate(t_span)
-    
+    # t_span = simple_interpolate(constants.T_PRIME_SPAN)
+    # t_span = simple_interpolate(t_span)
     # # Pr(Event) when pdf are obtained by MC
     # data_list = []
     # for t in t_span:
@@ -587,9 +590,9 @@ def app1(p_net, e1_net_seq1, e1_net_seq2):
     # np.save('data/app1/pr_mcs.npy', data_array)
 
     # Pr(Event) when pdf are obtained by MC vs. PINN + B1, with finer t_span (possibly continuous)
-    refine = 2
-    for i in range(refine):
-        t_span = simple_interpolate(t_span)
+    dt = 0.005
+    t_span = np.arange(0.00, 0.20+dt, dt)
+    # t_span = [0.10]
     data_list = []
     for t in t_span:
         pr = compute_prob_event(target_r, target_phi, t, p_net, e1_net_seq1, e1_net_seq2, N_discret=50)
@@ -599,18 +602,37 @@ def app1(p_net, e1_net_seq1, e1_net_seq2):
     # Now data_array is an array of shape (N, 3), where N = len(t_span).
     print("Data array:")
     print(data_array)
-    np.save('data/app1/pr_nn_Nd50_phat+B.npy', data_array)
+    np.save('data/app1/pr_nn_Nd50_gmmx64(new).npy', data_array)
 
 
 # Paper
 def plot_app1(N_mc=1):
     set_publication_plot_style()
 
-    pr_mcs = np.load('data/app1/pr_mcs.npy')
+    parent_folder = "data/app1/tar1/"
+    pr_mcs = np.load(parent_folder+"pr_mcs.npy")
     
-    pr_nn_data_labels = ["data/app1/pr_nn_Nd50_onlyphat.npy", "data/app1/pr_nn_Nd50_phat+B.npy", "data/app1/pr_nn_Nd50_LP.npy", "data/app1/pr_nn_Nd50_gmm7.npy"]
-    plot_labels = [r"$\hat{p}$",r"$\int_{X^{'}} \hat{p}+B_1 dx$", r"LP($\hat{p},B_1$)", r"GMM($\hat{p},B_1$)"]
-    
+    pr_nn_data_labels = [parent_folder+"pr_nn_Nd50_onlyphat.npy", 
+                         parent_folder+"pr_nn_Nd50_phat+B.npy", 
+                         parent_folder+"pr_nn_Nd50_LP.npy", 
+                        #  parent_folder+"pr_nn_Nd50_FOx128(new).npy",
+                         parent_folder+"pr_nn_Nd50_gmmx64(iter-10k).npy", # weight of region_loss 1e-2
+                         parent_folder+"pr_nn_Nd50_gmmx64(iter-20k).npy", # weight of region_loss 1e-2
+                         parent_folder+"pr_nn_Nd50_gmmx64(new).npy", # weight of region_loss 1e-1 with half random samples
+                        #  parent_folder+"pr_nn_Nd50_FOx256.npy"
+                         ]
+    plot_labels = [r"$\hat{p}$",
+                   r"$\int_{X^{'}} \hat{p}+B_1 dx$", 
+                   r"LP($\hat{p},B_1$)", 
+                #    r"FO($\hat{p},B_1$) RBFx256(new)",
+                   r"FO($\hat{p},B_1$) GMMx64(10k det.)",
+                   r"FO($\hat{p},B_1$) GMMx64(20k det.)",
+                   r"FO($\hat{p},B_1$) GMMx64(20k quasi)",
+                #    r"FO($\hat{p},B_1;\theta=256$)"
+                   ]
+    plot_fills  = [False, False, True, True, True, True]
+    plot_style =  ["--", "-", "-", "-", "-", "-"]
+
     pr_nn_data = []
     for j in range(len(pr_nn_data_labels)):
         pr_nn_data.append(np.load(pr_nn_data_labels[j]))
@@ -620,22 +642,24 @@ def plot_app1(N_mc=1):
 
     for j in range(N_mc):
         t_span = pr_mcs[:,0]
-        pr = pr_mcs[:,j+1] 
+        pr = pr_mcs[:,j+2] # [should change back to] pr = pr_mcs[:,j+1] 
         mask = ~np.isnan(pr)
-        plt.plot(t_span[mask], pr[mask], color="black", linestyle="--", marker="d", label="M.C.")
+        plt.plot(t_span[mask], pr[mask], color="black", linestyle="", marker="o", markersize=4, label="MC")
+        print(t_span[mask], pr[mask])
 
     for j in range(len(pr_nn_data_labels)):
         pr_nn_data_i = pr_nn_data[j]
         t_span = pr_nn_data_i[:,0]
-        plt.plot(t_span, pr_nn_data_i[:,1], color=colors[j], label=plot_labels[j]) 
-        # plt.fill_between(t_span, y1=0.0*t_span, y2=pr_nn_data_i[:,1],
-        #                  color=colors[j], edgecolor="none", alpha=0.2)
+        plt.plot(t_span, pr_nn_data_i[:,1], color=colors[j], linestyle=plot_style[j], label=plot_labels[j])
+        if(plot_fills[j]): 
+            plt.fill_between(t_span, y1=0.0*t_span, y2=pr_nn_data_i[:,1],
+                             color=colors[j], edgecolor="none", alpha=0.1)
 
     plt.grid(True)
     plt.ylabel(r"$Pr(x \in X^{'})$")
     plt.xlabel("t")
     plt.legend(loc="upper left", ncol=2)
-    plt.ylim([0.0, 1.5])
+    plt.ylim([-0.05, 1.5])
     # Get current axes, and then obtain and reformat the xticks.
     plt.tight_layout(pad=0.2)
     # Define the tick positions.
@@ -650,6 +674,54 @@ def plot_app1(N_mc=1):
     # Set the tick labels.
     ax.set_xticklabels(tick_labels)
     fig.savefig("figs/v2pr.pdf", format='pdf')
+    plt.show()
+
+
+# Paper
+def plot_app1_onlymc(N_mc=4):
+    set_publication_plot_style()
+
+    pr_mcs = np.load('data/app1/pr_mcs.npy')
+    plot_labels = ["1e+8", "1e+7", "1e+6", "1e+5"]
+    # pr_nn_data_labels = ["data/app1/pr_nn_Nd50_onlyphat.npy", "data/app1/pr_nn_Nd50_phat+B.npy", "data/app1/pr_nn_Nd50_LP.npy", "data/app1/pr_nn_Nd50_gmm7.npy"]
+    # plot_labels = [r"$\hat{p}$",r"$\int_{X^{'}} \hat{p}+B_1 dx$", r"LP($\hat{p},B_1$)", r"F.O.($\hat{p},B_1$)"]
+
+    fig = plt.figure(figsize=(8,6))
+    colors = sns.color_palette("husl", pr_mcs.shape[1])
+
+    for j in range(N_mc):
+        t_span = pr_mcs[:,0]
+        pr_base = pr_mcs[:,1] 
+        pr      = pr_mcs[:,j+1]
+
+        # Create a mask to filter out NaN values.
+        mask_nan = ~np.isnan(pr)
+        mask_nan_based = ~np.isnan(pr_base)
+        # Create a mask that selects only the time points in t_plot_list.
+        mask_time = np.isin(t_span, constants.T_PRIME_SPAN)
+        # Combine the two masks.
+        mask = mask_nan & mask_nan_based & mask_time
+
+        plt.plot(t_span[mask], pr[mask] - pr_base[mask], color=colors[j], linestyle="--", marker="d", label="M.C. samples="+plot_labels[j])
+
+    plt.grid(True)
+    plt.ylabel(r"$\Delta Pr(x \in X^{'})$")
+    plt.xlabel("t")
+    plt.legend(loc="lower right")
+    # Get current axes, and then obtain and reformat the xticks.
+    plt.tight_layout(pad=0.2)
+    # Define the tick positions.
+    ticks = [0.0, 0.04, 0.08, 0.12, 0.16, 0.20]
+    # Create corresponding labels with "T" appended.
+    tick_labels = [f"{tick:.2f}T" for tick in ticks]
+
+    # Get the current axis.
+    ax = plt.gca()
+    # Set the tick positions.
+    ax.set_xticks(ticks)
+    # Set the tick labels.
+    ax.set_xticklabels(tick_labels)
+    fig.savefig("figs/prmcs.pdf", format='pdf')
     plt.show()
 
 
@@ -805,201 +877,156 @@ def plot_target_volume(ax, target_r, target_ph, z_max, grid_resolution=30,
     return surfaces
 
 
-def create_second_difference_matrix(n):
+def generate_sobol_points_4d(N_points, bounds):
     """
-    Create the second-difference matrix D for a 1D grid of length n.
-    (D p)[i] = p[i+1] - 2*p[i] + p[i-1], for i = 1, ..., n-2.
-    D is of shape (n-2, n).
-    """
-    D = np.zeros((n-2, n))
-    for i in range(n-2):
-        D[i, i]   = 1
-        D[i, i+1] = -2
-        D[i, i+2] = 1
-    return D
-
-
-### Functional Optimization
-class GaussianMixtureModel(nn.Module):
-    def __init__(self, num_components=4, input_dim_t=1, output_dim_x=4, hidden_dim=64, verbose=False):
-        """
-        Constructs a neural network that outputs the parameters of a Gaussian Mixture Model.
-        For each t, the network outputs a normalized pdf p(x,t) over x in ℝ⁴ as a weighted sum
-        of K Gaussians.
+    Generate N_points in a 4D space with given bounds using a Sobol sequence.
+    
+    Args:
+        N_points (int): Number of points to generate.
+        bounds (np.ndarray): Array of shape (4,2) where each row is [lower, upper].
         
-        Args:
-            input_dim_t (int): Dimension of the time input t. (e.g., 1 if t is scalar)
-            output_dim_x (int): Dimension of x (here 4).
-            hidden_dim (int): Number of hidden neurons.
-            num_components (int): Number of mixture components (here 2).
-            verbose (bool): If True, prints debug information.
+    Returns:
+        np.ndarray: An array of shape (N_points, 4) of Sobol-generated sample points.
+    """
+    # Create a Sobol engine for 4 dimensions. (scramble=True gives more randomness)
+    sobol_engine = torch.quasirandom.SobolEngine(dimension=4, scramble=True)
+    x_tensor = sobol_engine.draw(N_points)  # shape: [N_points, 4], in [0,1]
+    samples = x_tensor.numpy()  # convert to NumPy array
+    # Scale each dimension to its respective bounds.
+    scaled_samples = np.zeros_like(samples)
+    for i in range(4):
+        a, b = bounds[i, 0], bounds[i, 1]
+        scaled_samples[:, i] = a + (b - a) * samples[:, i]
+    return scaled_samples
+
+
+class TorchGMM(nn.Module):
+    def __init__(self, num_components=64, n_features=4):
         """
-        super(GaussianMixtureModel, self).__init__()
-        self.input_dim_t = input_dim_t
-        self.output_dim_x = output_dim_x  # e.g., 4
+        Constructs a differentiable Gaussian Mixture Model using PyTorch distributions.
+
+        Args:
+            num_components (int): Number of mixture components.
+            n_features (int): Dimensionality of each Gaussian component (e.g., 4 for a 4D density).
+        """
+        super().__init__()
         self.num_components = num_components
-        self.verbose = verbose
-
-        # Two hidden layers.
-        self.fc1 = nn.Linear(input_dim_t, hidden_dim)
-        self.fc2 = nn.Linear(hidden_dim, 4*hidden_dim)
-        # For each mixture component, we need:
-        #  - output_dim_x for the mean (4)
-        #  - output_dim_x*(output_dim_x+1)//2 for the covariance lower-triangular parameters (10)
-        #  - 1 for the weight (logits)
-        comp_param_dim = output_dim_x + (output_dim_x * (output_dim_x + 1)) // 2 + 1  # 4 + 10 + 1 = 15
-        final_out_dim = num_components * comp_param_dim  # For K=2: 30
-        self.fc_out = nn.Linear(4*hidden_dim, final_out_dim)
+        self.n_features = n_features
+        
+        # Learnable parameters:
+        # Unnormalized mixture logit weights (will be converted to probabilities via softmax)
+        self.logits = nn.Parameter(torch.zeros(num_components))
+        # Means of shape [num_components, n_features]
+        self.means = nn.Parameter(torch.randn(num_components, n_features)) + torch.from_numpy(constants.N_MEAN_I)
+        # Raw lower-triangular matrix for each component. We have one per component.
+        # This parameter is of shape [num_components, n_features, n_features].
+        self.raw_scale_tril = nn.Parameter(torch.randn(num_components, n_features, n_features))
     
-    def forward(self, x_input, t):
+    def get_distribution(self):
         """
+        Constructs the MixtureSameFamily distribution representing the GMM.
+        The covariance for each component is built from a lower-triangular matrix
+        whose diagonal is enforced positive.
+        """
+        # Obtain lower triangular matrices. We use torch.tril to zero out the upper part.
+        # Then, we ensure the diagonal is positive via softplus.
+        scale_tril = torch.tril(self.raw_scale_tril)
+        # Create a mask for diagonal elements: shape (n_features, n_features)
+        diag_mask = torch.eye(self.n_features, device=scale_tril.device).bool()
+        
+        # Apply softplus to the diagonals of each component.
+        # Loop over components; if you prefer a vectorized approach you could reshape and index.
+        scale_tril_fixed = scale_tril.clone()
+        for k in range(self.num_components):
+            scale_tril_fixed[k][diag_mask] = F.softplus(scale_tril[k][diag_mask])
+        
+        # Create the categorical distribution from the logits.
+        cat = Categorical(logits=self.logits)
+        # Create the component multivariate normals.
+        comp = MultivariateNormal(loc=self.means, scale_tril=scale_tril_fixed)
+        # The mixture model is a MixtureSameFamily distribution.
+        gmm = MixtureSameFamily(cat, comp)
+        return gmm
+
+    def forward(self, x):
+        """
+        Evaluate the density at input x.
+        
         Args:
-            x_input (Tensor): Points at which to evaluate the PDF, shape [batch, output_dim_x].
-            t (Tensor): Time input of shape [batch, input_dim_t].
+            x (Tensor): Input tensor with shape [batch_size, n_features]
+            
+        Returns:
+            pdf (Tensor): Evaluated density for each input, with shape [batch_size]
+        """
+        gmm = self.get_distribution()
+        # Return the probability density, computed as exp(log_prob)
+        return gmm.log_prob(x).exp()
+
+
+class RBFDensity(nn.Module):
+    def __init__(self, input_dim=4, num_basis=20):
+        """
+        Approximates a function p(x) as a weighted sum of normalized Gaussian RBFs,
+        designed so that p(x) is a valid pdf:
+        
+           p(x) = sum_i w_i * phi_i(x)
+        
+        with phi_i(x) defined as a normalized Gaussian over R^4.
+        
+        The centers of each RBF are adjusted by adding constant offsets defined in
+        constants.N_MEAN_I.
+        
+        Args:
+            input_dim (int): Dimensionality of input (should be 4).
+            num_basis (int): Number of RBF basis functions.
+        """
+        super(RBFDensity, self).__init__()
+        self.input_dim = input_dim   # This should be 4.
+        self.num_basis = num_basis
+        
+        # Learnable centers: shape [num_basis, input_dim]
+        self.centers = nn.Parameter(torch.randn(num_basis, input_dim))
+        
+        # Learnable log-bandwidths (one per basis). Use softplus later to ensure positivity.
+        self.covs = nn.Parameter(torch.ones(num_basis))
+        
+        # Learnable logits for weights; using softmax will enforce nonnegativity and sum-to-one.
+        self.A = nn.Parameter(torch.ones(num_basis)/num_basis)
+
+    def forward(self, x):
+        """
+        Evaluate the density p(x) for a batch of input points x (shape [batch, input_dim]).
         
         Returns:
-            pdf (Tensor): Evaluated PDF at x_input, shape [batch, 1].
+            p (Tensor): The pdf evaluated at x, shape [batch].
         """
-        # Pass t through the hidden layers.
-        h1 = F.relu(self.fc1(t))
-        h2 = F.relu(self.fc2(h1))
-        out = self.fc_out(h2)  # shape: [batch, final_out_dim]
+        batch = x.shape[0]
+        K = self.num_basis
         
-        batch_size = out.shape[0]
-        K = self.num_components
-        d = self.output_dim_x  # For x in ℝ⁴.
-        comp_param_dim = d + (d*(d+1))//2 + 1  # =15
+        # Get sigma with softplus for numerical stability.
+        covs = torch.square(self.covs) + 1e-10
         
-        # Reshape output into [batch, K, comp_param_dim].
-        out = out.view(batch_size, K, comp_param_dim)
+        # Compute normalized weights via softmax.
+        A = self.A + 1e-10
+        sum_A = torch.sum(A**2)
+        weights = A**2 / sum_A  # shape: [K]
         
-        # Extract mean vectors for each component. Shape: [batch, K, d]
-        means = out[:, :, :d]
-        # (Optional: add constant offsets to each dimension.)
-        for i in range(d):
-            means[:, :, i] = means[:, :, i] + constants.N_MEAN_I[i]
-        
-        # Extract covariance parameters for each component. Shape: [batch, K, d*(d+1)//2]
-        cov_params = out[:, :, d : d + (d*(d+1))//2]
-        
-        # Extract weight logits for each component. Shape: [batch, K]
-        weight_logits = out[:, :, -1]
-        # Normalize to obtain valid mixture weights.
-        weights = F.softmax(weight_logits, dim=1)  # sums to 1 across components
-        
-        # Build lower-triangular matrices L for each mixture component.
-        L = torch.zeros(batch_size, K, d, d, device=out.device)
-        idx = 0
-        for i in range(d):
-            for j in range(i+1):
-                if i == j:
-                    # Diagonals: exponentiate to enforce positivity.
-                    L[:, :, i, j] = torch.exp(cov_params[:, :, idx])
-                else:
-                    L[:, :, i, j] = cov_params[:, :, idx]
-                idx += 1
-        
-        # Compute covariance matrices for each component: cov = L Lᵀ.
-        # Reshape L for batch-matrix multiplication.
-        L_reshaped = L.view(batch_size * K, d, d)
-        cov = torch.bmm(L_reshaped, L_reshaped.transpose(1, 2))
-        cov = cov.view(batch_size, K, d, d)
-        
-        # Create a multivariate normal distribution for each component.
-        components = D.MultivariateNormal(loc=means, covariance_matrix=cov)
-        # Create a categorical distribution for the mixture weights.
-        cat = D.Categorical(probs=weights)
-        # Create the mixture distribution.
-        mixture = D.MixtureSameFamily(cat, components)
-        
-        # Evaluate the log probability (and hence density) at x_input.
-        log_prob = mixture.log_prob(x_input)  # shape: [batch]
-        pdf = torch.exp(log_prob).unsqueeze(1)  # shape: [batch, 1]
-        
-        if self.verbose:
-            print("[check] mixture weights:", weights[0])
-            # print("[check] mixture means (first example):", means[0])
-            # print("[check] mixture covariances (first example):", cov[0])
+        # Adjust centers by adding the constant offset.
+        offset = torch.tensor(constants.N_MEAN_I, device=self.centers.device, dtype=self.centers.dtype)
+        effective_centers = self.centers + offset.unsqueeze(0)  # shape: [K, input_dim]
+
+        pdf = torch.zeros(batch)
+        for i in range(K):
+            mean_i = effective_centers[i, :]
+            cov_i  = covs[i]
+            m = torch.distributions.MultivariateNormal(
+                loc=mean_i,
+                covariance_matrix=cov_i * torch.eye(4)
+            )
+            pdf_values = m.log_prob(x).exp()
+            pdf = pdf + weights[i] * pdf_values
         return pdf
     
-
-class GaussianModel(nn.Module):
-    global constants
-    def __init__(self, input_dim_t=1, output_dim_x=4, hidden_dim=64, verbose=False):
-        """
-        Constructs a neural network p that for each t outputs a normalized pdf p(x,t)
-        over x in R^4 by outputting the parameters of a multivariate Gaussian.
-        
-        Args:
-            input_dim_t (int): Dimension of time input t.
-            output_dim_x (int): Dimension of x (here 4).
-            hidden_dim (int): Number of neurons in hidden layers.
-        """
-        super(GaussianModel, self).__init__()
-        self.input_dim_t = input_dim_t
-        self.output_dim_x = output_dim_x  # here x ∈ ℝ⁴
-        self.verbose = verbose
-
-        # Two hidden layers
-        self.fc1 = nn.Linear(input_dim_t, hidden_dim)
-        self.fc2 = nn.Linear(hidden_dim, hidden_dim)
-        # The final output layer produces:
-        #   - output_dim_x numbers for the mean vector, and
-        #   - output_dim_x*(output_dim_x+1)//2 numbers for the lower-triangular part of L.
-        final_out_dim = output_dim_x + (output_dim_x * (output_dim_x + 1)) // 2
-        self.fc_out = nn.Linear(hidden_dim, final_out_dim)
-    def forward(self, x_input, t):
-        """
-        Args:
-            t (Tensor): Time input of shape [batch, input_dim_t].
-        
-        Returns:
-            dist (torch.distributions.MultivariateNormal): A Gaussian distribution 
-                with parameters depending on t.
-        """
-        # Pass through the network
-        h = F.gelu(self.fc1(t))
-        h = F.gelu(self.fc2(h))
-        out = self.fc_out(h)  # shape: [batch, final_out_dim]
-        
-        batch_size = out.shape[0]
-        n = self.output_dim_x
-        
-        # Extract the mean vector (first n outputs)
-        mean = out[:, :n]  # shape: [batch, 4]
-        for i in range(4):
-            mean[:,i] = mean[:,i] + constants.N_MEAN_I[i]
-        
-        # The remaining outputs parameterize the lower-triangular matrix L
-        cov_params = out[:, n:]  # shape: [batch, n(n+1)/2]
-        L = torch.zeros(batch_size, n, n, device=out.device)
-        
-        idx = 0
-        for i in range(n):
-            for j in range(i+1):
-                if i == j:
-                    # Diagonal entries: exponentiate to ensure they are positive.
-                    L[:, i, j] = torch.exp(cov_params[:, idx])
-                else:
-                    L[:, i, j] = cov_params[:, idx]
-                idx += 1
-        
-        # Construct covariance matrix: Sigma = L Lᵀ (always positive definite)
-        cov = torch.bmm(L, L.transpose(1, 2))
-
-        if(self.verbose):
-            print("[check] pnn_gmm mean: ", mean[0,:])
-            print("[check] pnn_gmm cov:  ", cov[0,:,:])
-
-        # Create a multivariate normal distribution with these parameters.
-        # By construction, this density is normalized over R^4.
-        dist = D.MultivariateNormal(mean, covariance_matrix=cov)
-
-        # Evaluate the density at x_input.
-        log_prob = dist.log_prob(x_input)       # shape: [batch]
-        pdf = torch.exp(log_prob).unsqueeze(1)  # shape: [batch, 1]
-        return pdf
-
 
 def init_weights_He(m):
     if isinstance(m, nn.Linear):
@@ -1007,154 +1034,339 @@ def init_weights_He(m):
         m.bias.data.fill_(0.01)
 
 
-def train_model(t, target_region, p_net, p0_flat, grid_points_tensor, B, 
-                num_iterations=2000, batch_size=300, device=torch.device("cpu"), lambda_region=1000.0):
-    # Create the model and optimizer.
-    model = GaussianMixtureModel(num_components=7).to(device)
-    model.apply(init_weights_He)
-    optimizer = optim.Adam(model.parameters(), lr=1e-3)
+def get_valid_target_bounds(domain_bounds, target_bounds):
+    """
+    Compute the intersection of target_bounds and domain_bounds.
+    
+    Parameters:
+      domain_bounds: (4, 2) np.array containing the min and max for each dimension
+      target_bounds: (4, 2) np.array containing the min and max for each dimension
+      
+    Returns:
+      valid_target_bounds: (4, 2) np.array representing the intersection bounds
+      
+    Raises:
+      ValueError: if in any dimension the bounds do not intersect
+    """
+    # Compute the valid lower and upper bounds per dimension
+    valid_lower = np.maximum(domain_bounds[:, 0], target_bounds[:, 0])
+    valid_upper = np.minimum(domain_bounds[:, 1], target_bounds[:, 1])
+    
+    # Check for a valid intersection in each dimension
+    if np.any(valid_lower > valid_upper):
+        raise ValueError("The target region does not intersect with the domain bounds in at least one dimension.")
+    
+    # Stack the lower and upper bounds to form a valid bounds array.
+    valid_target_bounds = np.stack([valid_lower, valid_upper], axis=1)
+    return valid_target_bounds
+
+
+def filter_points_in_valid_domain(x, valid_bounds):
+    """
+    Filters out points in x (N x 4) that lie within the valid target domain bounds.
+
+    Parameters:
+      x (torch.Tensor): A tensor of shape (N, 4) containing the points.
+      valid_bounds (np.array or torch.Tensor): An array or tensor of shape (4, 2)
+          where each row represents [lower_bound, upper_bound] for that dimension.
+
+    Returns:
+      torch.Tensor: A tensor containing only the points that satisfy all dimension bounds.
+    """
+    # Ensure valid_bounds is a torch.Tensor (if it's not already)
+    if not isinstance(valid_bounds, torch.Tensor):
+        valid_bounds = torch.tensor(valid_bounds, dtype=x.dtype, device=x.device)
+    
+    # Start with a mask of all True values (for N points)
+    mask = torch.ones(x.shape[0], dtype=torch.bool, device=x.device)
+    
+    # Loop over each dimension and update the mask
+    for dim in range(x.shape[1]):
+        lower_bound = valid_bounds[dim, 0]
+        upper_bound = valid_bounds[dim, 1]
+        mask &= (x[:, dim] >= lower_bound) & (x[:, dim] <= upper_bound)
+    
+    # Use the mask to filter the points
+    return x[mask]
+
+
+def violation_percentage_loss(p_model, p_target, B, k=100.0):
+    """
+    Computes a differentiable loss that approximates the percentage of violations.
+    
+    A violation is when |p_model - p_target| > B.
+    The loss is given by the mean of a steep sigmoid that approximates the indicator function.
+    
+    Parameters:
+      p_model (torch.Tensor): predictions (any shape, but must match p_target)
+      p_target (torch.Tensor): target values (same shape as p_model)
+      B (float): the acceptable bound threshold
+      k (float): steepness parameter for the sigmoid (larger values make the sigmoid sharper)
+    
+    Returns:
+      torch.Tensor: a scalar loss that approximates the fraction of violations.
+    """
+    # Compute the absolute difference between model and target
+    diff = torch.abs(p_model - p_target)
+    
+    # Use sigmoid to approximate the indicator
+    # When diff == B, the output is 0.5; for diff < B, it tends toward 0; for diff > B, toward 1.
+    violation_approx = torch.sigmoid(k * (diff - B))
+    
+    # The mean approximates the percentage (fraction) of points that violate the bound.
+    return torch.mean(violation_approx)
+
+
+def compute_volume(bounds):
+    """
+    Compute the volume of an axis-aligned hyper-rectangle in 4D space.
+    
+    Parameters:
+      bounds (np.array): A (4, 2) array where each row is [min, max] for a dimension.
+      
+    Returns:
+      float: The volume of the hyper-rectangle.
+    """
+    # Compute the length of the interval in each dimension.
+    side_lengths = bounds[:, 1] - bounds[:, 0]
+    
+    # Volume is the product of all side lengths.
+    volume = np.prod(side_lengths)
+    return volume
+
+
+def train_model(t, model, target_region, p_net, p0_flat, mask_flat, grid_points_tensor, B, 
+                num_iterations=1000, batch_size=256, device=torch.device("cpu"), lambda_region=1.0):
+    optimizer = optim.Adam(model.parameters(), lr=1e-2)
     # Add a learning rate scheduler.
     # For example, using StepLR to decay the learning rate by a factor of 0.9 every 10,000 iterations.
     scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=1000, gamma=0.9)
 
     domain_bounds = np.array([constants.X1_RANGE, constants.X2_RANGE, constants.X3_RANGE, constants.X4_RANGE])
-    target_bounds = np.array([target_region[0,:], target_region[1,:], 
+    target_region = np.array([target_region[0,:], target_region[1,:], 
                               constants.X3_RANGE, 
                               constants.X4_RANGE])
+    target_bounds = get_valid_target_bounds(domain_bounds, target_region)
+    domain_V = compute_volume(domain_bounds)
+    target_V = compute_volume(target_bounds)
     
     # Convert the target numpy array to a torch tensor once.
     p0_tensor = torch.from_numpy(p0_flat).to(device)
-    # # Select a fixed mini-batch from the full dataset based on sorted p0 values.
-    # indices = torch.argsort(p0_tensor, descending=True)[:batch_size]
-    # x_fix = grid_points_tensor[indices].view(-1, 4)
-    # t_fix = torch.full((x_fix.shape[0], 1), t).view(-1, 1)
-    # p_target_fix = p0_tensor[indices].view(-1,)
-    # # Create the region data once.
-    # x_region = grid_points_tensor[torch.from_numpy(mask_flat)].view(-1, 4)
-    # t_region = torch.full((x_region.shape[0], 1), t).view(-1, 1)
-    # N_region = x_region.shape[0]
-    
+
+    _p_model_add = model(grid_points_tensor).view(-1,)
+    _deviation = torch.abs(_p_model_add - p0_tensor)
+    _, indices = torch.topk(_deviation, batch_size, largest=True)
+    # Now use the selected indices to pick the corresponding training points from the violating set
+    x_dom = grid_points_tensor[indices].view(-1, 4)
+    p_target_dom = p0_tensor[indices].view(-1)
+
+    _p_reg_add = p0_tensor[mask_flat].view(-1,)
+    _x_red_add = grid_points_tensor[mask_flat].view(-1,4)
+    _, indices = torch.topk(_p_reg_add, batch_size, largest=True)
+    x_reg = _x_red_add[indices].view(-1,4)
+    p_target_reg = _p_reg_add[indices].view(-1,)
+    # print(p_target_reg.shape, x_reg.shape)
+
+    x_dom = torch.cat((x_dom, x_reg), dim=0)
+    p_target_dom = torch.cat((p_target_dom, p_target_reg), dim=0)
+
     best_loss = np.inf
-    best_violation = np.inf
-    best_model_state = None
+    max_Pr = 0.0
     
     for it in range(num_iterations):
         optimizer.zero_grad()
 
-        x_batch = constants.sample_points(batch_size, domain_bounds)
-        t_batch = torch.full((x_batch.shape[0], 1), t).view(-1, 1)
-        p_target_batch = p_net(x_batch, t_batch).view(-1,)
+        # random samples
+        _x_dom = constants.sample_points(batch_size, domain_bounds)
+        _t_dom = torch.full((batch_size, 1), t)
+        _p_target_dom = p_net(_x_dom, _t_dom).view(-1,)
+        _x_reg = constants.sample_points(batch_size, target_bounds)
+        _t_reg = torch.full((batch_size, 1), t)
+        _p_target_reg = p_net(_x_reg, _t_reg).view(-1,)
+        x_dom_train = torch.cat((x_dom, _x_dom, _x_reg), dim=0)
+        p_target_dom_train = torch.cat((p_target_dom, _p_target_dom, _p_target_reg), dim=0)
+        x_reg_train = torch.cat((x_reg, _x_reg), dim=0)
 
-        random_indices = torch.randperm(grid_points_tensor.shape[0])[:batch_size]
-        x_fix = grid_points_tensor[random_indices].view(-1, 4)
-        t_fix = torch.full((x_fix.shape[0], 1), t).view(-1, 1)
-        p_target_fix = p0_tensor[random_indices].view(-1,)
-        p_target_hc = torch.cat((p_target_batch, p_target_fix), dim=0)
-        # p_target_hc = p_target_batch
-
-        p_model_batch = model(x_batch, t_batch).view(-1,)
-        p_model_fix   = model(x_fix, t_fix).view(-1,)
-        p_model_hc    = torch.cat((p_model_batch, p_model_fix), dim=0)
-        # p_model_hc = p_model_batch
-        hc = (p_model_hc >= (p_target_hc - B)) & (p_model_hc <= (p_target_hc + B))
-        if not hc.all():
-            loss_full = 1e+10*torch.mean((p_target_hc - p_model_hc) ** 2)
+        # [hard constraints loss]
+        p_model_dom  = model(x_dom_train).view(-1,)
+        hc = (p_model_dom >= (p_target_dom_train - B)) & (p_model_dom <= (p_target_dom_train + B))
+        violation_mask = ~hc  # True for datapoints that do NOT satisfy the constraint
+        vio_percent = 100.0*(violation_mask.sum()/p_target_dom_train.shape[0])
+        if(sum(violation_mask) > 0):
+            loss_full = torch.mean(0.5*(p_model_dom[violation_mask] - p_target_dom_train[violation_mask]) ** 2)*domain_V
         else:
-            loss_full = 0.0*torch.mean((p_target_hc - p_model_hc) ** 2)
+            loss_full = torch.zeros(1)
 
-        # --- Region Loss (Mass Maximization) ---
-        x_tar = constants.sample_points(batch_size, target_bounds)
-        t_tar = torch.full((x_tar.shape[0], 1), t).view(-1, 1)
-        p_model_tar = model(x_tar, t_tar).view(-1,)
-        region_mass_estimate = torch.mean(p_model_tar)
-        loss_region = -(region_mass_estimate)
+        # [max prob. over target region]
+        p_model_reg = model(x_reg_train).view(-1,)
+        region_mass_estimate = torch.mean(p_model_reg)*target_V
+        loss_region = -region_mass_estimate
 
-        total_loss = loss_full + lambda_region*loss_region
-        
-        total_loss.backward()
+        # combined loss
+        total_loss = loss_full + loss_region*1e-1
+
+        total_loss.backward(retain_graph=True)
         optimizer.step()
         scheduler.step()
         
         # Every 100 iterations, print progress and update the best model.
-        # if it % int(num_iterations/10) == 0:
-        #     print(f"Iteration {it:4d}, mini-batch loss: {total_loss.item()}, loss full: {loss_full.item()}, loss region: {lambda_region*loss_region.item()}")
-        
-        # (0. naive) current_loss = total_loss.item()
-        # (1. validation loss)
-        N_scale = 10
-        x_batch = constants.sample_points(N_scale*batch_size, domain_bounds)
-        t_batch = torch.full((x_batch.shape[0], 1), t).view(-1, 1)
-        p_target_batch = p_net(x_batch, t_batch).view(-1,)
-        random_indices = torch.randperm(grid_points_tensor.shape[0])[:10*batch_size]
-        x_fix = grid_points_tensor[random_indices].view(-1, 4)
-        t_fix = torch.full((x_fix.shape[0], 1), t).view(-1, 1)
-        p_target_fix = p0_tensor[random_indices].view(-1,)
-        p_target_hc = torch.cat((p_target_batch, p_target_fix), dim=0)
-        p_model_batch = model(x_batch, t_batch).view(-1,)
-        p_model_fix   = model(x_fix, t_fix).view(-1,)
-        p_model_hc    = torch.cat((p_model_batch, p_model_fix), dim=0)
-        hc = (p_model_hc >= (p_target_hc - B)) & (p_model_hc <= (p_target_hc + B))
-        violations = float(100.0 * (~hc).sum().item() / p_target_hc.shape[0])
-        if(violations < best_violation or violations < (100.0-99.9999) ):
-            x_tar = constants.sample_points(N_scale*batch_size, target_bounds)
-            t_tar = torch.full((x_tar.shape[0], 1), t).view(-1, 1)
-            p_model_tar = model(x_tar, t_tar).view(-1,)
-            region_mass_estimate = torch.mean(p_model_tar)
-            current_loss = -(region_mass_estimate)
-            if(current_loss < best_loss):
-                best_violation = violations
-                best_loss = current_loss
-                best_model_state = {k: v.cpu().clone() for k, v in model.state_dict().items()}
-                print(f"[Saved] Iteration {it:4d}, vio%: {violations}, loss: {current_loss}")
+        if it % int(num_iterations/10) == 0:
+            print(f"violation percent: {vio_percent:.4f}%")
+            print(f"Iteration {it:4d}, loss: {total_loss.item()}, loss hc: {loss_full.item()}, loss reg: {loss_region.item()}")
+            # print(f"Iteration {it:4d}, loss: {total_loss}, loss hc: {loss_full}, loss tar: {loss_region}, {loss_region_hc}")
 
+        if(total_loss.item() < best_loss):
+            # _x_reg = constants.sample_points(10*batch_size, target_bounds)
+            # p_model_reg = model(_x_reg).view(-1,)
+            # region_mass_estimate = torch.mean(p_model_reg)*target_V
+            # if(region_mass_estimate.item() > max_Pr and vio_percent < 30.0):
+            if(True):
+                # max_Pr = region_mass_estimate.item()
+                best_model_state = {k: v.cpu().clone() for k, v in model.state_dict().items()}
+                best_loss = total_loss.item()
+                print(f"[Saved] Iteration {it:4d}, loss: {total_loss.item()}, {loss_full.item()}, {loss_region.item()}")
+                print(f"   violation percent: {vio_percent:.4f}%")
+                # print(f"[Saved] Iteration {it:4d}, Region mass {max_Pr}, loss: {total_loss}, {loss_full}, {loss_region}, {loss_region_hc}")
+                # print(f"   violation percent: {vio_percent:.4f}%, max Pr: {max_Pr:.3f}, compute Pr: {region_mass_estimate.item():.3f}")
+            
     # After training, load the best model state.
     if best_model_state is not None:
         model.load_state_dict(best_model_state)
         print(f"Returning best model with total loss: {best_loss}")
-    
-    return model
+
+    return model, max_Pr, target_bounds
 
 
-# Testing routine.
 def compute_Pr_Guass(t, target_region, p_net, p0_flat, mask_flat, grid_points_tensor, dV, B):
     global constants
     device = torch.device("cpu")  # or torch.device("cuda") if available.
+    domain_bounds = np.array([constants.X1_RANGE, constants.X2_RANGE, constants.X3_RANGE, constants.X4_RANGE])
+    target_bounds = get_valid_target_bounds(domain_bounds, target_region)
 
-    trained_model = train_model(t, target_region, p_net, p0_flat, grid_points_tensor, B)
+    # Create model 
+    # trained_model = RBFDensity(num_basis=256).to(device) # (default degree of basis)
+    trained_model = TorchGMM().to(device)
+
+    ### [train model] ###
+    trained_model, _ , _  = train_model(t, trained_model, target_region, 
+                                p_net, p0_flat, mask_flat, grid_points_tensor, B, num_iterations=20000)
+    torch.save(trained_model.state_dict(), "data/app1/tar1/gmm_64_t{:.3f}.pth".format(t))
+
+    ### [load model] ###
+    # trained_model.load_state_dict(torch.load("data/app1/tar1/fo_rbf_128_t{:.3f}.pth".format(t)))
+
+    trained_model.eval()
     
     # # Check constraints over the full domain.
     x_full = grid_points_tensor.view(-1,4)
     p_target_full = torch.from_numpy(p0_flat)
     N_full = len(p_target_full)
-    t_full = torch.full((N_full, 1), t).view(-1,1)
-    p_model_full = trained_model(x_full, t_full).view(-1,)
+    p_model_full = trained_model(x_full).view(-1,)
+    print(f"[Check] sum of p (NN, FO): {torch.sum(p_target_full)*dV:.4f}, {torch.sum(p_model_full)*dV:.4f}")
+
     B_check = B  # Bound to check (can be different than training bound if desired)
     print("B: ", B_check)
     constraint_mask = (p_model_full >= (p_target_full - B_check)) & (p_model_full <= (p_target_full + B_check))
     percentage_satisfied = (constraint_mask.sum().item() / N_full) * 100
-    print(f"Constraint satisfied for {percentage_satisfied:.2f}% of samples over the full domain.")
-    violation_indices = (~constraint_mask).nonzero(as_tuple=False)
+    print(f"Constraint satisfied for {percentage_satisfied:.4f}% of samples over the full domain.")
+    # Get the indices of the violations.
+    violation_indices = (~constraint_mask).nonzero(as_tuple=False).squeeze(1)  # shape: [num_violations]
     if violation_indices.numel() > 0:
-        print(f"Number of constraint violations: {violation_indices.shape[0]}")
-        print("Example violations (first 5):")
-        for idx in violation_indices[:5]:
+        num_violations = violation_indices.shape[0]
+        print(f"Number of constraint violations: {num_violations}")
+    
+        # Set the number of top violations you want to print.
+        top_N = 5  # you can change this to any number you prefer
+        violation_p_values = p_target_full[violation_indices]
+        sorted_order = torch.argsort(violation_p_values, descending=True)
+        top_violation_indices = violation_indices[sorted_order][:top_N]
+        
+        print(f"Example violations (top {top_N} largest p_model values):")
+        for idx in top_violation_indices:
             i = idx.item()
+            # Assuming that state_full is an array (or tensor) holding the state coordinates for sample i.
+            # If state_full is a tensor, you might want to convert it to a list or numpy array.
+            # state_coords = state_full[i]
             print(f"  Sample {i}: p_target = {p_target_full[i].item():.6f}, p_model = {p_model_full[i].item():.6f}")
     else:
-        print("All samples satisfy the constraint.")
+        print("No constraint violations found.")
     
     # Evaluate integrated masses over the target region.
     trained_model.verbose = True
-    x_eval = grid_points_tensor[torch.from_numpy(mask_flat)].view(-1,4)
-    t_eval= torch.full((x_eval.shape[0], 1), t).view(-1,1)
-    learned_pdf_values = trained_model(x_eval, t_eval).view(-1,).detach().cpu().numpy()
     integrated_true_pdf = np.sum(p0_flat[mask_flat])*dV
-    integrated_learned_pdf = np.sum(learned_pdf_values)*dV
+
+    # Evaluate p_FO(X_tar) at the same grid
+    x_eval = grid_points_tensor[torch.from_numpy(mask_flat)].view(-1,4)
+    p_FO_tar = trained_model(x_eval).view(-1,).detach().cpu().numpy()
+    learned_pdf_values = np.sum(p_FO_tar)*dV
+
+    # [NOTE] for the learned pdf, we could compute it by directly sampling in the target region.
+    # batch_size = 1024*4*4*4*4*4
+    # x_reg = constants.sample_points(batch_size, target_bounds)
+    # p_model_reg = trained_model(x_reg).view(-1,)
+    # region_mass_estimate = torch.mean(p_model_reg)*compute_volume(target_bounds)
     
     print("\nIntegrated phat PDF over target region: {:.4f}".format(integrated_true_pdf))
-    print("Integrated Learned PDF over target region: {:.4f}".format(integrated_learned_pdf))
+    print("Integrated Learned PDF over target region: {:.4f}".format(learned_pdf_values))
+    # print("Integrated Learned PDF over target region: (random uniform samples) {:.4f}".format(region_mass_estimate))
 
-    return integrated_learned_pdf
+    # visual_fo_rbf(t, p_net, trained_model, target_region)
+
+    return learned_pdf_values, trained_model
+
+
+def visual_fo_rbf(t, p_net, model, target_region, N_discret=50):
+    x1s = np.linspace(constants.X1_RANGE[0], constants.X1_RANGE[1], N_discret)
+    x2s = np.linspace(constants.X2_RANGE[0], constants.X2_RANGE[1], N_discret)
+    x3s = np.linspace(constants.X3_RANGE[0], constants.X3_RANGE[1], N_discret)
+    x4s = np.linspace(constants.X4_RANGE[0], constants.X4_RANGE[1], N_discret)
+    x1_grid, x2_grid, x3_grid, x4_grid = np.meshgrid(x1s, x2s, x3s, x4s, indexing="ij") # the indexing is very important
+    grid_points = np.vstack([x1_grid.ravel(), x2_grid.ravel(), x3_grid.ravel(), x4_grid.ravel()]).T
+    dx1 = x1s[1] - x1s[0]
+    dx2 = x2s[1] - x2s[0]
+    dx3 = x3s[1] - x3s[0]
+    dx4 = x4s[1] - x4s[0]
+
+    # obtain pdf(nn)
+    grid_points_tensor = torch.tensor(grid_points, dtype=torch.float32, requires_grad=False)
+    t_tensor = (torch.ones(len(grid_points_tensor), 1, dtype=torch.float32) * t)
+    p0 = p_net(grid_points_tensor, t_tensor).detach().numpy().reshape(x1_grid.shape)
+
+    # plot
+    fig = plt.figure(figsize=(10, 8))
+    ax = fig.add_subplot(111, projection='3d')
+    p0_2D =  np.sum(p0, axis=(2,3)) * dx3 * dx4
+    p_rbf = model(grid_points_tensor).detach().numpy().reshape(x1_grid.shape)
+    p_rbf_2D = np.sum(p_rbf, axis=(2,3)) * dx3 * dx4
+    X, Y =  np.meshgrid(x1s, x2s, indexing="ij")
+    ax.plot_surface(X, Y, p0_2D, color="none", rstride=2, cstride=2, 
+                    edgecolor='black', linewidth=0.5, label=r"$\hat{p}$")
+    ax.plot_surface(X, Y, p_rbf_2D, color="none", rstride=2, cstride=2, 
+                    edgecolor='blue', linestyle="--", linewidth=0.5, label=r"$p_{FO}$")
+    
+    # Create the patch for the target region.
+    # Assume target_region is a 2x2 array:
+    #   target_region[0] = [r_min, r_max]
+    #   target_region[1] = [phi_min, phi_max]
+    r_bounds = target_region[0, :]    # [r_min, r_max]
+    phi_bounds = target_region[1, :]  # [phi_min, phi_max]
+    
+    # Define the corners of the rectangular patch at z = 0.
+    patch_vertices = [
+        [r_bounds[0], phi_bounds[0], 0],
+        [r_bounds[1], phi_bounds[0], 0],
+        [r_bounds[1], phi_bounds[1], 0],
+        [r_bounds[0], phi_bounds[1], 0],
+    ]
+    # Create a Poly3DCollection and add it to the 3D axis.
+    patch = Poly3DCollection([patch_vertices], facecolor='red', alpha=0.5, edgecolor='k', label=r"$X^'_{tar}$")
+    ax.add_collection3d(patch)
+    
+    ax.set_xlabel(r"$r'$")
+    ax.set_ylabel(r"$\phi'$")
+    ax.set_zlabel("PDF")
+    plt.legend()
+    plt.show()
 
 
 def main():
@@ -1164,6 +1376,7 @@ def main():
     # visual_phat_trainings()
     # visual_e1hat_training()
     # plot_train_loss(E1NET_PATH_SEQ2)
+    # plot_app1_onlymc()
     plot_app1()
     return
 

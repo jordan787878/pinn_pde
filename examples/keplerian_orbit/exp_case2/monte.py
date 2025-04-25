@@ -4,11 +4,21 @@ import matplotlib.pyplot as plt
 import time
 from scipy.stats import norm, multivariate_normal
 from scipy.interpolate import griddata
-from constants import Case2_4D_Constants
-from util import rnsphere_to_sphere, sphere_to_rnsphere, sphere_to_cartesian, cartesian_to_sphere, RV2COE, true_to_mean_anomaly, solve_kepler, COE2RV, set_publication_style
 
-DATA_FOLDER = "data/" # 10^8 samples
-# Compute Time of 10^8 samples
+# add ../utilities package
+import sys
+import os
+parent_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+if parent_dir not in sys.path:
+    sys.path.insert(0, parent_dir)
+from utilities.util import *
+from utilities.constants import Case2_4D_Constants
+
+# Compute Time 
+# 1e+5/
+# MC time (sec):  [18.44 19.04 18.87 18.73 18.7  19.14 18.99 19.04 19.07 19.11 18.91]
+
+# 1e+8/
 # [10985.15 10279.26 10203.24 10229.59 10386.13 17258.86*]
 
 constants = Case2_4D_Constants()
@@ -100,68 +110,16 @@ def p_init(x):
     return pdf_eval
 
 
-def p_init_perturb(x):
-    """
-    x is numpy array of shape (N x 4), N is the sample size
-    """
-    global constants
-    perturb = 1.05
-    pdf_func = multivariate_normal(mean=perturb*constants.N_MEAN_I, cov=constants. N_COV_I)
-    pdf_eval = pdf_func.pdf(x).reshape(-1,1).astype(x.dtype)
-    return pdf_eval
-
-
-def get_p_init_max():
-    x1s = np.load(DATA_FOLDER+"x1s.npy")
-    x2s = np.load(DATA_FOLDER+"x2s.npy")
-    x3s = np.load(DATA_FOLDER+"x3s.npy")
-    x4s = np.load(DATA_FOLDER+"x4s.npy")
+def get_p_init_max(data_folder):
+    x1s = np.load(data_folder+"x1s.npy")
+    x2s = np.load(data_folder+"x2s.npy")
+    x3s = np.load(data_folder+"x3s.npy")
+    x4s = np.load(data_folder+"x4s.npy")
     x1_grid, x2_grid, x3_grid, x4_grid = np.meshgrid(x1s, x2s, x3s, x4s, indexing="ij") # the indexing is very important
     grid_points = np.vstack([x1_grid.ravel(), x2_grid.ravel(), x3_grid.ravel(), x4_grid.ravel()]).T
     joint_pdf_true = p_init(grid_points)
     p_init_max = np.max(joint_pdf_true)
-    # print(p_init_max)
     return p_init_max
-
-
-def propagate_samples(t=0.2, dtt=1e-4, stat_sample=1):
-    global constants
-    X_four_dim = np.random.multivariate_normal(constants.N_MEAN_I, constants.N_COV_I, size=stat_sample).astype(np.float32)
-    # append constant theta' = 0.5pi/THETA, theta'_dot = 0.0
-    X = np.zeros((stat_sample, 6))
-    X[:,0] = X_four_dim[:,0]
-    X[:,1] = np.ones((stat_sample,)) * 0.5 * np.float32(np.pi) / constants.THETA
-    X[:,2] = X_four_dim[:,1]
-    X[:,3] = X_four_dim[:,2]
-    X[:,5] = X_four_dim[:,3]
-    # convert rns to sphere
-    kf = int(t/dtt)
-    for i in range(stat_sample):
-        x = X[i, :]
-        # ode45 propogate the X_sph(t)
-        for k in range(kf):
-            x = x + dyn_normsph(x) * dtt # + g*dw
-        X[i, :] = x
-    return X
-
-
-def dyn_normsph(x):
-    # normalized spherical coordinate dynamics
-    global constants
-    r = x[0]
-    th = x[1]
-    phi = x[2]
-    vr = x[3]
-    vth = x[4]
-    vphi = x[5]
-    f1 = vr
-    f2 = 0.0 # (constants)
-    f3 = vphi
-    aux = constants.W + constants.PHI/constants.T * vphi
-    f4 = constants.T**2 * r * aux**2 - constants.T**2 * constants.MU_EARTH /(constants.R**3 * r**2) # + J2
-    f5 = 0.0 # (constants)
-    f6 = -2*constants.T/(r * constants.PHI) * vr * aux
-    return np.array([f1, f2, f3, f4, f5, f6])
 
 
 def test_monte_accuracy():
@@ -253,7 +211,7 @@ def test_monte_spherical_pdf_Nrphi(data_folder):
         pdf_monte = np.load(data_folder+"pdf_t{:.3f}.npy".format(t_prime))
         print("[check] x1s, pdf(monte) data type: ", x1s.dtype, pdf_monte.dtype)
 
-        samples = np.load(DATA_FOLDER+"X_t{:.3f}.npy".format(t_prime))
+        samples = np.load(data_folder+"samples_t{:.3f}.npy".format(t_prime))
         r_samples = samples[:,0]
         phi_samples = samples[:,2]
 
@@ -352,11 +310,7 @@ def test_monte_cartesian_pdf_xy():
 
 def generate_data(data_folder, N_samples):
     mc_time = []
-
-    t_span = simple_interpolate(constants.T_PRIME_SPAN)
-    t_span = simple_interpolate(t_span)
-    idx = [7, 9, 10, 11, 13]
-    t_span = t_span[idx]
+    t_span = constants.T_PRIME_SPAN
     print(t_span)
 
     for t_prime in t_span:
@@ -364,58 +318,29 @@ def generate_data(data_folder, N_samples):
         x1s, x2s, x3s, x4s, pdf = p_sol_monte(t=t_prime, linespace_num=51, stat_sample=N_samples)   
         mc_time.append(time.time() - start_time)
         np.save(data_folder+"pdf_t{:.3f}.npy".format(t_prime), pdf)
-        # if t_prime == 0.0:
-        #     np.save(data_folder+"x1s.npy", x1s)
-        #     np.save(data_folder+"x2s.npy", x2s)
-        #     np.save(data_folder+"x3s.npy", x3s)
-        #     np.save(data_folder+"x4s.npy", x4s)
+        if t_prime == 0.0:
+            np.save(data_folder+"x1s.npy", x1s)
+            np.save(data_folder+"x2s.npy", x2s)
+            np.save(data_folder+"x3s.npy", x3s)
+            np.save(data_folder+"x4s.npy", x4s)
     print("MC time (sec): ", np.round(np.array(mc_time),2) )
 
-
-def generate_samples():
-    for t_prime in constants.T_PRIME_SPAN:
-        X = propagate_samples(t_prime, stat_sample=200)
-        np.save(DATA_FOLDER+"X_t{:.3f}.npy".format(t_prime), X)
-
-
-def simple_interpolate(arr):
-    """
-    Given a 1D numpy array, return a new array that inserts the average
-    of each pair of adjacent elements between them.
     
-    For example:
-    If arr = [0.0, 0.4, 0.8]
-    then the result will be [0.0, 0.2, 0.4, 0.6, 0.8]
-    """
-    # Number of original elements
-    n = len(arr)
-    # New array length will be (2*n - 1)
-    new_arr = np.empty(2 * n - 1, dtype=arr.dtype)
-    
-    # Place the original values in the even indices of the new array
-    new_arr[0::2] = arr
-    
-    # Calculate averages and place in the odd indices
-    new_arr[1::2] = (arr[:-1] + arr[1:]) * 0.5
-    
-    return new_arr
-
-    
-
 def main():
-    # # [Generate data] # #
-    # generate_data("data/1e+7/", 10000000)
-    generate_data("data/1e+7/", 10000000)
+    ######################
+    ## Generate data
+    ######################
+    data_folder = "data/1e+6/"
+    # generate_data(data_folder, 1000000)
+    # exp_case2_generate_samples(data_folder, constants, use_j2=False, N_samples=300, dtt=1e-4)
 
-    # generate_samples()
-
-    # # [Testing functions] # #
+    ######################
+    ## Test MC results
+    ######################
     # test_monte_accuracy()
-
-    # test_monte_spherical_pdf_Nrphi("data/1e+6/")
+    test_monte_spherical_pdf_Nrphi(data_folder)
     # test_monte_cartesian_pdf_xy()
     
-
 
 if __name__ == "__main__":
     main()

@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from constants import Case2_4D_Constants
+from utilities.constants import Case2_4D_Constants
 constants = Case2_4D_Constants()
 
 
