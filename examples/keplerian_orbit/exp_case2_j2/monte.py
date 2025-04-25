@@ -3,13 +3,23 @@ from tqdm import tqdm
 import matplotlib.pyplot as plt
 import time
 from scipy.stats import norm, multivariate_normal
-from scipy.interpolate import griddata
-from constants import Case2_4D_Constants
-from util import rnsphere_to_sphere, sphere_to_rnsphere, sphere_to_cartesian, cartesian_to_sphere, RV2COE, true_to_mean_anomaly, solve_kepler, COE2RV, set_publication_style
+# add ../utilities package
+import sys
+import os
+parent_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+if parent_dir not in sys.path:
+    sys.path.insert(0, parent_dir)
+from utilities.util import *
+from utilities.constants import Case2_4D_Constants
 
-DATA_FOLDER = "data/"
 constants = Case2_4D_Constants()
 np.random.seed(0)
+
+# log (run on linux)
+# 1e+5: MC time (sec):  [   5.97  667.7  1328.59 2994.82 3127.19 3275.15]
+# 1e+6: compute time: [   80.3   5079.97 10038.74 15072.17 19966.02 25059.48]
+# 1e+7: compute time: [   801.5   51027.14 101133.28 151690.62 200858.76 251892.38]
+# NOTE: J2 effect on GEO is small, could possibly be a strength if we show LEO orbits.
 
 
 def p_sol_monte(t=0.0, linespace_num=51, stat_sample=10000):
@@ -58,7 +68,7 @@ def p_sol_monte(t=0.0, linespace_num=51, stat_sample=10000):
         
         # Propagate the sample using the dynamics (e.g., RK4 with J2 dynamics).
         for k in range(kf):
-            x = x + dyn_normsph(x) * dtt  # dyn_normsph(x) is assumed to be defined elsewhere.
+            x = x + exp_case2_dyn_normsph(x, constants, use_j2=True) * dtt  # dyn_normsph(x) is assumed to be defined elsewhere.
         
         # Extract the 4D state (columns 0, 2, 3, 5).
         x_final = np.array([x[0], x[2], x[3], x[5]], dtype=np.float32)
@@ -95,7 +105,6 @@ def p_sol_monte(t=0.0, linespace_num=51, stat_sample=10000):
     return midpoints_x1, midpoints_x2, midpoints_x3, midpoints_x4, frequency_4d
 
 
-
 def p_init(x):
     """
     x is numpy array of shape (N x 4), N is the sample size
@@ -106,57 +115,16 @@ def p_init(x):
     return pdf_eval
 
 
-def get_p_init_max():
-    x1s = np.load(DATA_FOLDER+"x1s.npy")
-    x2s = np.load(DATA_FOLDER+"x2s.npy")
-    x3s = np.load(DATA_FOLDER+"x3s.npy")
-    x4s = np.load(DATA_FOLDER+"x4s.npy")
+def get_p_init_max(data_folder):
+    x1s = np.load(data_folder+"x1s.npy")
+    x2s = np.load(data_folder+"x2s.npy")
+    x3s = np.load(data_folder+"x3s.npy")
+    x4s = np.load(data_folder+"x4s.npy")
     x1_grid, x2_grid, x3_grid, x4_grid = np.meshgrid(x1s, x2s, x3s, x4s, indexing="ij") # the indexing is very important
     grid_points = np.vstack([x1_grid.ravel(), x2_grid.ravel(), x3_grid.ravel(), x4_grid.ravel()]).T
     joint_pdf_true = p_init(grid_points)
     p_init_max = np.max(joint_pdf_true)
-    # print(p_init_max)
     return p_init_max
-
-
-def propagate_samples(t=0.2, dtt=1e-4, stat_sample=1):
-    global constants
-    X_four_dim = np.random.multivariate_normal(constants.N_MEAN_I, constants.N_COV_I, size=stat_sample).astype(np.float32)
-    # append constant theta' = 0.5pi/THETA, theta'_dot = 0.0
-    X = np.zeros((stat_sample, 6))
-    X[:,0] = X_four_dim[:,0]
-    X[:,1] = np.ones((stat_sample,)) * 0.5 * np.float32(np.pi) / constants.THETA
-    X[:,2] = X_four_dim[:,1]
-    X[:,3] = X_four_dim[:,2]
-    X[:,5] = X_four_dim[:,3]
-    # convert rns to sphere
-    kf = int(t/dtt)
-    for i in range(stat_sample):
-        x = X[i, :]
-        # ode45 propogate the X_sph(t)
-        for k in range(kf):
-            x = x + dyn_normsph(x) * dtt # + g*dw
-        X[i, :] = x
-    return X
-
-
-def dyn_normsph(x):
-    # normalized spherical coordinate dynamics
-    global constants
-    r = x[0]
-    th = x[1]
-    phi = x[2]
-    vr = x[3]
-    vth = x[4]
-    vphi = x[5]
-    f1 = vr
-    f2 = 0.0 # (constants)
-    f3 = vphi
-    aux = constants.W + constants.PHI/constants.T * vphi
-    f4 = constants.T**2 * r * aux**2 - constants.T**2 * constants.MU_EARTH /(constants.R**3 * r**2) + 2.0*(3*constants.T**2 * constants.J2 * constants.MU_EARTH * constants.R_EARTH**2)/(2*constants.R**5 * r**4)
-    f5 = 0.0 # (constants)
-    f6 = -2*constants.T/(r * constants.PHI) * vr * aux
-    return np.array([f1, f2, f3, f4, f5, f6])
 
 
 def test_monte_accuracy():
@@ -232,7 +200,7 @@ def test_monte_accuracy():
     plt.show()
 
 
-def test_monte_spherical_pdf_Nrphi():
+def test_monte_spherical_pdf_Nrphi(data_folder):
     """
     marginalize the pdf of normalize spherical to [r,phi]
     """
@@ -241,16 +209,20 @@ def test_monte_spherical_pdf_Nrphi():
     for t_prime in constants.T_PRIME_SPAN:
         print("[test] pdf(monte) marginalized to rphi at t=", t_prime)
 
-        x1s = np.load(DATA_FOLDER+"x1s.npy")
-        x2s = np.load(DATA_FOLDER+"x2s.npy")
-        x3s = np.load(DATA_FOLDER+"x3s.npy")
-        x4s = np.load(DATA_FOLDER+"x4s.npy")
-        pdf_monte = np.load(DATA_FOLDER+"pdf_t{:.3f}.npy".format(t_prime))
+        x1s = np.load(data_folder+"x1s.npy")
+        x2s = np.load(data_folder+"x2s.npy")
+        x3s = np.load(data_folder+"x3s.npy")
+        x4s = np.load(data_folder+"x4s.npy")
+        pdf_monte = np.load(data_folder+"pdf_t{:.3f}.npy".format(t_prime))
         print("[check] x1s, pdf(monte) data type: ", x1s.dtype, pdf_monte.dtype)
 
-        samples = np.load(DATA_FOLDER+"X_t{:.3f}.npy".format(t_prime))
+        samples = np.load(data_folder+"samples_t{:.3f}.npy".format(t_prime))
         r_samples = samples[:,0]
         phi_samples = samples[:,2]
+
+        # samples_noj2 = np.load(data_folder+"X_t{:.3f}_noj2.npy".format(t_prime))
+        # r_samples_noj2 = samples_noj2[:,0]
+        # phi_samples_noj2 = samples_noj2[:,2]
 
         dx3 = x3s[1] - x3s[0]
         dx4 = x4s[1] - x4s[0]
@@ -268,113 +240,43 @@ def test_monte_spherical_pdf_Nrphi():
         plt.colorbar(cp)
         # scatter samples of (r, phi) on to the plot
         plt.scatter(r_samples, phi_samples, s=8, c='white', edgecolor='black', alpha=1.0, label='Samples')
+        # plt.scatter(r_samples_noj2, phi_samples_noj2, s=5, c='white', edgecolor='red', alpha=1.0, label='Samples')
         # Adding labels and title
         plt.xlabel(r"$r'$")
         plt.ylabel(r"$\phi'$")
         plt.title(r"$p(r',\phi')$"+ "from MC and 200 Samples at t="+str(np.round(t_prime,2))+"T")
         plt.legend()
         plt.show()
+   
 
-
-def test_monte_cartesian_pdf_xy():
-    """
-    convert the normalize spherical pdf to pdf(x,y)
-    the contour plot is not exact, since we use interpolation to create x,y grid and p(x,y) on this grid
-    """
-    set_publication_style()
-    global constants
-    # Create the contour plot
-    plt.figure(figsize=(8, 6))
-    for t_prime in constants.T_PRIME_SPAN:
-        print("[test] pdf(monte) marginalized to xy at t=", t_prime)
-
-        x1s = np.load(DATA_FOLDER+"x1s.npy")
-        x2s = np.load(DATA_FOLDER+"x2s.npy")
-        x3s = np.load(DATA_FOLDER+"x3s.npy")
-        x4s = np.load(DATA_FOLDER+"x4s.npy")
-        pdf_monte = np.load(DATA_FOLDER+"pdf_t{:.3f}.npy".format(t_prime))
-        print("[check] x1s, pdf(monte) data type: ", x1s.dtype, pdf_monte.dtype)
-
-        dx3 = x3s[1] - x3s[0]
-        dx4 = x4s[1] - x4s[0]
-
-        pdf_monte_Nrphi =  np.sum(pdf_monte, axis=(2,3)) * dx3 * dx4
-        x1_grid, x2_grid =  np.meshgrid(x1s, x2s, indexing="ij") # the indexing is very important
-        pdf_rphi_data = np.empty((0,4))
-        for i in range(len(x1_grid)):
-            for j in range(len(x2_grid)):
-                Nr = x1_grid[i,j]
-                Nphi = x2_grid[i,j]
-                pdf_Nrphi = pdf_monte_Nrphi[i,j]
-                r = Nr*constants.R
-                phi = Nphi*constants.PHI + constants.W*constants.T*t_prime
-                pdf_rphi = (pdf_Nrphi/(constants.R*constants.PHI))/r**2
-                t = constants.T*t_prime
-                pdf_rphi_data = np.vstack((pdf_rphi_data, np.array([r, phi, t, pdf_rphi])))
-
-        # Coordinates (x and y) and values (z)
-        x = pdf_rphi_data[:, 0] * np.cos(pdf_rphi_data[:, 1])  # x-coordinates (1st column)
-        y = pdf_rphi_data[:, 0] * np.sin(pdf_rphi_data[:, 1])  # y-coordinates (2nd column)
-        z = pdf_rphi_data[:, 3]  # values to plot (4th column)
-        print(np.max(z))
-        # Define the grid where you want to plot the contours
-        grid_x, grid_y = np.meshgrid(np.linspace(x.min(), x.max(), 100),  # Adjust 100 to get finer resolution
-                                     np.linspace(y.min(), y.max(), 100))
-        # Interpolate scattered data onto the grid
-        grid_z = griddata((x, y), z, (grid_x, grid_y), method='cubic')
-        cp = plt.contourf(grid_x, grid_y, grid_z, levels=15, cmap="viridis", alpha=0.9)  # Filled contour plot
-        # plt.colorbar(cp)  # Add a colorbar to indicate the values
-
-        samples = np.load(DATA_FOLDER+"X_t{:.3f}.npy".format(t_prime))
-        r_samples = samples[1:30,0]*constants.R
-        phi_samples = samples[1:30,2]*constants.PHI + constants.W*constants.T*t_prime
-        x_samples = r_samples * np.cos(phi_samples)
-        y_samples = r_samples * np.sin(phi_samples)
-        if(t_prime == 0.0):
-            plt.scatter(x_samples, y_samples, s=3, c='white', linewidths=0.2, edgecolor='red', alpha=0.9, label='Samples')
-        else:
-            plt.scatter(x_samples, y_samples, s=3, c='white', linewidths=0.2, edgecolor='red', alpha=0.9)
-
-    # Labels and title
-    plt.axis('equal')
-    plt.xlabel('X, m')
-    plt.ylabel('Y, m')
-    plt.title('p(x,y) from MC and (30) Samples over 0.2T')
-    plt.legend()
-    plt.savefig("figs/figure1.pdf", format="pdf", dpi=300, bbox_inches="tight")
-    plt.show()
-      
-
-def generate_data():
+def generate_data(data_folder, N_samples):
     mc_time = []
     for t_prime in constants.T_PRIME_SPAN:
         start_time = time.time()
-        x1s, x2s, x3s, x4s, pdf = p_sol_monte(t=t_prime, linespace_num=51, stat_sample=10000)   
+        x1s, x2s, x3s, x4s, pdf = p_sol_monte(t=t_prime, linespace_num=51, stat_sample=N_samples)   
         mc_time.append(time.time() - start_time)
-        np.save(DATA_FOLDER+"pdf_t{:.3f}.npy".format(t_prime), pdf)
+        np.save(data_folder+"pdf_t{:.3f}.npy".format(t_prime), pdf)
         if t_prime == 0.0:
-            np.save(DATA_FOLDER+"x1s.npy", x1s)
-            np.save(DATA_FOLDER+"x2s.npy", x2s)
-            np.save(DATA_FOLDER+"x3s.npy", x3s)
-            np.save(DATA_FOLDER+"x4s.npy", x4s)
+            np.save(data_folder+"x1s.npy", x1s)
+            np.save(data_folder+"x2s.npy", x2s)
+            np.save(data_folder+"x3s.npy", x3s)
+            np.save(data_folder+"x4s.npy", x4s)
     print("MC time (sec): ", np.round(np.array(mc_time),2) )
-
-
-def generate_samples():
-    for t_prime in constants.T_PRIME_SPAN:
-        X = propagate_samples(t_prime, stat_sample=200)
-        np.save(DATA_FOLDER+"X_t{:.3f}.npy".format(t_prime), X)
     
 
 def main():
-    # # [Generate data] # #
-    # generate_data()
-    # generate_samples()
+     ######################
+    ## Generate data
+    ######################
+    data_folder = "data/1e+6/"
+    generate_data(data_folder, 1000000)
+    exp_case2_generate_samples(data_folder, constants, use_j2=True, N_samples=300, dtt=1e-4)
 
-    # # [Testing functions] # #
+    ######################
+    ## Test MC results
+    ######################
     # test_monte_accuracy()
-
-    test_monte_spherical_pdf_Nrphi()
+    # test_monte_spherical_pdf_Nrphi(data_folder)
     # test_monte_cartesian_pdf_xy()
     
 

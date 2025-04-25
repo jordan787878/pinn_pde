@@ -23,8 +23,16 @@ from constants import Case2_4D_Constants
 from monte import p_init, get_p_init_max
 from pnet_models import PNet
 
+import sys
+import os
+# Get the parent directory of the current directory (exp1)
+parent_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+if parent_dir not in sys.path:
+    sys.path.insert(0, parent_dir)
+from utilities.post_exp_cas2 import check_pdf_Nrphi
 
-DATA_FOLDER = "data/"
+
+DATA_FOLDER = "data/1e+7/"
 PNET_PATH = "output/p_net_reg.pth"
 device = "cpu"
 TRAIN_FLAG = False
@@ -209,49 +217,49 @@ def load_trained_model(net, path, method="old"):
     return net
 
 
-def check_pdf_Nrphi(p_net):
-    """
-    marginalize the pdf of normalize spherical to [r,phi]
-    """
-    global constants
-    for t_prime in constants.T_PRIME_SPAN:
-        print("[test] pdf(NN) marginalized to rphi at t=", t_prime)
-        x1s = np.load(DATA_FOLDER+"x1s.npy")
-        x2s = np.load(DATA_FOLDER+"x2s.npy")
-        x3s = np.load(DATA_FOLDER+"x3s.npy")
-        x4s = np.load(DATA_FOLDER+"x4s.npy")
-        # pdf_monte = np.load(DATA_FOLDER+"pdf_t{:.3f}.npy".format(t_prime))
-        # print("[check] x1s, pdf(monte) data type: ", x1s.dtype, pdf_monte.dtype)
-        x1_grid, x2_grid, x3_grid, x4_grid = np.meshgrid(x1s, x2s, x3s, x4s, indexing="ij") # the indexing is very important
-        grid_points = np.vstack([x1_grid.ravel(), x2_grid.ravel(), x3_grid.ravel(), x4_grid.ravel()]).T
-        grid_points_tensor = torch.tensor(grid_points, dtype=torch.float32, requires_grad=False)
-        t_tensor = (torch.ones(len(grid_points_tensor), 1, dtype=torch.float32) * t_prime).to(device)
-        pdf_nn = p_net(grid_points_tensor, t_tensor).detach().numpy().reshape(x1_grid.shape)
+# def check_pdf_Nrphi(p_net):
+#     """
+#     marginalize the pdf of normalize spherical to [r,phi]
+#     """
+#     global constants
+#     for t_prime in constants.T_PRIME_SPAN:
+#         print("[test] pdf(NN) marginalized to rphi at t=", t_prime)
+#         x1s = np.load(DATA_FOLDER+"x1s.npy")
+#         x2s = np.load(DATA_FOLDER+"x2s.npy")
+#         x3s = np.load(DATA_FOLDER+"x3s.npy")
+#         x4s = np.load(DATA_FOLDER+"x4s.npy")
+#         # pdf_monte = np.load(DATA_FOLDER+"pdf_t{:.3f}.npy".format(t_prime))
+#         # print("[check] x1s, pdf(monte) data type: ", x1s.dtype, pdf_monte.dtype)
+#         x1_grid, x2_grid, x3_grid, x4_grid = np.meshgrid(x1s, x2s, x3s, x4s, indexing="ij") # the indexing is very important
+#         grid_points = np.vstack([x1_grid.ravel(), x2_grid.ravel(), x3_grid.ravel(), x4_grid.ravel()]).T
+#         grid_points_tensor = torch.tensor(grid_points, dtype=torch.float32, requires_grad=False)
+#         t_tensor = (torch.ones(len(grid_points_tensor), 1, dtype=torch.float32) * t_prime).to(device)
+#         pdf_nn = p_net(grid_points_tensor, t_tensor).detach().numpy().reshape(x1_grid.shape)
 
-        samples = np.load(DATA_FOLDER+"X_t{:.3f}.npy".format(t_prime))
-        r_samples = samples[:,0]
-        phi_samples = samples[:,2]
+#         samples = np.load(DATA_FOLDER+"X_t{:.3f}.npy".format(t_prime))
+#         r_samples = samples[:,0]
+#         phi_samples = samples[:,2]
 
-        dx3 = x3s[1] - x3s[0]
-        dx4 = x4s[1] - x4s[0]
+#         dx3 = x3s[1] - x3s[0]
+#         dx4 = x4s[1] - x4s[0]
 
-        # pdf_monte_Nrphi =  np.sum(pdf_monte, axis=(2,3)) * dx3 * dx4
-        pdf_nn_Nrphi = np.sum(pdf_nn, axis=(2,3)) * dx3 * dx4
-        x1_grid, x2_grid =  np.meshgrid(x1s, x2s, indexing="ij") # the indexing is very important
+#         # pdf_monte_Nrphi =  np.sum(pdf_monte, axis=(2,3)) * dx3 * dx4
+#         pdf_nn_Nrphi = np.sum(pdf_nn, axis=(2,3)) * dx3 * dx4
+#         x1_grid, x2_grid =  np.meshgrid(x1s, x2s, indexing="ij") # the indexing is very important
 
-        # Plotting the contour plot
-        plt.figure(figsize=(8, 6))
-        cp = plt.contourf(x1_grid, x2_grid, pdf_nn_Nrphi, levels=30, cmap="viridis", alpha=0.8)
-        # Adding color bar
-        plt.colorbar(cp)
-        # scatter samples of (r, phi) on to the plot
-        plt.scatter(r_samples, phi_samples, s=8, c='white', edgecolor='black', alpha=1.0, label='Samples')
-        # Adding labels and title
-        plt.xlabel(r"$r'$")
-        plt.ylabel(r"$\phi'$")
-        plt.title(r"$p(r',\phi')$"+ "from NN and 200 Samples at t="+str(np.round(t_prime,2))+"T")
-        plt.legend()
-        plt.show()
+#         # Plotting the contour plot
+#         plt.figure(figsize=(8, 6))
+#         cp = plt.contourf(x1_grid, x2_grid, pdf_nn_Nrphi, levels=30, cmap="viridis", alpha=0.8)
+#         # Adding color bar
+#         plt.colorbar(cp)
+#         # scatter samples of (r, phi) on to the plot
+#         plt.scatter(r_samples, phi_samples, s=8, c='white', edgecolor='black', alpha=1.0, label='Samples')
+#         # Adding labels and title
+#         plt.xlabel(r"$r'$")
+#         plt.ylabel(r"$\phi'$")
+#         plt.title(r"$p(r',\phi')$"+ "from NN and 200 Samples at t="+str(np.round(t_prime,2))+"T")
+#         plt.legend()
+#         plt.show()
 
 
 def check_pdfnn_marginalize(p_net, t=0.0):
@@ -520,11 +528,12 @@ def main():
     p_net = load_trained_model(p_net, path=PNET_PATH, method="new"); p_net.eval()
 
     ### Post-process ###
+    check_pdf_Nrphi(p_net, constants, DATA_FOLDER)
     # for t_prime in constants.T_PRIME_SPAN:
     #    check_pdfnn_marginalize(p_net, t=t_prime)
     # test_nn_cartesian_pdf_xy(p_net)
-    check_pdf_Nrphi(p_net)
-    check_pdfnn_cartesian_wrt_monte(p_net)
+    # check_pdf_Nrphi(p_net)
+    # check_pdfnn_cartesian_wrt_monte(p_net)
 
 
 if __name__ == "__main__":
