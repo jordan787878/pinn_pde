@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 from scipy.stats import multivariate_normal
 import scipy.sparse as sp
 from scipy.optimize import minimize
+from scipy.special import erf
 from matplotlib.lines import Line2D
 import time
 
@@ -877,6 +878,11 @@ def test_function_opt_1D():
     mu_opt, sigma_opt = result.x
     print("Optimized parameters: mu = {:.4f}, sigma = {:.4f}".format(mu_opt, sigma_opt))
     
+    a = x_subset[0]
+    b = x_subset[1]
+    p_opt_integral = 0.5*(erf((b-mu_opt)/(np.sqrt(2)*sigma_opt)) - erf((a-mu_opt)/(np.sqrt(2)*sigma_opt)))
+    print("P opt (by erf): {:.4f}".format(p_opt_integral))
+    
     # Evaluate the optimized Gaussian pdf.
     optimized_pdf = norm.pdf(x, loc=mu_opt, scale=sigma_opt)
     
@@ -895,13 +901,14 @@ def test_function_opt_1D():
     fig = plt.figure(figsize=(8, 6))
     plt.plot(x, p0, label=r"$\hat{p}$", linestyle="--", color="gray")
     plt.fill_between(x, lower_bound, upper_bound, color="gray", alpha=0.3,
-                    label=r"$\hat{p}+ \pm B_1$")
+                    label=r"$\hat{p} \pm B_1$")
     mask = (x >= x_subset[0]) & (x <= x_subset[1])
     plt.fill_between(x[mask], 0, upper_bound[mask], color="green", alpha=0.3, label=r"$X^'_{tar}$")  
     plt.plot(x, optimized_pdf, label=r"$p_{FO}$", marker="o", markersize=4, color="blue")
     plt.xlabel("x")
     plt.ylabel("Probability Density")
-    plt.title(r"True $\mathbb{P}(X^'_{tar})$= "+str(np.round(true_Pr,3))+r", Max $\mathbb{P}_{FO}(X^'_{tar})$="+str(np.round(max_Pr, 3)))
+    plt.title(r"True $\mathbb{P}(X^'_{tar})$= "+str(np.round(true_Pr,3))+
+              r", Max $\mathbb{P}_{FO}(X^'_{tar})$="+str(np.round(max_Pr, 3)))
     plt.legend()
     plt.grid(True)
     plt.tight_layout(pad=0.2)
