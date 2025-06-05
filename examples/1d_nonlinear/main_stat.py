@@ -1101,7 +1101,7 @@ def plot_p_surface(p_net, num=100):
         t1 = t1s[i]
         t1_monte = x_monte*0 + t1
         if i == 0:
-            ax.plot(x_monte, t1_monte, p_list[i], color="black", label=r"$p_s$")
+            ax.plot(x_monte, t1_monte, p_list[i], color="black", label=r"$p$")
         else:
             ax.plot(x_monte, t1_monte, p_list[i], color="black")
 
@@ -1301,15 +1301,15 @@ def main():
     e_model = load_trained_model(e_model, PATH=FOLDER+"output/e1_net.pth", PATH_LOSS=FOLDER+"output/e1_net_train_loss.npy")
     e_model.eval()
 
-    # show_table(p_model, e_model)
-    show_results(p_model, e_model)
+    show_table(p_model, e_model)
+    # show_results(p_model, e_model)
     # plot_a1_data()
     plot_p_surface(p_model)
     # plot_pres_surface(p_model)
-    plot_e1_surface(p_model, e_model)
+    # plot_e1_surface(p_model, e_model)
     # plot_e1res_surface(p_model, e_model)
-    plot_train_loss(FOLDER+"output/p_net_train_loss.npy", 
-                    FOLDER+"output/e1_net_train_loss.npy")
+    # plot_train_loss(FOLDER+"output/p_net_train_loss.npy", 
+    #                FOLDER+"output/e1_net_train_loss.npy")
 
 
 if __name__ == "__main__":

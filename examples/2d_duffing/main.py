@@ -854,7 +854,7 @@ def show_e1_net_results(p_net, e1_net):
             t_tensor = (torch.ones(len(grid_points_tensor), 1, dtype=torch.float32) * t1)
             p_hat_numpy = p_net(grid_points_tensor, t_tensor).detach().numpy().reshape(x1_grid.shape)
             e1 = p - p_hat_numpy
-            print("check: ", np.min(e1))
+            # print("check: ", np.min(e1))
             e1_hat = e1_net(grid_points_tensor, t_tensor).detach().numpy().reshape(x1_grid.shape)
             cp = ax.imshow(e1_hat, extent=[x_low, x_hig, x_low, x_hig], cmap='inferno', aspect='equal', origin='lower',
                             vmin=vmin, vmax=vmax)
@@ -914,9 +914,10 @@ def show_e1_net_results(p_net, e1_net):
         ax.plot_wireframe(x1_grid, x2_grid, np.abs(e1), 
                       color=palette[0], linewidth=0.7, alpha=1.0, 
                       rstride=num_stride, cstride=num_stride, label=r"$|e_1|$")
-        ax.plot_wireframe(x1_grid, x2_grid, np.abs(e1_hat.reshape(x1_grid.shape)), 
-                        color=palette[1], linewidth=0.7, alpha=1.0, 
-                        rstride=num_stride, cstride=num_stride, label=r"$|\hat{e}_1|$")
+        # ax.plot_wireframe(x1_grid, x2_grid, np.abs(e1_hat.reshape(x1_grid.shape)), 
+        #                 color=palette[1], linewidth=0.7, alpha=1.0, 
+        #                 rstride=num_stride, cstride=num_stride, label=r"$|\hat{e}_1|$")
+        ax.plot_surface(x1_grid, x2_grid, np.abs(e1_hat).reshape(x1_grid.shape), cmap='inferno', alpha=0.7, label=r"$|\hat{e}_1|$")
         ax.plot_surface(x1_grid, x2_grid, e1*0.0 + B1, color=palette[2], alpha=0.3, label=r"$B_1$")
         ax.view_init(25,-30)
         # ax.set_title("t="+str(t_eval))
@@ -936,9 +937,8 @@ def show_e1_net_results(p_net, e1_net):
 
 def main():
     global constants
-    # if(MONTE_FLAG):
-    constants.construct_p_sol()
-    return
+    if(MONTE_FLAG):
+        constants.construct_p_sol()
 
     p_net = Net(scale=constants.get_pinit_max())
     e1_net = E1Net()
@@ -964,7 +964,7 @@ def main():
     # check_e1nn_result(e1_net, p_net)
 
     # plot_train_loss(path_1="exp/1/output/p_net_train_loss.npy", path_2="exp/1/output/e1_net_train_loss.npy")
-    show_p_net_results(p_net)
+    # show_p_net_results(p_net)
     show_e1_net_results(p_net, e1_net)
 
     
