@@ -4,6 +4,20 @@ from scipy.special import erf
 import matplotlib.pyplot as plt
 
 
+def generate_base_pdf(x, num):
+    w = np.random.rand(num) + 1e-2
+    sum_w = np.sum(w)
+    w = w/sum_w
+    mu = np.random.uniform(low=np.min(x), high=np.max(x), size=num)
+    sigma = np.ones(num)
+    # initialize
+    p0 = x*0.0
+    for i in range(num):
+        p0 = p0 + w[i]*norm.pdf(x, loc=mu[i], scale=sigma[i])
+    params = (w, mu, sigma)
+    return p0, params
+
+
 def constraint_fun(params, x, p0, B):
     """
     Constraint function: For each x in our domain, ensure that the Gaussian PDF
@@ -55,7 +69,9 @@ def gmm_integral_1dsubset(params, x_subset):
     return p_opt_integral
 
 
-def plot_gamm_1dsubset(x, x_subset, dx, p0, B, params, Pr_opt_subset):
+def plot_gamm_1dsubset(show_plots, x, x_subset, p0, B, params, Pr_opt_subset, Pr_subset):
+    if(show_plots == False):
+       return
     mu_opt, sigma_opt = params
     # Evaluate the optimized Gaussian pdf.
     optimized_pdf = norm.pdf(x, loc=mu_opt, scale=sigma_opt)
@@ -63,13 +79,6 @@ def plot_gamm_1dsubset(x, x_subset, dx, p0, B, params, Pr_opt_subset):
     # Compute the bounds based on the baseline pdf.
     lower_bound = p0 - B
     upper_bound = p0 + B
-
-    # Compute the mask for the target subset.
-    mask = (x >= x_subset[0]) & (x <= x_subset[1])
-
-    # Compute the integrated probability masses.
-    true_Pr = np.sum(p0[mask]) * dx
-    max_Pr = np.sum(optimized_pdf[mask]) * dx
 
     # set_publication_plot_style()
     fig = plt.figure(figsize=(8, 6))
@@ -81,8 +90,9 @@ def plot_gamm_1dsubset(x, x_subset, dx, p0, B, params, Pr_opt_subset):
     plt.plot(x, optimized_pdf, label=r"$p_{FO}$", marker="o", markersize=4, color="blue")
     plt.xlabel("x")
     plt.ylabel("Probability Density")
-    plt.title(r"True $\mathbb{P}(X^'_{tar})$= "+str(np.round(true_Pr,3))+
-              r", Max $\mathbb{P}_{FO}(X^'_{tar})$="+str(np.round(Pr_opt_subset, 3)))
+    plt.title(r"True $\mathbb{P}(X^'_{tar})$= "+str(np.round(Pr_subset,3))+
+              r", Max $\mathbb{P}_{FO}(X^'_{tar})$="+str(np.round(Pr_opt_subset, 3))
+              )
     plt.legend()
     plt.grid(True)
     plt.tight_layout(pad=0.2)
