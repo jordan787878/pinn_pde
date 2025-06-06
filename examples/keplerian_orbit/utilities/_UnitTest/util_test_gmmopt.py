@@ -69,6 +69,15 @@ def gmm_integral_1dsubset(params, x_subset):
     return p_opt_integral
 
 
+def gmm_tv_bound_1d(x_subset, p0, B, iter=1):
+    max_p_value = np.max(p0) + B
+    subset_vol_1d = np.max(x_subset)-np.min(x_subset)
+    if(max_p_value <= 1):
+        return 0.5*np.sqrt(subset_vol_1d)*1*np.sqrt(1/iter)
+    else:
+        return 0.5*np.sqrt(subset_vol_1d)* (subset_vol_1d*max_p_value**2) *np.sqrt(1/iter)
+
+
 def plot_gamm_1dsubset(show_plots, x, x_subset, p0, B, params, Pr_opt_subset, Pr_subset):
     if(show_plots == False):
        return

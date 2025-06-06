@@ -36,7 +36,7 @@ def optimize_single_gmm_1d(x, x_subset, p0, B, Pr_subset, method):
         # iterative method: justifying that initial guess does affect the optimized GMM
         if(opt_sol):
             Pr_opt_subset = gmm_integral_1dsubset(result.x, x_subset)
-            if(Pr_opt_subset < Pr_subset and method == "iterative"):
+            if(Pr_opt_subset < Pr_subset and method == "iterative(fake)"):
                 opt_sol = False
         initial_guess[0] = np.random.uniform(np.min(x_subset), np.max(x_subset)) # re-initialize gmm to optimize
 
@@ -69,17 +69,25 @@ def single_gmm_1d(show_plots, method):
     
     print("Optimization Run Time: {:.4f}".format(runtime_end))
     Pr_opt_subset = gmm_integral_1dsubset(result.x, x_subset)
-    print("Opt Prob: {:.4f}, True Prob {:.4f}".format(Pr_opt_subset, Pr_subset))
+    Pr_tv_bound = 0.0
+    if(method == "tv_bound"):
+        Pr_tv_bound = gmm_tv_bound_1d(x_subset, p0, B, iter=1)
+    print("Opt Prob: {:.4f} (+ {:.4f}), True Prob {:.4f}".format(Pr_opt_subset, Pr_tv_bound, Pr_subset))
+
     plot_gamm_1dsubset(show_plots, x, x_subset, p0, B, result.x, Pr_opt_subset, Pr_subset)
-    np.testing.assert_array_less(Pr_subset, Pr_opt_subset, err_msg="Pr_opt <= Pr")    
-    mu_opt, sigma_opt = result.x
-    print("Optimized parameters: mu = {:.4f}, sigma = {:.4f}".format(mu_opt, sigma_opt))
+
+    np.testing.assert_array_less(Pr_subset, Pr_opt_subset + Pr_tv_bound, err_msg="Pr_opt <= Pr")    
+    # mu_opt, sigma_opt = result.x
+    # print("Optimized parameters: mu = {:.4f}, sigma = {:.4f}".format(mu_opt, sigma_opt))
 
 
-# This test shows that Pr_opt <= Pr if the initial guess of the GMM is not appropriate
 def test_single_gmm_1d():
+    """
+    This test shows that Pr_opt <= Pr if the initial guess of the GMM is not appropriate
+    """
     np.random.seed(13)
-    single_gmm_1d(show_plots=True, method="iterative")
+    single_gmm_1d(show_plots=True, method="iterative(fake)")
+
     np.random.seed(13)
     single_gmm_1d(show_plots=True, method="baseline")
 
@@ -88,10 +96,19 @@ def test_single_gmm_1d_iterative():
     for i in range(100):
         np.random.seed(i)
         print(i)
-        single_gmm_1d(show_plots=False, method="iterative")
+        single_gmm_1d(show_plots=False, method="iterative(fake)")
+
+
+def test_single_gmm_1d_tvbound():
+    for i in range(100):
+        np.random.seed(i)
+        print(i)
+        single_gmm_1d(show_plots=False, method="tv_bound")
 
 
 if __name__ == '__main__':
-    # test_single_gmm_1d()
+    test_single_gmm_1d()
 
-    test_single_gmm_1d_iterative()
+    # test_single_gmm_1d_iterative()
+
+    # test_single_gmm_1d_tvbound()
