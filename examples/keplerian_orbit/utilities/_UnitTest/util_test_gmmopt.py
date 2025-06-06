@@ -59,6 +59,37 @@ def objective(params, x, x_subset, method):
     
     else: # analytical
         return -gmm_integral_1dsubset(params, x_subset)
+    
+
+def constraint_fun_iter(params, x, p0, B):
+    """
+    Constraint function: For each x in our domain, ensure that the Gaussian PDF
+    (parameterized by params) lies within [p0 - B, p0 + B].
+    
+    We define g(params) >= 0 when the constraint is satisfied, e.g.,
+      (p0 + B) - pdf(x; params) >= 0  and  pdf(x; params) - (p0 - B) >= 0  for all x.
+    
+    To combine these, we can require that the minimum over x of the gap is nonnegative.
+    """
+    mu, sigma, alpha = params
+    pdf = norm.pdf(x, loc=mu, scale=sigma)
+    # For all x, we need:
+    #   pdf <= p0 + B   =>   (p0 + B) - pdf >= 0, and
+    #   pdf >= p0 - B   =>   pdf - (p0 - B) >= 0.
+    gap_upper = (p0 + B) - pdf   # should be >= 0 for all x
+    gap_lower = pdf - (p0 - B)   # should be >= 0 for all x
+    # Our constraint will be that both gaps are nonnegative; we return the minimal gap.
+    return min(np.min(gap_upper), np.min(gap_lower))
+
+
+def objective_iter(params, x_subset, Pr_iter):
+    """
+    Objective function to minimize.
+    """
+    mu, sigma, alpha = params
+    gmm_integral = gmm_integral_1dsubset((mu, sigma), x_subset)
+    Pr = Pr_iter*(1-alpha) + gmm_integral*(alpha)
+    return -Pr
 
 
 def gmm_integral_1dsubset(params, x_subset):
@@ -78,12 +109,48 @@ def gmm_tv_bound_1d(x_subset, p0, B, iter=1):
         return 0.5*np.sqrt(subset_vol_1d)* (subset_vol_1d*max_p_value**2) *np.sqrt(1/iter)
 
 
-def plot_gamm_1dsubset(show_plots, x, x_subset, p0, B, params, Pr_opt_subset, Pr_subset):
+def plot_singlegmm_1dsubset(show_plots, x, x_subset, p0, B, params, Pr_opt_subset, Pr_subset):
     if(show_plots == False):
        return
     mu_opt, sigma_opt = params
     # Evaluate the optimized Gaussian pdf.
     optimized_pdf = norm.pdf(x, loc=mu_opt, scale=sigma_opt)
+    
+    # Compute the bounds based on the baseline pdf.
+    lower_bound = p0 - B
+    upper_bound = p0 + B
+
+    # set_publication_plot_style()
+    fig = plt.figure(figsize=(8, 6))
+    plt.plot(x, p0, label=r"$\hat{p}$", linestyle="--", color="gray")
+    plt.fill_between(x, lower_bound, upper_bound, color="gray", alpha=0.3,
+                    label=r"$\hat{p} \pm B_1$")
+    mask = (x >= x_subset[0]) & (x <= x_subset[1])
+    plt.fill_between(x[mask], 0, upper_bound[mask], color="green", alpha=0.3, label=r"$X^'_{tar}$")  
+    plt.plot(x, optimized_pdf, label=r"$p_{FO}$", marker="o", markersize=4, color="blue")
+    plt.xlabel("x")
+    plt.ylabel("Probability Density")
+    plt.title(r"True $\mathbb{P}(X^'_{tar})$= "+str(np.round(Pr_subset,3))+
+              r", Max $\mathbb{P}_{FO}(X^'_{tar})$="+str(np.round(Pr_opt_subset, 3))
+              )
+    plt.legend()
+    plt.grid(True)
+    plt.tight_layout(pad=0.2)
+    plt.show()
+
+
+def plot_gmm_1dsubset(show_plots, x, x_subset, p0, B, gmm_results, Pr_opt_subset, Pr_subset):
+    if(show_plots == False):
+       return
+    # mu_opt, sigma_opt = params
+    # Evaluate the optimized Gaussian pdf.
+    # optimized_pdf = norm.pdf(x, loc=mu_opt, scale=sigma_opt)
+    optimized_pdf = x*0.0
+    for i in range(len(gmm_results)):
+        mu_i, sigma_i, alpha_i = gmm_results[i]
+        pdf_i = norm.pdf(x, loc=mu_i, scale=sigma_i)
+        optimized_pdf = optimized_pdf*(1-alpha_i) + pdf_i*alpha_i
+
     
     # Compute the bounds based on the baseline pdf.
     lower_bound = p0 - B
