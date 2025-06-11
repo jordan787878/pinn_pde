@@ -188,7 +188,7 @@ def single_gmm_1d_increment(show_plots, n_iter):
                       p0, B, gmm_results, 
                       Pr_opt_subset, Pr_subset)
     
-    plot_gmm_1dresults_increment(True, gmm_results)
+    plot_gmm_1dresults_increment(False, gmm_results)
 
     np.testing.assert_array_less(Pr_subset, Pr_opt_subset, err_msg="Pr_opt <= Pr")
 

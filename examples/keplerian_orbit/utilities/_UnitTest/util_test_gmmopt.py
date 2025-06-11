@@ -186,7 +186,6 @@ def plot_gmm_1dsubset_increment(show_plots, x, x_subset, p0, B, gmm_results, Pr_
     plt.fill_between(x, lower_bound, upper_bound, color="gray", alpha=0.3,
                     label=r"$\hat{p} \pm B_1$")
     mask = (x >= x_subset[0]) & (x <= x_subset[1])
-    plt.fill_between(x[mask], 0, upper_bound[mask], color="green", alpha=0.3, label=r"$X^'_{tar}$")  
 
     optimized_pdf = x*0.0
     colors = plt.cm.rainbow(np.linspace(0, 1, len(gmm_results))); colors = colors[::-1]
@@ -195,6 +194,7 @@ def plot_gmm_1dsubset_increment(show_plots, x, x_subset, p0, B, gmm_results, Pr_
         pdf_i = norm.pdf(x, loc=mu_i, scale=sigma_i)
         optimized_pdf = optimized_pdf*(1-alpha_i) + pdf_i*alpha_i
         plt.plot(x, optimized_pdf, color=colors[i,:], linewidth=1.0)
+    plt.fill_between(x[mask], 0, optimized_pdf[mask], color="green", alpha=0.3, label=r"$X^'_{tar}$")  
 
     plt.xlabel("x")
     plt.ylabel("Probability Density")
@@ -215,4 +215,31 @@ def plot_gmm_1dresults_increment(show_plots, gmm_results):
     plt.plot(iter_alphas, marker='o', linestyle='-')
     plt.xlabel("iterations")
     plt.ylabel("convex weights")
+    plt.show()
+
+
+def plot_Kmode_gmm_1d(show_plots, x, x_subset, p0, B, Pr_subset, p_gmm, Pr_gmm_subset):
+    if(show_plots == False):
+       return
+
+    # Compute the bounds based on the baseline pdf.
+    lower_bound = p0 - B
+    upper_bound = p0 + B
+
+    # set_publication_plot_style()
+    fig = plt.figure(figsize=(8, 6))
+    plt.plot(x, p0, label=r"$\hat{p}$", linestyle="--", color="gray")
+    plt.plot(x, p_gmm, label=r"$p_{GMM}$", linestyle="-", color="blue")
+    plt.fill_between(x, lower_bound, upper_bound, color="gray", alpha=0.3,
+                    label=r"$\hat{p} \pm B_1$")
+    mask = (x >= x_subset[0]) & (x <= x_subset[1])
+    plt.fill_between(x[mask], 0, p_gmm[mask], color="green", alpha=0.3, label=r"$X^'_{tar}$")  
+    plt.xlabel("x")
+    plt.ylabel("Probability Density")
+    plt.title(r"True $\mathbb{P}(X^'_{tar})$= "+str(np.round(Pr_subset,3))+
+              r", Max $\mathbb{P}_{FO}(X^'_{tar})$="+str(np.round(Pr_gmm_subset, 3))
+              )
+    plt.legend()
+    plt.grid(True)
+    plt.tight_layout(pad=0.2)
     plt.show()
