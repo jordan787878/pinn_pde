@@ -65,6 +65,7 @@ def optimize_single_gmm_1d_increment(iter, x, x_subset, p0, B, Pr_iter):
     bounds = [(-np.inf, np.inf), (1e-6, np.inf), (0.0, 1.0)]
     if(iter == 1):
         bounds = [(-np.inf, np.inf), (1e-6, np.inf), (1.0, 1.0)]
+
     # Define the inequality constraint: constraint_fun(params, x, p0, B) >= 0.
     cons = {'type': 'ineq',
             'fun': lambda params: constraint_fun_iter(params, x, p0, B)}
@@ -178,11 +179,17 @@ def single_gmm_1d_increment(show_plots, n_iter):
     Pr_opt_subset = Pr_iter
     Pr_tv_bound = gmm_tv_bound_1d(x_subset, p0, B, n_iter)
     print("Opt Prob: {:.5f}, True Prob {:.5f}".format(Pr_opt_subset, Pr_subset))
-    # print(gmm_results)
 
-    plot_gmm_1dsubset(show_plots, x, x_subset, 
+    plot_gmm_1dsubset(False, x, x_subset, 
                       p0, B, gmm_results, 
                       Pr_opt_subset, Pr_subset)
+    
+    plot_gmm_1dsubset_increment(True, x, x_subset, 
+                      p0, B, gmm_results, 
+                      Pr_opt_subset, Pr_subset)
+    
+    plot_gmm_1dresults_increment(True, gmm_results)
+
     np.testing.assert_array_less(Pr_subset, Pr_opt_subset, err_msg="Pr_opt <= Pr")
 
 
@@ -194,7 +201,7 @@ def test_single_gmm_1d():
     single_gmm_1d(show_plots=True, method="iterative(fake)")
 
     np.random.seed(13)
-    single_gmm_1d_increment(show_plots=True, n_iter=10)
+    single_gmm_1d_increment(show_plots=True, n_iter=20)
 
     np.random.seed(13)
     single_gmm_1d(show_plots=True, method="baseline")
@@ -211,7 +218,7 @@ def test_single_gmm_1d_increment():
     for i in range(100):
         np.random.seed(i)
         print(i)
-        single_gmm_1d_increment(show_plots=False, n_iter=8)
+        single_gmm_1d_increment(show_plots=False, n_iter=10)
 
 
 if __name__ == '__main__':
