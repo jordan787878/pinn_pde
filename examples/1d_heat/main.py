@@ -411,7 +411,7 @@ def show_e1_results(p_net, e1_net):
 
 def show_uniform_bound(p_net, e1_net):
     plt.rcParams['font.size'] = 18
-    fig, axs = plt.subplots(3, 1, figsize=(5, 6))
+    fig, axs = plt.subplots(3, 1, figsize=(8, 6))
     global x_low, x_hig, t0, T_end
     x = np.arange(x_low, x_hig, 0.01).reshape(-1,1)
     t1s = [0.2, 0.6, 1.0]
@@ -432,7 +432,7 @@ def show_uniform_bound(p_net, e1_net):
         ax1.plot(x, p_exact1, color="black", linewidth=1.0, linestyle="-", label="$u$")
         ax1.plot(x, p_approx1, "red", linewidth=1.0, linestyle="--", label=r"$\hat{u}$")
         ax1.fill_between(x.reshape(-1), y1=p_approx1.reshape(-1)+error_bound, y2=p_approx1.reshape(-1)-error_bound, 
-                         color="green", alpha=0.3, label=r"$e_S$")
+                         color="green", alpha=0.3, label=r"$B_1$")
         if i == 0:
             ax1.legend(loc="upper right")
         if i < 2:
@@ -441,7 +441,7 @@ def show_uniform_bound(p_net, e1_net):
             ax1.set_xlabel("x")
         ax1.set_xlim([x_low, x_hig])
         # ax1.grid(True, which='both', linestyle='-', linewidth=0.5)
-        ax1.text(0.01, 0.98, r"$t:$ "+str(t1s[i]) + r", $e_S:$ "+str(np.round(error_bound,4)), 
+        ax1.text(0.01, 0.98, r"$t:$ "+str(t1s[i]) + r", $B_1:$ "+str(np.round(error_bound,3)), 
                  transform=axs[i].transAxes, verticalalignment='top', fontsize=18)
         # Set y-axis to scientific notation
         yScalarFormatter = ScalarFormatterClass(useMathText=True)
@@ -663,8 +663,8 @@ def show_table(p_net, e1_net):
         gap_list.append((eS - e1_list[i])/max(abs(p)))
         eS_ratio_list.append(eS/ max(abs(p)) )
     print("[info] max a1: " +str(np.max(np.array(a1_list))) + ", avg a1:" + str(np.mean(np.array(a1_list))))
-    print("[info] max gap: " +str(np.max(np.array(gap_list))) + ", avg gap:" + str(np.mean(np.array(gap_list))))
-    print("[info] max eS_ratio: " +str(np.max(np.array(eS_ratio_list))) + ", avg eS_ratio:" + str(np.mean(np.array(eS_ratio_list))))
+    # print("[info] max gap: " +str(np.max(np.array(gap_list))) + ", avg gap:" + str(np.mean(np.array(gap_list))))
+    # print("[info] max eS_ratio: " +str(np.max(np.array(eS_ratio_list))) + ", avg eS_ratio:" + str(np.mean(np.array(eS_ratio_list))))
 
 
 def main():

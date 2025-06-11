@@ -529,7 +529,7 @@ def show_results_old(pnet, enet):
         ax1.fill_between(x.reshape(-1), y1=p_hat.reshape(-1)+eL, y2=p_hat.reshape(-1)-eL, 
                             color="green", alpha=0.3, label=r"$e_S$")
         if i == 0:
-            ax1.legend(loc="upper right")
+            ax1.legend(loc="upper right", fontsize=16)
 
         ax1.set_xlim([x_low, x_hig])
         ax1.set_ylim(0.0, global_max+limit_margin)
@@ -788,7 +788,7 @@ def show_results(pnet, enet):
         # ax1.plot(x[::6], p_gmm[::6], color=palette[4], linewidth = 0.0, linestyle="-", marker="x", markersize=8, label=r"$\tilde{p}_{GM}$")
         print("[check] mean: ", np.sum(x*p_monte)*dx, np.sum(x*p_gmm)*dx)
         if i == 0:
-            ax1.legend(loc="upper right", ncol=2, fontsize=20)
+            ax1.legend(loc="upper right", ncol=2, fontsize=24)
         if i == 2:
             ax1.set_xlabel("x")
         ax1.set_xlim([-5, 5])
@@ -1110,7 +1110,7 @@ def plot_p_surface(p_net, num=100):
     ax.set_ylabel(r'$t$')
     ax.text2D(0.94, 0.77, "PDF", transform=ax.transAxes)
     ax.zaxis.set_major_formatter(FormatStrFormatter('%.1f'))
-    ax.legend(loc='lower right', bbox_to_anchor=(0.6, 0.60))  
+    ax.legend(loc='lower right', bbox_to_anchor=(0.6, 0.60), fontsize=28)  
     plt.tight_layout()
     plt.savefig(FOLDER+'figs/1dnl_phatsurface.pdf', format='pdf', dpi=300, bbox_inches='tight', pad_inches=0.0)
     plt.close()
@@ -1172,7 +1172,7 @@ def plot_e1_surface(p_net, e1_net, num=100):
     ax.set_ylabel(r'$t$')
     ax.text2D(0.94, 0.77, "Error", transform=ax.transAxes)
     ax.zaxis.set_major_formatter(FormatStrFormatter('%.2f'))
-    ax.legend(loc='lower right', bbox_to_anchor=(0.5, 0.65))  
+    ax.legend(loc='lower right', bbox_to_anchor=(0.5, 0.65), fontsize=28)  
     plt.tight_layout()
     plt.savefig(FOLDER+'figs/1dnl_e1hatsurface.pdf', format='pdf', dpi=300, bbox_inches='tight', pad_inches=0.0)
     plt.close()
@@ -1302,11 +1302,11 @@ def main():
     e_model.eval()
 
     show_table(p_model, e_model)
-    # show_results(p_model, e_model)
+    show_results(p_model, e_model)
     # plot_a1_data()
     plot_p_surface(p_model)
     # plot_pres_surface(p_model)
-    # plot_e1_surface(p_model, e_model)
+    plot_e1_surface(p_model, e_model)
     # plot_e1res_surface(p_model, e_model)
     # plot_train_loss(FOLDER+"output/p_net_train_loss.npy", 
     #                FOLDER+"output/e1_net_train_loss.npy")

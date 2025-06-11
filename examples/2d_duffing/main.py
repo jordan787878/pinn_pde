@@ -899,8 +899,9 @@ def show_e1_net_results(p_net, e1_net):
     N_dataset = 3
     palette = sns.color_palette("dark", N_dataset)
 
-    num_stride = 6
-    fig, axs = plt.subplots(1, 5, figsize=(16, 12), subplot_kw={'projection': '3d'})
+    num_stride = 7
+    t1s = t1s[1:]
+    fig, axs = plt.subplots(1, 4, figsize=(12, 9), subplot_kw={'projection': '3d'})
     for i in range(len(t1s)):
         ax = axs[i]
         t1 = t1s[i]
@@ -917,7 +918,7 @@ def show_e1_net_results(p_net, e1_net):
         # ax.plot_wireframe(x1_grid, x2_grid, np.abs(e1_hat.reshape(x1_grid.shape)), 
         #                 color=palette[1], linewidth=0.7, alpha=1.0, 
         #                 rstride=num_stride, cstride=num_stride, label=r"$|\hat{e}_1|$")
-        ax.plot_surface(x1_grid, x2_grid, np.abs(e1_hat).reshape(x1_grid.shape), cmap='inferno', alpha=0.7, label=r"$|\hat{e}_1|$")
+        ax.plot_surface(x1_grid, x2_grid, np.abs(e1_hat).reshape(x1_grid.shape), cmap='inferno', alpha=0.5, label=r"$|\hat{e}_1|$")
         ax.plot_surface(x1_grid, x2_grid, e1*0.0 + B1, color=palette[2], alpha=0.3, label=r"$B_1$")
         ax.view_init(25,-30)
         # ax.set_title("t="+str(t_eval))
@@ -930,7 +931,7 @@ def show_e1_net_results(p_net, e1_net):
         ax.set_yticks(ticks_values, ticks_labels, fontsize=14)
         ax.set_xticks(ticks_values, ticks_labels, fontsize=14)
         ax.set_zlim([0,1.05*B1_max])
-    fig.subplots_adjust(left=0.02, right=0.98, bottom=0.15, top=0.9, wspace=0.25, hspace=0.3)
+    fig.subplots_adjust(left=0.02, right=0.98, bottom=0.15, top=0.9, wspace=0.2, hspace=0.2)
     plt.savefig(constants._FOLDER+'figs/2dduff_errorbound.pdf', format='pdf', dpi=300, bbox_inches='tight', pad_inches=0.0)
     plt.close()
 

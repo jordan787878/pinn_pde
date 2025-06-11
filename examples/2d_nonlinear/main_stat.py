@@ -1283,7 +1283,7 @@ def plot_paper(p_net, e1_net, t_eval=1.0):
     # Create a dummy plot for the legend
     # dummy_plot = ax.plot([], [], [], color=palette[0], label=r'$p$')
     # Create the legend and place it at specific 2D coordinates (x, y)
-    ax.legend(loc='lower right', bbox_to_anchor=(0.32, 0.65)) 
+    ax.legend(loc='lower right', bbox_to_anchor=(0.32, 0.65), fontsize=28) 
     plt.tight_layout()
     # plt.show()  
     plt.savefig(FOLDER+'figs/2dnl_p.pdf', format='pdf', dpi=300, bbox_inches='tight', pad_inches=0.0)
@@ -1292,10 +1292,10 @@ def plot_paper(p_net, e1_net, t_eval=1.0):
     num_stride = 6
     fig, axs = plt.subplots(1, 1, figsize=(9, 6), subplot_kw={'projection': '3d'})
     ax = axs
-    ax.plot_surface(x1_grid, x2_grid, np.abs(e1_hat).reshape(x1_grid.shape), cmap='inferno', alpha=0.5, label=r"$|\hat{e}_1|$")
     ax.plot_wireframe(x1_grid, x2_grid, np.abs(e1), 
                       color="black", linewidth=1.5, alpha=1.0, 
                       rstride=num_stride, cstride=num_stride, label=r"$|e_1|$")
+    ax.plot_surface(x1_grid, x2_grid, np.abs(e1_hat).reshape(x1_grid.shape), cmap='inferno', alpha=0.5, label=r"$|\hat{e}_1|$")
     # ax.plot_wireframe(x1_grid, x2_grid, np.abs(e1_hat.reshape(x1_grid.shape)), 
     #                   color=palette[1], linewidth=0.7, alpha=1.0, 
     #                   rstride=num_stride, cstride=num_stride, label=r"$|\hat{e}_1|$")
@@ -1306,7 +1306,7 @@ def plot_paper(p_net, e1_net, t_eval=1.0):
     ax.set_ylabel(r'$w$')
     ax.text2D(0.94, 0.77, "Error", transform=ax.transAxes)
     ax.set_zticks(np.linspace(np.min(np.abs(e1)), B1, num=5))  
-    ax.legend(loc='lower right', bbox_to_anchor=(0.32, 0.60))    
+    ax.legend(loc='lower right', bbox_to_anchor=(0.32, 0.60), fontsize=28)    
     plt.tight_layout()
     plt.savefig(FOLDER+'figs/2dnl_e.pdf', format='pdf', dpi=300, bbox_inches='tight', pad_inches=0.0)
     plt.close()
@@ -1341,7 +1341,7 @@ def main():
     e1_net = pos_e1_net_train(e1_net, PATH=FOLDER+"output/e1_net.pth", PATH_LOSS=FOLDER+"output/e1_net_train_loss.npy"); e1_net.eval()
     print("[load e1net model from: "+FOLDER+"output/e1_net.pth]")
     # show_e1_net_results(p_net ,e1_net)
-    # show_table(p_net, e1_net)
+    show_table(p_net, e1_net)
     # plot_train_loss(FOLDER+"output/p_net_train_loss.npy", FOLDER+"output/e1_net_train_loss.npy")
     # plot_results_at_one_time(3.0, p_net, e1_net)
     plot_paper(p_net, e1_net, t_eval=3.0)
