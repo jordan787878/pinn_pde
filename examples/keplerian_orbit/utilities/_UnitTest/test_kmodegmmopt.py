@@ -3,7 +3,7 @@ import time
 import warnings
 from scipy.stats import norm
 from scipy.optimize import minimize, LinearConstraint, NonlinearConstraint
-from scipy.special import erf
+from scipy.special import erfc
 from util_test_gmmopt import generate_base_pdf, plot_Kmode_gmm_1d
 
 
@@ -47,7 +47,7 @@ def gmm_integral_1dsubset(K, theta, x_subset):
     weights= theta[2*K:3*K]
     integral = 0.0
     for mu, sigma, w in zip(mus, sigmas, weights):
-        integral += w*0.5*(erf((b-mu)/(np.sqrt(2)*sigma)) - erf((a-mu)/(np.sqrt(2)*sigma)))
+        integral += w*0.5*(1-erfc((b-mu)/(np.sqrt(2)*sigma)) - (1-erfc((a-mu)/(np.sqrt(2)*sigma))) ) # erfc = 1 - erf (is numerically more stable)
     return integral
 
 
@@ -129,13 +129,15 @@ def test_optimize_gmm_k(show_plots=True):
     x = np.arange(x_l, x_u + dx, dx)
     x_subset = np.array([-2.0, 3.0])
 
-    p0, _ = generate_base_pdf(x, num=5)
+    np.random.seed(5)
+    p0, _ = generate_base_pdf(x, num=2)
     B  = np.max(p0)*0.1
 
     mask = (x >= x_subset[0]) & (x <= x_subset[1])
     Pr_subset = np.sum(p0[mask]) * dx
 
-    K=4; max_iter = 100; break_iter = 10
+    K=12
+    max_iter = 200; break_iter = 10
     success_iter = 0
     Pr_iter = 0.0
     p_gmm = 0.0*x
@@ -149,8 +151,10 @@ def test_optimize_gmm_k(show_plots=True):
             p_gmm_new = mixture_pdf(K, theta_gmm, x)
   
             Pr_new_samples = np.sum(p_gmm_new[mask])*dx
-            print("iter {:5d}, conv: {:.3f}, Pr_old {:.4f}, Pr_new {:.10f}, {:.4f}".format(
-                iter, theta_gmm[-1], Pr_iter, Pr_new, Pr_new_samples))
+            np.testing.assert_allclose(Pr_new_samples, Pr_new, atol=1e-1, rtol=1e-1)
+
+            print("iter {:5d}, conv: {:.3f}, Pr_old {:.4f}, Pr_new {:.10f}".format(
+                iter, theta_gmm[-1], Pr_iter, Pr_new))
             # print(theta_gmm)
             
             Pr_iter = Pr_new*(theta_gmm[-1]) + Pr_iter*(1-theta_gmm[-1])
@@ -170,7 +174,7 @@ def test_optimize_gmm_k(show_plots=True):
                                  B,
                                  err_msg="p_gmm cannot satisfy constraints of (p0 +/- B1)")
     
-    np.testing.assert_array_less(Pr_subset, Pr_gmm_subset, err_msg="Pr_opt <= Pr")    
+    np.testing.assert_array_less(Pr_subset, Pr_gmm_subset, err_msg="Pr_opt does not upper bound Pr")    
 
 
 if __name__ == '__main__':
