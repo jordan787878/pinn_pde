@@ -9,8 +9,8 @@ import os
 parent_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 if parent_dir not in sys.path:
     sys.path.insert(0, parent_dir)
-from utilities.util import *
-from utilities.constants import Case2_4D_Constants
+from keplerian_orbit.exp_case2.utilities.util import *
+from keplerian_orbit.exp_case2.utilities.constants import Case2_4D_Constants
 
 constants = Case2_4D_Constants()
 np.random.seed(0)

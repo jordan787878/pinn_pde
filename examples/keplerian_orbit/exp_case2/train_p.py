@@ -15,15 +15,15 @@ import torch.nn.functional as F
 import time
 import argparse
 from monte import p_init, get_p_init_max
-from pnet_models import PNet
+from keplerian_orbit.exp_case2.exp_utilities.pnet_models import PNet
 # add ../utilities package
 import sys
 import os
 parent_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 if parent_dir not in sys.path:
     sys.path.insert(0, parent_dir)
-from utilities.post_exp_cas2 import *
-from utilities.constants import Case2_4D_Constants
+from keplerian_orbit.exp_case2.utilities.post_exp_cas2 import *
+from keplerian_orbit.exp_case2.utilities.constants import Case2_4D_Constants
 
 PNET_PATH = "output/v2/p_net.pth"
 PNET_INTER_PATH = "output/v2/p_net_"

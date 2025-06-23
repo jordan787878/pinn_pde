@@ -12,7 +12,7 @@ import time
 import argparse
 from monte import p_init, get_p_init_max
 from exp_case2.train_p import diff_opt_p
-from pnet_models import PNet
+from keplerian_orbit.exp_case2.exp_utilities.pnet_models import PNet
 from e1net_models import E1Net
 import sys
 import os
@@ -20,8 +20,8 @@ import os
 parent_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 if parent_dir not in sys.path:
     sys.path.insert(0, parent_dir)
-from utilities.post_exp_cas2 import check_train_results, get_max_e1_init, load_trained_model
-from utilities.constants import Case2_4D_Constants
+from keplerian_orbit.exp_case2.utilities.post_exp_cas2 import check_train_results, get_max_e1_init, load_trained_model
+from keplerian_orbit.exp_case2.utilities.constants import Case2_4D_Constants
 
 
 # curriculum training

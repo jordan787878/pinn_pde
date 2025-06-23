@@ -32,32 +32,6 @@ def p_init_better(x, mean, cov):
     return pdf_eval
 
 
-def load_trained_model(net, path, method="old"):
-    print("[load model from: "+ path)
-    checkpoint = torch.load(path)
-    net.load_state_dict(checkpoint['model_state_dict'])
-    epoch = checkpoint['epoch']
-    if(method == "new"):
-        loss_history = np.array(checkpoint['loss_history'])
-        print("best epoch: ", epoch, ", min loss:", np.min(loss_history), ", train time:", checkpoint['train_time'])
-    else:
-        print("best epoch: ", epoch, ", min loss:", checkpoint['loss'], ", train time:", checkpoint['train_time'])
-    # keys = p_net.state_dict().keys()
-    # for k in keys:
-    #     l2_norm = torch.norm(p_net.state_dict()[k], p=2)
-    #     print(f"L2 norm of {k} : {l2_norm.item()}")
-    # plot loss history
-    # plt.figure()
-    # plt.plot(np.arange(len(loss_history)), loss_history, "black", linewidth=1)
-    # plt.ylim([min_loss, 10*min_loss])
-    # plt.xlabel("epoch")
-    # plt.ylabel("pnet loss")
-    # plt.tight_layout()
-    # plt.savefig("figs/pnet_loss_history.pdf", format='pdf', dpi=300)
-    # plt.close()
-    return net
-
-
 # Paper
 def plot_train_loss(path):
     set_publication_plot_style()
