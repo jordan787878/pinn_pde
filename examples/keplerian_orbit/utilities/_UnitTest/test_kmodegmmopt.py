@@ -1,84 +1,61 @@
 import numpy as np
-import time
+import pickle
 import warnings
-from scipy.stats import norm
 from scipy.optimize import minimize, LinearConstraint, NonlinearConstraint
-from scipy.special import erfc
-from util_test_gmmopt import generate_base_pdf, plot_Kmode_gmm_1d
+from util_test_gmmopt import *
 
 
-def mixture_pdf(K, theta, x):
-    """
-    Compute the mixture PDF for a K-component GMM.
-    theta: length 3*K array [mu_1..mu_K, sigma_1..sigma_K, w_1..w_K]
-    x: array of evaluation points
-    """
-    mus    = theta[0:K]
-    sigmas = theta[K:2*K]
-    weights= theta[2*K:3*K]
-    pdfs = np.array([
-        w * norm.pdf(x, loc=mu, scale=sigma)
-        for mu, sigma, w in zip(mus, sigmas, weights)
-    ])
-    return pdfs.sum(axis=0)
-
-
-def gmm_constraint(K, theta, x, p0, B):
-    """
-    Ensure mixture PDF lies within [p0-B, p0+B] for all x.
-    Returns a vector of >=0 values when satisfied.
-    """
-    slack = B*0.01
-    p_mix = mixture_pdf(K, theta, x)
-    return np.hstack([
-        p_mix - (p0 - B) - slack,    # >= 0
-        (p0 + B) - p_mix - slack     # >= 0
-    ])
-
-
-def gmm_integral_1dsubset(K, theta, x_subset):
-    """
-    Analytical integral of the GMM over the interval [a, b].
-    Uses the error function for Gaussian CDF.
-    """
-    a = x_subset[0]; b = x_subset[1]
-    mus    = theta[0:K]
-    sigmas = theta[K:2*K]
-    weights= theta[2*K:3*K]
-    integral = 0.0
-    for mu, sigma, w in zip(mus, sigmas, weights):
-        integral += w*0.5*(1-erfc((b-mu)/(np.sqrt(2)*sigma)) - (1-erfc((a-mu)/(np.sqrt(2)*sigma))) ) # erfc = 1 - erf (is numerically more stable)
-    return integral
-
-
-def optimize_gmm_k(K, x, x_subset, p0, B, Pr_iter, method="analytical"):
+def optimize_gmm_k(K, x, x_subset, p0, B, strategy, info):
     """
     Optimize a K-component GMM to maximize probability mass over x_subset
     subject to PDF bounds [p0 - B, p0 + B] over the full domain x.
 
     Returns the SciPy OptimizeResult with .x = optimal theta.
+
+    Inputs:
+        strategy: {'baseline', 'inverse_square'}
+        info: { 
+                'Pr_old': optimized Probabililty of previous iteration
+                'theta_old': optimized gmm paramters of previous iteration
+                'success_iter': success_iter,
+                'c': Pr_iter at first success_iter
+               }
     """
-    # re-seed from the current time (in microseconds)
-    seed = int(time.time() * 1e6) & 0xFFFFFFFF
-    np.random.seed(seed)
-    # Initial guess: evenly spaced means, unit sigmas, uniform weights
+    # Initial guess: uniformly spaced means, unit sigmas, uniform weights
+    min_sigma = 1e-1
     theta0 = np.zeros(3 * K + 1)
-    theta0[:K]     = np.random.uniform(np.min(x_subset), np.max(x_subset), K)
-    theta0[K:2*K]  = 1.0
-    theta0[2*K:]   = 1.0 / K
+    theta0[:K]     = np.random.uniform(np.min(x), np.max(x), K)
+    theta0[K:2*K]  = 1.0 # NOTE: plot the distribution of thetas
+    theta0[2*K:3*K]   = 1.0 / K
     theta0[-1]     = 1.0
 
     # Bounds for (mu, sigma, weights, convex)
-    if(Pr_iter == 0.0):
+    if(info['success_iter'] == 0):
         bounds = [(-np.inf, np.inf)] * K + \
-            [(1e-2, np.inf)] * K + \
-            [(0.0, 1.0)] * K + \
-            [(1, 1)]
-    else:
-        bounds = [(-np.inf, np.inf)] * K + \
-            [(1e-2, np.inf)] * K + \
+            [(min_sigma, np.inf)] * K + \
             [(0.0, 1.0)] * K + \
             [(1.0, 1.0)]
+    else:
+        bounds = [(-np.inf, np.inf)] * K + \
+            [(min_sigma, np.inf)] * K + \
+            [(0.0, 1.0)] * K + \
+            [(1.0, 1.0)]
+    
+    # using the theta gmm of previous iteration
+    if(info['theta_old'] is not None):
+        theta_old = info['theta_old']
+        K_old = theta_old.shape[0] // 3
+        mus    = theta_old[0:K_old]
+        sigmas = theta_old[K_old:2*K_old]
+        ws = theta_old[2*K_old:3*K_old]
+        for i in range(K_old):
+            theta0[i] = mus[i] + np.random.normal(loc=0, scale=0.1)
+            theta0[K+i] = np.clip(sigmas[i]+ np.random.normal(loc=0, scale=0.1), a_min=min_sigma, a_max=np.inf)
+            theta0[2*K+i] = ws[i]
+        # ensure weights sum to 1
+        w_sum = np.sum(theta0[2*K:3*K])
+        theta0[2*K:3*K] /= w_sum
+        # print(theta_old); print(theta0)
 
     # Linear constraint: sum(weights) = 1
     A = np.zeros((1, 3 * K + 1))
@@ -91,91 +68,178 @@ def optimize_gmm_k(K, x, x_subset, p0, B, Pr_iter, method="analytical"):
         lb=0, ub=np.inf
     )
 
+    constraints=[weight_sum, pdf_bounds]
+
     # Objective: negative mass over x_subset
     def objective(th):
-        if method == "analytical":
+        if strategy['integral'] == "analytical":
             p_new = gmm_integral_1dsubset(K, th, x_subset)
-            return -(p_new * th[-1] + Pr_iter * (1-th[-1]))
+            return -(p_new* th[-1] + info['Pr_old'] * (1-th[-1]))
         else:
             dx = x[1]-x[0]
             p_vals = mixture_pdf(K, th, x)
             mask = (x >= x_subset[0]) & (x <= x_subset[1])
-            return -(np.sum(p_vals[mask])*dx * th[-1] + Pr_iter * (1-th[-1]))
+            return -(np.sum(p_vals[mask])*dx * th[-1] + info['Pr_old'] * (1-th[-1]))
         
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always", RuntimeWarning)
-
         result = minimize(
                     objective, theta0,
                     bounds=bounds,
-                    constraints=[weight_sum, pdf_bounds],
-                    method="SLSQP"
+                    constraints=constraints,
+                    method="SLSQP",
+                    options={'maxiter': 50, 'disp': False},
+                    tol=1e-3
                 )
-        
-        saw_outside_bounds = any(
-            isinstance(w.message, Warning) and 
-            "outside bounds" in str(w.message)
-            for w in caught
-        )
-    # ensure incremental construction
-    if(-result.fun < Pr_iter):
+    # non-decreasing incremental construction
+    Pr_new = -result.fun
+    if(Pr_new <= info['Pr_old']):
         result.success = False
-    return result
+
+    if(strategy['increment'] == "inverse_square"):
+        if(info['success_iter'] > 0):
+            fac = info['success_iter']
+            Pr_thres = info['Pr_old'] + \
+                info['rho']*(1+info['rho'])*(1/(fac*(fac+info['rho'])) - 1/((fac+1)*(fac+1+info['rho'])))
+            # print(Pr_new, Pr_thres)
+            if(Pr_new <= Pr_thres):
+                result.success = False
+                info['rho'] *= 0.99
+
+    return result, info
 
 
-def test_optimize_gmm_k(show_plots=True):
-    # Example
-    x_l, x_u, dx = -5.0, 5.0, 0.01
+def test_convergence(load_data=False):
+    data_folder = 'data/case4/'
+    if(load_data):
+        with open(data_folder +'problem.pkl', 'rb') as f:
+            problem = pickle.load(f)
+        with open(data_folder+'all_histories.pkl', 'rb') as f:
+            all_histories = pickle.load(f)
+        plot_convergence_test(True, problem, all_histories, show_extrapolation=True)
+        return
+
+    # --- problem setup ---
+    np.random.seed(11)
+    # domain
+    x_l, x_u, dx = -6.0, 6.0, 0.02
     x = np.arange(x_l, x_u + dx, dx)
-    x_subset = np.array([-2.0, 3.0])
-
-    np.random.seed(5)
-    p0, _ = generate_base_pdf(x, num=2)
-    B  = np.max(p0)*0.1
-
+    # region of interest
+    x_subset = np.array([-4.0, 4.0]) # deterministic
+    # x_subset = np.random.uniform(x_l, x_u, size=2); x_subset.sort() # random
     mask = (x >= x_subset[0]) & (x <= x_subset[1])
-    Pr_subset = np.sum(p0[mask]) * dx
-
-    K=12
-    max_iter = 200; break_iter = 10
-    success_iter = 0
-    Pr_iter = 0.0
-    p_gmm = 0.0*x
-    for iter in range(max_iter):
-        result = optimize_gmm_k(K, x, x_subset, p0, B, Pr_iter, method="analytical")
-        # print(iter, result.success)
-        if(result.success):
-            success_iter += 1
-            theta_gmm = result.x
-            Pr_new = gmm_integral_1dsubset(K, theta_gmm, x_subset)
-            p_gmm_new = mixture_pdf(K, theta_gmm, x)
-  
-            Pr_new_samples = np.sum(p_gmm_new[mask])*dx
-            np.testing.assert_allclose(Pr_new_samples, Pr_new, atol=1e-1, rtol=1e-1)
-
-            print("iter {:5d}, conv: {:.3f}, Pr_old {:.4f}, Pr_new {:.10f}".format(
-                iter, theta_gmm[-1], Pr_iter, Pr_new))
-            # print(theta_gmm)
-            
-            Pr_iter = Pr_new*(theta_gmm[-1]) + Pr_iter*(1-theta_gmm[-1])
-            p_gmm = p_gmm_new*(theta_gmm[-1]) + p_gmm*(1-theta_gmm[-1])
-        if(success_iter >= break_iter):
-            break
-
-    Pr_samples = np.sum(p_gmm[mask])*dx
-
-    Pr_gmm_subset = Pr_iter
-    print("Opt Prob: {:.4f} ({:.4f}), True Prob {:.4f}".format(Pr_gmm_subset, Pr_samples, Pr_subset))
-
-    plot_Kmode_gmm_1d(show_plots, x, x_subset, p0, B, Pr_subset, p_gmm, Pr_gmm_subset) 
-
-    # check if added slack in the constraint works
-    np.testing.assert_array_less(np.abs(p0-p_gmm),
-                                 B,
-                                 err_msg="p_gmm cannot satisfy constraints of (p0 +/- B1)")
     
-    np.testing.assert_array_less(Pr_subset, Pr_gmm_subset, err_msg="Pr_opt does not upper bound Pr")    
+    # p_hat and error bound
+    K_p0 = 2
+    p0, _, theta_p0 = generate_base_pdf(x, num=K_p0, special=True)
+    # B  = np.max(p0)*np.random.uniform(0.1, 0.2)
+    B  = 0.04
+    
+    # Pr_subset = np.sum(p0[mask]) * dx
+    Pr_subset = gmm_integral_1dsubset(K_p0, theta_p0, x_subset)
+    Pr_max = B*(x_subset[1]-x_subset[0])+Pr_subset
+    problem = {
+        'x': x, 'x_subset': x_subset,
+        'p0': p0, 'B': B,
+        'Pr_subset': Pr_subset, 'Pr_max': Pr_max,
+    }
+
+    # --- linear program comparision ---
+    Pr_lp, pdf_lp, x_lp = optimize_linearprogram(problem)
+    problem['Pr_lp'] = Pr_lp
+    problem['Pr_neg'] = optimize_negation(problem)
+    problem['pdf_lp'] = pdf_lp
+    problem['x_lp'] = x_lp
+
+    # --- gmm optimization setup ---
+    num_test_trials = 10
+    K_gmm = 2
+    max_iter = 2000
+    break_iter = 40
+    strategy = {
+        'integral' : 'analytical', # this specify how to compute gmm integral over a region
+        'increment' : 'inverse_square' # this specify the incremental construction approach 
+    }
+    all_histories = []
+    k_incret = K_gmm
+
+    for iter_test in range(num_test_trials):
+        # --- initialization ---
+        history = {
+            'iter':[],
+            'Pr_iter': [],
+            'tv_bound': [],
+            'theta_iter': [],
+            'delta':[],
+        }
+        K = K_gmm
+        info = { 
+                'Pr_old': 0.0,
+                'theta_old': None,
+                'success_iter': 0,
+                'rho': 1.0,
+               }
+        p_gmm = 0.0*x
+        # --- solving ---
+        for iter in range(max_iter):
+            result, info = optimize_gmm_k(K, x, x_subset, p0, B, strategy, info)
+            if(result.success):
+                info['success_iter'] += 1
+                theta_new = result.x
+                Pr_new = gmm_integral_1dsubset(K, theta_new, x_subset)
+                p_gmm_new = mixture_pdf(K, theta_new, x)
+    
+                Pr_new_samples = np.sum(p_gmm_new[mask])*dx
+                np.testing.assert_allclose(Pr_new_samples, Pr_new, atol=1e-1, rtol=1e-1)
+                delta = 1-Pr_new # distance between max Prob.(which is 1) - Pr_new
+                print("i {:3d}, increment {:3d}, Pr_new {:.8f}, delta {:.4f}".format(
+                      iter, info['success_iter'], Pr_new, delta))
+                
+                # -- local line search along gradient direction ---
+                #   NOTE: there seems little difference when line search is enabled
+                # Pr_new, theta_new, p_gmm_new, _ = update_if_sat(K, Pr_new, theta_new, p_gmm_new, problem)
+
+                # --- update the old result --
+                info['Pr_old'] = Pr_new
+                info['theta_old'] = theta_new
+                # info['rho'] = 1.0 # reset
+                p_gmm = p_gmm_new
+                K = K + k_incret # direct incremental construction with additional gaussian mixtures
+
+                history['iter'].append(info['success_iter'])
+                history['Pr_iter'].append(Pr_new)
+                history['tv_bound'].append(gmm_tv_bound_1d(x_subset, p0, B, iter=info['success_iter']))
+                history['theta_iter'].append(theta_new)
+                history['delta'].append(delta)
+            # else:
+            #     print("i {:3d}, rho {:.8f}".format(iter, info["rho"]))
+
+            if(info['success_iter'] >= break_iter):
+                break
+        # --- storing solver history & testing ---
+        all_histories.append(history)
+        tv_bound = gmm_tv_bound_1d(x_subset, p0, B, iter=info['success_iter'])
+        Pr_gmm_subset = Pr_new
+        Pr_gmm_with_tv = Pr_gmm_subset+tv_bound
+        print("(Opt Prob: {:.4f} + TV: {:.4f}) = {:.4f}, True Prob. {:.4f}, Direct Inegral Prob. {:.4f}".format(
+            Pr_gmm_subset, tv_bound, Pr_gmm_with_tv, Pr_subset, Pr_max))
+        np.testing.assert_array_less(np.max(np.abs(p0-p_gmm)),
+                                     B,
+                                     err_msg="p_gmm cannot satisfy constraints of (p0 +/- B1)")
+        np.testing.assert_array_less(Pr_subset, 
+                                     Pr_gmm_with_tv, 
+                                     err_msg="(Pr_gmm + TV) does not upper bound Pr_subset")
+        np.testing.assert_array_less(Pr_gmm_subset, 
+                                     Pr_max, 
+                                     err_msg="Pr_gmm does not lower bound Pr_max")
+    # summarize test
+    # --- save to file ---
+    with open(data_folder +'problem.pkl', 'wb') as f:
+        pickle.dump(problem, f)
+    with open(data_folder+'all_histories.pkl', 'wb') as f:
+        pickle.dump(all_histories, f)
+    plot_convergence_test(True, problem, all_histories)
 
 
 if __name__ == '__main__':
-    test_optimize_gmm_k()
+    test_convergence(load_data=True)

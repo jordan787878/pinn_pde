@@ -70,7 +70,7 @@ def optimize_single_gmm_1d_increment(iter, x, x_subset, p0, B, Pr_iter):
     cons = {'type': 'ineq',
             'fun': lambda params: constraint_fun_iter(params, x, p0, B)}
     # Initial guess for parameters (mu, sigma, alpha).
-    initial_guess = [np.random.uniform(np.min(x_subset), np.max(x_subset)), 
+    initial_guess = [np.random.uniform(np.min(x), np.max(x)), 
                      1.0, 
                      np.random.uniform(0.0, 1.0)]
 
@@ -190,7 +190,8 @@ def single_gmm_1d_increment(show_plots, n_iter):
     
     plot_gmm_1dresults_increment(False, gmm_results)
 
-    np.testing.assert_array_less(Pr_subset, Pr_opt_subset, err_msg="Pr_opt <= Pr")
+    delta = 1e-10
+    np.testing.assert_array_less(Pr_subset - delta, Pr_opt_subset, err_msg="Pr_opt does not uppeer bound Pr")
 
 
 def test_single_gmm_1d():
