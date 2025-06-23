@@ -61,6 +61,7 @@ def main():
     # plot_train_loss(E1NET_PATH_SEQ2)
     # exp_plot.plot_app1_onlymc(constants, "data/app1/tar1/pr_mcs.npy")
     # exp_plot.plot_app1()
+    # return
 
     ### Application ###
     app1(p_net, e1_net_seq1, e1_net_seq2)

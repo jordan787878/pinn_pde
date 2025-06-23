@@ -294,29 +294,27 @@ def plot_app1_onlymc(constants, data_foler, N_mc=4, save_plots=False, save_plot_
 def plot_app1(N_mc=1, save_plots=False, save_plot_path=None):
     set_publication_plot_style()
 
-    parent_folder = "data/app1/tar1/"
+    parent_folder = "data/app1/tar1/prob/"
     pr_mcs = np.load(parent_folder+"pr_mcs.npy")
     
     pr_nn_data_labels = [parent_folder+"pr_nn_Nd50_onlyphat.npy", 
                          parent_folder+"pr_nn_Nd50_phat+B.npy", 
                          parent_folder+"pr_nn_Nd50_LP.npy", 
                         #  parent_folder+"pr_nn_Nd50_FOx128(new).npy",
-                         parent_folder+"pr_nn_Nd50_gmmx64(iter-10k).npy", # weight of region_loss 1e-2
-                         parent_folder+"pr_nn_Nd50_gmmx64(iter-20k).npy", # weight of region_loss 1e-2
-                         parent_folder+"pr_nn_Nd50_gmmx64(new).npy", # weight of region_loss 1e-1 with half random samples
-                        #  parent_folder+"pr_nn_Nd50_FOx256.npy"
+                        #  parent_folder+"pr_nn_Nd50_gmmx64(iter-10k).npy", # weight of region_loss 1e-2
+                        #  parent_folder+"pr_nn_Nd50_gmmx64(iter-20k).npy", # weight of region_loss 1e-2
+                         parent_folder+"pr_gmmx64.npy", # weight of region_loss 1e-1 with half random samples
                          ]
     plot_labels = [r"$\hat{p}$",
                    r"$\int_{X^{'}} \hat{p}+B_1 dx$", 
                    r"LP($\hat{p},B_1$)", 
                 #    r"FO($\hat{p},B_1$) RBFx256(new)",
-                   r"FO($\hat{p},B_1$) GMMx64(10k det.)",
-                   r"FO($\hat{p},B_1$) GMMx64(20k det.)",
+                #    r"FO($\hat{p},B_1$) GMMx64(10k det.)",
+                #    r"FO($\hat{p},B_1$) GMMx64(20k det.)",
                    r"FO($\hat{p},B_1$) GMMx64(20k quasi)",
-                #    r"FO($\hat{p},B_1;\theta=256$)"
                    ]
-    plot_fills  = [False, False, True, True, True, True]
-    plot_style =  ["--", "-", "-", "-", "-", "-"]
+    plot_fills  = [False, False, True, True]
+    plot_style =  ["--", "-", "-", "-"]
 
     pr_nn_data = []
     for j in range(len(pr_nn_data_labels)):
@@ -629,12 +627,10 @@ def plot_target_volume(ax, target_r, target_ph, z_max, grid_resolution=30,
 #     dx2 = x2s[1] - x2s[0]
 #     dx3 = x3s[1] - x3s[0]
 #     dx4 = x4s[1] - x4s[0]
-
 #     # obtain pdf(nn)
 #     grid_points_tensor = torch.tensor(grid_points, dtype=torch.float32, requires_grad=False)
 #     t_tensor = (torch.ones(len(grid_points_tensor), 1, dtype=torch.float32) * t)
 #     p0 = p_net(grid_points_tensor, t_tensor).detach().numpy().reshape(x1_grid.shape)
-
 #     # plot
 #     fig = plt.figure(figsize=(10, 8))
 #     ax = fig.add_subplot(111, projection='3d')
@@ -646,14 +642,12 @@ def plot_target_volume(ax, target_r, target_ph, z_max, grid_resolution=30,
 #                     edgecolor='black', linewidth=0.5, label=r"$\hat{p}$")
 #     ax.plot_surface(X, Y, p_rbf_2D, color="none", rstride=2, cstride=2, 
 #                     edgecolor='blue', linestyle="--", linewidth=0.5, label=r"$p_{FO}$")
-    
 #     # Create the patch for the target region.
 #     # Assume target_region is a 2x2 array:
 #     #   target_region[0] = [r_min, r_max]
 #     #   target_region[1] = [phi_min, phi_max]
 #     r_bounds = target_region[0, :]    # [r_min, r_max]
 #     phi_bounds = target_region[1, :]  # [phi_min, phi_max]
-    
 #     # Define the corners of the rectangular patch at z = 0.
 #     patch_vertices = [
 #         [r_bounds[0], phi_bounds[0], 0],
@@ -664,7 +658,6 @@ def plot_target_volume(ax, target_r, target_ph, z_max, grid_resolution=30,
 #     # Create a Poly3DCollection and add it to the 3D axis.
 #     patch = Poly3DCollection([patch_vertices], facecolor='red', alpha=0.5, edgecolor='k', label=r"$X^'_{tar}$")
 #     ax.add_collection3d(patch)
-    
 #     ax.set_xlabel(r"$r'$")
 #     ax.set_ylabel(r"$\phi'$")
 #     ax.set_zlabel("PDF")
