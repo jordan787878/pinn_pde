@@ -66,54 +66,41 @@ class TorchGMM(nn.Module):
 #     def __init__(self, input_dim=4, num_basis=20):
 #         """
 #         Approximates a function p(x) as a weighted sum of normalized Gaussian RBFs,
-#         designed so that p(x) is a valid pdf:
-        
-#            p(x) = sum_i w_i * phi_i(x)
-        
-#         with phi_i(x) defined as a normalized Gaussian over R^4.
-        
+#         designed so that p(x) is a valid pdf:    
+#            p(x) = sum_i w_i * phi_i(x)      
+#         with phi_i(x) defined as a normalized Gaussian over R^4.     
 #         The centers of each RBF are adjusted by adding constant offsets defined in
-#         constants.N_MEAN_I.
-        
+#         constants.N_MEAN_I.     
 #         Args:
 #             input_dim (int): Dimensionality of input (should be 4).
 #             num_basis (int): Number of RBF basis functions.
 #         """
 #         super(RBFDensity, self).__init__()
 #         self.input_dim = input_dim   # This should be 4.
-#         self.num_basis = num_basis
-        
+#         self.num_basis = num_basis     
 #         # Learnable centers: shape [num_basis, input_dim]
-#         self.centers = nn.Parameter(torch.randn(num_basis, input_dim))
-        
+#         self.centers = nn.Parameter(torch.randn(num_basis, input_dim))    
 #         # Learnable log-bandwidths (one per basis). Use softplus later to ensure positivity.
-#         self.covs = nn.Parameter(torch.ones(num_basis))
-        
+#         self.covs = nn.Parameter(torch.ones(num_basis))      
 #         # Learnable logits for weights; using softmax will enforce nonnegativity and sum-to-one.
 #         self.A = nn.Parameter(torch.ones(num_basis)/num_basis)
-
 #     def forward(self, x):
 #         """
-#         Evaluate the density p(x) for a batch of input points x (shape [batch, input_dim]).
-        
+#         Evaluate the density p(x) for a batch of input points x (shape [batch, input_dim]).     
 #         Returns:
 #             p (Tensor): The pdf evaluated at x, shape [batch].
 #         """
 #         batch = x.shape[0]
-#         K = self.num_basis
-        
+#         K = self.num_basis      
 #         # Get sigma with softplus for numerical stability.
-#         covs = torch.square(self.covs) + 1e-10
-        
+#         covs = torch.square(self.covs) + 1e-10    
 #         # Compute normalized weights via softmax.
 #         A = self.A + 1e-10
 #         sum_A = torch.sum(A**2)
-#         weights = A**2 / sum_A  # shape: [K]
-        
+#         weights = A**2 / sum_A  # shape: [K]      
 #         # Adjust centers by adding the constant offset.
 #         offset = torch.tensor(constants.N_MEAN_I, device=self.centers.device, dtype=self.centers.dtype)
 #         effective_centers = self.centers + offset.unsqueeze(0)  # shape: [K, input_dim]
-
 #         pdf = torch.zeros(batch)
 #         for i in range(K):
 #             mean_i = effective_centers[i, :]

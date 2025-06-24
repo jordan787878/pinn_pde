@@ -1,6 +1,6 @@
 import numpy as np
 
-from utilities.constants import Case2_4D_Constants
+from utilities.constants import Case2_4D_Constants # NOTE: move utilities to exp_utilities
 
 from monte import get_p_init_max
 from utilities.post_exp_cas2 import get_max_e1_init
@@ -33,6 +33,7 @@ def app1(p_net, e1_net_seq1, e1_net_seq2):
     # Define a t_span to evaluate Pr(Event)
     dt = 0.01
     t_span = np.arange(0.00, 0.20+dt, dt)
+    # t_span = np.array([0.08])
     # t_span = simple_interpolate(constants.T_PRIME_SPAN); t_span = simple_interpolate(t_span)
 
     # Prob. (Event) when pdf are obtained by MC
@@ -60,8 +61,8 @@ def main():
     # exp_plot.visual_e1hat_training(constants, (p_net, e1_net_seq1, e1_net_seq2), DATA_FOLDER)
     # plot_train_loss(E1NET_PATH_SEQ2)
     # exp_plot.plot_app1_onlymc(constants, "data/app1/tar1/pr_mcs.npy")
-    # exp_plot.plot_app1()
-    # return
+    exp_plot.plot_app1()
+    return
 
     ### Application ###
     app1(p_net, e1_net_seq1, e1_net_seq2)

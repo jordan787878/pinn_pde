@@ -69,6 +69,7 @@ def integral_torchgmm(gmm_params, region_bounds):
     return Pr
 
 
+# NOTE: move below to _General
 def compute_volume(bounds):
     """
     Compute the volume of an axis-aligned hyper-rectangle

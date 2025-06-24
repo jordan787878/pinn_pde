@@ -303,7 +303,7 @@ def plot_app1(N_mc=1, save_plots=False, save_plot_path=None):
                         #  parent_folder+"pr_nn_Nd50_FOx128(new).npy",
                         #  parent_folder+"pr_nn_Nd50_gmmx64(iter-10k).npy", # weight of region_loss 1e-2
                         #  parent_folder+"pr_nn_Nd50_gmmx64(iter-20k).npy", # weight of region_loss 1e-2
-                         parent_folder+"pr_gmmx64.npy", # weight of region_loss 1e-1 with half random samples
+                         parent_folder+"diaggmmx64.npy", # weight of region_loss 1e-1 with half random samples
                          ]
     plot_labels = [r"$\hat{p}$",
                    r"$\int_{X^{'}} \hat{p}+B_1 dx$", 
