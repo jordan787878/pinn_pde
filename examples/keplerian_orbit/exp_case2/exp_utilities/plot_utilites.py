@@ -304,6 +304,7 @@ def plot_app1(N_mc=1, save_plots=False, save_plot_path=None):
                         #  parent_folder+"pr_nn_Nd50_gmmx64(iter-10k).npy", # weight of region_loss 1e-2
                         #  parent_folder+"pr_nn_Nd50_gmmx64(iter-20k).npy", # weight of region_loss 1e-2
                          parent_folder+"diaggmmx64.npy", # weight of region_loss 1e-1 with half random samples
+                         parent_folder+"diaggmmx64(aug_vio).npy",
                          ]
     plot_labels = [r"$\hat{p}$",
                    r"$\int_{X^{'}} \hat{p}+B_1 dx$", 
@@ -311,10 +312,11 @@ def plot_app1(N_mc=1, save_plots=False, save_plot_path=None):
                 #    r"FO($\hat{p},B_1$) RBFx256(new)",
                 #    r"FO($\hat{p},B_1$) GMMx64(10k det.)",
                 #    r"FO($\hat{p},B_1$) GMMx64(20k det.)",
-                   r"FO($\hat{p},B_1$) GMMx64(20k quasi)",
+                   r"FO($\hat{p},B_1$) GMMx64(20k)",
+                   r"FO($\hat{p},B_1$) GMMx64(20k aug.)",
                    ]
-    plot_fills  = [False, False, True, True]
-    plot_style =  ["--", "-", "-", "-"]
+    plot_fills  = [False, False, True, True, False]
+    plot_style =  ["--", "-", "-", "-", "-"]
 
     pr_nn_data = []
     for j in range(len(pr_nn_data_labels)):
@@ -325,10 +327,10 @@ def plot_app1(N_mc=1, save_plots=False, save_plot_path=None):
 
     for j in range(N_mc):
         t_span = pr_mcs[:,0]
-        pr = pr_mcs[:,j+2] # [should change back to] pr = pr_mcs[:,j+1] 
+        pr = pr_mcs[:,j+2] # should change back to pr = pr_mcs[:,j+1] 
         mask = ~np.isnan(pr)
         plt.plot(t_span[mask], pr[mask], color="black", linestyle="", marker="o", markersize=4, label="MC")
-        print(t_span[mask], pr[mask])
+        # print(t_span[mask], pr[mask])
 
     for j in range(len(pr_nn_data_labels)):
         pr_nn_data_i = pr_nn_data[j]

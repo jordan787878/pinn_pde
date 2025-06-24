@@ -47,14 +47,14 @@ def get_prob_PINN(constants, t_span, target_r, targer_ph, networks):
         pr, model = compute_prob_event(constants, target_r, targer_ph, t, networks, N_discret=50)
         data_list.append([t, pr])
         # --- save model ----
-        if(model is not None):
-            torch.save(model.state_dict(), "data/app1/tar1/pdf_models/diaggmmx64_t{:.3f}.pth".format(t))
+        # if(model is not None):
+        #     torch.save(model.state_dict(), "data/app1/tar1/pdf_models/diaggmmx64(aug_vio)_t{:.3f}.pth".format(t))
 
     data_array = np.array(data_list)
     print("Prob result:")
     print(data_array)
     # --- save results ---
-    np.save('data/app1/tar1/prob/diaggmmx64.npy', data_array)
+    # np.save('data/app1/tar1/prob/diaggmmx64(aug_vio).npy', data_array)
 
 
 def compute_prob_event_monte(constants, target_r, targer_ph, t, N_monte=4, data_folder="data/"):
