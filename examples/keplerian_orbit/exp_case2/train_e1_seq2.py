@@ -30,11 +30,11 @@ from _General.neuralnetworks import PNet, E1Net, load_trained_model
 
 
 # curriculum training
-E1NET_PATH = "output/v2/e1_net_seq2.pth"
-E1NET_INTER_PATH = "output/v2/e1_net_seq2_"
+E1NET_PATH = "output/v0/e1_net_seq2.pth"
+E1NET_INTER_PATH = "output/v0/e1_net_seq2_"
 
 PNET_PATH = "output/v0/p_net.pth"
-E1NET_PATH_SEQ1 = "output/v2/e1_net_seq1.pth"
+E1NET_PATH_SEQ1 = "output/v0/e1_net_seq1.pth"
 DATA_FOLDER = "data/1e+6/"
 device = "cpu"
 TRAIN_FLAG = False

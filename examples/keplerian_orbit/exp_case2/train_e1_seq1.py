@@ -1,7 +1,6 @@
 """
-
+Train PINN e1
 """
-
 
 import numpy as np
 import torch
@@ -50,8 +49,7 @@ def train_model(e1_net, p_net, optimizer, scheduler, mse_cost_function, iteratio
     loss_history = []
     normalize = e1_net.scale
     print("normalize: ", normalize)
-    # t_seq = np.float32(np.array([constants.TI, constants.TF*0.5]))
-    t_seq = np.float32(np.array([constants.TI, constants.TF*1.0]))
+    t_seq = np.float32(np.array([constants.TI, constants.TF*0.5]))
 
     N0_samples = 2000
     Nr_samples = 2000
