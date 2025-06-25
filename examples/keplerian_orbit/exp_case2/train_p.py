@@ -6,40 +6,6 @@ This case is a circular orbit on plannar motion. Hence, we reduce the dynamics t
 Compared to exp2_sphere_4d (baseline):
     1) the final time is increased to 0.2*T.
     2) the solution domain is increased to ensure sum(p) ~= 1.0
-
-Training log:
-p net scale:  0.18991181
-save epoch: 0 ,loss: tensor(2.7721) ,ic: tensor(1.7133) ,res: tensor(1.0341) ,tv: tensor(2.4719) ,beta:  0.0
-... RAR IC, add:  0.0 3.8275725841522217
-... RAR Res, add:  0.020027311518788338 68.32891845703125
-save epoch: 1 ,loss: tensor(1.4248) ,ic: tensor(0.9195) ,res: tensor(0.4873) ,tv: tensor(1.7979) ,beta:  0.02
-save epoch: 2 ,loss: tensor(0.7899) ,ic: tensor(0.4309) ,res: tensor(0.3432) ,tv: tensor(1.5765) ,beta:  0.04
-save epoch: 3 ,loss: tensor(0.4395) ,ic: tensor(0.1955) ,res: tensor(0.2300) ,tv: tensor(1.3948) ,beta:  0.06
-save epoch: 4 ,loss: tensor(0.2529) ,ic: tensor(0.0981) ,res: tensor(0.1436) ,tv: tensor(1.1115) ,beta:  0.08
-save epoch: 5 ,loss: tensor(0.1550) ,ic: tensor(0.0636) ,res: tensor(0.0836) ,tv: tensor(0.7837) ,beta:  0.099999994
-save epoch: 6 ,loss: tensor(0.1051) ,ic: tensor(0.0539) ,res: tensor(0.0461) ,tv: tensor(0.5054) ,beta:  0.11999999
-save epoch: 7 ,loss: tensor(0.0809) ,ic: tensor(0.0528) ,res: tensor(0.0250) ,tv: tensor(0.3121) ,beta:  0.13999999
-save epoch: 8 ,loss: tensor(0.0699) ,ic: tensor(0.0542) ,res: tensor(0.0137) ,tv: tensor(0.1918) ,beta:  0.15999998
-save epoch: 9 ,loss: tensor(0.0651) ,ic: tensor(0.0561) ,res: tensor(0.0078) ,tv: tensor(0.1200) ,beta:  0.17999998
-... RAR IC, add:  0.0 1.0642411708831787
-save epoch: 379 ,loss: tensor(0.0618) ,ic: tensor(0.0609) ,res: tensor(0.0007) ,tv: tensor(0.0282) ,beta:  0.19999997
-... RAR IC, add:  0.0 1.028399109840393
-... RAR Res, add:  0.199101984500885 0.8782105445861816
-save epoch: 413 ,loss: tensor(0.0586) ,ic: tensor(0.0563) ,res: tensor(0.0016) ,tv: tensor(0.0622) ,beta:  0.21999997
-save epoch: 426 ,loss: tensor(0.0556) ,ic: tensor(0.0522) ,res: tensor(0.0026) ,tv: tensor(0.0780) ,beta:  0.23999996
-save epoch: 446 ,loss: tensor(0.0527) ,ic: tensor(0.0480) ,res: tensor(0.0037) ,tv: tensor(0.1032) ,beta:  0.25999996
-save epoch: 479 ,loss: tensor(0.0500) ,ic: tensor(0.0465) ,res: tensor(0.0030) ,tv: tensor(0.0580) ,beta:  0.27999997
-... RAR IC, add:  0.0 0.9148398041725159
-... RAR Res, add:  0.18391795456409454 1.006196141242981
-save epoch: 590 ,loss: tensor(0.0475) ,ic: tensor(0.0456) ,res: tensor(0.0015) ,tv: tensor(0.0363) ,beta:  0.29999998
-...
-save epoch: 47054 ,loss: tensor(0.0033) ,ic: tensor(0.0012) ,res: tensor(0.0006) ,tv: tensor(0.1500) ,beta:  1.0
-... RAR Res, add:  0.17846857011318207 0.25211480259895325
-save epoch: 49579 ,loss: tensor(0.0031) ,ic: tensor(0.0011) ,res: tensor(0.0006) ,tv: tensor(0.1451) ,beta:  1.0
-... RAR Res, add:  0.177302747964859 0.18425658345222473
-p_net_reg train complete
-[load model from: output/v0/p_net.pth
-best epoch:  49579 , min loss: 0.003088535275310278 , train time: 1963.380201101303
 """
 
 
