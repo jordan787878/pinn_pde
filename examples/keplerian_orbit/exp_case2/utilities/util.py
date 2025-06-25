@@ -244,10 +244,10 @@ def simple_interpolate(arr):
 ## Exp Case2
 ##############    
 
-def exp_case2_generate_samples(data_folder, constants, use_j2=False, N_samples=100, dtt=1e-4):
+def exp_case2_generate_samples(constants, use_j2=False, N_samples=100, dtt=1e-4):
     for t_prime in constants.T_PRIME_SPAN:
         X = exp_case2_propagate_samples(constants, use_j2=use_j2, t=t_prime, stat_sample=N_samples, dtt=dtt)
-        np.save(data_folder+"samples_t{:.3f}.npy".format(t_prime), X)
+        np.save("data/samples/samples_t{:.3f}.npy".format(t_prime), X)
 
 
 def exp_case2_propagate_samples(constants, use_j2=False, t=0.2, stat_sample=1, dtt=1e-4):

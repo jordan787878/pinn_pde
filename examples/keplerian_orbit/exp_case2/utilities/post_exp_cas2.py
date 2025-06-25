@@ -23,13 +23,13 @@ def set_publication_plot_style(font_family='Times New Roman', font_size=18):
     plt.rcParams['figure.titlesize'] = font_size
 
 
-def p_init_better(x, mean, cov):
-    """
-    x is numpy array of shape (N x 4), N is the sample size
-    """
-    pdf_func = multivariate_normal(mean=mean, cov=cov)
-    pdf_eval = pdf_func.pdf(x).reshape(-1,1).astype(x.dtype)
-    return pdf_eval
+# def p_init_better(x, mean, cov):
+#     """
+#     x is numpy array of shape (N x 4), N is the sample size
+#     """
+#     pdf_func = multivariate_normal(mean=mean, cov=cov)
+#     pdf_eval = pdf_func.pdf(x).reshape(-1,1).astype(x.dtype)
+#     return pdf_eval
 
 
 # Paper
@@ -69,55 +69,6 @@ def plot_train_loss(path):
     fig.savefig("figs/v2e1hat_seq2_loss.pdf", format='pdf')
     # Display the plot.
     plt.show()
-
-
-# Paper
-def check_pdf_Nrphi(p_net, constants, DATA_FOLDER):
-    """
-    marginalize the pdf of normalize spherical to [r,phi]
-    """
-    set_publication_plot_style()
-    for t_prime in constants.T_PRIME_SPAN:
-        print("[test] pdf(NN) marginalized to rphi at t=", t_prime)
-        print(DATA_FOLDER)
-        x1s = np.load(DATA_FOLDER+"x1s.npy")
-        x2s = np.load(DATA_FOLDER+"x2s.npy")
-        x3s = np.load(DATA_FOLDER+"x3s.npy")
-        x4s = np.load(DATA_FOLDER+"x4s.npy")
-        # pdf_monte = np.load(DATA_FOLDER+"pdf_t{:.3f}.npy".format(t_prime))
-        # print("[check] x1s, pdf(monte) data type: ", x1s.dtype, pdf_monte.dtype)
-        x1_grid, x2_grid, x3_grid, x4_grid = np.meshgrid(x1s, x2s, x3s, x4s, indexing="ij") # the indexing is very important
-        grid_points = np.vstack([x1_grid.ravel(), x2_grid.ravel(), x3_grid.ravel(), x4_grid.ravel()]).T
-        grid_points_tensor = torch.tensor(grid_points, dtype=torch.float32, requires_grad=False)
-        t_tensor = (torch.ones(len(grid_points_tensor), 1, dtype=torch.float32) * t_prime)
-        pdf_nn = p_net(grid_points_tensor, t_tensor).detach().numpy().reshape(x1_grid.shape)
-
-        samples = np.load(DATA_FOLDER+"samples_t{:.3f}.npy".format(t_prime))
-        r_samples = samples[:,0]
-        phi_samples = samples[:,2]
-
-        dx3 = x3s[1] - x3s[0]
-        dx4 = x4s[1] - x4s[0]
-
-        # pdf_monte_Nrphi =  np.sum(pdf_monte, axis=(2,3)) * dx3 * dx4
-        pdf_nn_Nrphi = np.sum(pdf_nn, axis=(2,3)) * dx3 * dx4
-        x1_grid, x2_grid =  np.meshgrid(x1s, x2s, indexing="ij") # the indexing is very important
-
-        # Plotting the contour plot
-        fig = plt.figure(figsize=(8, 6))
-        cp = plt.contourf(x1_grid, x2_grid, pdf_nn_Nrphi, levels=30, cmap="viridis", alpha=0.8)
-        # Adding color bar
-        plt.colorbar(cp)
-        # scatter samples of (r, phi) on to the plot
-        plt.scatter(r_samples, phi_samples, s=30, c='white', linewidths=0.5, edgecolor='black', alpha=1.0, label='Samples')
-        # Adding labels and title
-        plt.xlabel(r"$r'$")
-        plt.ylabel(r"$\phi'$")
-        # plt.title(r"$p(r',\phi')$"+ "from NN and 200 Samples at t="+str(np.round(t_prime,2))+"T")
-        plt.legend()
-        plt.tight_layout(pad=0.2)
-        fig.savefig("figs/v2phat_idx3_nrphi"+str(np.round(t_prime,3))+".pdf", format='pdf')
-        plt.show()
 
 
 def check_pdfnn_cartesian_wrt_monte(p_net, constants, DATA_FOLDER):
@@ -238,89 +189,6 @@ def compute_total_variation(t, data_1, data_2, p_net):
     plt.plot(idx_plot, np.abs(pdf_1- pdf_3), "b--", linewidth=0.5)
     plt.show()
     return tv, tv_nn
-
-
-def check_train_results(e1_net, p_net, t, data_folder, constants):
-    """
-    """
-    # load p(monte)
-    x1s = np.load(data_folder+"x1s.npy")
-    x2s = np.load(data_folder+"x2s.npy")
-    x3s = np.load(data_folder+"x3s.npy")
-    x4s = np.load(data_folder+"x4s.npy")
-    pdf_true = np.load(data_folder+"pdf_t{:.3f}.npy".format(t))
-    # print("[check] monte joint pdf shape, type: ", pdf_monte.shape, pdf_monte.dtype)
-    x1_grid, x2_grid, x3_grid, x4_grid = np.meshgrid(x1s, x2s, x3s, x4s, indexing="ij") # the indexing is very important
-    grid_points = np.vstack([x1_grid.ravel(), x2_grid.ravel(), x3_grid.ravel(), x4_grid.ravel()]).T
-    # print("[check] grid points shape type: ", grid_points.shape, grid_points.dtype)
-    if(t == 0.0):
-        pdf_true = p_init_better(grid_points, constants.N_MEAN_I, constants.N_COV_I).reshape(x1_grid.shape) # obtain analytical p(true)
-        # print("[check] x1 ranges, true joint pdf shape, type: ", x1s.dtype, pdf_true.shape, pdf_true.dtype)
-
-    # Grid spacings (assumed uniform)
-    dx1 = x1s[1] - x1s[0]
-    dx2 = x2s[1] - x2s[0]
-    dx3 = x3s[1] - x3s[0]
-    dx4 = x4s[1] - x4s[0]
-    dV = dx1 * dx2 * dx3 * dx4
-    E_x1 = np.sum(x1_grid * pdf_true) * dV
-    E_x2 = np.sum(x2_grid * pdf_true) * dV
-    E_x3 = np.sum(x3_grid * pdf_true) * dV
-    E_x4 = np.sum(x4_grid * pdf_true) * dV
-
-    # obtain pdf(nn)
-    grid_points_tensor = torch.tensor(grid_points, dtype=torch.float32, requires_grad=False)
-    t_tensor = (torch.ones(len(grid_points_tensor), 1, dtype=torch.float32) * t)
-    # print("[check] grid points tensor shape type: ", grid_points_tensor.shape, grid_points_tensor.dtype)
-    pdf_nn = p_net(grid_points_tensor, t_tensor).detach().numpy().reshape(x1_grid.shape)
-    # if(t == 0): # [test]
-    #     pdf_nn = p_init_perturb(grid_points).reshape(x1_grid.shape)
-    # print("[check] nn joint pdf shape, type: ", pdf_nn.shape, pdf_nn.dtype)
-    e1_nn  = e1_net(grid_points_tensor, t_tensor).detach().numpy().reshape(x1_grid.shape)
-    e1 = pdf_true - pdf_nn
-    
-    e1_vec = e1.reshape(-1)
-    e1_nn_vec = e1_nn.reshape(-1)
-    a1 = np.max(np.abs(e1_vec - e1_nn_vec)) / np.max(np.abs(e1_nn_vec))
-    print("a1 (t=", np.round(t,2),"): ", np.round(a1,3))
-    # print(E_x1, E_x2, E_x3, E_x4)
-    max_e1 = np.max(np.abs(e1_vec))
-    max_e1_nn = np.max(np.abs(e1_nn_vec))
-    print(max_e1, max_e1_nn)
-    B1 = 2.0 * max_e1_nn 
-
-    idx_plot = np.arange(1, 1+len(e1_vec))
-    plt.figure
-    plt.plot(idx_plot, e1_vec, "black", linewidth=2.0)
-    plt.plot(idx_plot, e1_nn_vec, "b--", linewidth=0.2)
-    plt.fill_between(idx_plot, y1=0.0*idx_plot+B1, y2=0.0*idx_plot-B1, 
-                         color="green", alpha=0.2, label=r"$B$")
-    plt.show()
-
-    return max_e1
-
-
-def get_max_e1_init(p_net, data_folder, constants):
-    """
-    """
-    # load p(monte)
-    t = constants.TI
-    x1s = np.load(data_folder+"x1s.npy")
-    x2s = np.load(data_folder+"x2s.npy")
-    x3s = np.load(data_folder+"x3s.npy")
-    x4s = np.load(data_folder+"x4s.npy")
-    pdf_true = np.load(data_folder+"pdf_t{:.3f}.npy".format(t))
-    x1_grid, x2_grid, x3_grid, x4_grid = np.meshgrid(x1s, x2s, x3s, x4s, indexing="ij") # the indexing is very important
-    grid_points = np.vstack([x1_grid.ravel(), x2_grid.ravel(), x3_grid.ravel(), x4_grid.ravel()]).T
-    pdf_true = p_init_better(grid_points, constants.N_MEAN_I, constants.N_COV_I).reshape(x1_grid.shape) # obtain analytical p(true)
-    grid_points_tensor = torch.tensor(grid_points, dtype=torch.float32, requires_grad=False)
-    t_tensor = (torch.ones(len(grid_points_tensor), 1, dtype=torch.float32) * t)
-    pdf_nn = p_net(grid_points_tensor, t_tensor).detach().numpy().reshape(x1_grid.shape)
-    e1 = pdf_true - pdf_nn
-    e1_vec = e1.reshape(-1)
-    max_e1 = np.max(np.abs(e1_vec))
-
-    return max_e1
 
 
 # def check_pdfnn_marginalize(p_net, t=0.0):

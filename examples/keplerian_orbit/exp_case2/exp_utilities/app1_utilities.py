@@ -2,6 +2,7 @@ import numpy as np
 import exp_utilities.plot_utilites as exp_plot
 # import cvxpy as cp
 import torch
+import os
 import sys
 sys.path.insert(0, '../utilities/')
 import FunctionalOpt.src as funcOpt
@@ -37,7 +38,7 @@ def get_prob_MC(constants, t_span, target_r, targer_ph):
     data_array = np.vstack(data_list)
     print("Prob result:")
     print(data_array)
-    # np.save('data/app1/pr_mcs.npy', data_array)
+    np.save('data/app1/tar1/prob/mcs.npy', data_array)
 
 
 def get_prob_PINN(constants, t_span, target_r, targer_ph, networks):
@@ -57,7 +58,7 @@ def get_prob_PINN(constants, t_span, target_r, targer_ph, networks):
     # np.save('data/app1/tar1/prob/diaggmmx64(aug_vio).npy', data_array)
 
 
-def compute_prob_event_monte(constants, target_r, targer_ph, t, N_monte=4, data_folder="data/"):
+def compute_prob_event_monte(constants, target_r, targer_ph, t):
     # convert target_r target_phi to normalized coordinate
     target_region = np.array([
         [target_r[0], target_r[1]]/constants.R,   # r bounds
@@ -67,15 +68,16 @@ def compute_prob_event_monte(constants, target_r, targer_ph, t, N_monte=4, data_
         [constants._X4_RANGE[0], constants._X4_RANGE[1]]
     ])
 
-    # [1e+8, 1e+7, 1e+6, 1e+5]
+    # [1e+5, 1e+6]
     pr_list = []
-    mc_folders = ["data/1e+8/", "data/1e+7/", "data/1e+6/", "data/1e+5/"]
+    mc_folders = ["data/1e+5/", "data/1e+6/"]
+    N_monte = len(mc_folders)
 
     # data_folder
-    x1s = np.load(data_folder+"x1s.npy")
-    x2s = np.load(data_folder+"x2s.npy")
-    x3s = np.load(data_folder+"x3s.npy")
-    x4s = np.load(data_folder+"x4s.npy")
+    x1s = np.load("data/grids/x1s.npy")
+    x2s = np.load("data/grids/x2s.npy")
+    x3s = np.load("data/grids/x3s.npy")
+    x4s = np.load("data/grids/x4s.npy")
     x1_grid, x2_grid, x3_grid, x4_grid = np.meshgrid(x1s, x2s, x3s, x4s, indexing="ij") # the indexing is very important
     dx1 = x1s[1] - x1s[0]
     dx2 = x2s[1] - x2s[0]

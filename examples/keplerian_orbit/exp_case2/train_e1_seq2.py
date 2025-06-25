@@ -1,7 +1,16 @@
 """
-train a p_nn that is parameterized by GMM
-
+Training log:
+[load model from: output/v2/e1_net_seq2.pth
+best epoch:  47055 , min loss: 0.00917399674654007 , train time: 4884.348750114441
+a1 (t= 0.12 ):  1.097
+0.03231857 0.033636343
+a1 (t= 0.16 ):  1.294
+0.046574354 0.045143493
+a1 (t= 0.2 ):  1.337
+0.066505484 0.060133357
 """
+
+
 import numpy as np
 import torch
 import torch.nn as nn
@@ -10,26 +19,22 @@ import torch.nn.functional as F
 import matplotlib.pyplot as plt
 import time
 import argparse
-from monte import p_init, get_p_init_max
-from exp_case2.train_p import diff_opt_p
-from keplerian_orbit.exp_case2.exp_utilities.pnet_models import PNet
-from e1net_models import E1Net
+from monte import p_init, get_p_init_max, get_max_e1_init
+from train_p import diff_opt_p
+from exp_utilities.plot_utilites import check_error_flatten
+from utilities.constants import Case2_4D_Constants
+# import utilities
 import sys
-import os
-# Get the parent directory of the current directory (exp1)
-parent_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
-if parent_dir not in sys.path:
-    sys.path.insert(0, parent_dir)
-from keplerian_orbit.exp_case2.utilities.post_exp_cas2 import check_train_results, load_trained_model, get_max_e1_init
-from keplerian_orbit.exp_case2.utilities.constants import Case2_4D_Constants
+sys.path.insert(0, '../utilities/')
+from _General.neuralnetworks import PNet, E1Net, load_trained_model
 
 
 # curriculum training
 E1NET_PATH = "output/v2/e1_net_seq2.pth"
 E1NET_INTER_PATH = "output/v2/e1_net_seq2_"
 
-PNET_PATH = "output/v2/p_net.pth"
-E1NET_PATH_SEQ1 = "output/v2/e1_net_seq1.pth" # sequence 1
+PNET_PATH = "output/v0/p_net.pth"
+E1NET_PATH_SEQ1 = "output/v2/e1_net_seq1.pth"
 DATA_FOLDER = "data/1e+6/"
 device = "cpu"
 TRAIN_FLAG = False
@@ -165,12 +170,12 @@ def train_model(e1_net, p_net, e1_net_seq1, optimizer, scheduler, mse_cost_funct
 
 def main():
     global constants
-    p_net = PNet(scale=get_p_init_max(DATA_FOLDER)).to(device)
+    p_net = PNet(constants, scale=get_p_init_max(constants)).to(device)
     p_net = load_trained_model(p_net, path=PNET_PATH, method="new"); p_net.eval()
-    e1_net_seq1 = E1Net(scale=get_max_e1_init(p_net, DATA_FOLDER, constants)).to(device)
+    e1_net_seq1 = E1Net(constants, scale=get_max_e1_init(constants, p_net)).to(device)
     e1_net_seq1 = load_trained_model(e1_net_seq1, path=E1NET_PATH_SEQ1, method="new"); e1_net_seq1.eval()
 
-    e1_net = E1Net(scale=get_max_e1_init(p_net, DATA_FOLDER, constants)).to(device)
+    e1_net = E1Net(constants, scale=get_max_e1_init(constants, p_net)).to(device)
     e1_net.apply(init_weights_He)
 
     mse_cost_function = torch.nn.MSELoss()
@@ -183,7 +188,7 @@ def main():
     ### Post-process ###
     for t_prime in constants.T_PRIME_SPAN:
         if(t_prime >= 0.5*constants.TF/constants.T):
-            check_train_results(e1_net, p_net, t_prime, DATA_FOLDER, constants)
+            check_error_flatten(constants, e1_net, p_net, t_prime, DATA_FOLDER)
     # for t_prime in constants.T_PRIME_SPAN:
     #    check_pdfnn_marginalize(p_net, t=t_prime)
     # test_nn_cartesian_pdf_xy(p_net, model_name="p_net")

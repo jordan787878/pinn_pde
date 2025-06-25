@@ -1,19 +1,16 @@
 import numpy as np
+import torch
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 import time
 from scipy.stats import norm, multivariate_normal
 from scipy.interpolate import griddata
-
 from utilities.util import *
 from utilities.constants import Case2_4D_Constants
 
-# Compute Time 
-# 1e+5/
-# MC time (sec):  [18.44 19.04 18.87 18.73 18.7  19.14 18.99 19.04 19.07 19.11 18.91]
 
-# 1e+8/
-# [10985.15 10279.26 10203.24 10229.59 10386.13 17258.86*]
+GRID_FOLDER = "data/grids/"
+SAMPLES_FOLDER = "data/samples/"
 
 constants = Case2_4D_Constants()
 np.random.seed(0)
@@ -94,26 +91,43 @@ def p_sol_monte(t=0.0, linespace_num=51, stat_sample=10000000):
     return midpoints_x1, midpoints_x2, midpoints_x3, midpoints_x4, frequency_4d
 
 
-def p_init(x):
+def p_init(constants, x):
     """
     x is numpy array of shape (N x 4), N is the sample size
     """
-    global constants
     pdf_func = multivariate_normal(mean=constants.N_MEAN_I, cov=constants. N_COV_I)
     pdf_eval = pdf_func.pdf(x).reshape(-1,1).astype(x.dtype)
     return pdf_eval
 
 
-def get_p_init_max(data_folder):
-    x1s = np.load(data_folder+"x1s.npy")
-    x2s = np.load(data_folder+"x2s.npy")
-    x3s = np.load(data_folder+"x3s.npy")
-    x4s = np.load(data_folder+"x4s.npy")
+def get_p_init_max(constants):
+    x1s = np.load("data/grids/x1s.npy")
+    x2s = np.load("data/grids/x2s.npy")
+    x3s = np.load("data/grids/x3s.npy")
+    x4s = np.load("data/grids/x4s.npy")
     x1_grid, x2_grid, x3_grid, x4_grid = np.meshgrid(x1s, x2s, x3s, x4s, indexing="ij") # the indexing is very important
     grid_points = np.vstack([x1_grid.ravel(), x2_grid.ravel(), x3_grid.ravel(), x4_grid.ravel()]).T
-    joint_pdf_true = p_init(grid_points)
+    joint_pdf_true = p_init(constants, grid_points)
     p_init_max = np.max(joint_pdf_true)
     return p_init_max
+
+
+def get_max_e1_init(constants, p_net):
+    t = constants.TI
+    x1s = np.load("data/grids/x1s.npy")
+    x2s = np.load("data/grids/x2s.npy")
+    x3s = np.load("data/grids/x3s.npy")
+    x4s = np.load("data/grids/x4s.npy")
+    x1_grid, x2_grid, x3_grid, x4_grid = np.meshgrid(x1s, x2s, x3s, x4s, indexing="ij") # the indexing is very important
+    grid_points = np.vstack([x1_grid.ravel(), x2_grid.ravel(), x3_grid.ravel(), x4_grid.ravel()]).T
+    pdf_true = p_init(constants, grid_points).reshape(x1_grid.shape) # obtain analytical p(true)
+    grid_points_tensor = torch.tensor(grid_points, dtype=torch.float32, requires_grad=False)
+    t_tensor = (torch.ones(len(grid_points_tensor), 1, dtype=torch.float32) * t)
+    pdf_nn = p_net(grid_points_tensor, t_tensor).detach().numpy().reshape(x1_grid.shape)
+    e1 = pdf_true - pdf_nn
+    e1_vec = e1.reshape(-1)
+    max_e1 = np.max(np.abs(e1_vec))
+    return max_e1
 
 
 def test_monte_accuracy():
@@ -303,36 +317,37 @@ def test_monte_cartesian_pdf_xy():
       
 
 def generate_data(data_folder, N_samples):
+    dt = 0.01
+    t_span = np.arange(0.00, 0.20+dt, dt)
     mc_time = []
-    t_span = constants.T_PRIME_SPAN
-    print(t_span)
-
     for t_prime in t_span:
         start_time = time.time()
         x1s, x2s, x3s, x4s, pdf = p_sol_monte(t=t_prime, linespace_num=51, stat_sample=N_samples)   
         mc_time.append(time.time() - start_time)
         np.save(data_folder+"pdf_t{:.3f}.npy".format(t_prime), pdf)
+        
         if t_prime == 0.0:
-            np.save(data_folder+"x1s.npy", x1s)
-            np.save(data_folder+"x2s.npy", x2s)
-            np.save(data_folder+"x3s.npy", x3s)
-            np.save(data_folder+"x4s.npy", x4s)
-    print("MC time (sec): ", np.round(np.array(mc_time),2) )
+            np.save(GRID_FOLDER+"x1s.npy", x1s)
+            np.save(GRID_FOLDER+"x2s.npy", x2s)
+            np.save(GRID_FOLDER+"x3s.npy", x3s)
+            np.save(GRID_FOLDER+"x4s.npy", x4s)
+
+    np.save(data_folder+"mc_time.npy", np.array(mc_time))
 
     
 def main():
     ######################
     ## Generate data
     ######################
-    data_folder = "data/1e+6/"
-    # generate_data(data_folder, 1000000)
-    # exp_case2_generate_samples(data_folder, constants, use_j2=False, N_samples=300, dtt=1e-4)
+    data_folder = "data/1e+5/"
+    # generate_data(data_folder, 100000)
+    # exp_case2_generate_samples(constants, use_j2=False, N_samples=100, dtt=1e-4)
 
     ######################
     ## Test MC results
     ######################
     # test_monte_accuracy()
-    test_monte_spherical_pdf_Nrphi(data_folder)
+    # test_monte_spherical_pdf_Nrphi(data_folder)
     # test_monte_cartesian_pdf_xy()
     
 

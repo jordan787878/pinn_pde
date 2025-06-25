@@ -37,18 +37,18 @@ def app1(p_net, e1_net_seq1, e1_net_seq2):
     # t_span = simple_interpolate(constants.T_PRIME_SPAN); t_span = simple_interpolate(t_span)
 
     # Prob. (Event) when pdf are obtained by MC
-    # app1_util.get_prob_MC(constants, t_span, target_r, target_phi)
+    app1_util.get_prob_MC(constants, t_span, target_r, target_phi)
 
     # Prob. (Event) when pdf are obtained using PINN + B1(possibly continuous)
-    networks = (p_net, e1_net_seq1, e1_net_seq2)
-    app1_util.get_prob_PINN(constants, t_span, target_r, target_phi, networks)
+    # networks = (p_net, e1_net_seq1, e1_net_seq2)
+    # app1_util.get_prob_PINN(constants, t_span, target_r, target_phi, networks)
     
 
 
 def main():
     global constants
 
-    p_net = PNet(constants, scale=get_p_init_max(DATA_FOLDER))
+    p_net = PNet(constants, scale=get_p_init_max(constants))
     p_net = load_trained_model(p_net, path=PNET_PATH, method="new"); p_net.eval()
     e1_net_seq1 = E1Net(constants, scale=get_max_e1_init(p_net, DATA_FOLDER, constants))
     e1_net_seq1 = load_trained_model(e1_net_seq1, path=E1NET_PATH_SEQ1, method="new"); e1_net_seq1.eval()
@@ -61,11 +61,10 @@ def main():
     # exp_plot.visual_e1hat_training(constants, (p_net, e1_net_seq1, e1_net_seq2), DATA_FOLDER)
     # plot_train_loss(E1NET_PATH_SEQ2)
     # exp_plot.plot_app1_onlymc(constants, "data/app1/tar1/pr_mcs.npy")
-    # exp_plot.plot_app1()
-    # return
+    exp_plot.plot_app1()
 
     ### Application ###
-    app1(p_net, e1_net_seq1, e1_net_seq2)
+    # app1(p_net, e1_net_seq1, e1_net_seq2)
 
 
 if __name__ == "__main__":

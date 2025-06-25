@@ -6,7 +6,43 @@ This case is a circular orbit on plannar motion. Hence, we reduce the dynamics t
 Compared to exp2_sphere_4d (baseline):
     1) the final time is increased to 0.2*T.
     2) the solution domain is increased to ensure sum(p) ~= 1.0
+
+Training log:
+p net scale:  0.18991181
+save epoch: 0 ,loss: tensor(2.7721) ,ic: tensor(1.7133) ,res: tensor(1.0341) ,tv: tensor(2.4719) ,beta:  0.0
+... RAR IC, add:  0.0 3.8275725841522217
+... RAR Res, add:  0.020027311518788338 68.32891845703125
+save epoch: 1 ,loss: tensor(1.4248) ,ic: tensor(0.9195) ,res: tensor(0.4873) ,tv: tensor(1.7979) ,beta:  0.02
+save epoch: 2 ,loss: tensor(0.7899) ,ic: tensor(0.4309) ,res: tensor(0.3432) ,tv: tensor(1.5765) ,beta:  0.04
+save epoch: 3 ,loss: tensor(0.4395) ,ic: tensor(0.1955) ,res: tensor(0.2300) ,tv: tensor(1.3948) ,beta:  0.06
+save epoch: 4 ,loss: tensor(0.2529) ,ic: tensor(0.0981) ,res: tensor(0.1436) ,tv: tensor(1.1115) ,beta:  0.08
+save epoch: 5 ,loss: tensor(0.1550) ,ic: tensor(0.0636) ,res: tensor(0.0836) ,tv: tensor(0.7837) ,beta:  0.099999994
+save epoch: 6 ,loss: tensor(0.1051) ,ic: tensor(0.0539) ,res: tensor(0.0461) ,tv: tensor(0.5054) ,beta:  0.11999999
+save epoch: 7 ,loss: tensor(0.0809) ,ic: tensor(0.0528) ,res: tensor(0.0250) ,tv: tensor(0.3121) ,beta:  0.13999999
+save epoch: 8 ,loss: tensor(0.0699) ,ic: tensor(0.0542) ,res: tensor(0.0137) ,tv: tensor(0.1918) ,beta:  0.15999998
+save epoch: 9 ,loss: tensor(0.0651) ,ic: tensor(0.0561) ,res: tensor(0.0078) ,tv: tensor(0.1200) ,beta:  0.17999998
+... RAR IC, add:  0.0 1.0642411708831787
+save epoch: 379 ,loss: tensor(0.0618) ,ic: tensor(0.0609) ,res: tensor(0.0007) ,tv: tensor(0.0282) ,beta:  0.19999997
+... RAR IC, add:  0.0 1.028399109840393
+... RAR Res, add:  0.199101984500885 0.8782105445861816
+save epoch: 413 ,loss: tensor(0.0586) ,ic: tensor(0.0563) ,res: tensor(0.0016) ,tv: tensor(0.0622) ,beta:  0.21999997
+save epoch: 426 ,loss: tensor(0.0556) ,ic: tensor(0.0522) ,res: tensor(0.0026) ,tv: tensor(0.0780) ,beta:  0.23999996
+save epoch: 446 ,loss: tensor(0.0527) ,ic: tensor(0.0480) ,res: tensor(0.0037) ,tv: tensor(0.1032) ,beta:  0.25999996
+save epoch: 479 ,loss: tensor(0.0500) ,ic: tensor(0.0465) ,res: tensor(0.0030) ,tv: tensor(0.0580) ,beta:  0.27999997
+... RAR IC, add:  0.0 0.9148398041725159
+... RAR Res, add:  0.18391795456409454 1.006196141242981
+save epoch: 590 ,loss: tensor(0.0475) ,ic: tensor(0.0456) ,res: tensor(0.0015) ,tv: tensor(0.0363) ,beta:  0.29999998
+...
+save epoch: 47054 ,loss: tensor(0.0033) ,ic: tensor(0.0012) ,res: tensor(0.0006) ,tv: tensor(0.1500) ,beta:  1.0
+... RAR Res, add:  0.17846857011318207 0.25211480259895325
+save epoch: 49579 ,loss: tensor(0.0031) ,ic: tensor(0.0011) ,res: tensor(0.0006) ,tv: tensor(0.1451) ,beta:  1.0
+... RAR Res, add:  0.177302747964859 0.18425658345222473
+p_net_reg train complete
+[load model from: output/v0/p_net.pth
+best epoch:  49579 , min loss: 0.003088535275310278 , train time: 1963.380201101303
 """
+
+
 import numpy as np
 import torch
 import torch.nn as nn
@@ -15,18 +51,19 @@ import torch.nn.functional as F
 import time
 import argparse
 from monte import p_init, get_p_init_max
-from keplerian_orbit.exp_case2.exp_utilities.pnet_models import PNet
-# add ../utilities package
-import sys
-import os
-parent_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
-if parent_dir not in sys.path:
-    sys.path.insert(0, parent_dir)
-from keplerian_orbit.exp_case2.utilities.post_exp_cas2 import *
-from keplerian_orbit.exp_case2.utilities.constants import Case2_4D_Constants
+from exp_utilities.plot_utilites import check_pdf_Nrphi
+from utilities.post_exp_cas2 import *
+from utilities.constants import Case2_4D_Constants
 
-PNET_PATH = "output/v2/p_net.pth"
-PNET_INTER_PATH = "output/v2/p_net_"
+# import utilities
+import sys
+sys.path.insert(0, '../utilities/')
+from _General.neuralnetworks import PNet, load_trained_model
+
+
+PNET_PATH = "output/v0/p_net.pth"
+PNET_INTER_PATH = "output/v0/p_net_"
+
 DATA_FOLDER = "data/1e+6/"
 device = "cpu"
 TRAIN_FLAG = False
@@ -90,8 +127,8 @@ def train_p_net(p_net, optimizer, scheduler, mse_cost_function, iterations=40000
     S = 30000
     RAR_eps = 1e-1
     FLAG = False
-    # beta = np.float32(0.0)
-    beta = np.float32(1.0)
+    beta = np.float32(0.0)
+    # beta = np.float32(1.0)
     FLAG_SAVE_INTER = 0
     INTER_COUNT = 0
     
@@ -100,7 +137,7 @@ def train_p_net(p_net, optimizer, scheduler, mse_cost_function, iterations=40000
         optimizer.zero_grad()
 
         # Loss based on boundary conditions
-        p_i = p_init(x_bc.detach().numpy())
+        p_i = p_init(constants, x_bc.detach().numpy())
         p_i = torch.tensor(p_i, dtype=torch.float32, requires_grad=False)
         phat_i = p_net(x_bc, t_bc)
         mse_u = mse_cost_function(phat_i/normalize, p_i.detach()/normalize)
@@ -118,7 +155,7 @@ def train_p_net(p_net, optimizer, scheduler, mse_cost_function, iterations=40000
         tv_loss = torch.mean(tv_t)
 
         # Loss Function
-        loss = mse_u + mse_res + 0.0 * tv_loss
+        loss = mse_u + mse_res + 1e-2 * tv_loss
         loss_history.append(loss.item())
 
         # Save the min loss model
@@ -129,11 +166,11 @@ def train_p_net(p_net, optimizer, scheduler, mse_cost_function, iterations=40000
                   ",tv:", tv_loss.data,
                   ",beta: ", beta
                    )
-            torch.save({
-                    'epoch': epoch, 'model_state_dict': p_net.state_dict(),
-                    'optimizer_state_dict': optimizer.state_dict(),
-                    'loss_history': loss_history, 'train_time': train_time,
-                    }, PNET_PATH)
+            # torch.save({
+            #         'epoch': epoch, 'model_state_dict': p_net.state_dict(),
+            #         'optimizer_state_dict': optimizer.state_dict(),
+            #         'loss_history': loss_history, 'train_time': train_time,
+            #         }, PNET_PATH)
             min_loss = loss.data
             FLAG = True
             
@@ -144,19 +181,19 @@ def train_p_net(p_net, optimizer, scheduler, mse_cost_function, iterations=40000
             FLAG_SAVE_INTER = FLAG_SAVE_INTER + 1
             if(FLAG_SAVE_INTER >= 10):
                 INTER_COUNT = INTER_COUNT + 1
-                torch.save({
-                    'epoch': epoch, 'model_state_dict': p_net.state_dict(),
-                    'optimizer_state_dict': optimizer.state_dict(),
-                    'loss_history': loss_history, 'train_time': train_time,
-                    }, PNET_INTER_PATH+str(INTER_COUNT)+".pth")
-                FLAG_SAVE_INTER = 0
+                # torch.save({
+                #     'epoch': epoch, 'model_state_dict': p_net.state_dict(),
+                #     'optimizer_state_dict': optimizer.state_dict(),
+                #     'loss_history': loss_history, 'train_time': train_time,
+                #     }, PNET_INTER_PATH+str(INTER_COUNT)+".pth")
+                # FLAG_SAVE_INTER = 0
 
         # RAR
         if(epoch % 100 == 0 and FLAG):
             x_bc_rar, t_bc_rar = constants.sample_init_points(S)
             x_rar, t_rar = constants.sample_res_points(S)
             # add initial points
-            p_i = p_init(x_bc_rar.detach().numpy())
+            p_i = p_init(constants, x_bc_rar.detach().numpy())
             p_i = torch.tensor(p_i, dtype=torch.float32, requires_grad=False)
             phat_i = p_net(x_bc_rar, t_bc_rar).to(device)
             max_error = torch.max(torch.abs(p_i - phat_i))/normalize
@@ -188,16 +225,16 @@ def train_p_net(p_net, optimizer, scheduler, mse_cost_function, iterations=40000
 
 def main():
     global constants
-    p_net = PNet().to(device)
+    p_net = PNet(constants).to(device)
     p_net.apply(init_weights_He)
-    p_net.scale = get_p_init_max(DATA_FOLDER)
+    p_net.scale = get_p_init_max(constants)
     print("p net scale: ", p_net.scale)
 
     mse_cost_function = torch.nn.MSELoss()
     optimizer = torch.optim.Adam(p_net.parameters(), lr=1e-3)
     scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.95)
     if(TRAIN_FLAG):
-        train_p_net(p_net, optimizer, scheduler, mse_cost_function, iterations=50000)
+        train_p_net(p_net, optimizer, scheduler, mse_cost_function, iterations=600)
         print("p_net_reg train complete")
     p_net = load_trained_model(p_net, path=PNET_PATH, method="new"); p_net.eval()
 
@@ -207,7 +244,7 @@ def main():
     #     tv, tv_nn = compute_total_variation(t_prime, "data/", "data/1e+7/", p_net)
     #     print(tv, tv_nn)
     # 2. distribution plots
-    check_pdf_Nrphi(p_net, constants, DATA_FOLDER)
+    check_pdf_Nrphi(constants, p_net)
     # check_pdfnn_cartesian_wrt_monte(p_net, constants, "data/")
     # (obsolete)
     # # check_pdfnn_marginalize(p_net, t=t_prime)
