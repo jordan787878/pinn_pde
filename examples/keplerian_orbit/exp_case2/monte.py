@@ -95,7 +95,7 @@ def p_init(constants, x):
     """
     x is numpy array of shape (N x 4), N is the sample size
     """
-    pdf_func = multivariate_normal(mean=constants.N_MEAN_I, cov=constants. N_COV_I)
+    pdf_func = multivariate_normal(mean=constants.N_MEAN_I, cov=constants.N_COV_I)
     pdf_eval = pdf_func.pdf(x).reshape(-1,1).astype(x.dtype)
     return pdf_eval
 

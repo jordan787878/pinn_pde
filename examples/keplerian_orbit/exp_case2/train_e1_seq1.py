@@ -35,9 +35,10 @@ sys.path.insert(0, '../utilities/')
 from _General.neuralnetworks import PNet, E1Net, load_trained_model
 
 
-# curriculum training
-E1NET_PATH = "output/v2/e1_net_seq1.pth"
-E1NET_INTER_PATH = "output/v2/e1_net_seq1_"
+E1NET_PATH = "output/v0/e1_net_seq1.pth"
+E1NET_INTER_PATH = "output/v0/e1_net_seq1_"
+# E1NET_PATH = "output/v2/e1_net_seq1.pth"
+# E1NET_INTER_PATH = "output/v2/e1_net_seq1_"
 
 PNET_PATH = "output/v0/p_net.pth"
 DATA_FOLDER = "data/1e+6/"
@@ -77,8 +78,8 @@ def train_model(e1_net, p_net, optimizer, scheduler, mse_cost_function, iteratio
     S = 30000
     RAR_eps = 1e-1
     FLAG = False
-    # beta = np.float32(0.0)
-    beta = np.float32(1.0)
+    beta = np.float32(0.0)
+    # beta = np.float32(1.0)
     FLAG_SAVE_INTER = 0
     INTER_COUNT = 0
     
@@ -87,7 +88,7 @@ def train_model(e1_net, p_net, optimizer, scheduler, mse_cost_function, iteratio
         optimizer.zero_grad()
 
         # Loss based on boundary conditions
-        p_i = p_init(x_bc.detach().numpy())
+        p_i = p_init(constants, x_bc.detach().numpy())
         p_i = torch.tensor(p_i, dtype=torch.float32, requires_grad=False)
         phat_i = p_net(x_bc, t_bc).to(device)
         e_i = p_i - phat_i
@@ -106,7 +107,7 @@ def train_model(e1_net, p_net, optimizer, scheduler, mse_cost_function, iteratio
         res_tau = diff_opt_p(x, tau, e1_net, beta=beta) + diff_opt_p(x, tau, p_net, beta=beta)
         tv_loss = mse_cost_function(res_tau/normalize, res/normalize)
 
-        loss = mse_u + mse_res + 0.0*tv_loss
+        loss = mse_u + mse_res + 1e-2*tv_loss
         loss_history.append(loss.item())
 
         # Save the min loss model
@@ -147,7 +148,7 @@ def train_model(e1_net, p_net, optimizer, scheduler, mse_cost_function, iteratio
             x_rar, t_rar = constants.sample_res_points_seq(S, t_seq)
 
             # add initial points
-            p_i = p_init(x_bc_rar.detach().numpy())
+            p_i = p_init(constants, x_bc_rar.detach().numpy())
             p_i = torch.tensor(p_i, dtype=torch.float32, requires_grad=False)
             phat_i = p_net(x_bc_rar, t_bc_rar).to(device)
             e_i = p_i - phat_i
