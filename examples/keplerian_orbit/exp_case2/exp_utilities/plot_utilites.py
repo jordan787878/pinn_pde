@@ -397,7 +397,7 @@ def plot_app1_onlymc(constants, data_foler, N_mc=4, save_plots=False, save_plot_
         plt.show()
 
 
-def plot_app1(save_plots=False, save_plot_path=None):
+def plot_app1(save_plot_path=None):
     set_publication_plot_style()
 
     parent_folder = "data/app1/tar1/prob/"
@@ -411,6 +411,7 @@ def plot_app1(save_plots=False, save_plot_path=None):
                         #  parent_folder+"pr_nn_Nd50_gmmx64(iter-20k).npy", # weight of region_loss 1e-2
                          parent_folder+"diaggmmx64.npy", # weight of region_loss 1e-1 with half random samples
                          parent_folder+"diaggmmx64(aug_vio).npy",
+                         parent_folder+"pinnv0_diaggmmx64.npy",
                          ]
     plot_labels = [r"$\hat{p}$",
                    r"$\int_{X^{'}} \hat{p}+B_1 dx$", 
@@ -420,9 +421,10 @@ def plot_app1(save_plots=False, save_plot_path=None):
                 #    r"FO($\hat{p},B_1$) GMMx64(20k det.)",
                    r"FO($\hat{p},B_1$) GMMx64(20k)",
                    r"FO($\hat{p},B_1$) GMMx64(20k aug.)",
+                   r"FO PINN:v0 GMMx64(20k)",
                    ]
-    plot_fills  = [False, False, True, True, False]
-    plot_style =  ["--", "-", "-", "-", "-"]
+    plot_fills  = [False, False, True, True, False, False]
+    plot_style =  ["--", "-", "-", "-", "-", "-"]
 
     pr_nn_data = []
     for j in range(len(pr_nn_data_labels)):
@@ -463,10 +465,9 @@ def plot_app1(save_plots=False, save_plot_path=None):
     ax.set_xticks(ticks)
     # Set the tick labels.
     ax.set_xticklabels(tick_labels)
-    if(save_plots):
-        if(save_plot_path is not None):
-            print("Save plot to: ", save_plot_path)
-            fig.savefig(save_plot_path, format='pdf')
+    if(save_plot_path is not None):
+        print("Save plot to: ", save_plot_path)
+        fig.savefig(save_plot_path+".pdf", format='pdf')
     else:
         plt.show()
 

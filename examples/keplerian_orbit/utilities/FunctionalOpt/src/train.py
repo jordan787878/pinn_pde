@@ -52,19 +52,25 @@ def train_model(problem, model, num_iterations=1000, batch_size=256, device=torc
 
         # --- Combine loss and optimize ---
         total_loss = loss_full + loss_region*1e-1
-        total_loss.backward(retain_graph=True)
-        optimizer.step()
-        scheduler.step()
-        
         # --- Print progress and update the best model ---
         if it % int(num_iterations/10) == 0:
             print(f"Iteration {it:4d}, loss: {total_loss.item()}, loss hc: {loss_full.item()}, loss reg: {loss_region.item()}")
             print(f"   violation percent: {vio_percent:.4f}%")
-        if(total_loss.item() < best_loss):
-            best_model_state = {k: v.cpu().clone() for k, v in model.state_dict().items()}
-            best_loss = total_loss.item()
-            print(f"[Saved] Iteration {it:4d}, loss: {total_loss.item()}, {loss_full.item()}, {loss_region.item()}")
-            print(f"   violation percent: {vio_percent:.4f}%")
+        if(total_loss.item() < best_loss and vio_percent <= 0):
+            # --- Augment by checking violation on grid ---
+            _x_vio, _p0_vio, x_remains, p0_remains = aug_samples_violate(problem, model, x_remains, p0_remains, batch_size)
+            if(_x_vio is None):    
+                best_model_state = {k: v.cpu().clone() for k, v in model.state_dict().items()}
+                best_loss = total_loss.item()
+                print(f"[Best] Iteration {it:4d}, loss: {total_loss.item()}, {loss_full.item()}, {loss_region.item()}")
+                print(f"   violation percent: {vio_percent:.4f}%")
+            else:
+                x_dom   = torch.cat([x_dom,   _x_vio], dim=0)         
+                p0_dom  = torch.cat([p0_dom, _p0_vio], dim=0)
+                print("[check] sample size:", x_dom.shape[0], x_remains.shape[0])
+        total_loss.backward(retain_graph=True)
+        optimizer.step()
+        scheduler.step()
             
     # --- Return best model ---
     if best_model_state is not None:
@@ -161,7 +167,7 @@ def aug_samples_violate(problem, model, x_remains, p0_remains, batch_size):
     # 3) All violating indices
     viol_idx_all = (viol_mag > 0).nonzero(as_tuple=False).view(-1)
     if viol_idx_all.numel() == 0:
-        print("No violations found.")
+        # print("No violations found.")
         return None, None, x_remains, p0_remains
 
     # 4) Pick top-k by descending violation mag

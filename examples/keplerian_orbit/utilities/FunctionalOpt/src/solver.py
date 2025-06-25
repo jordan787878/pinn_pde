@@ -16,7 +16,7 @@ def solve_funcopt(problem):
     # --- Train model ---
     trained_model  = train_model(problem, trained_model, num_iterations=20000)
 
-    # --- Load model ---
+    # --- Load trained model ---
     # trained_model.load_state_dict(torch.load("data/app1/tar1/pdf_models/gmm_64_t{:.3f}.pth".format(t)))
     
     # --- Check constraints ---

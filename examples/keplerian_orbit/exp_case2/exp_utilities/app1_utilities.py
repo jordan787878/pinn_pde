@@ -8,7 +8,7 @@ sys.path.insert(0, '../utilities/')
 import FunctionalOpt.src as funcOpt
 
 
-def set_target(constants, p_net, data_folder, show_plot=False):
+def set_target(constants):
     """
     convert the normalize spherical pdf_nn to pdf_nn(x,y)
     and compare it with respect to pdf_monte(x,y)
@@ -22,9 +22,6 @@ def set_target(constants, p_net, data_folder, show_plot=False):
     ## tar2
     # target_r = np.array([21.3, 21.8])*constants.R
     # target_ph = np.array([-3.5, 1.5])*constants.PHI + constants.W*constants.T*(0.19)
-
-    if(show_plot):
-        exp_plot.plot_target(constants, p_net, target_r, target_ph, data_folder)
 
     return target_r, target_ph
 
@@ -41,21 +38,23 @@ def get_prob_MC(constants, t_span, target_r, targer_ph):
     np.save('data/app1/tar1/prob/mcs.npy', data_array)
 
 
-def get_prob_PINN(constants, t_span, target_r, targer_ph, networks):
+def get_prob_PINN(constants, t_span, target_r, targer_ph, networks, options):
     data_list = []
     for t in t_span:
         model = None
         pr, model = compute_prob_event(constants, target_r, targer_ph, t, networks, N_discret=50)
         data_list.append([t, pr])
         # --- save model ----
-        # if(model is not None):
-        #     torch.save(model.state_dict(), "data/app1/tar1/pdf_models/diaggmmx64(aug_vio)_t{:.3f}.pth".format(t))
+        if(model is not None and options['save_result']):
+            torch.save(model.state_dict(), 
+                options["path_pdf_models"]+options["label"]+"_t{:.3f}.pth".format(t))
 
     data_array = np.array(data_list)
     print("Prob result:")
     print(data_array)
     # --- save results ---
-    # np.save('data/app1/tar1/prob/diaggmmx64(aug_vio).npy', data_array)
+    if(options['save_result']):
+        np.save(options["path_prob"]+options["label"]+".npy", data_array)
 
 
 def compute_prob_event_monte(constants, target_r, targer_ph, t):
@@ -111,7 +110,7 @@ def compute_prob_event_monte(constants, target_r, targer_ph, t):
     return pr_list
 
 
-def compute_prob_event(constants, target_r, targer_ph, t, networks, N_discret = 50, data_folder="data/"):
+def compute_prob_event(constants, target_r, targer_ph, t, networks, N_discret = 50):
     p_net, e1_net_seq1, e1_net_seq2 = networks
 
     # convert target_r target_phi to normalized coordinate
