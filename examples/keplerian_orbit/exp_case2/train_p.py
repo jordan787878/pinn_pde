@@ -18,8 +18,8 @@ import time
 import argparse
 from monte import p_init, get_p_init_max
 from exp_utilities.plot_utilites import check_pdf_Nrphi
-from utilities.post_exp_cas2 import *
-from utilities.constants import Case2_4D_Constants
+from exp_utilities.constants import Case2_4D_Constants
+# from utilities.post_exp_cas2 import *
 
 # import utilities
 import sys

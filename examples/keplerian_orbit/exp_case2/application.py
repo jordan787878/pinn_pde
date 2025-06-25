@@ -1,6 +1,6 @@
 import numpy as np
-from utilities.constants import Case2_4D_Constants # NOTE: move utilities to exp_utilities
 from monte import get_p_init_max, get_max_e1_init
+from exp_utilities.constants import Case2_4D_Constants
 import exp_utilities.plot_utilites as exp_plot
 import exp_utilities.app1_utilities as app1_util
 

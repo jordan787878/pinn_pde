@@ -411,7 +411,7 @@ def plot_app1(save_plot_path=None):
                         #  parent_folder+"pr_nn_Nd50_gmmx64(iter-20k).npy", # weight of region_loss 1e-2
                          parent_folder+"diaggmmx64.npy", # weight of region_loss 1e-1 with half random samples
                          parent_folder+"diaggmmx64(aug_vio).npy",
-                         parent_folder+"pinnv0_diaggmmx64.npy",
+                         parent_folder+"pinnv0_diaggmmx64.npy", # error bound B is obtained by e1_net.pth
                          ]
     plot_labels = [r"$\hat{p}$",
                    r"$\int_{X^{'}} \hat{p}+B_1 dx$", 

@@ -13,7 +13,7 @@ import argparse
 from monte import p_init, get_p_init_max, get_max_e1_init
 from train_p import diff_opt_p
 from exp_utilities.plot_utilites import check_error_flatten
-from utilities.constants import Case2_4D_Constants
+from exp_utilities.constants import Case2_4D_Constants
 # import utilities
 import sys
 sys.path.insert(0, '../utilities/')

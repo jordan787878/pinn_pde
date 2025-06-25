@@ -5,8 +5,8 @@ import matplotlib.pyplot as plt
 import time
 from scipy.stats import norm, multivariate_normal
 from scipy.interpolate import griddata
+from exp_utilities.constants import Case2_4D_Constants
 from utilities.util import *
-from utilities.constants import Case2_4D_Constants
 
 
 GRID_FOLDER = "data/grids/"
