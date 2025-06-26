@@ -6,15 +6,13 @@ from .helpers import *
 def train_model(problem, model, num_iterations=1000, batch_size=256, device=torch.device("cpu")):
     # --- Extract problem ----
     B = problem['B']
-    domain_bounds = problem['domain_bounds']
-    target_bounds = problem['target_bounds']
+    domain_V = problem['domain_V']
+    target_V = problem['target_V']
+    problem['p_net'], _, _ = problem['networks']
 
     # --- Set optimizer ---
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-2)
     scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=1000, gamma=0.9)
-
-    domain_V = compute_volume(domain_bounds)
-    target_V = compute_volume(target_bounds)
     
     # --- Select deterministic samples over domain and target ---
     x_dom, p0_dom, x_tar, x_remains, p0_remains = get_samples_determin(problem, model, batch_size)
@@ -82,7 +80,7 @@ def train_model(problem, model, num_iterations=1000, batch_size=256, device=torc
 def get_samples_determin(problem, model, batch_size):
     # unpack
     p0_flat           = problem['p0']               # np.ndarray, shape [N]
-    mask_flat         = problem['mask_flat']        # boolean np.ndarray, shape [N]
+    mask         = problem['mask']        # boolean np.ndarray, shape [N]
     grid_points_tensor = problem['x']               # torch.Tensor, shape [N, d]
 
     device = grid_points_tensor.device
@@ -98,8 +96,8 @@ def get_samples_determin(problem, model, batch_size):
     x_dev      = grid_points_tensor[dev_idx]                # [batch_size, d]
     p0_dev     = _p0_tensor[dev_idx]                        # [batch_size]
 
-    # 2) Top‐k p0 within mask_flat
-    mask_tensor = torch.from_numpy(mask_flat).to(device)    # [N], bool
+    # 2) Top‐k p0 within mask
+    mask_tensor = torch.from_numpy(mask).to(device)    # [N], bool
     masked_p0    = _p0_tensor[mask_tensor]                  # [M]
     masked_x     = grid_points_tensor[mask_tensor]          # [M, d]
     _, rel_idx   = torch.topk(masked_p0, batch_size, largest=True)  # [batch_size]
@@ -126,7 +124,6 @@ def get_samples_determin(problem, model, batch_size):
 
 
 def aug_samples_random(problem, x_dom, p0_dom, x_tar, batch_size):
-    constants = problem['constants']
     constants = problem['constants']
     t = problem['time']
     p_net = problem['p_net'] 

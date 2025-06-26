@@ -1,12 +1,12 @@
 import numpy as np
 import exp_utilities.plot_utilites as exp_plot
-# import cvxpy as cp
 import torch
 import os
 import sys
 sys.path.insert(0, '../utilities/')
 import FunctionalOpt.src as funcOpt
-from _General.othersolvers import solve_numer_integral
+from _General.util import get_valid_target_bounds, compute_volume
+from _General.generalsolvers import solve_numer_integral, solve_linearprogram
 
 
 def set_target(constants):
@@ -112,8 +112,6 @@ def compute_prob_event_monte(constants, target_r, targer_ph, t):
 
 
 def compute_prob_event(constants, target_r, targer_ph, t, networks, options, N_discret = 50):
-    p_net, e1_net_seq1, e1_net_seq2 = networks
-
     # convert target_r target_phi to normalized coordinate
     target_region = np.array([
         [target_r[0], target_r[1]]/constants.R,   # r bounds
@@ -122,10 +120,48 @@ def compute_prob_event(constants, target_r, targer_ph, t, networks, options, N_d
         [constants._X3_RANGE[0], constants._X3_RANGE[1]],  
         [constants._X4_RANGE[0], constants._X4_RANGE[1]]
     ])
-    x1s = np.linspace(constants.X1_RANGE[0], constants.X1_RANGE[1], N_discret)
-    x2s = np.linspace(constants.X2_RANGE[0], constants.X2_RANGE[1], N_discret)
-    x3s = np.linspace(constants.X3_RANGE[0], constants.X3_RANGE[1], N_discret)
-    x4s = np.linspace(constants.X4_RANGE[0], constants.X4_RANGE[1], N_discret)
+    domain_bounds = np.array([constants.X1_RANGE, constants.X2_RANGE, constants.X3_RANGE, constants.X4_RANGE])
+    target_bounds = get_valid_target_bounds(domain_bounds, target_region)
+    # --- if the intersection of target and domain is empty ---
+    if(target_bounds is None):
+        return 0.0, None
+
+    # --- Formulate well-posed problem ---
+    problem = {
+        'networks': networks,
+        'domain_bounds': domain_bounds,
+        'target_bounds': target_bounds,
+        'domain_V' : compute_volume(domain_bounds),
+        'target_V' : compute_volume(target_bounds),
+        'time': t,
+        'constants': constants,
+    }
+
+    # --- Solving ---
+    if options["solver"] == "funcOpt":
+        problem = form_problem_exp_case2(problem, need_grid=True)
+        pr, model = funcOpt.solver.solve_funcopt(problem)
+    elif options["solver"] == "num_integral":
+        problem = form_problem_exp_case2(problem)
+        pr, model = solve_numer_integral(problem)
+    elif options["solver"] == "lp":
+        problem = form_problem_exp_case2(problem)
+        pr, model = solve_linearprogram(problem)
+    else:
+        raise("solver in options is not implemented")
+    return pr, model
+
+
+def form_problem_exp_case2(problem, need_grid=False, N_res=50):
+    constants = problem['constants']
+    t = problem['time']
+    p_net, e1_net_seq1, e1_net_seq2 = problem['networks']
+    target_bounds = problem['target_bounds']
+
+    x1s = np.linspace(constants.X1_RANGE[0], constants.X1_RANGE[1], N_res)
+    x2s = np.linspace(constants.X2_RANGE[0], constants.X2_RANGE[1], N_res)
+    x3s = np.linspace(constants.X3_RANGE[0], constants.X3_RANGE[1], N_res)
+    x4s = np.linspace(constants.X4_RANGE[0], constants.X4_RANGE[1], N_res)
     x1_grid, x2_grid, x3_grid, x4_grid = np.meshgrid(x1s, x2s, x3s, x4s, indexing="ij") # the indexing is very important
     grid_points = np.vstack([x1_grid.ravel(), x2_grid.ravel(), x3_grid.ravel(), x4_grid.ravel()]).T
     dx1 = x1s[1] - x1s[0]
@@ -133,52 +169,28 @@ def compute_prob_event(constants, target_r, targer_ph, t, networks, options, N_d
     dx3 = x3s[1] - x3s[0]
     dx4 = x4s[1] - x4s[0]
     dV = dx1 * dx2 * dx3 * dx4
-
-    # obtain pdf(nn)
     grid_points_tensor = torch.tensor(grid_points, dtype=torch.float32, requires_grad=False)
     t_tensor = (torch.ones(len(grid_points_tensor), 1, dtype=torch.float32) * t)
-    p0 = p_net(grid_points_tensor, t_tensor).detach().numpy().reshape(x1_grid.shape)
+    p0 = p_net(grid_points_tensor, t_tensor).detach().numpy().reshape(x1_grid.shape).flatten()
+    p0_flat = p0.flatten()
+    # Create a mask for grid points in the target region.
+    mask = ((x1_grid >= target_bounds[0, 0]) & (x1_grid <= target_bounds[0, 1]) &
+            (x2_grid >= target_bounds[1, 0]) & (x2_grid <= target_bounds[1, 1]) &
+            (x3_grid >= target_bounds[2, 0]) & (x3_grid <= target_bounds[2, 1]) &
+            (x4_grid >= target_bounds[3, 0]) & (x4_grid <= target_bounds[3, 1]))
+    mask_flat = mask.flatten()
+    problem['Pr_p0_est'] = p0_flat[mask_flat].sum()*dV
+    problem['dV'] = dV
+    problem['p0'] = p0_flat
+    problem['mask'] = mask_flat
+    if(need_grid):
+        problem['x'] = grid_points_tensor
 
     # sequence selection
     if(t < 0.5*constants.TF/constants.T):
         e1_nn  = e1_net_seq1(grid_points_tensor, t_tensor).detach().numpy().ravel()
     else:
         e1_nn  = e1_net_seq2(grid_points_tensor, t_tensor).detach().numpy().ravel()
-    B = 2.0 * np.max(np.abs(e1_nn))
+    problem['B'] = 2.0 * np.max(np.abs(e1_nn))
 
-    # Create a mask for grid points in the target region.
-    mask = ((x1_grid >= target_region[0, 0]) & (x1_grid <= target_region[0, 1]) &
-            (x2_grid >= target_region[1, 0]) & (x2_grid <= target_region[1, 1]) &
-            (x3_grid >= target_region[2, 0]) & (x3_grid <= target_region[2, 1]) &
-            (x4_grid >= target_region[3, 0]) & (x4_grid <= target_region[3, 1]))
-    mask_flat = mask.flatten()
-    print("\n[check] t, sum(mask), B: ", t, sum(mask_flat), B)
-    if(sum(mask_flat) <= 0.0):
-        return 0.0, None
-
-    # --- Formulate well-posed problem ---
-    domain_bounds = np.array([constants.X1_RANGE, constants.X2_RANGE, constants.X3_RANGE, constants.X4_RANGE])
-    target_bounds = funcOpt.helpers.get_valid_target_bounds(domain_bounds, target_region)
-    p0_flat = p0.flatten()
-    problem = {
-        'x': grid_points_tensor,
-        'mask_flat': mask_flat,
-        'p0': p0_flat,
-        'p_net': p_net,
-        'B': B,
-        'domain_bounds': domain_bounds,
-        'target_bounds': target_bounds,
-        'time': t,
-        'constants': constants,
-        'Pr_p0_est': np.sum(p0_flat[mask_flat])*dV,
-        'dV': dV
-    }
-
-    # --- Solving ---
-    if options["solver"] == "funcOpt":
-        pr, model = funcOpt.solver.solve_funcopt(problem)
-    elif options["solver"] == "num_integral":
-        pr, model = solve_numer_integral(problem, N_res=100)
-    else:
-        raise("solver in options is not implemented")
-    return pr, model
+    return problem

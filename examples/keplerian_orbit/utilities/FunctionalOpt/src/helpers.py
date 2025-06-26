@@ -7,7 +7,7 @@ def check_pdf_integral(problem, trained_model, method=""):
     N_grid = x_grid.shape[0]
     p0 = problem['p0'] # with respect to x_grid (N_grid, )
     domain_bounds = problem['domain_bounds']
-    domain_volume = compute_volume(domain_bounds)
+    domain_volume = problem['domain_V']
     Pr_p0 = np.sum(p0) * domain_volume / N_grid
 
     if(method == "analy"):
@@ -67,31 +67,3 @@ def integral_torchgmm(gmm_params, region_bounds):
             Pr_i *= 0.5*( erf( (up-mu[j])/(np.sqrt(2)*sigma[j]) ) - erf( (lb-mu[j])/(np.sqrt(2)*sigma[j]) ) )
         Pr += w*Pr_i
     return Pr
-
-
-# NOTE: move below to _General
-def compute_volume(bounds):
-    """
-    Compute the volume of an axis-aligned hyper-rectangle
-    """
-    # Compute the length of the interval in each dimension.
-    side_lengths = bounds[:, 1] - bounds[:, 0]
-    
-    # Volume is the product of all side lengths.
-    volume = np.prod(side_lengths)
-    return volume
-
-
-def get_valid_target_bounds(domain_bounds, target_bounds):
-    """
-    Compute the intersection of target_bounds and domain_bounds.
-    """
-    # Compute the valid lower and upper bounds per dimension
-    valid_lower = np.maximum(domain_bounds[:, 0], target_bounds[:, 0])
-    valid_upper = np.minimum(domain_bounds[:, 1], target_bounds[:, 1])
-    # Check for a valid intersection in each dimension
-    if np.any(valid_lower > valid_upper):
-        raise ValueError("The target region does not intersect with the domain bounds in at least one dimension.")
-    # Stack the lower and upper bounds to form a valid bounds array.
-    valid_target_bounds = np.stack([valid_lower, valid_upper], axis=1)
-    return valid_target_bounds

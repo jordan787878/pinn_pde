@@ -110,7 +110,7 @@ def optimize_gmm_k(K, x, x_subset, p0, B, strategy, info):
 
 
 def test_convergence(load_data=False):
-    data_folder = 'data/case4/'
+    data_folder = 'data/case2/'
     if(load_data):
         with open(data_folder +'problem.pkl', 'rb') as f:
             problem = pickle.load(f)

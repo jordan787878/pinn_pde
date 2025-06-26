@@ -1,6 +1,6 @@
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
-
+from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 import numpy as np
 import seaborn as sns
 import torch
@@ -607,32 +607,36 @@ def plot_app1(save_plot_path=None):
 
     parent_folder = "data/app1/tar1/prob/"
     pr_mcs = np.load(parent_folder+"mcs.npy")
-    print(pr_mcs)
     
     pr_nn_data_labels = [parent_folder+"pr_nn_Nd50_onlyphat.npy", 
-                         parent_folder+"num_integral.npy", 
-                         parent_folder+"pr_nn_Nd50_LP.npy", 
+                         parent_folder+"num_integral_nres50.npy", 
+                         parent_folder+"num_integral_nres80.npy", 
+                         parent_folder+"lp_nres50.npy", 
+                         parent_folder+"lp_nres80.npy", 
                         #  parent_folder+"pr_nn_Nd50_FOx128(new).npy",
                         #  parent_folder+"pr_nn_Nd50_gmmx64(iter-10k).npy", # weight of region_loss 1e-2
                         #  parent_folder+"pr_nn_Nd50_gmmx64(iter-20k).npy", # weight of region_loss 1e-2
                         #  parent_folder+"diaggmmx64.npy", # weight of region_loss 1e-1 with half random samples
                         #  parent_folder+"diaggmmx64(aug_vio).npy",
-                         parent_folder+"pinnv0_diaggmmx64.npy", # error bound B is obtained by e1_net.pth
+                        #  parent_folder+"pinnv0_diaggmmx64.npy", # error bound B is obtained by e1_net.pth
                          parent_folder+"pinnv0seq_diaggmmx64.npy", # error bound B is obtained by e1_net_seq1.pth and e1_net_seq2.pth
                          ]
     plot_labels = [r"$\hat{p}$",
-                   r"NI($\hat{p},B_1$)", 
-                   r"LP($\hat{p},B_1$)", 
+                   r"NI($\hat{p},B_1,50$)", 
+                   r"NI($\hat{p},B_1,80$)", 
+                   r"LP($\hat{p},B_1,50$)", 
+                   r"LP($\hat{p},B_1,80$)", 
                 #    r"FO($\hat{p},B_1$) RBFx256(new)",
                 #    r"FO($\hat{p},B_1$) GMMx64(10k det.)",
                 #    r"FO($\hat{p},B_1$) GMMx64(20k det.)",
                 #    r"FO($\hat{p},B_1$) GMMx64(20k)",
                 #    r"FO($\hat{p},B_1$) GMMx64(20k aug.)",
-                   r"FO PINN:v0 GMMx64(20k)",
-                   r"FO PINN:v0_seq GMMx64(20k)",
+                #    r"FO PINN:v0 GMMx64(20k)",
+                   r"FO PINN:v0seq GMMx64(20k)",
                    ]
-    plot_fills  = [False, False, True, True, True]
-    plot_style =  ["--", "-", "-", "-", "-"]
+    plot_fills  = [False, True, True, True, True, True]
+    plot_style =  ["--", "-", "-", "-", "-", "-"]
+    marker = ["", ">", "<", "d", "x", ""]
 
     pr_nn_data = []
     for j in range(len(pr_nn_data_labels)):
@@ -645,12 +649,18 @@ def plot_app1(save_plot_path=None):
     pr = pr_mcs[:,-1] # should change back to pr = pr_mcs[:,j+1] 
     mask = ~np.isnan(pr)
     plt.plot(t_span[mask], pr[mask], color="black", linestyle="", marker="o", markersize=4, label="MC")
-    # print(t_span[mask], pr[mask])
+    print("[check] Prob. by MC (time, Prob., Prob.)")
+    print(np.round(pr_mcs,4))
 
+    print("[check] Prob. by PINN and Error Bound (time, Prob.)")
     for j in range(len(pr_nn_data_labels)):
         pr_nn_data_i = pr_nn_data[j]
         t_span = pr_nn_data_i[:,0]
-        plt.plot(t_span, pr_nn_data_i[:,1], color=colors[j], linestyle=plot_style[j], label=plot_labels[j])
+        print(np.round(pr_nn_data_i,4))
+        plt.plot(t_span, pr_nn_data_i[:,1], color=colors[j], 
+                 linestyle=plot_style[j], 
+                 linewidth = 1.5,
+                 marker=marker[j], label=plot_labels[j])
         if(plot_fills[j]): 
             plt.fill_between(t_span, y1=0.0*t_span, y2=pr_nn_data_i[:,1],
                              color=colors[j], edgecolor="none", alpha=0.1)
@@ -931,51 +941,56 @@ def plot_target_volume(ax, target_r, target_ph, z_max, grid_resolution=30,
     return surfaces
 
 
-# --- Haven't updated ---
-# def visual_fo_rbf(t, p_net, model, target_region, N_discret=50):
-#     x1s = np.linspace(constants.X1_RANGE[0], constants.X1_RANGE[1], N_discret)
-#     x2s = np.linspace(constants.X2_RANGE[0], constants.X2_RANGE[1], N_discret)
-#     x3s = np.linspace(constants.X3_RANGE[0], constants.X3_RANGE[1], N_discret)
-#     x4s = np.linspace(constants.X4_RANGE[0], constants.X4_RANGE[1], N_discret)
-#     x1_grid, x2_grid, x3_grid, x4_grid = np.meshgrid(x1s, x2s, x3s, x4s, indexing="ij") # the indexing is very important
-#     grid_points = np.vstack([x1_grid.ravel(), x2_grid.ravel(), x3_grid.ravel(), x4_grid.ravel()]).T
-#     dx1 = x1s[1] - x1s[0]
-#     dx2 = x2s[1] - x2s[0]
-#     dx3 = x3s[1] - x3s[0]
-#     dx4 = x4s[1] - x4s[0]
-#     # obtain pdf(nn)
-#     grid_points_tensor = torch.tensor(grid_points, dtype=torch.float32, requires_grad=False)
-#     t_tensor = (torch.ones(len(grid_points_tensor), 1, dtype=torch.float32) * t)
-#     p0 = p_net(grid_points_tensor, t_tensor).detach().numpy().reshape(x1_grid.shape)
-#     # plot
-#     fig = plt.figure(figsize=(10, 8))
-#     ax = fig.add_subplot(111, projection='3d')
-#     p0_2D =  np.sum(p0, axis=(2,3)) * dx3 * dx4
-#     p_rbf = model(grid_points_tensor).detach().numpy().reshape(x1_grid.shape)
-#     p_rbf_2D = np.sum(p_rbf, axis=(2,3)) * dx3 * dx4
-#     X, Y =  np.meshgrid(x1s, x2s, indexing="ij")
-#     ax.plot_surface(X, Y, p0_2D, color="none", rstride=2, cstride=2, 
-#                     edgecolor='black', linewidth=0.5, label=r"$\hat{p}$")
-#     ax.plot_surface(X, Y, p_rbf_2D, color="none", rstride=2, cstride=2, 
-#                     edgecolor='blue', linestyle="--", linewidth=0.5, label=r"$p_{FO}$")
-#     # Create the patch for the target region.
-#     # Assume target_region is a 2x2 array:
-#     #   target_region[0] = [r_min, r_max]
-#     #   target_region[1] = [phi_min, phi_max]
-#     r_bounds = target_region[0, :]    # [r_min, r_max]
-#     phi_bounds = target_region[1, :]  # [phi_min, phi_max]
-#     # Define the corners of the rectangular patch at z = 0.
-#     patch_vertices = [
-#         [r_bounds[0], phi_bounds[0], 0],
-#         [r_bounds[1], phi_bounds[0], 0],
-#         [r_bounds[1], phi_bounds[1], 0],
-#         [r_bounds[0], phi_bounds[1], 0],
-#     ]
-#     # Create a Poly3DCollection and add it to the 3D axis.
-#     patch = Poly3DCollection([patch_vertices], facecolor='red', alpha=0.5, edgecolor='k', label=r"$X^'_{tar}$")
-#     ax.add_collection3d(patch)
-#     ax.set_xlabel(r"$r'$")
-#     ax.set_ylabel(r"$\phi'$")
-#     ax.set_zlabel("PDF")
-#     plt.legend()
-#     plt.show()
+def plot_pdf_gmm_wrt_pinn(constants, p_net, p_gmm, target_r, target_phi, t):
+    set_publication_plot_style()
+    # Create a figure
+    fig = plt.figure(figsize=(10, 8))
+    ax = fig.add_subplot(111, projection='3d')
+
+    x1s = np.load("data/grids/x1s.npy")
+    x2s = np.load("data/grids/x2s.npy")
+    x3s = np.load("data/grids/x3s.npy")
+    x4s = np.load("data/grids/x4s.npy")
+
+    # obtain pdf_nn on the domain
+    x1_grid, x2_grid, x3_grid, x4_grid = np.meshgrid(x1s, x2s, x3s, x4s, indexing="ij") # the indexing is very important
+    grid_points = np.vstack([x1_grid.ravel(), x2_grid.ravel(), x3_grid.ravel(), x4_grid.ravel()]).T
+    grid_points_tensor = torch.tensor(grid_points, dtype=torch.float32, requires_grad=False)
+    t_tensor = (torch.ones(len(grid_points_tensor), 1, dtype=torch.float32) * t)
+    pdf_pinn = p_net(grid_points_tensor, t_tensor).detach().numpy().reshape(x1_grid.shape)
+    pdf_gmm = p_gmm(grid_points_tensor).detach().numpy().reshape(x1_grid.shape)
+
+    dx1 = x1s[1] - x1s[0] # dr'
+    dx2 = x2s[1] - x2s[0] # dphi'
+    dx3 = x3s[1] - x3s[0]
+    dx4 = x4s[1] - x4s[0]
+
+    # marginalize to spherical position (r, phi)
+    num_stride = 2
+    pdf_pinn_marginal =  np.sum(pdf_pinn, axis=(2,3)) * dx3 * dx4
+    pdf_gmm_marginal =  np.sum(pdf_gmm, axis=(2,3)) * dx3 * dx4
+    X, Y =  np.meshgrid(x1s, x2s, indexing="ij")
+    surf1 = ax.plot_surface(X, Y, pdf_pinn_marginal, 
+                            color="none", rstride=num_stride, cstride=num_stride, edgecolor='red',  
+                            linewidth=0.5, linestyle="--", label="PINN")
+    surf2 = ax.plot_surface(X, Y, pdf_gmm_marginal, 
+                            color="none", rstride=num_stride, cstride=num_stride, edgecolor='blue',  
+                            linewidth=0.5, linestyle="--", label="GMM")
+    # get normalized target bound
+    r_bounds = target_r/constants.R    # [r_min, r_max]
+    phi_bounds = (target_phi-constants.W*constants.T*t)/constants.PHI  # [phi_min, phi_max]
+    patch_vertices = [
+        [r_bounds[0], phi_bounds[0], 0],
+        [r_bounds[1], phi_bounds[0], 0],
+        [r_bounds[1], phi_bounds[1], 0],
+        [r_bounds[0], phi_bounds[1], 0],
+    ]
+    # Create a Poly3DCollection and add it to the 3D axis.
+    patch = Poly3DCollection([patch_vertices], facecolor='red', alpha=0.5, edgecolor='k', label=r"$X^'_{tar}$")
+    ax.add_collection3d(patch)
+    ax.legend()
+    ax.set_xlabel(r"$r'$")
+    ax.set_ylabel(r"$\phi'$")
+    ax.set_zlabel('PDF Value')
+    ax.set_title('3D Surface Plot of PDF at t= {:.3f}'.format(t))
+    plt.show()
