@@ -6,6 +6,7 @@ import os
 import sys
 sys.path.insert(0, '../utilities/')
 import FunctionalOpt.src as funcOpt
+from _General.othersolvers import solve_numer_integral
 
 
 def set_target(constants):
@@ -42,7 +43,7 @@ def get_prob_PINN(constants, t_span, target_r, targer_ph, networks, options):
     data_list = []
     for t in t_span:
         model = None
-        pr, model = compute_prob_event(constants, target_r, targer_ph, t, networks, N_discret=50)
+        pr, model = compute_prob_event(constants, target_r, targer_ph, t, networks, options, N_discret=50)
         data_list.append([t, pr])
         # --- save model ----
         if(model is not None and options['save_result']):
@@ -110,7 +111,7 @@ def compute_prob_event_monte(constants, target_r, targer_ph, t):
     return pr_list
 
 
-def compute_prob_event(constants, target_r, targer_ph, t, networks, N_discret = 50):
+def compute_prob_event(constants, target_r, targer_ph, t, networks, options, N_discret = 50):
     p_net, e1_net_seq1, e1_net_seq2 = networks
 
     # convert target_r target_phi to normalized coordinate
@@ -169,9 +170,15 @@ def compute_prob_event(constants, target_r, targer_ph, t, networks, N_discret = 
         'target_bounds': target_bounds,
         'time': t,
         'constants': constants,
-        'Pr_p0_est': np.sum(p0_flat[mask_flat])*dV
+        'Pr_p0_est': np.sum(p0_flat[mask_flat])*dV,
+        'dV': dV
     }
 
     # --- Solving ---
-    pr, model = funcOpt.solver.solve_funcopt(problem)
+    if options["solver"] == "funcOpt":
+        pr, model = funcOpt.solver.solve_funcopt(problem)
+    elif options["solver"] == "num_integral":
+        pr, model = solve_numer_integral(problem, N_res=100)
+    else:
+        raise("solver in options is not implemented")
     return pr, model

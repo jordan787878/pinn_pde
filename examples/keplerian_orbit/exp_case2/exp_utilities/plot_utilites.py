@@ -610,27 +610,29 @@ def plot_app1(save_plot_path=None):
     print(pr_mcs)
     
     pr_nn_data_labels = [parent_folder+"pr_nn_Nd50_onlyphat.npy", 
-                         parent_folder+"pr_nn_Nd50_phat+B.npy", 
+                         parent_folder+"num_integral.npy", 
                          parent_folder+"pr_nn_Nd50_LP.npy", 
                         #  parent_folder+"pr_nn_Nd50_FOx128(new).npy",
                         #  parent_folder+"pr_nn_Nd50_gmmx64(iter-10k).npy", # weight of region_loss 1e-2
                         #  parent_folder+"pr_nn_Nd50_gmmx64(iter-20k).npy", # weight of region_loss 1e-2
-                         parent_folder+"diaggmmx64.npy", # weight of region_loss 1e-1 with half random samples
-                         parent_folder+"diaggmmx64(aug_vio).npy",
+                        #  parent_folder+"diaggmmx64.npy", # weight of region_loss 1e-1 with half random samples
+                        #  parent_folder+"diaggmmx64(aug_vio).npy",
                          parent_folder+"pinnv0_diaggmmx64.npy", # error bound B is obtained by e1_net.pth
+                         parent_folder+"pinnv0seq_diaggmmx64.npy", # error bound B is obtained by e1_net_seq1.pth and e1_net_seq2.pth
                          ]
     plot_labels = [r"$\hat{p}$",
-                   r"$\int_{X^{'}} \hat{p}+B_1 dx$", 
+                   r"NI($\hat{p},B_1$)", 
                    r"LP($\hat{p},B_1$)", 
                 #    r"FO($\hat{p},B_1$) RBFx256(new)",
                 #    r"FO($\hat{p},B_1$) GMMx64(10k det.)",
                 #    r"FO($\hat{p},B_1$) GMMx64(20k det.)",
-                   r"FO($\hat{p},B_1$) GMMx64(20k)",
-                   r"FO($\hat{p},B_1$) GMMx64(20k aug.)",
+                #    r"FO($\hat{p},B_1$) GMMx64(20k)",
+                #    r"FO($\hat{p},B_1$) GMMx64(20k aug.)",
                    r"FO PINN:v0 GMMx64(20k)",
+                   r"FO PINN:v0_seq GMMx64(20k)",
                    ]
-    plot_fills  = [False, False, True, True, False, False]
-    plot_style =  ["--", "-", "-", "-", "-", "-"]
+    plot_fills  = [False, False, True, True, True]
+    plot_style =  ["--", "-", "-", "-", "-"]
 
     pr_nn_data = []
     for j in range(len(pr_nn_data_labels)):
