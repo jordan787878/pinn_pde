@@ -1,13 +1,5 @@
 """
-Training log:
-[load model from: output/v2/e1_net_seq2.pth
-best epoch:  47055 , min loss: 0.00917399674654007 , train time: 4884.348750114441
-a1 (t= 0.12 ):  1.097
-0.03231857 0.033636343
-a1 (t= 0.16 ):  1.294
-0.046574354 0.045143493
-a1 (t= 0.2 ):  1.337
-0.066505484 0.060133357
+Train PINN e1 (following first half sequence)
 """
 
 

@@ -26,7 +26,7 @@ def set_publication_plot_style(font_family='Times New Roman', font_size=18):
     plt.rcParams['lines.linewidth'] = 2
 
 
-def check_pdf_Nrphi(constants, p_net):
+def check_pdf_Nrphi(constants, mc_folder=None, p_net=None):
     """
     marginalize the pdf of normalize spherical to [r,phi]
     """
@@ -43,7 +43,11 @@ def check_pdf_Nrphi(constants, p_net):
         grid_points = np.vstack([x1_grid.ravel(), x2_grid.ravel(), x3_grid.ravel(), x4_grid.ravel()]).T
         grid_points_tensor = torch.tensor(grid_points, dtype=torch.float32, requires_grad=False)
         t_tensor = (torch.ones(len(grid_points_tensor), 1, dtype=torch.float32) * t_prime)
-        pdf_nn = p_net(grid_points_tensor, t_tensor).detach().numpy().reshape(x1_grid.shape)
+        
+        if(mc_folder is None):
+            pdf = p_net(grid_points_tensor, t_tensor).detach().numpy().reshape(x1_grid.shape)
+        else:
+            pdf = np.load(mc_folder+"pdf_t{:.3f}.npy".format(t_prime))
 
         samples = np.load("data/samples/samples_t{:.3f}.npy".format(t_prime))
         r_samples = samples[:,0]
@@ -51,9 +55,8 @@ def check_pdf_Nrphi(constants, p_net):
 
         dx3 = x3s[1] - x3s[0]
         dx4 = x4s[1] - x4s[0]
-
         # pdf_monte_Nrphi =  np.sum(pdf_monte, axis=(2,3)) * dx3 * dx4
-        pdf_nn_Nrphi = np.sum(pdf_nn, axis=(2,3)) * dx3 * dx4
+        pdf_nn_Nrphi = np.sum(pdf, axis=(2,3)) * dx3 * dx4
         x1_grid, x2_grid =  np.meshgrid(x1s, x2s, indexing="ij") # the indexing is very important
 
         # Plotting the contour plot
@@ -71,6 +74,80 @@ def check_pdf_Nrphi(constants, p_net):
         plt.tight_layout(pad=0.2)
         # fig.savefig("figs/v2phat_idx3_nrphi"+str(np.round(t_prime,3))+".pdf", format='pdf')
         plt.show()
+
+
+def check_pdf_cartesian_wrt_samples(constants, mc_folder=None, p_net=None):
+    """
+    convert the normalize spherical pdf to pdf(x,y)
+    the contour plot is not exact, since we use interpolation to create x,y grid and p(x,y) on this grid
+    """
+    # Create the contour plot
+    plt.figure(figsize=(8, 6))
+    for t_prime in constants.T_PRIME_SPAN:
+        print("[test] pdf marginalized to xy at t=", t_prime)
+
+        x1s = np.load("data/grids/x1s.npy")
+        x2s = np.load("data/grids/x2s.npy")
+        x3s = np.load("data/grids/x3s.npy")
+        x4s = np.load("data/grids/x4s.npy")
+        x1_grid, x2_grid, x3_grid, x4_grid = np.meshgrid(x1s, x2s, x3s, x4s, indexing="ij") # the indexing is very important
+        grid_points = np.vstack([x1_grid.ravel(), x2_grid.ravel(), x3_grid.ravel(), x4_grid.ravel()]).T
+        grid_points_tensor = torch.tensor(grid_points, dtype=torch.float32, requires_grad=False)
+        t_tensor = (torch.ones(len(grid_points_tensor), 1, dtype=torch.float32) * t_prime)
+
+        if(p_net is None):
+            pdf = np.load(mc_folder+"pdf_t{:.3f}.npy".format(t_prime))
+        else:
+            pdf = p_net(grid_points_tensor, t_tensor).detach().numpy().reshape(x1_grid.shape)
+
+        print("[check] x1s, pdf data type: ", x1s.dtype, pdf.dtype)
+        dx3 = x3s[1] - x3s[0]
+        dx4 = x4s[1] - x4s[0]
+
+        pdf_monte_Nrphi =  np.sum(pdf, axis=(2,3)) * dx3 * dx4
+        x1_grid, x2_grid =  np.meshgrid(x1s, x2s, indexing="ij") # the indexing is very important
+        pdf_rphi_data = np.empty((0,4))
+        for i in range(len(x1_grid)):
+            for j in range(len(x2_grid)):
+                Nr = x1_grid[i,j]
+                Nphi = x2_grid[i,j]
+                pdf_Nrphi = pdf_monte_Nrphi[i,j]
+                r = Nr*constants.R
+                phi = Nphi*constants.PHI + constants.W*constants.T*t_prime
+                pdf_rphi = (pdf_Nrphi/(constants.R*constants.PHI))/r**2
+                t = constants.T*t_prime
+                pdf_rphi_data = np.vstack((pdf_rphi_data, np.array([r, phi, t, pdf_rphi])))
+
+        # Coordinates (x and y) and values (z)
+        x = pdf_rphi_data[:, 0] * np.cos(pdf_rphi_data[:, 1])  # x-coordinates (1st column)
+        y = pdf_rphi_data[:, 0] * np.sin(pdf_rphi_data[:, 1])  # y-coordinates (2nd column)
+        z = pdf_rphi_data[:, 3]  # values to plot (4th column)
+        print(np.max(z))
+        # Define the grid where you want to plot the contours
+        grid_x, grid_y = np.meshgrid(np.linspace(x.min(), x.max(), 100),  # Adjust 100 to get finer resolution
+                                     np.linspace(y.min(), y.max(), 100))
+        # Interpolate scattered data onto the grid
+        grid_z = griddata((x, y), z, (grid_x, grid_y), method='cubic')
+        cp = plt.contourf(grid_x, grid_y, grid_z, levels=15, cmap="viridis", alpha=0.9)  # Filled contour plot
+        # plt.colorbar(cp)  # Add a colorbar to indicate the values
+
+        samples = np.load("data/samples/samples_t{:.3f}.npy".format(t_prime))
+        r_samples = samples[1:30,0]*constants.R
+        phi_samples = samples[1:30,2]*constants.PHI + constants.W*constants.T*t_prime
+        x_samples = r_samples * np.cos(phi_samples)
+        y_samples = r_samples * np.sin(phi_samples)
+        if(t_prime == 0.0):
+            plt.scatter(x_samples, y_samples, s=3, c='white', linewidths=0.2, edgecolor='red', alpha=0.9, label='Samples')
+        else:
+            plt.scatter(x_samples, y_samples, s=3, c='white', linewidths=0.2, edgecolor='red', alpha=0.9)
+    # Labels and title
+    plt.axis('equal')
+    plt.xlabel('X, m')
+    plt.ylabel('Y, m')
+    plt.title('p(x,y) v.s. Samples over 0.2T')
+    plt.legend()
+    plt.savefig("figs/figure1.pdf", format="pdf", dpi=300, bbox_inches="tight")
+    plt.show()
 
 
 def check_error_flatten(constants, e1_net, p_net, t, data_folder):
@@ -129,6 +206,97 @@ def check_error_flatten(constants, e1_net, p_net, t, data_folder):
     plt.plot(idx_plot, e1_nn_vec, "b--", linewidth=0.2)
     plt.fill_between(idx_plot, y1=0.0*idx_plot+B1, y2=0.0*idx_plot-B1, 
                          color="green", alpha=0.2, label=r"$B$")
+    plt.show()
+
+
+def check_pdfnn_cartesian_wrt_monte(constants, p_net, mc_folder):
+    """
+    convert the normalize spherical pdf_nn to pdf_nn(x,y)
+    and compare it with respect to pdf_monte(x,y)
+    the surface plot is not exact, since we use interpolation to create x,y grid and pdf_nn(x,y) on this grid
+    """
+    # Create a figure
+    fig = plt.figure(figsize=(10, 8))
+    ax = fig.add_subplot(111, projection='3d')
+
+    for t_prime in constants.T_PRIME_SPAN:
+        print("[test] pdf(nn) marginalized to xy at t'=", t_prime)
+        x1s = np.load("data/grids/x1s.npy")
+        x2s = np.load("data/grids/x2s.npy")
+        x3s = np.load("data/grids/x3s.npy")
+        x4s = np.load("data/grids/x4s.npy")
+        # load pdf_monte on the domain
+        pdf_monte = np.load(mc_folder+"pdf_t{:.3f}.npy".format(t_prime))
+
+        # obtain pdf_nn on the domain
+        x1_grid, x2_grid, x3_grid, x4_grid = np.meshgrid(x1s, x2s, x3s, x4s, indexing="ij") # the indexing is very important
+        grid_points = np.vstack([x1_grid.ravel(), x2_grid.ravel(), x3_grid.ravel(), x4_grid.ravel()]).T
+        grid_points_tensor = torch.tensor(grid_points, dtype=torch.float32, requires_grad=False)
+        t_tensor = (torch.ones(len(grid_points_tensor), 1, dtype=torch.float32) * t_prime)
+        pdf_nn = p_net(grid_points_tensor, t_tensor).detach().numpy().reshape(x1_grid.shape)
+
+        dx1 = x1s[1] - x1s[0] # dr'
+        dx2 = x2s[1] - x2s[0] # dphi'
+        dx3 = x3s[1] - x3s[0]
+        dx4 = x4s[1] - x4s[0]
+
+        # marginalize to spherical position (r, phi)
+        pdf_nn_Nrphi =  np.sum(pdf_nn, axis=(2,3)) * dx3 * dx4
+        pdf_mo_Nrphi =  np.sum(pdf_monte, axis=(2,3)) * dx3 * dx4
+
+        sum_p_nn = np.sum(pdf_nn_Nrphi) * dx1 * dx2
+        print("[check] sum p_nn (N-sphere): ", sum_p_nn)
+
+        # convert pdf(r, phi)
+        # NOTE: I store the area = "dr*(r*dphi)" associated to each pdf
+        pdf_nn_rphi_data = np.empty((0,5))
+        pdf_mo_rphi_data = np.empty((0,4))
+        x1_grid, x2_grid =  np.meshgrid(x1s, x2s, indexing="ij") # the indexing is very important
+        for i in range(len(x1_grid)):
+            for j in range(len(x2_grid)):
+                # extract [r', phi', p(r',phi')]
+                Nr = x1_grid[i,j]
+                Nphi = x2_grid[i,j]
+                r = Nr*constants.R
+                phi = Nphi*constants.PHI + constants.W*constants.T*t_prime
+                t = constants.T*t_prime
+                pdf_nn_rphi_data = np.vstack((pdf_nn_rphi_data, np.array([r, phi, t, pdf_nn_Nrphi[i,j]/(constants.R*constants.PHI), (dx1*constants.R)*(r*dx2*constants.PHI)])))
+                pdf_mo_rphi_data = np.vstack((pdf_mo_rphi_data, np.array([r, phi, t, pdf_mo_Nrphi[i,j]/(constants.R*constants.PHI)])))
+
+        # convert pdf(r,phi) to pdf(x,y)
+        x = pdf_nn_rphi_data[:, 0] * np.cos(pdf_nn_rphi_data[:, 1]) 
+        y = pdf_nn_rphi_data[:, 0] * np.sin(pdf_nn_rphi_data[:, 1])
+        r = pdf_nn_rphi_data[:, 0]
+        z_nn = pdf_nn_rphi_data[:, 3]/(r) # see derivation of the factor (1/r) in Nov 7 notes
+        z_mo = pdf_mo_rphi_data[:, 3]/(r) 
+
+        _p_test = (np.sum(pdf_nn_Nrphi)/(constants.R*constants.PHI)) * (dx1*constants.R * dx2*constants.PHI)
+        __p_test = np.sum(z_nn * pdf_nn_rphi_data[:, 4])
+        ___p_test = np.sum(z_mo * pdf_nn_rphi_data[:, 4])
+        print("[check] p_monte in (x,y) {:.2f} & p_nn sum in (r,phi) {:.2f} and (x,y) {:.2f}".format(___p_test, _p_test, __p_test))
+
+        # visualize p(x,y) using interpolation
+        _grid_resolution = 70
+        grid_x, grid_y = np.meshgrid(np.linspace(x.min(), x.max(), _grid_resolution), np.linspace(y.min(), y.max(), _grid_resolution), indexing="ij")
+        # Interpolate scattered data onto the grid
+        grid_z_nn = griddata((x, y), z_nn, (grid_x, grid_y), method='cubic')
+        grid_z_mo = griddata((x, y), z_mo, (grid_x, grid_y), method='cubic')
+
+        if(t_prime == 0.0):
+            surf1 = ax.plot_surface(grid_x, grid_y, grid_z_nn, color="none", rstride=3, cstride=3, edgecolor='red',  linewidth=0.5, linestyle="--", label="NN")
+            surf2 = ax.plot_surface(grid_x, grid_y, grid_z_mo, color="none", rstride=3, cstride=3, edgecolor='blue', linewidth=0.5, label="Monte")
+        else:
+            surf1 = ax.plot_surface(grid_x, grid_y, grid_z_nn, color="none", rstride=3, cstride=3, edgecolor='red',  linewidth=0.5, linestyle="--")
+            surf2 = ax.plot_surface(grid_x, grid_y, grid_z_mo, color="none", rstride=3, cstride=3, edgecolor='blue', linewidth=0.5)
+        # Optional: Add a color bar
+        # fig.colorbar(surf, ax=ax, shrink=0.5, aspect=5)
+    # Labels and title
+    ax.legend()
+    ax.set_xlabel('X, m')
+    ax.set_ylabel('Y, m')
+    ax.set_zlabel('PDF Value')
+    ax.set_title(f'3D Surface Plot of PDF over t='+str(constants.TF))
+    # Show the plot
     plt.show()
 
 
@@ -343,6 +511,43 @@ def visual_e1hat_training(constants, networks, data_foler, save_plots=False, sav
         plt.show()
 
 
+def plot_train_loss(path):
+    print("[load pnet model from: "+ path)
+    checkpoint = torch.load(path)
+    loss_history = np.array(checkpoint['loss_history'])
+    # Create a figure and plot the loss history.
+    fig = plt.figure(figsize=(8, 6))
+    plt.plot(loss_history, color='black')
+
+    # Define epochs at which to scatter points and their corresponding labels
+    # scatter_epochs = np.array([9, 4287, 17264, 49579]) # phat
+    # scatter_epochs = np.array([92, 261, 2181, 49219]) # e1hat_seq1
+    scatter_epochs = np.array([51, 299, 4540, 47055]) # e1hat_seq2
+    scatter_labels = ['a', 'b', 'c', 'd']
+
+    # For this example, we'll assume loss_history has enough entries;
+    # in practice, ensure that your loss_history length exceeds the maximum epoch in scatter_epochs.
+    # Extract the loss values at these epochs
+    scatter_losses = loss_history[scatter_epochs]
+
+    # Scatter the points using red markers
+    plt.scatter(scatter_epochs, scatter_losses, color='blue', s=50, zorder=5)
+
+    # Annotate each scatter point with its label (offset the text to avoid overlap)
+    for epoch, loss_val, label in zip(scatter_epochs, scatter_losses, scatter_labels):
+        plt.annotate(label, (epoch, loss_val), textcoords="offset points", xytext=(-12,-12),
+                    fontsize=18, color='blue')
+
+    plt.yscale('log')
+    plt.xlabel("Epoch")
+    plt.ylabel("Loss (log10 scale)")
+    plt.grid(True)
+    plt.tight_layout(pad=0.2)
+    # fig.savefig("figs/v2e1hat_seq2_loss.pdf", format='pdf')
+    # Display the plot.
+    plt.show()
+
+
 def plot_app1_onlymc(constants, data_foler, N_mc=4, save_plots=False, save_plot_path=None):
     """
     compare the Prob using different samples of M.C.
@@ -401,7 +606,8 @@ def plot_app1(save_plot_path=None):
     set_publication_plot_style()
 
     parent_folder = "data/app1/tar1/prob/"
-    pr_mcs = np.load(parent_folder+"pr_mcs.npy")
+    pr_mcs = np.load(parent_folder+"mcs.npy")
+    print(pr_mcs)
     
     pr_nn_data_labels = [parent_folder+"pr_nn_Nd50_onlyphat.npy", 
                          parent_folder+"pr_nn_Nd50_phat+B.npy", 
@@ -434,7 +640,7 @@ def plot_app1(save_plot_path=None):
     colors = sns.color_palette("husl", len(pr_nn_data_labels))
 
     t_span = pr_mcs[:,0]
-    pr = pr_mcs[:,1] # should change back to pr = pr_mcs[:,j+1] 
+    pr = pr_mcs[:,-1] # should change back to pr = pr_mcs[:,j+1] 
     mask = ~np.isnan(pr)
     plt.plot(t_span[mask], pr[mask], color="black", linestyle="", marker="o", markersize=4, label="MC")
     # print(t_span[mask], pr[mask])

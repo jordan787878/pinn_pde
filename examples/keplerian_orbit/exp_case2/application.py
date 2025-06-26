@@ -42,7 +42,7 @@ def app1(p_net, e1_net_seq1, e1_net_seq2):
                "path_pdf_models": "data/app1/tar1/pdf_models/",
                "path_prob": "data/app1/tar1/prob/",
                "label": "pinnv0_diaggmmx64"}
-    app1_util.get_prob_PINN(constants, t_span, target_r, target_phi, networks, options)
+    # app1_util.get_prob_PINN(constants, t_span, target_r, target_phi, networks, options)
     
 
 def main():
@@ -56,7 +56,7 @@ def main():
     e1_net_seq2 = load_trained_model(e1_net_seq2, path=E1NET_PATH_SEQ2, method="new"); e1_net_seq2.eval()
 
     ### Application ###
-    # app1(p_net, e1_net_seq1, e1_net_seq2)
+    app1(p_net, e1_net_seq1, e1_net_seq2)
 
     ### Visualization ###
     # exp_plot.visual_phat_trainings(constants, p_net, DATA_FOLDER, save_plots=False,

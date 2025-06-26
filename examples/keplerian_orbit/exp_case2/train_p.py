@@ -17,10 +17,8 @@ import torch.nn.functional as F
 import time
 import argparse
 from monte import p_init, get_p_init_max
-from exp_utilities.plot_utilites import check_pdf_Nrphi
+from exp_utilities.plot_utilites import check_pdf_Nrphi, check_pdfnn_cartesian_wrt_monte, check_pdf_cartesian_wrt_samples
 from exp_utilities.constants import Case2_4D_Constants
-# from utilities.post_exp_cas2 import *
-
 # import utilities
 import sys
 sys.path.insert(0, '../utilities/')
@@ -204,15 +202,11 @@ def main():
         print("p_net_reg train complete")
     p_net = load_trained_model(p_net, path=PNET_PATH, method="new"); p_net.eval()
 
-    ### Post-process ###
-    # 1. total variation 
-    # for t_prime in constants.T_PRIME_SPAN:
-    #     tv, tv_nn = compute_total_variation(t_prime, "data/", "data/1e+7/", p_net)
-    #     print(tv, tv_nn)
-    # 2. distribution plots
-    check_pdf_Nrphi(constants, p_net)
-    # check_pdfnn_cartesian_wrt_monte(p_net, constants, "data/")
-    # (obsolete)
+    # --- Post-process ---
+    # check_pdf_Nrphi(constants, p_net=p_net)
+    # check_pdfnn_cartesian_wrt_monte(constants, p_net, DATA_FOLDER)
+    check_pdf_cartesian_wrt_samples(constants, p_net=p_net)
+    # --- (obsolete) ---
     # # check_pdfnn_marginalize(p_net, t=t_prime)
     # # test_nn_cartesian_pdf_xy(p_net)
 
