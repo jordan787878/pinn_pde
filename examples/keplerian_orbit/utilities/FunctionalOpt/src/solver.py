@@ -26,6 +26,6 @@ def solve_funcopt(problem):
     
     # --- Evaluate Probability ---
     Pr_opt = integral_torchgmm(trained_model.get_gmm_paramters(), problem['target_bounds'])
-    print(" [Solved] Pr_tar: {:.4f}".format(Pr_opt))
+    print(" [Solved] time: {:.3f}, Pr_tar: {:.4f}".format(problem['time'], Pr_opt))
 
     return Pr_opt, trained_model

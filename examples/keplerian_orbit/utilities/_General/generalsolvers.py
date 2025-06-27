@@ -26,7 +26,9 @@ def solve_numer_integral(problem):
         if((p-B) >= 0):
             Pr_neg += (p-B)*dV
     Pr_neg = 1 - Pr_neg
-    return min(Pr, Pr_neg), None
+    Pr_opt = min(Pr, Pr_neg)
+    print(" [Solved] time:{:.3f}, Pr_tar: {:.4f}".format(problem["time"], Pr_opt))
+    return Pr_opt, None
 
 
 def solve_linearprogram(problem):

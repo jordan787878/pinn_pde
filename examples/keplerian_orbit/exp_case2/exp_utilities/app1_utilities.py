@@ -9,24 +9,6 @@ from _General.util import get_valid_target_bounds, compute_volume
 from _General.generalsolvers import solve_numer_integral, solve_linearprogram
 
 
-def set_target(constants):
-    """
-    convert the normalize spherical pdf_nn to pdf_nn(x,y)
-    and compare it with respect to pdf_monte(x,y)
-    the surface plot is not exact, since we use interpolation to create x,y grid and pdf_nn(x,y) on this grid
-    """
-    # specify a fixedtarget region in spherical coordinate
-    ## tar1
-    target_r = np.array([21.3, 21.8])*constants.R
-    target_ph = np.array([-3.5, 1.5])*constants.PHI + constants.W*constants.T*(0.1)
-
-    ## tar2
-    # target_r = np.array([21.3, 21.8])*constants.R
-    # target_ph = np.array([-3.5, 1.5])*constants.PHI + constants.W*constants.T*(0.19)
-
-    return target_r, target_ph
-
-
 def get_prob_MC(constants, t_span, target_r, targer_ph):
     data_list = []
     for t in t_span:
@@ -34,9 +16,9 @@ def get_prob_MC(constants, t_span, target_r, targer_ph):
         data = np.insert(pr_array, 0, t)
         data_list.append(data)
     data_array = np.vstack(data_list)
-    print("Prob result:")
+    print("Prob result (MC):")
     print(data_array)
-    np.save('data/app1/tar1/prob/mcs.npy', data_array)
+    return data_array
 
 
 def get_prob_PINN(constants, t_span, target_r, targer_ph, networks, options):
@@ -138,10 +120,10 @@ def compute_prob_event(constants, target_r, targer_ph, t, networks, options, N_d
     }
 
     # --- Solving ---
-    if options["solver"] == "funcOpt":
+    if options["solver"] == "fo":
         problem = form_problem_exp_case2(problem, need_grid=True)
         pr, model = funcOpt.solver.solve_funcopt(problem)
-    elif options["solver"] == "num_integral":
+    elif options["solver"] == "ni":
         problem = form_problem_exp_case2(problem)
         pr, model = solve_numer_integral(problem)
     elif options["solver"] == "lp":
@@ -192,5 +174,7 @@ def form_problem_exp_case2(problem, need_grid=False, N_res=50):
     else:
         e1_nn  = e1_net_seq2(grid_points_tensor, t_tensor).detach().numpy().ravel()
     problem['B'] = 2.0 * np.max(np.abs(e1_nn))
+    problem['B_marginal'] = problem['B'] * problem["target_V"]
+    print("[debug] integral of B over target domain: {:.4f}".format(problem['B_marginal']))
 
     return problem

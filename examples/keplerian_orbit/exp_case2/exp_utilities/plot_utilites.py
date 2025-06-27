@@ -5,6 +5,7 @@ import numpy as np
 import seaborn as sns
 import torch
 from scipy.interpolate import griddata
+from matplotlib import cm
 
 
 def set_publication_plot_style(font_family='Times New Roman', font_size=18):
@@ -602,42 +603,61 @@ def plot_app1_onlymc(constants, data_foler, N_mc=4, save_plots=False, save_plot_
         plt.show()
 
 
-def plot_app1(save_plot_path=None):
+def plot_app1(target, save_plot_path=None):
     set_publication_plot_style()
+    parent_folder = "data/app1/"+target+"/prob/"
+    def set_plots():
+        if(target == "tar1"):
+            pr_mcs = np.load(parent_folder+"mc.npy")
+            pr_nn_data_labels = [parent_folder+"pr_nn_Nd50_onlyphat.npy", 
+                                parent_folder+"num_integral_nres50.npy", 
+                                parent_folder+"num_integral_nres80.npy", 
+                                parent_folder+"lp_nres50.npy", 
+                                parent_folder+"lp_nres80.npy", 
+                                #  parent_folder+"pr_nn_Nd50_FOx128(new).npy",
+                                #  parent_folder+"pr_nn_Nd50_gmmx64(iter-10k).npy", # weight of region_loss 1e-2
+                                #  parent_folder+"pr_nn_Nd50_gmmx64(iter-20k).npy", # weight of region_loss 1e-2
+                                #  parent_folder+"diaggmmx64.npy", # weight of region_loss 1e-1 with half random samples
+                                #  parent_folder+"diaggmmx64(aug_vio).npy",
+                                #  parent_folder+"pinnv0_diaggmmx64.npy", # error bound B is obtained by e1_net.pth
+                                parent_folder+"pinnv0seq_diaggmmx64.npy", # error bound B is obtained by e1_net_seq1.pth and e1_net_seq2.pth
+                                ]
+            plot_labels = [r"$\hat{p}$",
+                        r"NI($\hat{p},B_1,50$)", 
+                        r"NI($\hat{p},B_1,80$)", 
+                        r"LP($\hat{p},B_1,50$)", 
+                        r"LP($\hat{p},B_1,80$)", 
+                        #    r"FO($\hat{p},B_1$) RBFx256(new)",
+                        #    r"FO($\hat{p},B_1$) GMMx64(10k det.)",
+                        #    r"FO($\hat{p},B_1$) GMMx64(20k det.)",
+                        #    r"FO($\hat{p},B_1$) GMMx64(20k)",
+                        #    r"FO($\hat{p},B_1$) GMMx64(20k aug.)",
+                        #    r"FO PINN:v0 GMMx64(20k)",
+                        r"FO($\hat{p},B_1,GMMx64$)",
+                        ]
+            plot_fills  = [False, True, True, True, True, True]
+            plot_style =  ["--", "-", "-", "-", "-", "-"]
+            marker = ["", ">", "<", "d", "x", ""]
+        elif(target == "tar2"):
+            pr_mcs = np.load(parent_folder+"mc.npy")
+            pr_nn_data_labels = [parent_folder+"ni_nres50.npy", 
+                                parent_folder+"lp_nres50.npy", 
+                                parent_folder+"fo_gmmx64_nres50_20k.npy"
+                                ]
+            plot_labels = [
+                        r"NI($\hat{p},B_1,50$)", 
+                        r"LP($\hat{p},B_1,50$)", 
+                        r"FO($\hat{p},B_1,GMMx64$)",
+                        ]
+            plot_fills  = [True, True, True, True, True, True]
+            plot_style =  ["-", "-", "-", "-", "-", "-"]
+            marker = [">", "d", ""]
+        else:
+            raise("this target is not runned")
+        return pr_mcs, pr_nn_data_labels, plot_labels, plot_fills, plot_style, marker
 
-    parent_folder = "data/app1/tar1/prob/"
-    pr_mcs = np.load(parent_folder+"mcs.npy")
-    
-    pr_nn_data_labels = [parent_folder+"pr_nn_Nd50_onlyphat.npy", 
-                         parent_folder+"num_integral_nres50.npy", 
-                         parent_folder+"num_integral_nres80.npy", 
-                         parent_folder+"lp_nres50.npy", 
-                         parent_folder+"lp_nres80.npy", 
-                        #  parent_folder+"pr_nn_Nd50_FOx128(new).npy",
-                        #  parent_folder+"pr_nn_Nd50_gmmx64(iter-10k).npy", # weight of region_loss 1e-2
-                        #  parent_folder+"pr_nn_Nd50_gmmx64(iter-20k).npy", # weight of region_loss 1e-2
-                        #  parent_folder+"diaggmmx64.npy", # weight of region_loss 1e-1 with half random samples
-                        #  parent_folder+"diaggmmx64(aug_vio).npy",
-                        #  parent_folder+"pinnv0_diaggmmx64.npy", # error bound B is obtained by e1_net.pth
-                         parent_folder+"pinnv0seq_diaggmmx64.npy", # error bound B is obtained by e1_net_seq1.pth and e1_net_seq2.pth
-                         ]
-    plot_labels = [r"$\hat{p}$",
-                   r"NI($\hat{p},B_1,50$)", 
-                   r"NI($\hat{p},B_1,80$)", 
-                   r"LP($\hat{p},B_1,50$)", 
-                   r"LP($\hat{p},B_1,80$)", 
-                #    r"FO($\hat{p},B_1$) RBFx256(new)",
-                #    r"FO($\hat{p},B_1$) GMMx64(10k det.)",
-                #    r"FO($\hat{p},B_1$) GMMx64(20k det.)",
-                #    r"FO($\hat{p},B_1$) GMMx64(20k)",
-                #    r"FO($\hat{p},B_1$) GMMx64(20k aug.)",
-                #    r"FO PINN:v0 GMMx64(20k)",
-                   r"FO PINN:v0seq GMMx64(20k)",
-                   ]
-    plot_fills  = [False, True, True, True, True, True]
-    plot_style =  ["--", "-", "-", "-", "-", "-"]
-    marker = ["", ">", "<", "d", "x", ""]
-
+    pr_mcs, pr_nn_data_labels, plot_labels, plot_fills, plot_style, marker = set_plots()
+    # --- load Pr_opt data ---
     pr_nn_data = []
     for j in range(len(pr_nn_data_labels)):
         pr_nn_data.append(np.load(pr_nn_data_labels[j]))
@@ -648,7 +668,8 @@ def plot_app1(save_plot_path=None):
     t_span = pr_mcs[:,0]
     pr = pr_mcs[:,-1] # should change back to pr = pr_mcs[:,j+1] 
     mask = ~np.isnan(pr)
-    plt.plot(t_span[mask], pr[mask], color="black", linestyle="", marker="o", markersize=4, label="MC")
+    plt.plot(t_span[mask], pr[mask], color="black", linestyle="", marker="o", markersize=4, 
+             label=r"$\mathbb{P}_{true}$ by MC")
     print("[check] Prob. by MC (time, Prob., Prob.)")
     print(np.round(pr_mcs,4))
 
@@ -670,6 +691,7 @@ def plot_app1(save_plot_path=None):
     plt.xlabel("t")
     plt.legend(loc="upper left", ncol=2)
     plt.ylim([-0.05, 1.5])
+    plt.ylim([-0.01, 0.1])
     # Get current axes, and then obtain and reformat the xticks.
     plt.tight_layout(pad=0.2)
     # Define the tick positions.
@@ -712,10 +734,10 @@ def plot_target(constants, p_net, target_r, target_ph, data_foler):
     for t_prime in t_span:
     # for t_prime in np.linspace(constants.T_PRIME_SPAN[0], constants.T_PRIME_SPAN[-1], num=6):
         print("[test] pdf(nn) marginalized to xy at t'=", t_prime)
-        x1s = np.load(data_foler+"x1s.npy")
-        x2s = np.load(data_foler+"x2s.npy")
-        x3s = np.load(data_foler+"x3s.npy")
-        x4s = np.load(data_foler+"x4s.npy")
+        x1s = np.load("data/grids/x1s.npy")
+        x2s = np.load("data/grids/x2s.npy")
+        x3s = np.load("data/grids/x3s.npy")
+        x4s = np.load("data/grids/x4s.npy")
 
         # obtain pdf_nn on the domain
         x1_grid, x2_grid, x3_grid, x4_grid = np.meshgrid(x1s, x2s, x3s, x4s, indexing="ij") # the indexing is very important
@@ -958,7 +980,8 @@ def plot_pdf_gmm_wrt_pinn(constants, p_net, p_gmm, target_r, target_phi, t):
     grid_points_tensor = torch.tensor(grid_points, dtype=torch.float32, requires_grad=False)
     t_tensor = (torch.ones(len(grid_points_tensor), 1, dtype=torch.float32) * t)
     pdf_pinn = p_net(grid_points_tensor, t_tensor).detach().numpy().reshape(x1_grid.shape)
-    pdf_gmm = p_gmm(grid_points_tensor).detach().numpy().reshape(x1_grid.shape)
+    if(p_gmm is not None):
+        pdf_gmm = p_gmm(grid_points_tensor).detach().numpy().reshape(x1_grid.shape)
 
     dx1 = x1s[1] - x1s[0] # dr'
     dx2 = x2s[1] - x2s[0] # dphi'
@@ -968,14 +991,24 @@ def plot_pdf_gmm_wrt_pinn(constants, p_net, p_gmm, target_r, target_phi, t):
     # marginalize to spherical position (r, phi)
     num_stride = 2
     pdf_pinn_marginal =  np.sum(pdf_pinn, axis=(2,3)) * dx3 * dx4
-    pdf_gmm_marginal =  np.sum(pdf_gmm, axis=(2,3)) * dx3 * dx4
+    if(p_gmm is not None):
+        pdf_gmm_marginal =  np.sum(pdf_gmm, axis=(2,3)) * dx3 * dx4
     X, Y =  np.meshgrid(x1s, x2s, indexing="ij")
     surf1 = ax.plot_surface(X, Y, pdf_pinn_marginal, 
-                            color="none", rstride=num_stride, cstride=num_stride, edgecolor='red',  
-                            linewidth=0.5, linestyle="--", label="PINN")
-    surf2 = ax.plot_surface(X, Y, pdf_gmm_marginal, 
-                            color="none", rstride=num_stride, cstride=num_stride, edgecolor='blue',  
-                            linewidth=0.5, linestyle="--", label="GMM")
+                            color="none", rstride=num_stride, cstride=num_stride, edgecolor='black',  
+                            linewidth=0.8, linestyle="-", label="PINN")
+    if(p_gmm is not None):
+        surf2 = ax.plot_surface(
+            X, Y, pdf_gmm_marginal,
+            rstride=num_stride,
+            cstride=num_stride,
+            cmap=cm.viridis,        # choose your colormap
+            linewidth=0.5,            # no grid lines
+            antialiased=True,
+            edgecolor='white',  
+            alpha=0.6,
+            label="GMM"
+        )
     # get normalized target bound
     r_bounds = target_r/constants.R    # [r_min, r_max]
     phi_bounds = (target_phi-constants.W*constants.T*t)/constants.PHI  # [phi_min, phi_max]
@@ -986,7 +1019,11 @@ def plot_pdf_gmm_wrt_pinn(constants, p_net, p_gmm, target_r, target_phi, t):
         [r_bounds[0], phi_bounds[1], 0],
     ]
     # Create a Poly3DCollection and add it to the 3D axis.
-    patch = Poly3DCollection([patch_vertices], facecolor='red', alpha=0.5, edgecolor='k', label=r"$X^'_{tar}$")
+    patch = Poly3DCollection([patch_vertices], facecolor='red', 
+                             alpha=1.0, edgecolor='k', 
+                             linewidths=2,
+                             zorder=10,
+                             label=r"$X^'_{tar}$")
     ax.add_collection3d(patch)
     ax.legend()
     ax.set_xlabel(r"$r'$")
