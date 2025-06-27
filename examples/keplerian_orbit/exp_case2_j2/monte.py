@@ -150,6 +150,19 @@ def fourdorbit_generate_samples(constants, use_j2=True, N_samples=100, dtt=1e-4)
 
 
 def fourdorbit_propagate_samples(constants, use_j2=False, t=0.2, stat_sample=1, dtt=1e-4):
+    """
+    dx = f dt + g*dw
+    g*dw, where g = [0, 0, 0;
+                     0, 0, 0;
+                     0, 0, 0;
+                     1, 0, 0;
+                     0, 1, 0;
+                     0, 0, 1]
+    dw in R^3 with noise intensity diag([constants.N_Q_NOISE])
+    To simulate this SDE: the last three compoenent of dw (over a fixed dt) is
+      sqrt(constants.N_Q_NOISE) * sqrt(dt) * N(0,1, size=3),
+      and the first three components are zeros.
+    """
     X_four_dim = np.random.multivariate_normal(constants.N_MEAN_I, constants.N_COV_I, size=stat_sample).astype(np.float32)
     # append constant theta' = 0.5pi/THETA, theta'_dot = 0.0
     X = np.zeros((stat_sample, 6))
@@ -211,7 +224,41 @@ def generate_data(constants, data_folder, N_samples):
             np.save(GRID_FOLDER+"x3s.npy", x3s)
             np.save(GRID_FOLDER+"x4s.npy", x4s)
     np.save(data_folder+"mc_time.npy", np.array(mc_time))
-    
+
+
+def test_J2effect_exp_case2():
+    """
+    show the effect of J2 & Brownian noise by samples
+    """
+    exps = ["../exp_case2/", "../exp_case2_j2/"]
+    colors = ["blue", "red"]
+    labels = ["no J2","J2 + Brownian noise"]
+    # set_publication_plot_style()
+    T_PRIME_SPAN   = np.float32(np.array([0.0, 0.04, 0.08, 0.12, 0.16, 0.20]))
+
+    for t_prime in T_PRIME_SPAN:
+        # print("[test] pdf(NN) marginalized to rphi at t=", t_prime)
+
+        # Plotting the contour plot
+        fig = plt.figure(figsize=(8, 6))
+
+        for i in range(2):
+            samples = np.load(exps[i]+"data/samples/samples_t{:.3f}.npy".format(t_prime))
+            r_samples = samples[:,0]
+            phi_samples = samples[:,2]
+            # scatter samples of (r, phi) on to the plot
+            plt.scatter(r_samples, phi_samples, s=30, c='white', linewidths=0.5, 
+                        edgecolor=colors[i], alpha=1.0, label=labels[i])
+
+        # Adding labels and title
+        plt.xlabel(r"$r'$")
+        plt.ylabel(r"$\phi'$")
+        # plt.title(r"$p(r',\phi')$"+ "from NN and 200 Samples at t="+str(np.round(t_prime,2))+"T")
+        plt.legend()
+        plt.tight_layout(pad=0.2)
+        # fig.savefig("figs/v2phat_idx3_nrphi"+str(np.round(t_prime,3))+".pdf", format='pdf')
+        plt.show()
+
 
 def main():
     # --- Generate data ---
@@ -221,7 +268,8 @@ def main():
 
     # --- Test MC results ---
     # test_monte_accuracy()
-    check_pdf_Nrphi(constants, mc_folder=data_folder)
+    # test_J2effect_exp_case2()
+    # check_pdf_Nrphi(constants, mc_folder=data_folder)
     # check_pdf_cartesian_wrt_samples(constants, mc_folder=data_folder)
     # test_monte_cartesian_pdf_xy(constants, data_folder)
     
