@@ -98,13 +98,13 @@ def train_model(e1_net, p_net, optimizer, scheduler, mse_cost_function, iteratio
                   ",tv:",tv_loss.data,
                   ",beta:", beta
                    )
-            torch.save({
-                    'epoch': epoch,
-                    'model_state_dict': e1_net.state_dict(),
-                    'optimizer_state_dict': optimizer.state_dict(),
-                    'loss_history': loss_history,
-                    'train_time': train_time,
-                    }, E1NET_PATH)
+            # torch.save({
+            #         'epoch': epoch,
+            #         'model_state_dict': e1_net.state_dict(),
+            #         'optimizer_state_dict': optimizer.state_dict(),
+            #         'loss_history': loss_history,
+            #         'train_time': train_time,
+            #         }, E1NET_PATH)
             min_loss = loss.data
             FLAG = True
             beta = beta + np.float32(0.005)
@@ -114,12 +114,12 @@ def train_model(e1_net, p_net, optimizer, scheduler, mse_cost_function, iteratio
             FLAG_SAVE_INTER = FLAG_SAVE_INTER + 1
             if(FLAG_SAVE_INTER >= 10):
                 INTER_COUNT = INTER_COUNT + 1
-                torch.save({
-                    'epoch': epoch, 'model_state_dict': e1_net.state_dict(),
-                    'optimizer_state_dict': optimizer.state_dict(),
-                    'loss_history': loss_history, 'train_time': train_time,
-                    }, E1NET_INTER_PATH+str(INTER_COUNT)+".pth")
-                FLAG_SAVE_INTER = 0
+                # torch.save({
+                #     'epoch': epoch, 'model_state_dict': e1_net.state_dict(),
+                #     'optimizer_state_dict': optimizer.state_dict(),
+                #     'loss_history': loss_history, 'train_time': train_time,
+                #     }, E1NET_INTER_PATH+str(INTER_COUNT)+".pth")
+                # FLAG_SAVE_INTER = 0
 
         # RAR
         if(epoch % 100 == 0 and FLAG):

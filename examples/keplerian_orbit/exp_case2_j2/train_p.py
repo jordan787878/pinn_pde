@@ -27,7 +27,7 @@ from _General.neuralnetworks import PNet, load_trained_model
 
 PNET_PATH = "output/v0/p_net.pth"
 PNET_INTER_PATH = "output/v0/p_net_"
-MC_FOLDER = "data/1e+4/"
+MC_FOLDER = "data/1e+6/"
 device = "cpu"
 TRAIN_FLAG = False
 constants = Case2_4D_Constants()
@@ -232,8 +232,8 @@ def main():
     p_net = load_trained_model(p_net, path=PNET_PATH, method="new"); p_net.eval()
 
     # --- Post-process ---
-    # check_pdf_Nrphi(constants, p_net=p_net)
-    check_pdfnn_cartesian_wrt_monte(constants, p_net, MC_FOLDER)
+    check_pdf_Nrphi(constants, p_net=p_net)
+    # check_pdfnn_cartesian_wrt_monte(constants, p_net, MC_FOLDER)
     # check_pdf_cartesian_wrt_samples(constants, p_net=p_net)
     # --- (obsolete) ---
     # # check_pdfnn_marginalize(p_net, t=t_prime)
