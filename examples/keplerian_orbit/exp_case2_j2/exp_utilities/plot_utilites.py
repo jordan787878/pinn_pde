@@ -151,7 +151,7 @@ def check_pdf_cartesian_wrt_samples(constants, mc_folder=None, p_net=None):
     plt.show()
 
 
-def check_error_flatten(constants, e1_net, p_net, t, data_folder):
+def check_error_flatten(constants, p_init_func, e1_net, p_net, t, data_folder):
     """
     """    
     # load p(monte)
@@ -165,9 +165,9 @@ def check_error_flatten(constants, e1_net, p_net, t, data_folder):
     grid_points = np.vstack([x1_grid.ravel(), x2_grid.ravel(), x3_grid.ravel(), x4_grid.ravel()]).T
     # print("[check] grid points shape type: ", grid_points.shape, grid_points.dtype)
     
-    # if(t == 0.0):
-    #     pdf_true = p_init(constants, grid_points).reshape(x1_grid.shape) # obtain analytical p(true)
-        # print("[check] x1 ranges, true joint pdf shape, type: ", x1s.dtype, pdf_true.shape, pdf_true.dtype)
+    if(t == 0.0):
+        pdf_true = p_init_func(constants, grid_points).reshape(x1_grid.shape) # obtain analytical p(true)
+        print("[check] x1 ranges, true joint pdf shape, type: ", x1s.dtype, pdf_true.shape, pdf_true.dtype)
 
     # Grid spacings (assumed uniform)
     dx1 = x1s[1] - x1s[0]

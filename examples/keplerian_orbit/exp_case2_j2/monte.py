@@ -263,13 +263,13 @@ def test_J2effect_exp_case2():
 def main():
     # --- Generate data ---
     data_folder = "data/1e+5/"
-    generate_data(constants, data_folder, 100000)
+    # generate_data(constants, data_folder, 100000)
     # fourdorbit_generate_samples(constants)
 
     # --- Test MC results ---
     # test_monte_accuracy()
     # test_J2effect_exp_case2()
-    # check_pdf_Nrphi(constants, mc_folder=data_folder)
+    check_pdf_Nrphi(constants, mc_folder=data_folder)
     # check_pdf_cartesian_wrt_samples(constants, mc_folder=data_folder)
     # test_monte_cartesian_pdf_xy(constants, data_folder)
     
