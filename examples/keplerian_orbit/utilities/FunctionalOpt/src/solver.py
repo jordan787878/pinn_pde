@@ -1,7 +1,7 @@
 import torch
 import numpy as np
 from .models import TorchGMM
-from .train import train_model
+from .train import train_model, visual_loss
 from .helpers import check_pdf_integral, check_pdf_interval, integral_torchgmm
 
 
@@ -14,10 +14,13 @@ def solve_funcopt(problem):
     # trained_model = RBFDensity(num_basis=256).to(device) # (default degree of basis)
 
     # --- Train model ---
-    trained_model  = train_model(problem, trained_model, num_iterations=20000)
-
-    # --- Load trained model ---
-    # trained_model.load_state_dict(torch.load("data/app1/tar1/pdf_models/gmm_64_t{:.3f}.pth".format(t)))
+    if(problem['use_trained_gmm'] == False):
+        trained_model  = train_model(problem, trained_model, num_iterations=20000)
+    else:
+        # --- Load trained model ---
+        trained_model.load_state_dict(torch.load(problem["trained_gmm_path"]+"_t{:.3f}.pth".format(problem["time"])))
+        if(problem['show_loss_landscape']):
+            visual_loss(problem, trained_model)
     
     # --- Check constraints ---
     trained_model.eval()

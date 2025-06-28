@@ -609,35 +609,18 @@ def plot_app1(target, save_plot_path=None):
     def set_plots():
         if(target == "tar1"):
             pr_mcs = np.load(parent_folder+"mc.npy")
-            pr_nn_data_labels = [parent_folder+"pr_nn_Nd50_onlyphat.npy", 
-                                parent_folder+"num_integral_nres50.npy", 
-                                parent_folder+"num_integral_nres80.npy", 
+            pr_nn_data_labels = [parent_folder+"ni_nres50.npy", 
                                 parent_folder+"lp_nres50.npy", 
-                                parent_folder+"lp_nres80.npy", 
-                                #  parent_folder+"pr_nn_Nd50_FOx128(new).npy",
-                                #  parent_folder+"pr_nn_Nd50_gmmx64(iter-10k).npy", # weight of region_loss 1e-2
-                                #  parent_folder+"pr_nn_Nd50_gmmx64(iter-20k).npy", # weight of region_loss 1e-2
-                                #  parent_folder+"diaggmmx64.npy", # weight of region_loss 1e-1 with half random samples
-                                #  parent_folder+"diaggmmx64(aug_vio).npy",
-                                #  parent_folder+"pinnv0_diaggmmx64.npy", # error bound B is obtained by e1_net.pth
-                                parent_folder+"pinnv0seq_diaggmmx64.npy", # error bound B is obtained by e1_net_seq1.pth and e1_net_seq2.pth
+                                parent_folder+"fo_gmmx64_nres50_20k.npy"
                                 ]
-            plot_labels = [r"$\hat{p}$",
+            plot_labels = [
                         r"NI($\hat{p},B_1,50$)", 
-                        r"NI($\hat{p},B_1,80$)", 
                         r"LP($\hat{p},B_1,50$)", 
-                        r"LP($\hat{p},B_1,80$)", 
-                        #    r"FO($\hat{p},B_1$) RBFx256(new)",
-                        #    r"FO($\hat{p},B_1$) GMMx64(10k det.)",
-                        #    r"FO($\hat{p},B_1$) GMMx64(20k det.)",
-                        #    r"FO($\hat{p},B_1$) GMMx64(20k)",
-                        #    r"FO($\hat{p},B_1$) GMMx64(20k aug.)",
-                        #    r"FO PINN:v0 GMMx64(20k)",
                         r"FO($\hat{p},B_1,GMMx64$)",
                         ]
-            plot_fills  = [False, True, True, True, True, True]
-            plot_style =  ["--", "-", "-", "-", "-", "-"]
-            marker = ["", ">", "<", "d", "x", ""]
+            plot_fills  = [True, True, True, True, True, True]
+            plot_style =  ["-", "-", "-", "-", "-", "-"]
+            marker = [">", "d", ""]
         elif(target == "tar2"):
             pr_mcs = np.load(parent_folder+"mc.npy")
             pr_nn_data_labels = [parent_folder+"ni_nres50.npy", 
@@ -691,7 +674,7 @@ def plot_app1(target, save_plot_path=None):
     plt.xlabel("t")
     plt.legend(loc="upper left", ncol=2)
     plt.ylim([-0.05, 1.5])
-    plt.ylim([-0.01, 0.1])
+    # plt.ylim([-0.01, 0.1])
     # Get current axes, and then obtain and reformat the xticks.
     plt.tight_layout(pad=0.2)
     # Define the tick positions.

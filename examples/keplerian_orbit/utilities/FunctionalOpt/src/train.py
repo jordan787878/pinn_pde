@@ -21,38 +21,17 @@ def train_model(problem, model, num_iterations=1000, batch_size=256, device=torc
     best_loss = np.inf
     for it in range(num_iterations):
         optimizer.zero_grad()
-
-        # # --- Augment by checking violation on grid
-        # if(it % 100 == 0):
-        #     _x_vio, _p0_vio, x_remains, p0_remains = aug_samples_violate(problem, model, x_remains, p0_remains, batch_size)
-        #     if(_x_vio is not None):
-        #         x_dom   = torch.cat([x_dom,   _x_vio], dim=0)         
-        #         p0_dom  = torch.cat([p0_dom, _p0_vio], dim=0)
-        #         print("[check] sample size:", x_dom.shape[0], x_remains.shape[0])
             
         # --- Augment samples with random points --- 
         x_dom_train, p0_dom_train, x_tar_train = aug_samples_random(problem, x_dom, p0_dom, x_tar, batch_size)
 
-        # --- hard constraint over domain loss ---
-        p_dom  = model(x_dom_train).view(-1,)
-        hc = (p_dom >= (p0_dom_train - B)) & (p_dom <= (p0_dom_train + B))
-        violation_mask = ~hc  # True for datapoints that do NOT satisfy the constraint
-        vio_percent = 100.0*(violation_mask.sum()/p0_dom_train.shape[0])
-        if(sum(violation_mask) > 0):
-            loss_full = torch.mean(0.5*(p_dom[violation_mask] - p0_dom_train[violation_mask]) ** 2)*domain_V
-        else:
-            loss_full = torch.zeros(1)
+        # --- loss -- 
+        total_loss, loss_hc, loss_tar, vio_percent = loss_custom(problem, model, 
+            x_dom_train, p0_dom_train, x_tar_train)
 
-        # --- maximize prob. over target loss ---
-        p_tar = model(x_tar_train).view(-1,)
-        target_mass_estimate = torch.mean(p_tar)*target_V
-        loss_region = -target_mass_estimate
-
-        # --- Combine loss and optimize ---
-        total_loss = loss_full + loss_region*1e-1
         # --- Print progress and update the best model ---
         if it % int(num_iterations/10) == 0:
-            print(f"Iteration {it:4d}, loss: {total_loss.item()}, loss hc: {loss_full.item()}, loss reg: {loss_region.item()}")
+            print(f"Iteration {it:4d}, loss: {total_loss.item()}, loss hc: {loss_hc.item()}, loss reg: {loss_tar.item()}")
             print(f"   violation percent: {vio_percent:.4f}%")
         if(total_loss.item() < best_loss and vio_percent <= 0):
             # --- Augment by checking violation on grid ---
@@ -60,7 +39,7 @@ def train_model(problem, model, num_iterations=1000, batch_size=256, device=torc
             if(_x_vio is None):    
                 best_model_state = {k: v.cpu().clone() for k, v in model.state_dict().items()}
                 best_loss = total_loss.item()
-                print(f"[Best] Iteration {it:4d}, loss: {total_loss.item()}, {loss_full.item()}, {loss_region.item()}")
+                print(f"[Best] Iteration {it:4d}, loss: {total_loss.item()}, {loss_hc.item()}, {loss_tar.item()}")
                 print(f"   violation percent: {vio_percent:.4f}%")
             else:
                 x_dom   = torch.cat([x_dom,   _x_vio], dim=0)         
@@ -186,3 +165,45 @@ def aug_samples_violate(problem, model, x_remains, p0_remains, batch_size):
 
     print(f"Selected {k} violations out of {N} remains.")
     return x_vio, p0_vio, x_rem_new, p0_rem_new
+
+
+def visual_loss(problem, model):
+    """
+    ideally want to visualize a 3D surface plot where
+        x,y axes represents the variation of the GMM parameters
+        z height represents the loss
+    """
+    print("options[show_loss_landscape] has not been implemented, due to the lack of good representation of gmm paramters in 2D")
+    # batch_size = 10
+    # x_dom, p0_dom, x_tar, _, _ = get_samples_determin(problem, model, batch_size)
+    # # --- loss (of given model) ---
+    # loss, params = loss_custom(problem, model, x_dom, p0_dom, x_tar)
+    # w, mu, cov = params
+    # N = w.shape[0]
+    # N_half = int(N/2)
+    # d1 = np.concatenate((w[0:N_half].flatten(),mu[0:N_half,:].flatten(), cov[0:N_half,:].flatten()))
+    # d2 = np.concatenate((w[N_half:].flatten(),mu[N_half:,:].flatten(), cov[N_half:,:].flatten()))
+    # print(d1.shape)
+    # print(loss)
+
+
+def loss_custom(problem, model, x_dom, p0_dom, x_tar):
+    B = problem['B']
+    domain_V = problem['domain_V']
+    target_V = problem['target_V']
+    # --- loss (of given model) ---
+    p_dom  = model(x_dom).view(-1,)
+    hc = (p_dom >= (p0_dom - B)) & (p_dom <= (p0_dom + B))
+    violation_mask = ~hc  # True for datapoints that do NOT satisfy the constraint
+    vio_percent = 100.0*(violation_mask.sum()/p0_dom.shape[0])
+    if(sum(violation_mask) > 0):
+        loss_hc = torch.mean(0.5*(p_dom[violation_mask] - p0_dom[violation_mask]) ** 2)*domain_V
+    else:
+        loss_hc = torch.zeros(1)
+    # --- maximize prob. over target loss ---
+    p_tar = model(x_tar).view(-1,)
+    target_mass_estimate = torch.mean(p_tar)*target_V
+    loss_tar = -target_mass_estimate
+    # --- Combine loss and optimize ---
+    total_loss = loss_hc + loss_tar*1e-1
+    return total_loss, loss_hc, loss_tar, vio_percent

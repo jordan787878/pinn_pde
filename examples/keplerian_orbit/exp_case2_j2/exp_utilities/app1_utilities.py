@@ -117,6 +117,9 @@ def compute_prob_event(constants, target_r, targer_ph, t, networks, options, N_d
         'target_V' : compute_volume(target_bounds),
         'time': t,
         'constants': constants,
+        'use_trained_gmm': options["use_trained_gmm"],
+        'show_loss_landscape': options["show_loss_landscape"],
+        'trained_gmm_path': options["path_pdf_models"]+options["label"],
     }
 
     # --- Solving ---

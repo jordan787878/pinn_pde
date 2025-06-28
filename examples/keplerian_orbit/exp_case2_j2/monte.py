@@ -18,7 +18,6 @@ constants = Case2_4D_Constants()
 np.random.seed(0)
 
 
-# --- Refactor ---
 def p_sol_monte(t=0.0, linespace_num=51, stat_sample=10000):
     """
     Propagate stat_sample samples from the initial 4D Gaussian distribution
@@ -224,6 +223,12 @@ def generate_data(constants, data_folder, N_samples):
             np.save(GRID_FOLDER+"x3s.npy", x3s)
             np.save(GRID_FOLDER+"x4s.npy", x4s)
     np.save(data_folder+"mc_time.npy", np.array(mc_time))
+
+
+# --- added ---
+def print_mc_time(mc_folder):
+    mc_time = np.load(mc_folder+"mc_time.npy") # print mc computation time
+    print("[check] MC computation time: ", mc_time)
 
 
 def test_J2effect_exp_case2():
