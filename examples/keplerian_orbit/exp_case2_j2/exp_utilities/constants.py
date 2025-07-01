@@ -184,7 +184,7 @@ class Case2_4D_Constants:
         return x, t
     
     # [new sampling methods]
-    def sample_init_points_seq(self, N_samples, T_seq):
+    def sample_init_points_seq(self, N_samples, T_seq, sobol_seed=0):
         _x_bc_normal = np.random.multivariate_normal(self.N_MEAN_I, self.N_COV_I, size=N_samples).astype(np.float32)
         _x_bc_normal = torch.tensor(_x_bc_normal, dtype=torch.float32, requires_grad=False)
         _x_bc = np.column_stack([
@@ -199,18 +199,18 @@ class Case2_4D_Constants:
         lower_bounds = np.array([self.X1_RANGE[0], self.X2_RANGE[0], self.X3_RANGE[0], self.X4_RANGE[0]])
         upper_bounds = np.array([self.X1_RANGE[1], self.X2_RANGE[1], self.X3_RANGE[1], self.X4_RANGE[1]])
         # Create a Sobol sequence sampler for 4 dimensions
-        sobol_sampler = qmc.Sobol(d=4, scramble=True)
+        sobol_sampler = qmc.Sobol(d=4, scramble=True, seed=sobol_seed)
         # Generate samples in the unit hypercube [0, 1]^4
-        samples_unit = sobol_sampler.random(1024)
+        samples_unit = sobol_sampler.random_base2(m=10)
         # Scale the samples to the specified ranges for each dimension
         _x_bc_sol = qmc.scale(samples_unit, lower_bounds, upper_bounds)
         _x_bc_sol = torch.tensor(_x_bc_sol, dtype=torch.float32, requires_grad=False)
-
         x_bc = torch.cat((_x_bc_normal, _x_bc, _x_bc_sol), dim=0)
+        # x_bc = torch.cat((_x_bc_normal, _x_bc), dim=0)
         t_bc = (torch.ones(len(x_bc), 1) * T_seq[0]/self.T)
         return x_bc, t_bc
     
-    def sample_res_points_seq(self, N_samples, T_seq):
+    def sample_res_points_seq(self, N_samples, T_seq, sobol_seed=0):
         _x_normal = np.random.multivariate_normal(self.N_MEAN_I, self.N_COV_I, size=N_samples).astype(np.float32)
         _x_normal = torch.tensor(_x_normal, dtype=torch.float32, requires_grad=True)
         _x = np.column_stack([
@@ -225,13 +225,14 @@ class Case2_4D_Constants:
         lower_bounds = np.array([self.X1_RANGE[0], self.X2_RANGE[0], self.X3_RANGE[0], self.X4_RANGE[0]])
         upper_bounds = np.array([self.X1_RANGE[1], self.X2_RANGE[1], self.X3_RANGE[1], self.X4_RANGE[1]])
         # Create a Sobol sequence sampler for 4 dimensions
-        sobol_sampler = qmc.Sobol(d=4, scramble=True)
+        sobol_sampler = qmc.Sobol(d=4, scramble=True, seed=sobol_seed)
         # Generate samples in the unit hypercube [0, 1]^4
-        samples_unit = sobol_sampler.random(1024)
+        samples_unit = sobol_sampler.random_base2(m=10)
         # Scale the samples to the specified ranges for each dimension
         _x_sol = qmc.scale(samples_unit, lower_bounds, upper_bounds)
         _x_sol = torch.tensor(_x_sol, dtype=torch.float32, requires_grad=True)
         x = torch.cat((_x_normal, _x, _x_sol), dim=0)
+        # x = torch.cat((_x_normal, _x), dim=0)
         
         portion_of_time_boundary = 0.05
         N_total = len(x)
@@ -251,7 +252,6 @@ class Case2_4D_Constants:
         np.random.shuffle(t_combined)
         # Convert to tensor
         t = torch.tensor(t_combined, dtype=torch.float32, requires_grad=True).view(-1, 1)
-
         return x, t
     
     def sample_points(self, N_samples, bounds):

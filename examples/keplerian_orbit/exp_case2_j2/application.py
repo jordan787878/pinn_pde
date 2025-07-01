@@ -75,7 +75,7 @@ def main():
                "path_prob": "data/app1/"+target+"/prob/",
                "label": "fo_gmmx64_nres50_20k", #fo_gmmx64_nres50_20k",
                "solver": "fo",
-               "run_solver": False,
+               "run_solver": True,
         # special options for solver: fo
                "use_trained_gmm": False,
                "show_loss_landscape": False,
@@ -84,9 +84,9 @@ def main():
                "show_pdf": False,
                "show_pdf_gmm": False,
                "show_target": False,
-               "mc_folder": "data/1e+5/",
-               "compute_prob_by_mc": False,
-               "save_result": False,
+               "mc_folder": "data/1e+6/",
+               "compute_prob_by_mc": True,
+               "save_result": True,
         # pinn path
                "pnet_path" : "output/v0/p_net.pth",
                "e1net_path" : "output/v0/e1_net.pth",
@@ -108,7 +108,7 @@ def main():
 
     # --- Define a t_span to evaluate Pr(Event) ---
     dt = 0.01
-    options['t_span'] = np.arange(0.08, 0.08+dt, dt)
+    options['t_span'] = np.arange(0.00, 0.20+dt, dt)
 
     # --- Run application ---
     app1(constants, p_net, e1_net_seq1, e1_net_seq2, options)

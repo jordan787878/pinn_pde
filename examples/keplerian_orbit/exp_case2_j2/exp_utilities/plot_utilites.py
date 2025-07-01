@@ -188,26 +188,29 @@ def check_error_flatten(constants, p_init_func, e1_net, p_net, t, data_folder):
     # if(t == 0): # [test]
     #     pdf_nn = p_init_perturb(grid_points).reshape(x1_grid.shape)
     # print("[check] nn joint pdf shape, type: ", pdf_nn.shape, pdf_nn.dtype)
-    e1_nn  = e1_net(grid_points_tensor, t_tensor).detach().numpy().reshape(x1_grid.shape)
+    if(e1_net is not None):
+        e1_nn  = e1_net(grid_points_tensor, t_tensor).detach().numpy().reshape(x1_grid.shape)
     e1 = pdf_true - pdf_nn
     
     e1_vec = e1.reshape(-1)
-    e1_nn_vec = e1_nn.reshape(-1)
-    a1 = np.max(np.abs(e1_vec - e1_nn_vec)) / np.max(np.abs(e1_nn_vec))
-    print("a1 (t=", np.round(t,2),"): ", np.round(a1,3))
+    if(e1_net is not None):
+        e1_nn_vec = e1_nn.reshape(-1)
+        a1 = np.max(np.abs(e1_vec - e1_nn_vec)) / np.max(np.abs(e1_nn_vec))
+        print("a1 (t=", np.round(t,2),"): ", np.round(a1,3))
     # print(E_x1, E_x2, E_x3, E_x4)
     max_e1 = np.max(np.abs(e1_vec))
-    max_e1_nn = np.max(np.abs(e1_nn_vec))
-    print(max_e1, max_e1_nn)
-    B1 = 2.0 * max_e1_nn 
-
-    idx_plot = np.arange(1, 1+len(e1_vec))
-    plt.figure
-    plt.plot(idx_plot, e1_vec, "black", linewidth=2.0)
-    plt.plot(idx_plot, e1_nn_vec, "b--", linewidth=0.2)
-    plt.fill_between(idx_plot, y1=0.0*idx_plot+B1, y2=0.0*idx_plot-B1, 
-                         color="green", alpha=0.2, label=r"$B$")
-    plt.show()
+    print("[test] max(p_mc - p_nn) at t={:.3f}: {:.4f}".format(t, max_e1))
+    if(e1_net is not None):
+        max_e1_nn = np.max(np.abs(e1_nn_vec))
+        print("[test] max(p_mc - p_nn), max(e1_nn) at t={:.3f}: {:.4f} vs {:.4f}".format(t, max_e1, max_e1_nn))
+        B1 = 2.0 * max_e1_nn 
+        idx_plot = np.arange(1, 1+len(e1_vec))
+        plt.figure
+        plt.plot(idx_plot, e1_vec, "black", linewidth=2.0)
+        plt.plot(idx_plot, e1_nn_vec, "b--", linewidth=0.2)
+        plt.fill_between(idx_plot, y1=0.0*idx_plot+B1, y2=0.0*idx_plot-B1, 
+                            color="green", alpha=0.2, label=r"$B$")
+        plt.show()
 
 
 def check_pdfnn_cartesian_wrt_monte(constants, p_net, mc_folder):

@@ -63,8 +63,8 @@ def normalize_inputs(x, t, constants):
     return inputs
 
 
-def load_trained_model(net, path, method="old"):
-    print("[load model from: "+ path)
+def load_trained_model(net, path, method="new"):
+    print("[load model] from: "+ path)
     checkpoint = torch.load(path)
     net.load_state_dict(checkpoint['model_state_dict'])
     epoch = checkpoint['epoch']
@@ -87,3 +87,9 @@ def load_trained_model(net, path, method="old"):
     # plt.savefig("figs/pnet_loss_history.pdf", format='pdf', dpi=300)
     # plt.close()
     return net
+
+
+def init_weights_He(m):
+    if isinstance(m, nn.Linear):
+        torch.nn.init.kaiming_normal_(m.weight)
+        m.bias.data.fill_(0.01)
