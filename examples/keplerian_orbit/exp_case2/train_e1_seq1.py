@@ -1,13 +1,8 @@
 """
 Train PINN e1
 """
-
 import numpy as np
 import torch
-import torch.nn as nn
-import torch.nn.init as init
-import torch.nn.functional as F
-import matplotlib.pyplot as plt
 import time
 import argparse
 from monte import p_init, get_p_init_max, get_max_e1_init
@@ -17,29 +12,13 @@ from exp_utilities.constants import Case2_4D_Constants
 # import utilities
 import sys
 sys.path.insert(0, '../utilities/')
-from _General.neuralnetworks import PNet, E1Net, load_trained_model
+from _General.neuralnetworks import PNet, E1Net, load_trained_model, init_weights_He
+import _General.train_pinn as PINN
 
 
-E1NET_PATH = "output/v0/e1_net_seq1.pth"
-E1NET_INTER_PATH = "output/v0/e1_net_seq1_"
-# E1NET_PATH = "output/v2/e1_net_seq1.pth"
-# E1NET_INTER_PATH = "output/v2/e1_net_seq1_"
-
-PNET_PATH = "output/v0/p_net.pth"
 DATA_FOLDER = "data/1e+6/"
-device = "cpu"
 TRAIN_FLAG = False
 constants = Case2_4D_Constants()
-# Set a fixed seed for reproducibility
-torch.manual_seed(0)
-np.random.seed(0)
-
-
-def init_weights_He(m):
-    if isinstance(m, nn.Linear):
-        init.kaiming_normal_(m.weight)
-        # init.xavier_normal_(m.weight)
-        m.bias.data.fill_(0.01)
 
 
 def train_model(e1_net, p_net, optimizer, scheduler, mse_cost_function, iterations=50000):
@@ -169,30 +148,36 @@ def train_model(e1_net, p_net, optimizer, scheduler, mse_cost_function, iteratio
 
 def main():
     global constants
+    PNET_PATH = "output/v0/p_net.pth"
 
-    p_net = PNet(constants, scale=get_p_init_max(constants)).to(device)
-    p_net = load_trained_model(p_net, path=PNET_PATH, method="new"); p_net.eval()
-
-    e1_net = E1Net(constants, scale=get_max_e1_init(constants, p_net)).to(device)
+    # --- Init e1 pinn ---
+    torch.manual_seed(0); np.random.seed(0) # set a fixed seed for reproducibility
+    e1_net = E1Net(constants)
     e1_net.apply(init_weights_He)
 
-    mse_cost_function = torch.nn.MSELoss()
-    optimizer = torch.optim.Adam(e1_net.parameters(), lr=1e-3)
-    scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.95)
+    # --- Load pinn p_net and compute normalize scale ---
+    p_net = PNet(constants, scale=get_p_init_max(constants))
+    p_net = load_trained_model(p_net, path=PNET_PATH, method="new"); p_net.eval()
+    e1_net.scale = get_max_e1_init(constants, p_net)
+
+    configurations = {
+        "ic_fcn": p_init,
+        "diff_opt_fcn": diff_opt_p,
+        "save_path": "output/base/e1_net_seq1.pth",
+        "save_path_inter": "output/base/e1_net_seq1_",
+    }
     if(TRAIN_FLAG):
-        train_model(e1_net, p_net, optimizer, scheduler, mse_cost_function, iterations=50000); print("e1_net train complete")
-    e1_net = load_trained_model(e1_net, path=E1NET_PATH, method="new"); e1_net.eval()
+        networks = (p_net, e1_net)
+        # train_model(e1_net, p_net, optimizer, scheduler, mse_cost_function, iterations=50000); print("e1_net train complete")
+        PINN.train_pinn_e1seq1_base(constants, networks, configurations, 
+                                    iterations=20000, save_model=True)
 
-    ### Post-process ###
-    # for t_prime in constants.T_PRIME_SPAN:
-    #     check_error_flatten(constants, e1_net, p_net, t_prime, DATA_FOLDER)
+    # --- Load best model after training ---
+    e1_net = load_trained_model(e1_net, path=configurations["save_path"], method="new"); e1_net.eval()
 
-    # for t_prime in constants.T_PRIME_SPAN:
-    #    check_pdfnn_marginalize(p_net, t=t_prime)
-    # test_nn_cartesian_pdf_xy(p_net, model_name="p_net")
-    # check_pdfnn_cartesian_wrt_monte(p_net, model_name="p_net")
-    # test_nn_cartesian_pdf_xy(p_net_gmm, model_name="p_net_gmm")
-    # check_pdfnn_cartesian_wrt_monte(p_net_gmm, model_name="p_net_gmm")
+    # --- Post-process ---
+    for t_prime in constants.T_PRIME_SPAN:
+        check_error_flatten(constants, p_init, e1_net, p_net, t_prime, DATA_FOLDER)
 
 
 if __name__ == "__main__":
