@@ -25,7 +25,8 @@ np.random.seed(0)
 def main():
     global constants
     PNET_PATH = "output/v0/p_net.pth"
-    E1NET_PATH_SEQ1 = "output/v0/e1_net_seq1.pth"
+    # E1NET_PATH_SEQ1 = "output/v0/e1_net_seq1.pth"
+    E1NET_PATH_SEQ1 = "output/base/e1_net_seq1.pth"
 
     # --- Init e1 pinn ---
     torch.manual_seed(0); np.random.seed(0) # set a fixed seed for reproducibility
@@ -42,23 +43,27 @@ def main():
     configurations = {
         "ic_fcn": p_init,
         "diff_opt_fcn": diff_opt,
-        "save_path": "output/v0/e1_net_seq2.pth",
-        "save_path_inter": "output/v0/e1_net_seq2_",
+        # "save_path": "output/v0/e1_net_seq2.pth",
+        # "save_path_inter": "output/v0/e1_net_seq2_",
+        "save_path": "output/base/e1_net_seq2.pth",
+        "save_path_inter": "output/base/e1_net_seq2_",
     }
 
     if(TRAIN_FLAG):
         networks = (p_net, e1_net_seq1, e1_net)
-        PINN.train_pinn_e1seq2_v0(constants, networks, configurations, 
-                                  iterations=50000, save_model=True)
+        # PINN.train_pinn_e1seq2_v0(constants, networks, configurations, 
+        #                           iterations=50000, save_model=True)
+        PINN.train_pinn_e1seq2_base(constants, networks, configurations, 
+                                    iterations=50000, save_model=True)
     
     # --- Load best model after training ---
     e1_net = load_trained_model(e1_net, path=configurations["save_path"]); e1_net.eval()
 
     # --- Post-process ---
-    # for t_prime in constants.T_PRIME_SPAN:
-    #     if(t_prime >= 0.5*constants.TF/constants.T):
-    #         check_error_flatten(constants, p_init, e1_net, p_net, t_prime, MC_FOLDER)
-    visual_e1hat_training(constants, (p_net, e1_net_seq1, e1_net), MC_FOLDER, save_plot_path="figs/case2_e1net.png")
+    for t_prime in constants.T_PRIME_SPAN:
+        if(t_prime >= 0.5*constants.TF/constants.T):
+            check_error_flatten(constants, p_init, e1_net, p_net, t_prime, MC_FOLDER)
+    #visual_e1hat_training(constants, (p_net, e1_net_seq1, e1_net), MC_FOLDER, save_plot_path="figs/case2_e1net.png")
 
 
 if __name__ == "__main__":

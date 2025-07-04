@@ -36,15 +36,19 @@ def main():
     configurations = {
         "ic_fcn": p_init,
         "diff_opt_fcn": diff_opt,
-        "save_path": "output/v0/e1_net_seq1.pth",
-        "save_path_inter": "output/v0/e1_net_seq1_",
+        # "save_path": "output/v0/e1_net_seq1.pth",
+        # "save_path_inter": "output/v0/e1_net_seq1_",
+        "save_path": "output/base/e1_net_seq1.pth",
+        "save_path_inter": "output/base/e1_net_seq1_",
     }
 
     # --- Train e1 pinn over first time seq ---
     if(TRAIN_FLAG):
         networks = (p_net, e1_net)
-        PINN.train_pinn_e1seq1_v0(constants, networks, configurations, 
-                                  iterations=120, save_model=False)
+        # PINN.train_pinn_e1seq1_v0(constants, networks, configurations, 
+        #                           iterations=120, save_model=False)
+        PINN.train_pinn_e1seq1_base(constants, networks, configurations, 
+                                  iterations=20000, save_model=True)
     
     # --- Load best model after training ---
     e1_net = load_trained_model(e1_net, path=configurations["save_path"]); e1_net.eval()
