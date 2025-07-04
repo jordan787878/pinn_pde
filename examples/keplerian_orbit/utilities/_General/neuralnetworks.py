@@ -93,3 +93,8 @@ def init_weights_He(m):
     if isinstance(m, nn.Linear):
         torch.nn.init.kaiming_normal_(m.weight)
         m.bias.data.fill_(0.01)
+
+
+def visual_pinn(model):
+    print(model)
+    pass

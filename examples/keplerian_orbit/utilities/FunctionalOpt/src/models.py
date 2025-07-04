@@ -6,13 +6,16 @@ from torch.distributions import Categorical, MixtureSameFamily, Independent, Nor
 
 
 class TorchGMM(nn.Module):
-    def __init__(self, constants, num_components=64, n_features=4):
+    def __init__(self, constants, num_components=64, n_features=4, min_std=1e-2):
         super().__init__()
         self.num_components = num_components
         self.n_features = n_features
+        self.min_std = min_std
         
         # mixture weights
-        self.logits = nn.Parameter(torch.zeros(num_components))
+        # self.logits = nn.Parameter(torch.zeros(num_components))
+        self.raw_weights = nn.Parameter(torch.randn(num_components))
+
         # means [num_components, n_features]
         self.means  = nn.Parameter(torch.randn(num_components, n_features) + 
                                    torch.from_numpy(constants.N_MEAN_I))
@@ -21,16 +24,18 @@ class TorchGMM(nn.Module):
 
     def get_distribution(self):
         # ensure all std-devs are positive
-        scales = F.softplus(self.raw_scales)      # [num_components, n_features]
-        
-        # mixture category
-        cat  = Categorical(logits=self.logits)    # batch_shape=[num_components]
-        # independent multivariate normal with diagonal cov
-        comp = Independent(
-                   Normal(loc=self.means, scale=scales),
-                   1
-               )                                   # event_shape=[n_features]
+        scales = F.softplus(self.raw_scales) + self.min_std      # [num_components, n_features]
 
+        # 2) turn raw_weights into non-negative mixture probs
+        w2 = self.raw_weights.pow(2)                             # square
+        weights = w2 / (w2.sum() + 1e-12)                        # normalize
+
+        # 3) build the Mixture distribution
+        cat  = Categorical(probs=weights)                       # batch_shape=[num_components]
+        comp = Independent(
+            Normal(loc=self.means, scale=scales),
+            1                                                    # event_dim = n_features
+        )
         return MixtureSameFamily(cat, comp)
 
     def forward(self, x):
@@ -45,14 +50,14 @@ class TorchGMM(nn.Module):
         # 1) Directly from your parameters:
         # ------------------------------------------------
         # (a) mixture weights
-        raw_logits = self.logits               # [num_components]
-        weights     = torch.softmax(raw_logits, dim=0)    # normalized → probabilities
+        w2 = self.raw_weights.pow(2)                             # square
+        weights = w2 / (w2.sum() + 1e-12)                        # normalize
 
         # (b) component means
         means = self.means                      # [num_components, n_features]
 
         # (c) component std-dev’s and covariances
-        scales      = F.softplus(self.raw_scales)       # std-dev’s, shape [C, F]
+        scales = F.softplus(self.raw_scales) + self.min_std       # std-dev’s, shape [C, F]
         covariances = scales.pow(2)                      # variances on the diagonal
 
         # Now if you want NumPy arrays
@@ -60,6 +65,43 @@ class TorchGMM(nn.Module):
         m_np  = means.detach().cpu().numpy()
         cov_np = covariances.detach().cpu().numpy()
         return (w_np, m_np, cov_np)
+    
+    def region_prob(self, region_bounds):
+        """
+        region_bounds: torch tensor of shape [n_features, 2],
+                       where region_bounds[j,0] = lower bound on dim j,
+                             region_bounds[j,1] = upper bound on dim j
+        Returns the total probability mass in that hyper‐rectangle.
+        """
+        # 1) unpack parameters
+        w2 = self.raw_weights.pow(2)                             # square
+        weights = w2 / (w2.sum() + 1e-12)                        # normalize
+        means  = self.means                  # [C, D]
+        scales = F.softplus(self.raw_scales) # [C, D]
+
+        # 2) get bounds (broadcasted)
+        #    lb, ub shape [1, D] → will broadcast to [C, D]
+        lb = region_bounds[:, 0].unsqueeze(0)
+        ub = region_bounds[:, 1].unsqueeze(0)
+
+        # 3) standardized coords
+        #    z_low = (lb - μ) / (σ * sqrt(2)), same shape [C, D]
+        denom = scales * (2**0.5)
+        z_low  = (lb - means) / denom
+        z_high = (ub - means) / denom
+
+        # 4) 1D Gaussian CDF difference per component per dim
+        #    Φ(ub) - Φ(lb) = 0.5 * [erf(z_high) - erf(z_low)]
+        cdf_diff = 0.5 * (torch.erf(z_high) - torch.erf(z_low))  # [C, D]
+
+        # 5) joint probability in D dims = product over dims
+        #    (independence across features)
+        comp_mass = torch.prod(cdf_diff, dim=1)  # [C]
+
+        # 6) weight‐sum over components
+        total_mass = torch.dot(weights, comp_mass)  # scalar
+
+        return total_mass
 
 
 # class RBFDensity(nn.Module):

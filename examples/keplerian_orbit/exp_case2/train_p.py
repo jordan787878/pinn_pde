@@ -16,7 +16,7 @@ import torch.nn.init as init
 import torch.nn.functional as F
 import time
 import argparse
-from monte import p_init, get_p_init_max
+from monte import p_init, get_p_init_max, print_mc_time
 from exp_utilities.plot_utilites import check_pdf_Nrphi, check_pdfnn_cartesian_wrt_monte, check_pdf_cartesian_wrt_samples
 from exp_utilities.constants import Case2_4D_Constants
 # import utilities
@@ -203,9 +203,10 @@ def main():
     p_net = load_trained_model(p_net, path=PNET_PATH, method="new"); p_net.eval()
 
     # --- Post-process ---
+    print_mc_time(DATA_FOLDER)
     # check_pdf_Nrphi(constants, p_net=p_net)
     # check_pdfnn_cartesian_wrt_monte(constants, p_net, DATA_FOLDER)
-    check_pdf_cartesian_wrt_samples(constants, p_net=p_net)
+    # check_pdf_cartesian_wrt_samples(constants, p_net=p_net)
     # --- (obsolete) ---
     # # check_pdfnn_marginalize(p_net, t=t_prime)
     # # test_nn_cartesian_pdf_xy(p_net)

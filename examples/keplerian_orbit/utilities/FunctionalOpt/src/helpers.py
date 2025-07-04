@@ -1,5 +1,5 @@
 import numpy as np
-from scipy.special import erf
+from scipy.special import erf, betaincinv
 
 
 def check_pdf_integral(problem, trained_model, method=""):
@@ -67,3 +67,9 @@ def integral_torchgmm(gmm_params, region_bounds):
             Pr_i *= 0.5*( erf( (up-mu[j])/(np.sqrt(2)*sigma[j]) ) - erf( (lb-mu[j])/(np.sqrt(2)*sigma[j]) ) )
         Pr += w*Pr_i
     return Pr
+
+
+def scenario_base_guarantee(d, N, delta):
+    eps = betaincinv(d, N - d + 1, 1 - delta)
+    print("with confidience {:.4f}, the probability that the constraint holds is greater than {:.4f}".format(1-delta, 1-eps))
+    print("if the constraint is satisifed on {:4d} samples".format(N))

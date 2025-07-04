@@ -3,45 +3,61 @@ import numpy as np
 from .helpers import *
 
 
-def train_model(problem, model, num_iterations=1000, batch_size=256, device=torch.device("cpu")):
+def train_model(problem, model, num_iterations=1000, batch_size=512, device=torch.device("cpu")):
     # --- Extract problem ----
-    B = problem['B']
-    domain_V = problem['domain_V']
-    target_V = problem['target_V']
     problem['p_net'], _, _ = problem['networks']
+    target_bounds = problem["target_bounds"]
+    dtype  = next(model.parameters()).dtype
+    target_bounds_tensor = torch.tensor(target_bounds, dtype=dtype)
 
     # --- Set optimizer ---
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-2)
     scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=1000, gamma=0.9)
     
     # --- Select deterministic samples over domain and target ---
-    x_dom, p0_dom, x_tar, x_remains, p0_remains = get_samples_determin(problem, model, batch_size)
+    x_dom, p0_dom, x_remains, p0_remains = get_samples_determin(problem, model, batch_size)
 
     # --- Run ---
     best_loss = np.inf
+    increment = 0.001
     for it in range(num_iterations):
         optimizer.zero_grad()
             
         # --- Augment samples with random points --- 
-        x_dom_train, p0_dom_train, x_tar_train = aug_samples_random(problem, x_dom, p0_dom, x_tar, batch_size)
+        x_dom_train, p0_dom_train = aug_samples_random(problem, x_dom, p0_dom, batch_size)
 
         # --- loss -- 
-        total_loss, loss_hc, loss_tar, vio_percent = loss_custom(problem, model, 
-            x_dom_train, p0_dom_train, x_tar_train)
+        loss_hc, vio_percent = loss_hardconstraint(problem, model, x_dom_train, p0_dom_train)
+        
+        Pr = model.region_prob(target_bounds_tensor)
+        total_loss = loss_hc - Pr
 
-        # --- Print progress and update the best model ---
-        if it % int(num_iterations/10) == 0:
-            print(f"Iteration {it:4d}, loss: {total_loss.item()}, loss hc: {loss_hc.item()}, loss reg: {loss_tar.item()}")
+        # --- Print progress ---
+        if it % int(num_iterations/100) == 0:
+            print(f"Iteration {it:4d}, loss: {total_loss.item()}, loss hc: {loss_hc.item()}, Pr: {Pr.item()}")
             print(f"   violation percent: {vio_percent:.4f}%")
-        if(total_loss.item() < best_loss and vio_percent <= 0):
+
+        # --- Update the best model ---
+        if(total_loss.item() < best_loss - increment and vio_percent <= 0.0):
             # --- Augment by checking violation on grid ---
-            _x_vio, _p0_vio, x_remains, p0_remains = aug_samples_violate(problem, model, x_remains, p0_remains, batch_size)
-            if(_x_vio is None):    
+            _x_vio, _p0_vio, x_remains, p0_remains = aug_samples_violate(
+                problem, model, x_remains, p0_remains, batch_size)
+            
+            # --- Scenario-based Approach vertification ---
+            _x_rand, _p0_rand = get_samples_random(problem, 10000)
+            _, vio_rand_hc_check = loss_hardconstraint(problem, model, _x_rand, _p0_rand)
+
+            if(_x_vio is None and vio_rand_hc_check <= 0.0):    
                 best_model_state = {k: v.cpu().clone() for k, v in model.state_dict().items()}
                 best_loss = total_loss.item()
-                print(f"[Best] Iteration {it:4d}, loss: {total_loss.item()}, {loss_hc.item()}, {loss_tar.item()}")
-                print(f"   violation percent: {vio_percent:.4f}%")
-            else:
+                # if it % int(num_iterations/100) == 0:
+                if(True):
+                    print(f"[Best] Iteration {it:4d}, loss: {total_loss.item()}, {loss_hc.item()}")
+                    print(f"   violation percent: {vio_percent:.4f}%")
+                    print(f"   Pr: {Pr:.4f}")
+                    # print(model.get_gmm_paramters())
+            # --- If exists violation on grids, add it to deterministic samples ---
+            elif (_x_vio is not None):
                 x_dom   = torch.cat([x_dom,   _x_vio], dim=0)         
                 p0_dom  = torch.cat([p0_dom, _p0_vio], dim=0)
                 print("[check] sample size:", x_dom.shape[0], x_remains.shape[0])
@@ -75,21 +91,24 @@ def get_samples_determin(problem, model, batch_size):
     x_dev      = grid_points_tensor[dev_idx]                # [batch_size, d]
     p0_dev     = _p0_tensor[dev_idx]                        # [batch_size]
 
-    # 2) Top‐k p0 within mask
-    mask_tensor = torch.from_numpy(mask).to(device)    # [N], bool
-    masked_p0    = _p0_tensor[mask_tensor]                  # [M]
-    masked_x     = grid_points_tensor[mask_tensor]          # [M, d]
-    _, rel_idx   = torch.topk(masked_p0, batch_size, largest=True)  # [batch_size]
-    # map back to global indices
-    mask_idx     = torch.nonzero(mask_tensor, as_tuple=False).view(-1)  # [M]
-    tar_idx      = mask_idx[rel_idx]                        # [batch_size]
-    x_tar        = grid_points_tensor[tar_idx]              # [batch_size, d]
-    p0_tar       = _p0_tensor[tar_idx]                      # [batch_size]
+    # # 2) Top‐k p0 within mask
+    # mask_tensor = torch.from_numpy(mask).to(device)    # [N], bool
+    # masked_p0    = _p0_tensor[mask_tensor]                  # [M]
+    # masked_x     = grid_points_tensor[mask_tensor]          # [M, d]
+    # _, rel_idx   = torch.topk(masked_p0, batch_size, largest=True)  # [batch_size]
+    # # map back to global indices
+    # mask_idx     = torch.nonzero(mask_tensor, as_tuple=False).view(-1)  # [M]
+    # tar_idx      = mask_idx[rel_idx]                        # [batch_size]
+    # x_tar        = grid_points_tensor[tar_idx]              # [batch_size, d]
+    # p0_tar       = _p0_tensor[tar_idx]                      # [batch_size]
 
     # 3) Combine “domain” selections
-    dom_idx = torch.cat([dev_idx, tar_idx], dim=0)          # [2*batch_size]
-    x_dom   = torch.cat([x_dev,   x_tar], dim=0)            # [2*batch_size, d]
-    p0_dom  = torch.cat([p0_dev, p0_tar], dim=0)            # [2*batch_size]
+    # dom_idx = torch.cat([dev_idx, tar_idx], dim=0)          # [2*batch_size]
+    # x_dom   = torch.cat([x_dev,   x_tar], dim=0)            # [2*batch_size, d]
+    # p0_dom  = torch.cat([p0_dev, p0_tar], dim=0)            # [2*batch_size]
+    dom_idx = dev_idx       # [2*batch_size]
+    x_dom   = x_dev            # [2*batch_size, d]
+    p0_dom  = p0_dev            # [2*batch_size]
 
     # 4) Compute “not selected” as complement of dom_idx
     all_idx       = torch.arange(N, device=device)          # [N]
@@ -99,29 +118,43 @@ def get_samples_determin(problem, model, batch_size):
     x_not_select  = grid_points_tensor[not_sel_idx]         # [...]
     p0_not_select = _p0_tensor[not_sel_idx]                 # [...]
 
-    return x_dom, p0_dom, x_tar, x_not_select, p0_not_select
+    return x_dom, p0_dom, x_not_select, p0_not_select
 
 
-def aug_samples_random(problem, x_dom, p0_dom, x_tar, batch_size):
+def get_samples_random(problem, batch_size):
     constants = problem['constants']
     t = problem['time']
     p_net = problem['p_net'] 
     domain_bounds = problem['domain_bounds']
-    target_bounds = problem['target_bounds']
+    _x_dom_rand = constants.sample_points(batch_size, domain_bounds)
+    _t_dom_rand = torch.full((batch_size, 1), t)
+    _p0_dom_rand = p_net(_x_dom_rand, _t_dom_rand).view(-1,)
+    return _x_dom_rand, _p0_dom_rand
+
+
+def aug_samples_random(problem, x_dom, p0_dom, batch_size):
+    constants = problem['constants']
+    t = problem['time']
+    p_net = problem['p_net'] 
+    domain_bounds = problem['domain_bounds']
+    # target_bounds = problem['target_bounds']
 
     _x_dom_rand = constants.sample_points(batch_size, domain_bounds)
     _t_dom_rand = torch.full((batch_size, 1), t)
     _p0_dom_rand = p_net(_x_dom_rand, _t_dom_rand).view(-1,)
 
-    _x_tar_rand = constants.sample_points(batch_size, target_bounds)
-    _t_tar_rand = torch.full((batch_size, 1), t)
-    _p0_dom_rand = p_net(_x_tar_rand, _t_tar_rand).view(-1,)
+    # _x_tar_rand = constants.sample_points(batch_size, target_bounds)
+    # _t_tar_rand = torch.full((batch_size, 1), t)
+    # _p0_dom_rand = p_net(_x_tar_rand, _t_tar_rand).view(-1,)
 
-    x_dom_train = torch.cat((x_dom, _x_dom_rand, _x_tar_rand), dim=0)
-    p0_dom_train = torch.cat((p0_dom, _p0_dom_rand, _p0_dom_rand), dim=0)
-    x_tar_train = torch.cat((x_tar, _x_tar_rand), dim=0)
+    # x_dom_train = torch.cat((x_dom, _x_dom_rand, _x_tar_rand), dim=0)
+    # p0_dom_train = torch.cat((p0_dom, _p0_dom_rand, _p0_dom_rand), dim=0)
+    # x_tar_train = torch.cat((x_tar, _x_tar_rand), dim=0)
+    x_dom_train = torch.cat((x_dom, _x_dom_rand), dim=0)
+    p0_dom_train = torch.cat((p0_dom, _p0_dom_rand), dim=0)
+    # x_tar_train = torch.cat((x_tar), dim=0)
 
-    return x_dom_train, p0_dom_train, x_tar_train
+    return x_dom_train, p0_dom_train
 
 
 def aug_samples_violate(problem, model, x_remains, p0_remains, batch_size):
@@ -187,23 +220,29 @@ def visual_loss(problem, model):
     # print(loss)
 
 
-def loss_custom(problem, model, x_dom, p0_dom, x_tar):
+def loss_hardconstraint(problem, model, x_dom, p0_dom):
     B = problem['B']
     domain_V = problem['domain_V']
-    target_V = problem['target_V']
+    # target_V = problem['target_V']
     # --- loss (of given model) ---
     p_dom  = model(x_dom).view(-1,)
     hc = (p_dom >= (p0_dom - B)) & (p_dom <= (p0_dom + B))
     violation_mask = ~hc  # True for datapoints that do NOT satisfy the constraint
     vio_percent = 100.0*(violation_mask.sum()/p0_dom.shape[0])
+
+    # loss_hc = torch.relu(p_dom - (p0_dom + B)).sum() + \
+    #           torch.relu(p0_dom - B - p_dom).sum()
+    # loss_hc *= domain_V
     if(sum(violation_mask) > 0):
         loss_hc = torch.mean(0.5*(p_dom[violation_mask] - p0_dom[violation_mask]) ** 2)*domain_V
     else:
         loss_hc = torch.zeros(1)
+
     # --- maximize prob. over target loss ---
-    p_tar = model(x_tar).view(-1,)
-    target_mass_estimate = torch.mean(p_tar)*target_V
-    loss_tar = -target_mass_estimate
+    # p_tar = model(x_tar).view(-1,)
+    # target_mass_estimate = torch.mean(p_tar)*target_V
+    # loss_tar = -target_mass_estimate
+    # loss_tar = -integral_torchgmm(model.get_gmm_paramters(), problem['target_bounds'])
     # --- Combine loss and optimize ---
-    total_loss = loss_hc + loss_tar*1e-1
-    return total_loss, loss_hc, loss_tar, vio_percent
+    # total_loss = loss_hc + loss_tar*1e-1
+    return loss_hc, vio_percent

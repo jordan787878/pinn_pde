@@ -184,8 +184,8 @@ def main():
     e1_net = load_trained_model(e1_net, path=E1NET_PATH, method="new"); e1_net.eval()
 
     ### Post-process ###
-    for t_prime in constants.T_PRIME_SPAN:
-        check_error_flatten(constants, e1_net, p_net, t_prime, DATA_FOLDER)
+    # for t_prime in constants.T_PRIME_SPAN:
+    #     check_error_flatten(constants, e1_net, p_net, t_prime, DATA_FOLDER)
 
     # for t_prime in constants.T_PRIME_SPAN:
     #    check_pdfnn_marginalize(p_net, t=t_prime)

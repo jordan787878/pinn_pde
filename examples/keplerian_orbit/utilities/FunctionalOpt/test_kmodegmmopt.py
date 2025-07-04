@@ -109,8 +109,7 @@ def optimize_gmm_k(K, x, x_subset, p0, B, strategy, info):
     return result, info
 
 
-def test_convergence(load_data=False):
-    data_folder = 'data/case2/'
+def test_convergence(data_folder, load_data=False):
     if(load_data):
         with open(data_folder +'problem.pkl', 'rb') as f:
             problem = pickle.load(f)
@@ -120,18 +119,18 @@ def test_convergence(load_data=False):
         return
 
     # --- problem setup ---
-    np.random.seed(11)
+    # np.random.seed(11)
     # domain
     x_l, x_u, dx = -6.0, 6.0, 0.02
     x = np.arange(x_l, x_u + dx, dx)
     # region of interest
-    x_subset = np.array([-4.0, 4.0]) # deterministic
-    # x_subset = np.random.uniform(x_l, x_u, size=2); x_subset.sort() # random
+    # x_subset = np.array([-4.0, 4.0]) # deterministic
+    x_subset = np.random.uniform(x_l, x_u, size=2); x_subset.sort() # random
     mask = (x >= x_subset[0]) & (x <= x_subset[1])
     
     # p_hat and error bound
-    K_p0 = 2
-    p0, _, theta_p0 = generate_base_pdf(x, num=K_p0, special=True)
+    K_p0 = 3
+    p0, _, theta_p0 = generate_base_pdf(x, num=K_p0)
     # B  = np.max(p0)*np.random.uniform(0.1, 0.2)
     B  = 0.04
     
@@ -142,20 +141,23 @@ def test_convergence(load_data=False):
         'x': x, 'x_subset': x_subset,
         'p0': p0, 'B': B,
         'Pr_subset': Pr_subset, 'Pr_max': Pr_max,
+        'mask': mask, 'dV': dx
     }
 
     # --- linear program comparision ---
     Pr_lp, pdf_lp, x_lp = optimize_linearprogram(problem)
+    Pr_lp_new, _ = solve_linearprogram(problem)
+    print("[debug]: ", Pr_lp, Pr_lp_new)
     problem['Pr_lp'] = Pr_lp
     problem['Pr_neg'] = optimize_negation(problem)
     problem['pdf_lp'] = pdf_lp
     problem['x_lp'] = x_lp
 
     # --- gmm optimization setup ---
-    num_test_trials = 10
-    K_gmm = 2
-    max_iter = 2000
-    break_iter = 40
+    num_test_trials = 1
+    K_gmm = 3
+    max_iter = 100
+    break_iter = 10
     strategy = {
         'integral' : 'analytical', # this specify how to compute gmm integral over a region
         'increment' : 'inverse_square' # this specify the incremental construction approach 
@@ -242,4 +244,5 @@ def test_convergence(load_data=False):
 
 
 if __name__ == '__main__':
-    test_convergence(load_data=True)
+    data_folder = 'data/case3/'
+    test_convergence(data_folder, load_data=True)

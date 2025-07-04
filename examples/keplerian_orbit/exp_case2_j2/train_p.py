@@ -94,14 +94,15 @@ def main():
     p_net.scale = get_p_init_max(constants)
     print("p net scale: ", p_net.scale)
 
-    if(TRAIN_FLAG):
-        # --- v0 --- with regularization and curriculum training to enable subsequent training of e1_net
-        # PNET_PATH = "output/v0/p_net.pth"
-        # PNET_INTER_PATH = "output/v0/p_net_"
-        # --- base --- the most basic PINN training attempted to compare with standard MC
-        PNET_PATH = "output/base/p_net.pth"
-        PNET_INTER_PATH = "output/base/p_net_"
+    # --- v0 --- with regularization and curriculum training to enable subsequent training of e1_net
+    PNET_PATH = "output/v0/p_net.pth"
+    PNET_INTER_PATH = "output/v0/p_net_"
 
+    # --- base --- the most basic PINN training attempted to compare with standard MC
+    # PNET_PATH = "output/base/p_net.pth"
+    # PNET_INTER_PATH = "output/base/p_net_"
+
+    if(TRAIN_FLAG):
         configurations = {
             "ic_fcn": p_init,
             "diff_opt_fcn": diff_opt,
@@ -109,19 +110,19 @@ def main():
             "pnet_path_inter": PNET_INTER_PATH
         }
         # --- v0 ---
-        # PINN.train_pinn_sol_v0(constants, p_net, configurations, iterations=400)
+        PINN.train_pinn_sol_v0(constants, p_net, configurations, iterations=400)
         # --- base ---
-        PINN.train_pinn_sol_base(constants, p_net, configurations, iterations=400)
+        # PINN.train_pinn_sol_base(constants, p_net, configurations, iterations=400)
     
     # --- Load the best network after training ---   
     p_net = load_trained_model(p_net, path=PNET_PATH, method="new"); p_net.eval()
 
     # --- Post-process ---
-    # print_mc_time(MC_FOLDER)
+    print_mc_time(MC_FOLDER)
     # check_pdf_Nrphi(constants, p_net=p_net)
     # check_pdfnn_cartesian_wrt_monte(constants, p_net, MC_FOLDER)
-    for t_prime in constants.T_PRIME_SPAN:
-        check_error_flatten(constants, p_init, None, p_net, t_prime, MC_FOLDER)
+    # for t_prime in constants.T_PRIME_SPAN:
+    #     check_error_flatten(constants, p_init, None, p_net, t_prime, MC_FOLDER)
     # check_pdf_cartesian_wrt_samples(constants, p_net=p_net)
     # --- (obsolete) ---
     # # check_pdfnn_marginalize(p_net, t=t_prime)

@@ -61,20 +61,28 @@ def check_pdf_Nrphi(constants, mc_folder=None, p_net=None):
         x1_grid, x2_grid =  np.meshgrid(x1s, x2s, indexing="ij") # the indexing is very important
 
         # Plotting the contour plot
-        fig = plt.figure(figsize=(8, 6))
+        fig, ax = plt.subplots(figsize=(8, 6))
         cp = plt.contourf(x1_grid, x2_grid, pdf_nn_Nrphi, levels=30, cmap="viridis", alpha=0.8)
         # Adding color bar
         plt.colorbar(cp)
         # scatter samples of (r, phi) on to the plot
-        plt.scatter(r_samples, phi_samples, s=30, c='white', linewidths=0.5, edgecolor='black', alpha=1.0, label='Samples')
+        # plt.scatter(r_samples, phi_samples, s=30, c='white', linewidths=0.5, edgecolor='black', alpha=1.0, label='Samples')
+        ax.text(
+            0.01, 0.99,                   # near top-left
+            f"t = {t_prime:.3f}\np estimated by 1e+5 samples",
+            transform=ax.transAxes,       # use axes coords
+            fontsize=32,                  # big text
+            color='white',
+            va='top', ha='left'           # align text box
+        )
         # Adding labels and title
         plt.xlabel(r"$r'$")
         plt.ylabel(r"$\phi'$")
         # plt.title(r"$p(r',\phi')$"+ "from NN and 200 Samples at t="+str(np.round(t_prime,2))+"T")
-        plt.legend()
+        # plt.legend(loc='upper right')
         plt.tight_layout(pad=0.2)
-        # fig.savefig("figs/v2phat_idx3_nrphi"+str(np.round(t_prime,3))+".pdf", format='pdf')
-        plt.show()
+        fig.savefig("figs/pdf_monte_10x5_t{:.3f}.pdf".format(t_prime), format='pdf'); plt.close()
+        # plt.show()
 
 
 def check_pdf_cartesian_wrt_samples(constants, mc_folder=None, p_net=None):
@@ -154,6 +162,7 @@ def check_pdf_cartesian_wrt_samples(constants, mc_folder=None, p_net=None):
 def check_error_flatten(constants, p_init_func, e1_net, p_net, t, data_folder):
     """
     """    
+    set_publication_plot_style(font_size=16)
     # load p(monte)
     x1s = np.load("data/grids/x1s.npy")
     x2s = np.load("data/grids/x2s.npy")
@@ -205,11 +214,24 @@ def check_error_flatten(constants, p_init_func, e1_net, p_net, t, data_folder):
         print("[test] max(p_mc - p_nn), max(e1_nn) at t={:.3f}: {:.4f} vs {:.4f}".format(t, max_e1, max_e1_nn))
         B1 = 2.0 * max_e1_nn 
         idx_plot = np.arange(1, 1+len(e1_vec))
-        plt.figure
-        plt.plot(idx_plot, e1_vec, "black", linewidth=2.0)
-        plt.plot(idx_plot, e1_nn_vec, "b--", linewidth=0.2)
-        plt.fill_between(idx_plot, y1=0.0*idx_plot+B1, y2=0.0*idx_plot-B1, 
-                            color="green", alpha=0.2, label=r"$B$")
+        fig, ax = plt.subplots(figsize=(8, 4))
+        ax.plot(idx_plot, e1_vec, "black", linewidth=2.0, label=r"$e_1$")
+        ax.plot(idx_plot, e1_nn_vec, "b--", linewidth=0.2, label=r"$\hat{e}_1$")
+        ax.fill_between(idx_plot, y1=0.0*idx_plot+B1, y2=0.0*idx_plot-B1, 
+                            color="green", alpha=0.2, label=r"$B_1$")
+        ax.legend(loc='upper right')
+        ax.text(
+            0.01, 0.99,                   # near top-left
+            f"t = {t:.3f}",
+            transform=ax.transAxes,       # use axes coords
+            fontsize=20,                  # big text
+            color='black',
+            va='top', ha='left'           # align text box
+        )
+        ax.set_ylim([-1.5*B1, 1.5*B1])
+        ax.set_ylabel("Error")
+        ax.set_xlabel("4D state idx")
+        plt.tight_layout(pad=0.2)
         plt.show()
 
 
@@ -219,11 +241,16 @@ def check_pdfnn_cartesian_wrt_monte(constants, p_net, mc_folder):
     and compare it with respect to pdf_monte(x,y)
     the surface plot is not exact, since we use interpolation to create x,y grid and pdf_nn(x,y) on this grid
     """
+    set_publication_plot_style()
+
     # Create a figure
     fig = plt.figure(figsize=(10, 8))
     ax = fig.add_subplot(111, projection='3d')
 
     for t_prime in constants.T_PRIME_SPAN:
+        if(t_prime < constants.T_PRIME_SPAN[3] or t_prime > constants.T_PRIME_SPAN[3]):
+            continue
+
         print("[test] pdf(nn) marginalized to xy at t'=", t_prime)
         x1s = np.load("data/grids/x1s.npy")
         x2s = np.load("data/grids/x2s.npy")
@@ -290,18 +317,18 @@ def check_pdfnn_cartesian_wrt_monte(constants, p_net, mc_folder):
             surf1 = ax.plot_surface(grid_x, grid_y, grid_z_nn, color="none", rstride=3, cstride=3, edgecolor='red',  linewidth=0.5, linestyle="--", label="NN")
             surf2 = ax.plot_surface(grid_x, grid_y, grid_z_mo, color="none", rstride=3, cstride=3, edgecolor='blue', linewidth=0.5, label="Monte")
         else:
-            surf1 = ax.plot_surface(grid_x, grid_y, grid_z_nn, color="none", rstride=3, cstride=3, edgecolor='red',  linewidth=0.5, linestyle="--")
-            surf2 = ax.plot_surface(grid_x, grid_y, grid_z_mo, color="none", rstride=3, cstride=3, edgecolor='blue', linewidth=0.5)
-        # Optional: Add a color bar
-        # fig.colorbar(surf, ax=ax, shrink=0.5, aspect=5)
-    # Labels and title
-    ax.legend()
-    ax.set_xlabel('X, m')
-    ax.set_ylabel('Y, m')
-    ax.set_zlabel('PDF Value')
-    ax.set_title(f'3D Surface Plot of PDF over t='+str(constants.TF))
-    # Show the plot
-    plt.show()
+            surf1 = ax.plot_surface(grid_x, grid_y, grid_z_nn, color="none", rstride=3, cstride=3, edgecolor='black',  
+                                    linewidth=1.0, linestyle="--", label=r"MC $p(x,y, t=0.12T)$")
+            surf2 = ax.plot_surface(grid_x, grid_y, grid_z_mo, cmap=cm.viridis, rstride=3, cstride=3, edgecolor=None, 
+                                    label=r"PINN $\hat{p}(x,y, t=0.12T)$")
+        ax.view_init(30, -52)
+        ax.legend()
+        ax.set_xlabel('\n X, m')
+        ax.set_ylabel('\n Y, m')
+        ax.set_zlabel('\n PDF Value')
+        plt.tight_layout(pad=0.1)
+        fig.savefig("figs/case2_pinn_vs_monte_t{:.3f}.pdf".format(t_prime), format='pdf'); plt.close()
+        # plt.show()
 
 
 def visual_phat_trainings(constants, p_net, data_foler, save_plots=False, save_plot_path=None):
@@ -436,7 +463,7 @@ def visual_phat_trainings(constants, p_net, data_foler, save_plots=False, save_p
         plt.show()
 
 
-def visual_e1hat_training(constants, networks, data_foler, save_plots=False, save_plot_path=None):
+def visual_e1hat_training(constants, networks, data_foler, save_plot_path=None):
     """
     visualize e1 networks training results using final or intermediate saved model
     NOTE: select the t_span
@@ -445,10 +472,10 @@ def visual_e1hat_training(constants, networks, data_foler, save_plots=False, sav
 
     set_publication_plot_style()
 
-    x1s = np.load(data_foler+"x1s.npy")
-    x2s = np.load(data_foler+"x2s.npy")
-    x3s = np.load(data_foler+"x3s.npy")
-    x4s = np.load(data_foler+"x4s.npy")
+    x1s = np.load("data/grids/x1s.npy")
+    x2s = np.load("data/grids/x2s.npy")
+    x3s = np.load("data/grids/x3s.npy")
+    x4s = np.load("data/grids/x4s.npy")
 
     fig, axs = plt.subplots(2, 1, figsize=(8, 6))
     ymin = [-0.025, -0.070]
@@ -488,18 +515,18 @@ def visual_e1hat_training(constants, networks, data_foler, save_plots=False, sav
         x = np.arange(len(e1_vec))[::gap]
         # Select every n-th element from the data array for the y-axis
         y1 = e1_vec[::gap]
-        # y2 = e1_nn_vec[::gap]
+        y2 = e1_nn_vec[::gap]
         axs[i].plot(x, y1, "black", linewidth=0.5, rasterized=True, label="MC")
-        # axs[i].plot(x, y2, "blue",  linewidth=0.5, rasterized=True, label="NN")
-        # axs[i].fill_between(x, y1=0.0*x+B1, y2=0.0*0-B1, 
-        #                     color="green", edgecolor="none", alpha=0.1, label=r"$B_1$")
+        axs[i].plot(x, y2, "blue",  linewidth=0.5, rasterized=True, label="NN")
+        axs[i].fill_between(x, y1=0.0*x+B1, y2=0.0*0-B1, 
+                            color="green", edgecolor="none", alpha=0.1, label="Error bound")
         axs[i].set_ylabel("Error")
         axs[i].grid(True)
         axs[i].text(0.02, 0.98, f"t={t_prime:.2f}T", transform=axs[i].transAxes,
                     ha='left', va='top', color='black', fontsize=18,
                     bbox=dict(facecolor='white', edgecolor='black', boxstyle='round,pad=0.2'))
         axs[i].yaxis.set_major_formatter(mticker.FormatStrFormatter('%.2f'))
-        # axs[i].set_ylim([ymin[i], ymax[i]])
+        axs[i].set_ylim([-1.5*B1, 1.5*B1])
         # ymin, ymax = axs[i].get_ylim()
         # print(f"Subplot {i}: ymin = {ymin}, ymax = {ymax}")
 
@@ -507,10 +534,9 @@ def visual_e1hat_training(constants, networks, data_foler, save_plots=False, sav
     axs[0].legend(loc="lower left", ncol=3)
     # fig.subplots_adjust(left=0.1)
     plt.tight_layout(pad=0.2)
-    if(save_plots):
-        if(save_plot_path is not None):
-            print("Save plot to: ", save_plot_path)
-            fig.savefig(save_plot_path, format='pdf')
+    if(save_plot_path is not None):
+        print("Save plot to: ", save_plot_path)
+        fig.savefig(save_plot_path, format='png', dpi=300)
     else:
         plt.show()
 

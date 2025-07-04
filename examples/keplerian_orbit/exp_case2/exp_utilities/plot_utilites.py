@@ -614,30 +614,26 @@ def plot_app1(target, save_plot_path=None):
                                 parent_folder+"num_integral_nres80.npy", 
                                 parent_folder+"lp_nres50.npy", 
                                 parent_folder+"lp_nres80.npy", 
-                                #  parent_folder+"pr_nn_Nd50_FOx128(new).npy",
-                                #  parent_folder+"pr_nn_Nd50_gmmx64(iter-10k).npy", # weight of region_loss 1e-2
-                                #  parent_folder+"pr_nn_Nd50_gmmx64(iter-20k).npy", # weight of region_loss 1e-2
-                                #  parent_folder+"diaggmmx64.npy", # weight of region_loss 1e-1 with half random samples
-                                #  parent_folder+"diaggmmx64(aug_vio).npy",
-                                #  parent_folder+"pinnv0_diaggmmx64.npy", # error bound B is obtained by e1_net.pth
-                                parent_folder+"pinnv0seq_diaggmmx64.npy", # error bound B is obtained by e1_net_seq1.pth and e1_net_seq2.pth
+                                parent_folder+"fo_gmmx32_nres50_100k.npy",
+                                parent_folder+"fo_gmmx48_nres50_100k.npy",
+                                parent_folder+"fo_gmmx64_nres50_100k.npy",
+                                parent_folder+"fo_gmmx80_nres50_100k.npy"
+                                # parent_folder+"pinnv0seq_diaggmmx64.npy", # error bound B is obtained by e1_net_seq1.pth and e1_net_seq2.pth
                                 ]
-            plot_labels = [r"$\hat{p}$",
-                        r"NI($\hat{p},B_1,50$)", 
-                        r"NI($\hat{p},B_1,80$)", 
-                        r"LP($\hat{p},B_1,50$)", 
-                        r"LP($\hat{p},B_1,80$)", 
-                        #    r"FO($\hat{p},B_1$) RBFx256(new)",
-                        #    r"FO($\hat{p},B_1$) GMMx64(10k det.)",
-                        #    r"FO($\hat{p},B_1$) GMMx64(20k det.)",
-                        #    r"FO($\hat{p},B_1$) GMMx64(20k)",
-                        #    r"FO($\hat{p},B_1$) GMMx64(20k aug.)",
-                        #    r"FO PINN:v0 GMMx64(20k)",
-                        r"FO($\hat{p},B_1,GMMx64$)",
+            plot_labels = [r"$\mathbb{P}_{est}$ by $\hat{p}$",
+                        r"$\mathbb{P}^+$, NI($N=50^4$)", 
+                        r"$\mathbb{P}^+$, NI($N=80^4$)", 
+                        r"$\mathbb{P}^+$, LP($N=50^4$)", 
+                        r"$\mathbb{P}^+$, LP($N=80^4$)", 
+                        r"$\mathbb{P}^+$, FO($N=32$)", 
+                        r"$\mathbb{P}^+$, FO($N=48$)", 
+                        r"$\mathbb{P}^+$, FO($N=64$)", 
+                        r"$\mathbb{P}^+$, FO($N=80$)", 
+                        # r"FO($\hat{p},B_1,GMMx64$)",
                         ]
-            plot_fills  = [False, True, True, True, True, True]
-            plot_style =  ["--", "-", "-", "-", "-", "-"]
-            marker = ["", ">", "<", "d", "x", ""]
+            plot_fills  = [False, True, True, True, True, True, True, True, True]
+            plot_style =  ["--", "-", "-", "-", "-", "-", "-", "-", "-"]
+            marker = ["", ">", "<", "d", "x", "", "", "", ""]
         elif(target == "tar2"):
             pr_mcs = np.load(parent_folder+"mc.npy")
             pr_nn_data_labels = [parent_folder+"ni_nres50.npy", 
@@ -669,7 +665,7 @@ def plot_app1(target, save_plot_path=None):
     pr = pr_mcs[:,-1] # should change back to pr = pr_mcs[:,j+1] 
     mask = ~np.isnan(pr)
     plt.plot(t_span[mask], pr[mask], color="black", linestyle="", marker="o", markersize=4, 
-             label=r"$\mathbb{P}_{true}$ by MC")
+             label=r"$\mathbb{P}$ by MC")
     print("[check] Prob. by MC (time, Prob., Prob.)")
     print(np.round(pr_mcs,4))
 
@@ -691,7 +687,7 @@ def plot_app1(target, save_plot_path=None):
     plt.xlabel("t")
     plt.legend(loc="upper left", ncol=2)
     plt.ylim([-0.05, 1.5])
-    plt.ylim([-0.01, 0.1])
+    # plt.ylim([-0.01, 0.1])
     # Get current axes, and then obtain and reformat the xticks.
     plt.tight_layout(pad=0.2)
     # Define the tick positions.
@@ -963,6 +959,63 @@ def plot_target_volume(ax, target_r, target_ph, z_max, grid_resolution=30,
     return surfaces
 
 
+def densify(V, N_degree=1):
+    """
+    Given a 1D array V of length N, returns an array of length 2N−1
+    with V’s entries interleaved with the midpoints of each adjacent pair.
+    """
+    V = np.asarray(V, dtype=float)
+
+    for i in range(N_degree):
+        N = V.shape[0]
+        # new length = original + (N−1) midpoints
+        new_len = 2*N - 1
+        
+        new_V = np.empty(new_len, dtype=V.dtype)
+        # place original values at even indices
+        new_V[0::2] = V
+        # compute midpoints and place at odd indices
+        new_V[1::2] = (V[:-1] + V[1:]) / 2.0
+        V = new_V
+
+    return V
+
+
+def marginal_gmm_in_2d(X, Y, p_gmm):
+    w_np, m_np, cov_np = p_gmm.get_gmm_paramters()
+    K, D = m_np.shape
+
+    # 2) flatten grid, build full-D evaluation points
+    M, N = X.shape
+    fixed_vals = None 
+    pts12 = np.stack([X.ravel(), Y.ravel()], axis=1)  # [M*N, 2]
+    if fixed_vals is None:
+        fixed_vals = np.zeros(D - 2, dtype=float)
+    else:
+        fixed_vals = np.asarray(fixed_vals, dtype=float)
+        assert fixed_vals.shape == (D - 2,)
+    # tiled [M*N, D-2]
+    pts_rest = np.tile(fixed_vals[None, :], (M*N, 1))
+    pts_full = np.concatenate([pts12, pts_rest], axis=1)  # [M*N, D]
+    # 3) define a helper for 2-D diagonal‐Gaussian PDF
+    def gaussian2d_pdf(xy, mu, var):
+        # xy: [P,2], mu: [2,], var: [2,]
+        diff = xy - mu[None, :]
+        inv_var = 1.0 / var[None, :]
+        exp_term = -0.5 * np.sum(diff * diff * inv_var, axis=1)
+        norm = 1.0 / (2 * np.pi * np.sqrt(var[0] * var[1]))
+        return norm * np.exp(exp_term)
+    # 4) accumulate weighted marginals
+    pdf_vals = np.zeros(M * N, dtype=float)
+    for k in range(K):
+        mu_k = m_np[k, :2]
+        var_k = cov_np[k, :2]
+        pdf_k = gaussian2d_pdf(pts12, mu_k, var_k)
+        pdf_vals += w_np[k] * pdf_k
+    Z = pdf_vals.reshape(M, N)
+    return Z
+
+
 def plot_pdf_gmm_wrt_pinn(constants, p_net, p_gmm, target_r, target_phi, t):
     set_publication_plot_style()
     # Create a figure
@@ -979,36 +1032,48 @@ def plot_pdf_gmm_wrt_pinn(constants, p_net, p_gmm, target_r, target_phi, t):
     grid_points = np.vstack([x1_grid.ravel(), x2_grid.ravel(), x3_grid.ravel(), x4_grid.ravel()]).T
     grid_points_tensor = torch.tensor(grid_points, dtype=torch.float32, requires_grad=False)
     t_tensor = (torch.ones(len(grid_points_tensor), 1, dtype=torch.float32) * t)
-    pdf_pinn = p_net(grid_points_tensor, t_tensor).detach().numpy().reshape(x1_grid.shape)
-    if(p_gmm is not None):
-        pdf_gmm = p_gmm(grid_points_tensor).detach().numpy().reshape(x1_grid.shape)
-
     dx1 = x1s[1] - x1s[0] # dr'
     dx2 = x2s[1] - x2s[0] # dphi'
     dx3 = x3s[1] - x3s[0]
     dx4 = x4s[1] - x4s[0]
+    pdf_pinn = p_net(grid_points_tensor, t_tensor).detach().numpy().reshape(x1_grid.shape)
 
     # marginalize to spherical position (r, phi)
-    num_stride = 2
-    pdf_pinn_marginal =  np.sum(pdf_pinn, axis=(2,3)) * dx3 * dx4
-    if(p_gmm is not None):
-        pdf_gmm_marginal =  np.sum(pdf_gmm, axis=(2,3)) * dx3 * dx4
     X, Y =  np.meshgrid(x1s, x2s, indexing="ij")
-    surf1 = ax.plot_surface(X, Y, pdf_pinn_marginal, 
-                            color="none", rstride=num_stride, cstride=num_stride, edgecolor='black',  
-                            linewidth=0.8, linestyle="-", label="PINN")
+    num_stride = 1
+    pdf_pinn_marginal =  np.sum(pdf_pinn, axis=(2,3)) * dx3 * dx4
+    surf1 = ax.plot_surface(
+        X, Y, pdf_pinn_marginal,
+        rstride=num_stride,
+        cstride=num_stride,
+        cmap=cm.Reds,        # choose your colormap
+        linewidth=0.5,            # no grid lines
+        antialiased=True,
+        # edgecolor='white',  
+        alpha=0.5,
+    )
+    # surf1 = ax.plot_surface(X, Y, pdf_pinn_marginal, 
+    #                         color="none", rstride=num_stride, cstride=num_stride, edgecolor='black',  
+    #                         linewidth=1.0, linestyle="-", label="PINN")
+    
     if(p_gmm is not None):
+        N_dense = 2
+        X_dense, Y_dense = np.meshgrid(densify(x1s, N_degree=N_dense), 
+                                       densify(x2s, N_degree=N_dense), indexing="ij")
+        Z = marginal_gmm_in_2d(X_dense, Y_dense, p_gmm)
+        # pdf_gmm = p_gmm(grid_points_tensor).detach().numpy().reshape(x1_grid.shape)
+        # pdf_gmm_marginal =  np.sum(pdf_gmm, axis=(2,3)) * dx3 * dx4
         surf2 = ax.plot_surface(
-            X, Y, pdf_gmm_marginal,
+            X_dense, Y_dense, Z,
             rstride=num_stride,
             cstride=num_stride,
             cmap=cm.viridis,        # choose your colormap
             linewidth=0.5,            # no grid lines
             antialiased=True,
-            edgecolor='white',  
-            alpha=0.6,
-            label="GMM"
+            # edgecolor='white',  
+            alpha=0.9,
         )
+
     # get normalized target bound
     r_bounds = target_r/constants.R    # [r_min, r_max]
     phi_bounds = (target_phi-constants.W*constants.T*t)/constants.PHI  # [phi_min, phi_max]

@@ -33,7 +33,7 @@ def get_prob_PINN(constants, t_span, target_r, targer_ph, networks, options):
                 options["path_pdf_models"]+options["label"]+"_t{:.3f}.pth".format(t))
 
     data_array = np.array(data_list)
-    print("Prob result:")
+    print("Prob result of "+options["label"])
     print(data_array)
     # --- save results ---
     if(options['save_result']):
@@ -117,6 +117,13 @@ def compute_prob_event(constants, target_r, targer_ph, t, networks, options, N_d
         'target_V' : compute_volume(target_bounds),
         'time': t,
         'constants': constants,
+        'path_pdf_models' : options["path_pdf_models"],
+        'label': options['label'],
+        'use_trained_gmm': options["use_trained_gmm"],
+        'show_loss_landscape': options["show_loss_landscape"],
+        'trained_gmm_path': options["path_pdf_models"]+options["label"],
+        'num_iterations': options["num_iterations"],
+        "label_parent_gmm": options["label_parent_gmm"],
     }
 
     # --- Solving ---

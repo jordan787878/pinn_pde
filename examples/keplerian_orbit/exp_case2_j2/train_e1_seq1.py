@@ -33,14 +33,15 @@ def main():
     p_net = load_trained_model(p_net, path=PNET_PATH, method="new"); p_net.eval()
     e1_net.scale = get_max_e1_init(constants, p_net)
 
+    configurations = {
+        "ic_fcn": p_init,
+        "diff_opt_fcn": diff_opt,
+        "save_path": "output/v0/e1_net_seq1.pth",
+        "save_path_inter": "output/v0/e1_net_seq1_",
+    }
+
     # --- Train e1 pinn over first time seq ---
     if(TRAIN_FLAG):
-        configurations = {
-            "ic_fcn": p_init,
-            "diff_opt_fcn": diff_opt,
-            "save_path": "output/v0/e1_net_seq1.pth",
-            "save_path_inter": "output/v0/e1_net_seq1_",
-        }
         networks = (p_net, e1_net)
         PINN.train_pinn_e1seq1_v0(constants, networks, configurations, 
                                   iterations=120, save_model=False)
@@ -51,13 +52,6 @@ def main():
     # --- Post-process ---
     for t_prime in constants.T_PRIME_SPAN:
         check_error_flatten(constants, p_init, e1_net, p_net, t_prime, MC_FOLDER)
-
-    # for t_prime in constants.T_PRIME_SPAN:
-    #    check_pdfnn_marginalize(p_net, t=t_prime)
-    # test_nn_cartesian_pdf_xy(p_net, model_name="p_net")
-    # check_pdfnn_cartesian_wrt_monte(p_net, model_name="p_net")
-    # test_nn_cartesian_pdf_xy(p_net_gmm, model_name="p_net_gmm")
-    # check_pdfnn_cartesian_wrt_monte(p_net_gmm, model_name="p_net_gmm")
 
 
 if __name__ == "__main__":

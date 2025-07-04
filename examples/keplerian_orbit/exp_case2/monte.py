@@ -267,8 +267,12 @@ def generate_data(data_folder, N_samples):
             np.save(GRID_FOLDER+"x2s.npy", x2s)
             np.save(GRID_FOLDER+"x3s.npy", x3s)
             np.save(GRID_FOLDER+"x4s.npy", x4s)
-
     np.save(data_folder+"mc_time.npy", np.array(mc_time))
+
+
+def print_mc_time(mc_folder):
+    mc_time = np.load(mc_folder+"mc_time.npy") # print mc computation time
+    print("[check] MC computation time: ", mc_time)
 
     
 def main():

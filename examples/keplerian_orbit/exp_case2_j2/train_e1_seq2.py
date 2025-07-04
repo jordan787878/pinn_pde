@@ -6,7 +6,7 @@ import torch
 import argparse
 from monte import p_init, get_p_init_max, get_max_e1_init
 from train_p import diff_opt, MC_FOLDER
-from exp_utilities.plot_utilites import check_error_flatten
+from exp_utilities.plot_utilites import check_error_flatten, visual_e1hat_training
 from exp_utilities.constants import Case2_4D_Constants
 # import utilities
 import sys
@@ -39,13 +39,14 @@ def main():
     e1_net_seq1 = load_trained_model(e1_net_seq1, path=E1NET_PATH_SEQ1); e1_net_seq1.eval()
     e1_net.scale = get_max_e1_init(constants, p_net)
 
+    configurations = {
+        "ic_fcn": p_init,
+        "diff_opt_fcn": diff_opt,
+        "save_path": "output/v0/e1_net_seq2.pth",
+        "save_path_inter": "output/v0/e1_net_seq2_",
+    }
+
     if(TRAIN_FLAG):
-        configurations = {
-            "ic_fcn": p_init,
-            "diff_opt_fcn": diff_opt,
-            "save_path": "output/v0/e1_net_seq2.pth",
-            "save_path_inter": "output/v0/e1_net_seq2_",
-        }
         networks = (p_net, e1_net_seq1, e1_net)
         PINN.train_pinn_e1seq2_v0(constants, networks, configurations, 
                                   iterations=50000, save_model=True)
@@ -54,15 +55,10 @@ def main():
     e1_net = load_trained_model(e1_net, path=configurations["save_path"]); e1_net.eval()
 
     # --- Post-process ---
-    for t_prime in constants.T_PRIME_SPAN:
-        if(t_prime >= 0.5*constants.TF/constants.T):
-            check_error_flatten(constants, p_init, e1_net, p_net, t_prime, MC_FOLDER)
     # for t_prime in constants.T_PRIME_SPAN:
-    #    check_pdfnn_marginalize(p_net, t=t_prime)
-    # test_nn_cartesian_pdf_xy(p_net, model_name="p_net")
-    # check_pdfnn_cartesian_wrt_monte(p_net, model_name="p_net")
-    # test_nn_cartesian_pdf_xy(p_net_gmm, model_name="p_net_gmm")
-    # check_pdfnn_cartesian_wrt_monte(p_net_gmm, model_name="p_net_gmm")
+    #     if(t_prime >= 0.5*constants.TF/constants.T):
+    #         check_error_flatten(constants, p_init, e1_net, p_net, t_prime, MC_FOLDER)
+    visual_e1hat_training(constants, (p_net, e1_net_seq1, e1_net), MC_FOLDER, save_plot_path="figs/case2_e1net.png")
 
 
 if __name__ == "__main__":

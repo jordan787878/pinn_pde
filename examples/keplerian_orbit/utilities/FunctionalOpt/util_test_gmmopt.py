@@ -5,6 +5,25 @@ import matplotlib.pyplot as plt
 import cvxpy as cp
 
 
+def set_publication_plot_style(font_family='Times New Roman', font_size=18):
+    """
+    Update Matplotlib settings to use publication-ready fonts.
+
+    Parameters:
+        font_family (str): Font family to be used for all texts.
+        font_size (int): Base font size for labels, titles, legends, and ticks.
+    """
+    plt.rcParams['font.family'] = font_family
+    plt.rcParams['font.size'] = font_size
+    plt.rcParams['axes.labelsize'] = font_size
+    plt.rcParams['axes.titlesize'] = font_size
+    plt.rcParams['xtick.labelsize'] = font_size
+    plt.rcParams['ytick.labelsize'] = font_size
+    plt.rcParams['legend.fontsize'] = font_size
+    plt.rcParams['figure.titlesize'] = font_size
+    plt.rcParams['lines.linewidth'] = 2
+
+
 def generate_base_pdf(x, num, special=False):
     w = np.random.rand(num) + 1e-2
     sum_w = np.sum(w)
@@ -229,7 +248,7 @@ def plot_gmm_1dresults_increment(show_plots, gmm_results):
     plt.show()
 
 
-### Kmode gmm 1D ###
+# --- Kmode gmm 1D ---
 def mixture_pdf(K, theta, x):
     """
     Compute the mixture PDF for a K-component GMM.
@@ -342,15 +361,20 @@ def plot_convergence_test(show_plots, problem, all_histories, show_extrapolation
     if(show_plots == False):
         return
     
+    set_publication_plot_style()
+
     Pr_subset = problem['Pr_subset']
     Pr_max = problem['Pr_max']
     x = problem['x']
     x_subset = problem['x_subset']
     p0 = problem['p0']
     B  = problem['B']
+    Pr_ni = min(problem['Pr_max'], problem['Pr_neg'])
+    Pr_lp = problem['Pr_lp']
+    Pr_fo = []
     
     print("Prob. (Approximate Integral) Direct: {:.4f}, Negation: {:.4f}".format(problem['Pr_max'], problem['Pr_neg']))
-    print("Prob. LP: {:.4f}".format(problem['Pr_lp']))
+    print("Prob. LP: {:.4f}".format(Pr_lp))
 
     fig = plt.figure(figsize=(8, 6))
     colors = plt.cm.spring(np.linspace(0, 1, len(all_histories)))
@@ -361,6 +385,7 @@ def plot_convergence_test(show_plots, problem, all_histories, show_extrapolation
         plt.plot(all_histories[i]['iter'], lower_bound, marker='*', color=colors[i,:], alpha=0.3, label=str(i)+r"-trial: $P_{GMM}$")
         plt.plot(all_histories[i]['iter'], upper_bound, marker='o', color=colors[i,:], alpha=0.3, label=str(i)+r"-trial: $P_{GMM}+TV$")
         print("trial: {:2d} Prob. Pr_gmm: {:.4f}".format(i, lower_bound[-1]))
+        Pr_fo.append(lower_bound[-1])
         
         if(show_extrapolation):
             factor_tv_bound = np.array(all_histories[i]['tv_bound'])[0]
@@ -391,48 +416,58 @@ def plot_convergence_test(show_plots, problem, all_histories, show_extrapolation
     plt.fill_between(x, upper_bound, lower_bound, color="gray", alpha=0.4,
                 label=r"$\hat{p} \pm B_1$")
     mask = (x >= x_subset[0]) & (x <= x_subset[1])
-    plt.fill_between(x[mask], lower_bound[mask], upper_bound[mask], color="green", alpha=0.15, label=r"$X^'_{tar}$")  
-    plt.plot(problem['x_lp'], problem['pdf_lp'], color="black", linestyle="--", label=r"$f_{LP}$")
-    for i in range(len(all_histories)):
-    # for i in range(0, 1):
+    plt.fill_between(x[mask], lower_bound[mask], upper_bound[mask], color="green", alpha=0.15, label=r"$X^'_{tar}$") 
+    plt.plot(x, p0, linewidth=1.5, color="black", linestyle="--", label=r"$p$") 
+    plt.plot(problem['x_lp'], problem['pdf_lp'], linewidth=1.5, color="blue", linestyle="-", label=r"$p_i$ (LP)")
+    plt.title(r"$\mathbb{P}$"+" = {:.4f},   ".format(Pr_subset) +\
+              r"$\mathbb{P}^+_{NI}$"+" = {:.4f}, ".format(Pr_ni) +\
+              r"$\mathbb{P}^+_{LP}$"+" = {:.4f}, ".format(Pr_lp) +\
+              r"$\mathbb{P}^+_{FO}$"+" = {:.4f}".format(Pr_fo[0]))
+    # for i in range(len(all_histories)):
+    for i in range(0, 1):
         theta_history = all_histories[i]['theta_iter']
-        colors = plt.cm.spring(np.linspace(0, 1, len(theta_history)))
+        colors = plt.cm.Oranges(np.linspace(0, 1, len(theta_history)))
         for j in range(len(theta_history)):
+        # for j in range(1):
             theta_j = theta_history[j]
             K_j = theta_j.shape[0] // 3
             p_gmm = mixture_pdf(K_j, theta_j, x)
-            # plt.plot(x, p_gmm, linewidth=1.0, color=colors[j,:], alpha=0.5)
+            # plt.plot(x, p_gmm, linewidth=0.5, color=colors[j,:], alpha=0.5)
             if(j == len(theta_history)-1):
                 plt.plot(x, p_gmm, linewidth=1.5, color=colors[j,:], alpha=1.0)
                 plt.scatter(x[::10], p_gmm[::10], s=16, marker="*", color=colors[j,:], 
-                            # label=r"$f_{GM}$"+"[trial="+str(i) +", N=" + str(K_j) + "]")
-                            label=r"$f_{GM}$"+"[trial="+str(i) +", final]", alpha=1.0)
+                            label=r"$\phi$ (FO)"+", [N=" + str(K_j*3) + "]",
+                            # label=r"$f_{GM}$"+"[trial="+str(i) +", final]", 
+                            alpha=1.0)
             # if(j == 0):
             #     plt.plot(x, p_gmm, linewidth=1.0, color=colors[j,:], alpha=1.0)
             #     plt.scatter(x[::10], p_gmm[::10], s=8, marker="o", color=colors[j,:], 
             #                 # label=r"$f_{GM}$"+"[trial="+str(i) +", N=" + str(K_j) + "]", alpha=alpha_j)
-            #                 label=r"$f_{GM}$"+"[trial="+str(i) +", init]", alpha=1.0)
+            #                 label=r"$f_{GM}$"+", [N=" + str(K_j*3) + "]",
+            #                 # label=r"$f_{GM}$"+"[trial="+str(i) +", init]"
+            #                 alpha=1.0)
                 
     plt.xlabel("x")
     plt.ylabel("Probability Density")
     plt.legend()
     plt.grid(True)
     plt.tight_layout(pad=0.2)
+    # fig.savefig("figs/1dexample_case3.pdf", format='pdf'); plt.close()
     plt.show()
 
-    fig = plt.figure(figsize=(8, 6))
-    for i in range(len(all_histories)):
-    # for i in range(0, 1):
-        theta_history = all_histories[i]['theta_iter']
-        theta_end = theta_history[-1]
-        K = theta_end.shape[0] // 3
-        mus = theta_end[0:K]
-        sigmas = theta_end[K:2*K]
-        ws = theta_end[2*K:3*K]
-        plt.hist(sigmas, bins=30)
-    plt.grid(True)
-    plt.tight_layout(pad=0.2)
-    plt.show()
+    # fig = plt.figure(figsize=(8, 6))
+    # for i in range(len(all_histories)):
+    # # for i in range(0, 1):
+    #     theta_history = all_histories[i]['theta_iter']
+    #     theta_end = theta_history[-1]
+    #     K = theta_end.shape[0] // 3
+    #     mus = theta_end[0:K]
+    #     sigmas = theta_end[K:2*K]
+    #     ws = theta_end[2*K:3*K]
+    #     plt.hist(sigmas, bins=30)
+    # plt.grid(True)
+    # plt.tight_layout(pad=0.2)
+    # plt.show()
 
 
 def optimize_negation(problem):
@@ -498,6 +533,52 @@ def optimize_linearprogram(problem):
     return result, np.array(p.value), x_center
 
 
+def solve_linearprogram(problem):
+    """
+    linear program 
+    # NOTE: we assume that the discretization over state space is small enough such that
+    #   p_ub and p_lb can be directly calculated by the vertices of the cell
+    """
+    B = problem['B']
+    p0 = problem['p0']
+    mask = problem['mask']
+    dV = problem['dV']
+
+    # --- Solving via specialized ----
+    delta = 1e-6
+    # sorting
+    front = p0[mask]    # all the True’s
+    front.sort()
+    front[:] = front[::-1]
+    front_count = front.shape[0]
+    back  = p0[~mask]   # all the False’s
+    p0 = np.concatenate([front, back])
+    # init
+    Pr = 0.0
+    p_ub = p0+B
+    p_lb = np.clip(p0-B, 0.0, None)
+    p_result = p_lb
+    for i in range(p0.shape[0]):
+        p_ub_i = (p_ub[i])*dV
+        sum_p_lb_rest = (p_lb[i:].sum())*dV
+        if(Pr + p_ub_i + sum_p_lb_rest <= 1):
+            p_result[i] = p_ub_i/dV
+        else:
+            p_result[i] = (1.0 - Pr - sum_p_lb_rest)/dV
+        Pr += p_result[i]*dV
+        # print(i, p_result[i]*dV, Pr)
+        if(i >= front_count-1):
+            break
+        if(p_result[i]*dV < delta):
+            break
+    p_total = p_result.sum()*dV
+    print(" [Solved] Pr_tar: {:.4f}, Pr_total: {:.4f}".format(Pr, p_total))
+    deviation = np.abs(p_result - p0)
+    np.testing.assert_array_less(deviation, B+delta)
+    np.testing.assert_array_less(p_total, 1.0+delta)
+    return Pr, None
+
+
 def update_if_sat(K, Pr_new, theta_new, p_gmm_new, problem):
     """
     Performs a local line search to update GMM parameters if PDF constraint is satisfied.
@@ -538,3 +619,185 @@ def update_if_sat(K, Pr_new, theta_new, p_gmm_new, problem):
         return Pr_try, theta_try, pdf_try, True
     else:
         return Pr_new, theta_new, p_gmm_new, False
+
+
+# --- Kmode gmm 2D ---
+def generate_base_pdf_2d(X, Y, num):
+    """
+    X, Y : 2D arrays of the same shape (e.g. from np.meshgrid)
+    num   : number of Gaussian components
+    special: if True, use a fixed 2-component toy example
+    """
+    # 1) initialize weights, means and stds
+    w = np.random.rand(num) + 1e-2
+    w /= w.sum()
+    # for 2D, mu_i = [mu_x, mu_y]
+    mu = np.column_stack([
+        np.random.uniform(X.min(), X.max(), size=num),
+        np.random.uniform(Y.min(), Y.max(), size=num)
+    ])
+    # diagonal std devs
+    sigma = np.column_stack([
+        np.random.uniform(0.1, 6.0, size=num),
+        np.random.uniform(0.1, 6.0, size=num)
+    ])
+
+    # 2) build the density on the grid
+    # flatten for easy summation
+    xs = X.ravel()
+    ys = Y.ravel()
+    p0_flat = np.zeros_like(xs)
+
+    for i in range(num):
+        # product of independent normals
+        p0_flat += (
+            w[i]
+            * norm.pdf(xs, loc=mu[i,0], scale=sigma[i,0])
+            * norm.pdf(ys, loc=mu[i,1], scale=sigma[i,1])
+        )
+    P0 = p0_flat.reshape(X.shape)
+    # 3) pack parameters into theta
+    # order: [mu_x, mu_y, sigma_x, sigma_y, w]
+    theta = np.zeros(5 * num)
+    theta[     :  num] = mu[:, 0]
+    theta[num   :2*num] = mu[:, 1]
+    theta[2*num:3*num] = sigma[:, 0]
+    theta[3*num:4*num] = sigma[:, 1]
+    theta[4*num:5*num] = w
+
+    params = (w, mu, sigma)
+    return P0, params, theta
+
+
+def plot_pdf_2d(problem):
+    """Plot a 2D GMM density as a 3D surface with wireframe overlay."""
+    set_publication_plot_style()
+    X = problem["x1_grid"]
+    Y = problem["x2_grid"]
+    p0 = problem['p0_grid']
+    B = problem['B']
+    pdf_lp = problem['pdf_LP']
+    pdf_fo = problem['pdf_FO']
+    Pr = problem['Pr_subset']
+    Pr_LP = problem['Pr_LP']
+    Pr_FO = problem['Pr_FO']
+    ub = p0 + B
+    lb = p0 - B
+    lb[lb < 0] = 0
+    fig = plt.figure()
+    ax = fig.add_subplot(111, projection='3d')
+    num_strides = 8
+    lw = 1.0
+    ax.plot_surface(X, Y, ub, color="gray", alpha=0.3)
+    ax.plot_surface(X, Y, lb, color="gray", alpha=0.3)
+    ax.plot_wireframe(X, Y, p0, rstride=num_strides, cstride=num_strides, linewidth=lw,
+                      color="black", label="p")
+    ax.plot_surface(X, Y, pdf_lp, rstride=num_strides, cstride=num_strides, linewidth=lw,
+                      color="blue", alpha=0.5, label=r"$f_{LP}$")
+    ax.plot_surface(X, Y, pdf_fo, rstride=num_strides, cstride=num_strides, linewidth=lw,
+                      color="yellow", alpha=0.5, label=r"$f_{FO}$")
+    ax.set_xlabel('x1')
+    ax.set_ylabel('x2')
+    ax.set_zlabel('Density')
+    ax.set_zlim([0, ub.max()])
+    ax.legend()
+    plt.title('2D Test, Pr true: {:.4f},   LP: {:.4f},   FO: {:.4f}'.format(Pr, Pr_LP, Pr_FO))
+    plt.show()
+
+
+def optimize_linearprogram_2d(problem):
+    """
+    linear program 
+    # NOTE: we assume that the discretization over state space is small enough such that
+    #   p_ub and p_lb can be directly calculated by the vertices of the cell
+    """
+    x = problem['x']
+    n = x.shape[0]
+    p0 = problem['p0']
+    B = problem['B']
+
+    # Define the subset x_sub (e.g., points between -1 and 1).
+    sub_idx = problem['mask']
+    dV = problem['dV']
+    
+    # Decision variable: p, representing the probability at each discretized point.
+    p = cp.Variable(n)
+    p_ub = np.zeros(n)
+    p_lb = np.zeros(n)
+    
+    # Define constraints.
+    constraints = [
+        cp.sum(p) * dV <= 1,  # Total probability integrates to 1.
+        p >= 0,               # Non-negativity.
+    ]
+    
+    # Each p(x_j) must lie in [p0(x_j)-B, p0(x_j)+B].
+    for i in range(n):
+        constraints += [p[i] >= p0[i] - B,
+                        p[i] <= p0[i] + B]
+    
+    # Objective: maximize the total probability mass over the subset x_sub.
+    objective = cp.Maximize(cp.sum(p[sub_idx]) * dV)
+    
+    # Set up and solve the problem.
+    prob = cp.Problem(objective, constraints)
+    result = prob.solve()
+    return result, np.array(p.value), None
+
+
+def mixture_pdf_2d(K, theta, x):
+    """
+    x: array of shape (N_pts, 2)
+    theta: length 5*K array [mu_x, mu_y, sigma_x, sigma_y, w]
+    returns: array of shape (N_pts,) giving pdf at each x[i]
+    """
+    mu_x    = theta[     :   K]
+    mu_y    = theta[K   : 2*K]
+    sig_x   = theta[2*K : 3*K]
+    sig_y   = theta[3*K : 4*K]
+    weights = theta[4*K : 5*K]
+    
+    pdfs = np.zeros((K, x.shape[0]))
+    for i in range(K):
+        pdfs[i] = (
+            weights[i]
+            * norm.pdf(x[:,0], loc=mu_x[i], scale=sig_x[i])
+            * norm.pdf(x[:,1], loc=mu_y[i], scale=sig_y[i])
+        )
+    return pdfs.sum(axis=0)
+
+
+def gmm_integral_2dsubset(K, theta, subset):
+    """
+    Analytical integral of a diagonal‐GMM over a rectangle:
+      subset = [[x1_l, x1_u], [x2_l, x2_u]]
+    Uses the fact that for each component:
+      ∫N(x|μ,σ) dx = ½[erf((u-μ)/(√2σ)) - erf((l-μ)/(√2σ))]
+    """
+    x1_l, x1_u = subset[0]
+    x2_l, x2_u = subset[1]
+    
+    mu_x    = theta[     :   K]
+    mu_y    = theta[K   : 2*K]
+    sig_x   = theta[2*K : 3*K]
+    sig_y   = theta[3*K : 4*K]
+    weights = theta[4*K : 5*K]
+    
+    integral = 0.0
+    for i in range(K):
+        Fx = 0.5*(erf((x1_u-mu_x[i])/(np.sqrt(2)*sig_x[i]))
+                 - erf((x1_l-mu_x[i])/(np.sqrt(2)*sig_x[i])))
+        Fy = 0.5*(erf((x2_u-mu_y[i])/(np.sqrt(2)*sig_y[i]))
+                 - erf((x2_l-mu_y[i])/(np.sqrt(2)*sig_y[i])))
+        integral += weights[i] * Fx * Fy
+    return integral
+
+
+def gmm_constraint_2d(K, theta, x, p0, B):
+    """
+    Returns residuals >=0 for p0 - B <= p_mix <= p0 + B.
+    """
+    p_mix = mixture_pdf_2d(K, theta, x)
+    lower = p_mix - (p0 - B)   # >= 0 → p_mix >= p0 - B
+    upper = (p0 + B) - p_mix   # >= 0 → p_mix <= p0 + B
+    return np.hstack([lower, upper])

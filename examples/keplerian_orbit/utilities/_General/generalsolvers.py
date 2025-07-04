@@ -41,6 +41,7 @@ def solve_linearprogram(problem):
     p0 = problem['p0']
     mask = problem['mask']
     dV = problem['dV']
+    t = problem['time']
 
     # --- Solving via specialized ----
     delta = 1e-6
@@ -70,7 +71,8 @@ def solve_linearprogram(problem):
         if(p_result[i]*dV < delta):
             break
     p_total = p_result.sum()*dV
-    print(" [Solved] Pr_tar: {:.4f}, Pr_total: {:.4f}".format(Pr, p_total))
+    print("[check] target V: {:.3f}, target_V * B: {:.3f}".format(problem["target_V"], problem["target_V"]*B))
+    print(" [Solved] t: {:.3f}, Pr_tar: {:.4f}, Pr_total: {:.4f}".format(t, Pr, p_total))
     deviation = np.abs(p_result - p0)
     np.testing.assert_array_less(deviation, B+delta)
     np.testing.assert_array_less(p_total, 1.0+delta)
