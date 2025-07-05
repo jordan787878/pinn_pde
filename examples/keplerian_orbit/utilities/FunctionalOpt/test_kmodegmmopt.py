@@ -244,5 +244,5 @@ def test_convergence(data_folder, load_data=False):
 
 
 if __name__ == '__main__':
-    data_folder = 'data/case3/'
+    data_folder = 'data/case2/'
     test_convergence(data_folder, load_data=True)

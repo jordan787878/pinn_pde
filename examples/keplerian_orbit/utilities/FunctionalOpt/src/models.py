@@ -77,7 +77,7 @@ class TorchGMM(nn.Module):
         w2 = self.raw_weights.pow(2)                             # square
         weights = w2 / (w2.sum() + 1e-12)                        # normalize
         means  = self.means                  # [C, D]
-        scales = F.softplus(self.raw_scales) # [C, D]
+        scales = F.softplus(self.raw_scales) + self.min_std # [C, D]
 
         # 2) get bounds (broadcasted)
         #    lb, ub shape [1, D] → will broadcast to [C, D]

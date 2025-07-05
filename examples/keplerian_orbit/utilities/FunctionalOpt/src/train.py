@@ -19,7 +19,7 @@ def train_model(problem, model, num_iterations=1000, batch_size=512, device=torc
 
     # --- Run ---
     best_loss = np.inf
-    increment = 0.001
+    increment = 0.01
     for it in range(num_iterations):
         optimizer.zero_grad()
             
@@ -38,7 +38,7 @@ def train_model(problem, model, num_iterations=1000, batch_size=512, device=torc
             print(f"   violation percent: {vio_percent:.4f}%")
 
         # --- Update the best model ---
-        if(total_loss.item() < best_loss - increment and vio_percent <= 0.0):
+        if(total_loss.item() < best_loss*(1.0+increment) and vio_percent <= 0.0):
             # --- Augment by checking violation on grid ---
             _x_vio, _p0_vio, x_remains, p0_remains = aug_samples_violate(
                 problem, model, x_remains, p0_remains, batch_size)

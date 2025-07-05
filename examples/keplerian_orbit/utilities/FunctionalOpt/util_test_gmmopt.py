@@ -2,6 +2,10 @@ import numpy as np
 from scipy.stats import norm
 from scipy.special import erf
 import matplotlib.pyplot as plt
+from matplotlib.lines import Line2D
+from matplotlib.patches import Patch
+from mpl_toolkits.mplot3d.art3d import Poly3DCollection
+from matplotlib import cm
 import cvxpy as cp
 
 
@@ -426,13 +430,13 @@ def plot_convergence_test(show_plots, problem, all_histories, show_extrapolation
     # for i in range(len(all_histories)):
     for i in range(0, 1):
         theta_history = all_histories[i]['theta_iter']
-        colors = plt.cm.Oranges(np.linspace(0, 1, len(theta_history)))
+        colors = plt.cm.Reds(np.linspace(0, 1, len(theta_history)))
         for j in range(len(theta_history)):
         # for j in range(1):
             theta_j = theta_history[j]
             K_j = theta_j.shape[0] // 3
             p_gmm = mixture_pdf(K_j, theta_j, x)
-            # plt.plot(x, p_gmm, linewidth=0.5, color=colors[j,:], alpha=0.5)
+            plt.plot(x, p_gmm, linewidth=0.5, color=colors[j,:], alpha=0.5)
             if(j == len(theta_history)-1):
                 plt.plot(x, p_gmm, linewidth=1.5, color=colors[j,:], alpha=1.0)
                 plt.scatter(x[::10], p_gmm[::10], s=16, marker="*", color=colors[j,:], 
@@ -669,6 +673,185 @@ def generate_base_pdf_2d(X, Y, num):
     return P0, params, theta
 
 
+
+    set_publication_plot_style()
+
+    X, Y = problem["x1_grid"], problem["x2_grid"]
+    p0, B     = problem['p0_grid'], problem['B']
+    pdf_lp    = problem['pdf_LP']
+    pdf_fo    = problem['pdf_FO']
+    Pr, Pr_LP, Pr_FO = problem['Pr_subset'], problem['Pr_LP'], problem['Pr_FO']
+    
+    ub = p0 + B
+    lb = p0 - B
+    lb[lb < 0] = 0
+    
+    fig = plt.figure(figsize=(10, 8))
+    ax  = fig.add_subplot(111, projection='3d')
+    
+    # # bounds as light gray wireframe
+    # ax.plot_wireframe(X, Y, ub,  rstride=16, cstride=16, color='gray', linewidth=0.8, alpha=0.5)
+    # ax.plot_wireframe(X, Y, lb,  rstride=16, cstride=16, color='gray', linewidth=0.8, alpha=0.5)
+    
+    # true pdf as coarse wireframe
+    # ax.plot_wireframe(X, Y, p0, rstride=16, cstride=16, color='black', linewidth=1.2)
+    # surf_true = ax.plot_surface(
+    #     X, Y, p0,
+    #     cmap=cm.Greys,          # red colormap
+    #     alpha=0.8,
+    #     edgecolor='grey',
+    #     antialiased=True
+    # )
+    
+    # LP and FO surfaces
+    surf_lp = ax.plot_surface(
+        X, Y, pdf_lp,
+        cmap=cm.Blues,         # blue colormap
+        alpha=0.7,
+        edgecolor='blue',
+        antialiased=True
+    )
+    surf_fo = ax.plot_surface(
+        X, Y, pdf_fo,
+        cmap=cm.Reds,          # red colormap
+        alpha=0.7,
+        edgecolor='red',
+        antialiased=True
+    )
+
+    # get normalized target bound
+    target_bounds = problem['x_subset']
+    x1_tar_bounds = target_bounds[0,:]
+    x2_tar_bounds = target_bounds[1,:]
+    patch_vertices = [
+        [x1_tar_bounds[0], x2_tar_bounds[0], 0],
+        [x1_tar_bounds[1], x2_tar_bounds[0], 0],
+        [x1_tar_bounds[1], x2_tar_bounds[1], 0],
+        [x1_tar_bounds[0], x2_tar_bounds[1], 0],
+    ]
+    # Create a Poly3DCollection and add it to the 3D axis.
+    patch = Poly3DCollection([patch_vertices], facecolor='green', 
+                              alpha=1.0, edgecolor='k', 
+                              linewidths=2,
+                              zorder=10,
+                            #   label=r"$X^'_{tar}$"
+                              )
+    ax.add_collection3d(patch)
+    
+    # manual legend
+    legend_elems = [
+        # Line2D([0], [0], color='black', lw=1.2, label='True PDF'),
+        # Patch(facecolor=cm.Greys(0.6), label=r'$p_{true}$'),
+        Patch(facecolor=cm.Blues(0.6), label=r'$f_{LP}$'),
+        Patch(facecolor=cm.Reds(0.6),  label=r'$\phi_{FO}$'),
+        Patch(facecolor="green",  label=r"$X^'_{tar}$"),
+        # Line2D([0], [0], color='gray', lw=0.8, alpha=0.5, label='Bounds')
+    ]
+    ax.legend(handles=legend_elems, loc='upper left')
+    
+    ax.set_xlabel(r'$x_1$')
+    ax.set_ylabel(r'$x_2$')
+    ax.set_zlabel('\n Probability Distribution')
+    ax.set_zlim(0, ub.max())
+    ax.view_init(elev=14, azim=130)
+    plt.title(f'2D Test, Pr true: {Pr:.4f},   LP: {Pr_LP:.4f},   FO: {Pr_FO:.4f}')
+    plt.tight_layout()
+    plt.show()
+
+
+def plot_pdf_2d_overlay(problem):
+    set_publication_plot_style()
+
+    X, Y      = problem["x1_grid"], problem["x2_grid"]
+    p0        = problem['p0_grid']
+    pdf_lp    = problem['pdf_LP']
+    pdf_fo    = problem['pdf_FO']
+    Pr, Pr_LP, Pr_FO = problem['Pr_subset'], problem['Pr_LP'], problem['Pr_FO']
+    x1b, x2b  = problem['x_subset']
+
+    # precompute the verts for the green patch
+    verts = [
+        [x1b[0], x2b[0], 0],
+        [x1b[1], x2b[0], 0],
+        [x1b[1], x2b[1], 0],
+        [x1b[0], x2b[1], 0],
+    ]
+
+    fig = plt.figure(figsize=(14, 6))
+    ax_lp = fig.add_subplot(1, 2, 1, projection='3d')
+    ax_fo = fig.add_subplot(1, 2, 2, projection='3d')
+
+    # draw the gray "true" surface and green patch on both axes
+    for ax in (ax_lp, ax_fo):
+        ax.plot_surface(
+            X, Y, p0,
+            color='gray', alpha=0.5,
+            edgecolor='none', antialiased=True
+        )
+        patch = Poly3DCollection([verts],
+                                 facecolor='green',
+                                 edgecolor='k',
+                                 linewidths=2,
+                                 alpha=1.0,
+                                 zorder=10)
+        ax.add_collection3d(patch)
+        ax.set_xlabel(r'$x_1$')
+        ax.set_ylabel(r'$x_2$')
+        ax.view_init(elev=22, azim=110)
+
+    # LEFT: LP
+    ax_lp.plot_surface(
+        X, Y, pdf_lp,
+        cmap=cm.Blues, alpha=0.7,
+        edgecolor='blue', antialiased=True
+    )
+    zmax_lp = max(p0.max(), pdf_lp.max())
+    ax_lp.set_zlim(0, zmax_lp)
+    ax_lp.set_zlabel("\n Prob. Dist.")
+
+    # info + legend‐like text
+    # ax_lp.text2D(
+    #     0.02, 0.98,
+    #     f"Pr true: {Pr:.4f}\nPr LP:   {Pr_LP:.4f}",
+    #     transform=ax_lp.transAxes,
+    #     va='top', fontsize='small'
+    # )
+    ax_lp.text2D(0.02, 0.80, u"\u25A0 True p, "+r"$\mathbb{P}=$"+" {:.4f}".format(Pr), 
+                 color='gray', transform=ax_lp.transAxes)
+    ax_lp.text2D(0.02, 0.75, u"\u25A0 $p_i$ (LP), "+r"$\mathbb{P}^+=$"+" {:.4f}".format(Pr_LP),    
+                 color='blue', transform=ax_lp.transAxes)
+    ax_lp.text2D(0.02, 0.70, u"\u25A0 $X^'_{tar}$", color='green', transform=ax_lp.transAxes)
+
+    # RIGHT: FO
+    ax_fo.plot_surface(
+        X, Y, pdf_fo,
+        cmap=cm.Reds, alpha=0.7,
+        edgecolor='red', antialiased=True
+    )
+    zmax_fo = max(p0.max(), pdf_fo.max())
+    zmax_fo = max(zmax_fo, zmax_lp)
+    ax_fo.set_zlim(0, zmax_fo)
+    ax_fo.set_zlabel("\n Prob. Dist.")
+
+    # ax_fo.text2D(
+    #     0.02, 0.98,
+    #     f"Pr true: {Pr:.4f}\nPr FO:   {Pr_FO:.4f}",
+    #     transform=ax_fo.transAxes,
+    #     va='top', fontsize='small'
+    # )
+    ax_fo.text2D(0.02, 0.80, u"\u25A0 True p, "+r"$\mathbb{P}=$"+" {:.4f}".format(Pr), 
+                 color='gray', transform=ax_fo.transAxes)
+    ax_fo.text2D(0.02, 0.75, u"\u25A0 $\phi$ (FO), "+r"$\mathbb{P}^+=$"+" {:.4f}".format(Pr_FO),    
+                 color='red',  transform=ax_fo.transAxes)
+    ax_fo.text2D(0.02, 0.70, u"\u25A0 $X^'_{tar}$", color='green', transform=ax_fo.transAxes)
+
+    # aggressively trim the white margins between & around panels
+    plt.tight_layout(pad=0.1)
+    plt.savefig("figs/test_2d_case6.pdf",format="pdf"); plt.close()
+    # plt.show()
+
+
+
 def plot_pdf_2d(problem):
     """Plot a 2D GMM density as a 3D surface with wireframe overlay."""
     set_publication_plot_style()
@@ -690,11 +873,11 @@ def plot_pdf_2d(problem):
     lw = 1.0
     ax.plot_surface(X, Y, ub, color="gray", alpha=0.3)
     ax.plot_surface(X, Y, lb, color="gray", alpha=0.3)
-    ax.plot_wireframe(X, Y, p0, rstride=num_strides, cstride=num_strides, linewidth=lw,
+    ax.plot_wireframe(X, Y, p0, linewidth=lw,
                       color="black", label="p")
-    ax.plot_surface(X, Y, pdf_lp, rstride=num_strides, cstride=num_strides, linewidth=lw,
+    ax.plot_surface(X, Y, pdf_lp, linewidth=lw,
                       color="blue", alpha=0.5, label=r"$f_{LP}$")
-    ax.plot_surface(X, Y, pdf_fo, rstride=num_strides, cstride=num_strides, linewidth=lw,
+    ax.plot_surface(X, Y, pdf_fo, linewidth=lw,
                       color="yellow", alpha=0.5, label=r"$f_{FO}$")
     ax.set_xlabel('x1')
     ax.set_ylabel('x2')

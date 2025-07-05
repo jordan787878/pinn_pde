@@ -2,7 +2,7 @@ import numpy as np
 import pickle
 import warnings
 from scipy.optimize import minimize, LinearConstraint, NonlinearConstraint
-from util_test_gmmopt import generate_base_pdf_2d, plot_pdf_2d, solve_linearprogram, optimize_linearprogram_2d
+from util_test_gmmopt import generate_base_pdf_2d, plot_pdf_2d_overlay, solve_linearprogram, optimize_linearprogram_2d
 from util_test_gmmopt import gmm_constraint_2d, gmm_integral_2dsubset, mixture_pdf_2d
 
 
@@ -70,10 +70,9 @@ def optimize_gmm_2d(K, info, problem, inner_iterations=10):
     cons = [weight_sum]
 
     # --- solving ---
-    best_res = None
+    best_theta = None
     Pr_max = 0.0
     for jj in range(inner_iterations):
-        print(jj, Pr_max)
         res = minimize(
             objective, theta0,
             bounds=bounds,
@@ -96,8 +95,9 @@ def optimize_gmm_2d(K, info, problem, inner_iterations=10):
             Pr = gmm_integral_2dsubset(K, res.x, x_subset)
             if(Pr > Pr_max):
                 Pr_max = Pr
-                best_res = res
+                best_theta = res.x.copy()
                 theta0 = res.x
+                print(jj, Pr)
 
         # perturb the initialization
         noise_scale_mu = 1e-2
@@ -107,30 +107,31 @@ def optimize_gmm_2d(K, info, problem, inner_iterations=10):
         theta0[2*K  :4*K] += np.random.randn(2*K) * noise_scale_std 
         theta0[2*K : 4*K] = np.clip(theta0[2*K : 4*K], a_min=min_sigma, a_max=None)
 
-    return best_res
+    return best_theta
 
 
 def test_convergence(data_folder, load_data=False):
     if(load_data):
         with open(data_folder +'problem.pkl', 'rb') as f:
             problem = pickle.load(f)
-        plot_pdf_2d(problem)
+        plot_pdf_2d_overlay(problem)
         return
 
     # --- problem setup ---
     np.random.seed(0)
 
     # domain
-    x1_l, x1_u, dx1 = -6.0, 6.0, 0.1
-    x2_l, x2_u, dx2 = -6.0, 6.0, 0.1
-    dV = dx1*dx2
-    x1 = np.arange(x1_l, x1_u + dx1, dx1)
-    x2 = np.arange(x2_l, x2_u + dx2, dx2)
+    x1_l, x1_u = -12.0, 12.0
+    x2_l, x2_u = -12.0, 12.0
+    N_dis = 50
+    x1 = np.linspace(x1_l, x1_u, N_dis)
+    x2 = np.linspace(x2_l, x2_u, N_dis)
+    dV = (x1[1]-x1[0])*(x2[1]-x2[0])
     x1_grid, x2_grid = np.meshgrid(x1, x2, indexing="ij")
     x = np.vstack([x1_grid.ravel(), x2_grid.ravel()]).T
     # region of interest
     x_subset = np.array([[-3.0, 3.0],
-                         [-6.0, 6.0]]) # deterministic
+                         [x2_l, x2_u]]) # deterministic
     # x_subset = np.random.uniform(x_l, x_u, size=2); x_subset.sort() # random
 
     mask = np.all((x >= x_subset[:, 0]) & (x <= x_subset[:, 1]), axis=1)
@@ -154,10 +155,10 @@ def test_convergence(data_folder, load_data=False):
     }
 
     # --- linear program comparision ---
-    Pr_lp_new, pdf_lp, x_lp = optimize_linearprogram_2d(problem)
+    Pr_lp, pdf_lp, x_lp = optimize_linearprogram_2d(problem)
     pdf_lp = pdf_lp.reshape(x1_grid.shape)
-    Pr_lp, _ = solve_linearprogram(problem)
-    problem["Pr_LP"] = Pr_lp_new
+    Pr_lp_generalsolver, _ = solve_linearprogram(problem)
+    problem["Pr_LP"] = Pr_lp_generalsolver
     problem["pdf_LP"] = pdf_lp
 
     # --- FO solving ---
@@ -165,9 +166,8 @@ def test_convergence(data_folder, load_data=False):
         'Pr_old': 0.0,
         'theta_p0': theta_p0,
     }
-    K_gmm = 4
-    result = optimize_gmm_2d(K_gmm, info, problem, inner_iterations=200)
-    theta_fo = result.x
+    K_gmm = 16
+    theta_fo = optimize_gmm_2d(K_gmm, info, problem, inner_iterations=5000)
     Pr_fo_analy = gmm_integral_2dsubset(K_gmm, theta_fo, x_subset)
     pdf_fo = mixture_pdf_2d(K_gmm, theta_fo, x)
     pdf_fo = pdf_fo.reshape(x1_grid.shape)
@@ -175,13 +175,14 @@ def test_convergence(data_folder, load_data=False):
     problem["pdf_FO"] = pdf_fo
 
     # summarize test
-    print("Pr true: {:.4f}, LP: {:.4f}, FO: {:.4f}".format(problem['Pr_subset'], Pr_lp_new, Pr_fo_analy))
-    plot_pdf_2d(problem)
+    print("Pr true: {:.4f}, LP: {:.4f} ({:.4f}), FO: {:.4f}".format(
+        problem['Pr_subset'], Pr_lp_generalsolver, Pr_lp, Pr_fo_analy))
+    plot_pdf_2d_overlay(problem)
     # --- save to file ---
     with open(data_folder +'problem.pkl', 'wb') as f:
         pickle.dump(problem, f)
 
 
 if __name__ == '__main__':
-    data_folder = 'data/case5/'
+    data_folder = 'data/case6/'
     test_convergence(data_folder, load_data=True)
