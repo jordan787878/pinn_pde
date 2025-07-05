@@ -24,7 +24,7 @@ def train_model(problem, model, num_iterations=1000, batch_size=512, device=torc
         optimizer.zero_grad()
             
         # --- Augment samples with random points --- 
-        x_dom_train, p0_dom_train = aug_samples_random(problem, x_dom, p0_dom, batch_size)
+        x_dom_train, p0_dom_train = aug_samples_random(problem, model, x_dom, p0_dom, batch_size)
 
         # --- loss -- 
         loss_hc, vio_percent = loss_hardconstraint(problem, model, x_dom_train, p0_dom_train)
@@ -132,7 +132,7 @@ def get_samples_random(problem, batch_size):
     return _x_dom_rand, _p0_dom_rand
 
 
-def aug_samples_random(problem, x_dom, p0_dom, batch_size):
+def aug_samples_random(problem, model, x_dom, p0_dom, batch_size):
     constants = problem['constants']
     t = problem['time']
     p_net = problem['p_net'] 
@@ -147,11 +147,17 @@ def aug_samples_random(problem, x_dom, p0_dom, batch_size):
     # _t_tar_rand = torch.full((batch_size, 1), t)
     # _p0_dom_rand = p_net(_x_tar_rand, _t_tar_rand).view(-1,)
 
+    # [test]
+    _, mus, _ = model.get_gmm_paramters()
+    x_at_mus = torch.tensor(mus, dtype=x_dom.dtype)
+    t_at_mus = torch.full((x_at_mus.shape[0], 1), t)
+    p0_at_mus = p_net(x_at_mus, t_at_mus).view(-1,)
+
     # x_dom_train = torch.cat((x_dom, _x_dom_rand, _x_tar_rand), dim=0)
     # p0_dom_train = torch.cat((p0_dom, _p0_dom_rand, _p0_dom_rand), dim=0)
     # x_tar_train = torch.cat((x_tar, _x_tar_rand), dim=0)
-    x_dom_train = torch.cat((x_dom, _x_dom_rand), dim=0)
-    p0_dom_train = torch.cat((p0_dom, _p0_dom_rand), dim=0)
+    x_dom_train = torch.cat((x_dom, _x_dom_rand, x_at_mus), dim=0)
+    p0_dom_train = torch.cat((p0_dom, _p0_dom_rand, p0_at_mus), dim=0)
     # x_tar_train = torch.cat((x_tar), dim=0)
 
     return x_dom_train, p0_dom_train

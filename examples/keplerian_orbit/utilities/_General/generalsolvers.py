@@ -31,6 +31,27 @@ def solve_numer_integral(problem):
     return Pr_opt, None
 
 
+def solve_estimate(problem):
+    """
+    compute upper bound of P* by numerical integral
+    """
+    # B = problem['B']
+    p0 = problem['p0']
+    mask = problem['mask']
+    dV = problem['dV']
+
+    # --- Solving ---
+    inside = mask
+    outside = ~inside
+    p0_inside = p0[inside]
+    # direct integral inside target
+    Pr = 0.0
+    for p in p0_inside:
+        Pr += (p)*dV
+    print(" [Solved] time:{:.3f}, Pr_tar: {:.4f}".format(problem["time"], Pr))
+    return Pr, None
+
+
 def solve_linearprogram(problem):
     """
     linear program 
@@ -71,7 +92,6 @@ def solve_linearprogram(problem):
         if(p_result[i]*dV < delta):
             break
     p_total = p_result.sum()*dV
-    print("[check] target V: {:.3f}, target_V * B: {:.3f}".format(problem["target_V"], problem["target_V"]*B))
     print(" [Solved] t: {:.3f}, Pr_tar: {:.4f}, Pr_total: {:.4f}".format(t, Pr, p_total))
     deviation = np.abs(p_result - p0)
     np.testing.assert_array_less(deviation, B+delta)

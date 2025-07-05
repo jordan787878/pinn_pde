@@ -10,8 +10,6 @@ sys.path.insert(0, '../utilities/')
 import FunctionalOpt.src as funcOpt
 from _General.neuralnetworks import PNet, E1Net, load_trained_model
 constants = Case2_4D_Constants()
-
-
 """
 [check] Prob. by MC (time, Prob., Prob.)
 [[0.     0.     0.    ]
@@ -35,53 +33,7 @@ constants = Case2_4D_Constants()
  [0.18   0.     0.    ]
  [0.19   0.     0.    ]
  [0.2    0.     0.    ]]
-
-Prob result of fo_gmmx16_nres50_100k
- [6.00000000e-02 1.27848862e-04]
- [7.00000000e-02 1.77603162e-01]
- [8.00000000e-02 2.37732922e-01]
- [9.00000000e-02 1.93803242e-01]
- [1.00000000e-01 2.20968706e-01]
- [1.10000000e-01 2.29514231e-01]
- [1.20000000e-01 5.85522863e-02]
-
- Prob result of fo_gmmx32_nres50_100k
- [0.06       0.00059435]
- [0.07       0.33713864]
- [0.08       0.40718781]
- [0.09       0.46704033]
- [0.1        0.40165084]
- [0.11       0.3888601 ]
- [0.12       0.08258846]
-
- Prob result of fo_gmmx48_nres50_100k
- [0.06       0.00537373]
- [0.07       0.43645979]
- [0.08       0.48984353]
- [0.09       0.52575472]
- [0.1        0.49341175]
- [0.11       0.40244259]
- [0.12       0.09760283]
-
- Prob result of fo_gmmx64_nres50_100k
- [0.06       0.00537372]
- [0.07       0.43645969]
- [0.08       0.48984349]
- [0.09       0.52575461]
- [0.1        0.49490201]
- [0.11       0.43683389]
- [0.12       0.12094439]
-
- Prob result of fo_gmmx80_nres50_100k
- [0.06       0.00537372]
- [0.07       0.43645965]
- [0.08       0.48984335]
- [0.09       0.53820539]
- [0.1        0.54015397]
- [0.11       0.43683387]
- [0.12       0.14159438]
-
-"""
+ """
 
 
 def show_pdf(constants, options, p_net, target_r, target_phi):
@@ -89,11 +41,17 @@ def show_pdf(constants, options, p_net, target_r, target_phi):
     num_components = int(s.split("gmmx",1)[1].split("_",1)[0])
     p_gmm = funcOpt.models.TorchGMM(constants, num_components=num_components)
     p_gmm_path = options["path_pdf_models"]+options["label"]
-    for t in options['t_span']:
+    dt = 0.01
+    tspan = np.arange(0.06, 0.11+dt, dt)
+    for t in tspan:
         if(options["show_pdf_gmm"]):
             p_gmm.load_state_dict(torch.load(p_gmm_path+"_t{:.3f}.pth".format(t)))
             # print(p_gmm.logits)
-            # theta_gmm = p_gmm.get_gmm_paramters()
+            _, mus, _ = p_gmm.get_gmm_paramters()
+            x_at_mus = torch.tensor(mus)
+            pdf_at_mus = p_gmm(x_at_mus)
+            print(pdf_at_mus)
+
             # print("[debug] gmm parameters: ", theta_gmm)
             exp_plot.plot_pdf_gmm_wrt_pinn(constants, p_net, p_gmm, target_r, target_phi, t)
         else:
@@ -153,13 +111,13 @@ def main():
                "target": target,
                "path_pdf_models": "data/app1/"+target+"/pdf_models/",
                "path_prob": "data/app1/"+target+"/prob/",
-               "label": "fo_gmmx80_nres50_100k",
-               "solver": "lp",
+               "label": "est_nres50",
+               "solver": "est",
                "run_solver": True,
-               "save_result": False,
+               "save_result": True,
         # special options for FO solver
                "num_iterations": 100000,
-               "label_parent_gmm": "fo_gmmx64_nres50_100k",
+               "label_parent_gmm": None,
                "use_trained_gmm": False,
                "show_loss_landscape": False,
         # others
@@ -167,11 +125,11 @@ def main():
                "show_pdf": False,
                "show_pdf_gmm": False,
                "show_target": False,
-               "compute_prob_by_mc": False,
+               "compute_prob_by_mc": False, 
         # mc_data and pinn path
                "mc_folder": "data/1e+6/",
                "pnet_path" : "output/v0/p_net.pth",
-               "e1net_path" : "output/v0/e1_net.pth",
+               "e1net_path" : "output/base/e1_net.pth",
                "e1net_path_seq1" : "output/v0/e1_net_seq1.pth",
                "e1net_path_seq2" : "output/v0/e1_net_seq2.pth"
                }
@@ -182,10 +140,12 @@ def main():
     
     p_net = PNet(constants, scale=get_p_init_max(constants))
     p_net = load_trained_model(p_net, path=options["pnet_path"], method="new"); p_net.eval()
-    e1_net_seq1 = E1Net(constants, scale=get_max_e1_init(constants, p_net))
-    e1_net_seq1 = load_trained_model(e1_net_seq1, path=options["e1net_path_seq1"], method="new"); e1_net_seq1.eval()
-    e1_net_seq2 = E1Net(constants, scale=get_max_e1_init(constants, p_net))
-    e1_net_seq2 = load_trained_model(e1_net_seq2, path=options["e1net_path_seq2"], method="new"); e1_net_seq2.eval()
+    e1_net = E1Net(constants, scale=get_max_e1_init(constants, p_net))
+    e1_net = load_trained_model(e1_net, path=options["e1net_path"], method="new"); e1_net.eval()
+    # e1_net_seq1 = E1Net(constants, scale=get_max_e1_init(constants, p_net))
+    # e1_net_seq1 = load_trained_model(e1_net_seq1, path=options["e1net_path_seq1"], method="new"); e1_net_seq1.eval()
+    # e1_net_seq2 = E1Net(constants, scale=get_max_e1_init(constants, p_net))
+    # e1_net_seq2 = load_trained_model(e1_net_seq2, path=options["e1net_path_seq2"], method="new"); e1_net_seq2.eval()
 
 
     # --- Define a t_span to evaluate Pr(Event) ---
@@ -193,7 +153,7 @@ def main():
     options['t_span'] = np.arange(0.00, 0.20+dt, dt)
 
     # --- Run application ---
-    app1(constants, p_net, e1_net_seq1, e1_net_seq2, options)
+    app1(constants, p_net, e1_net, e1_net, options)
 
     # --- Other Visualization ---
     # exp_plot.visual_phat_trainings(constants, p_net, DATA_FOLDER, save_plots=False,

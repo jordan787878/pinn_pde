@@ -621,36 +621,40 @@ def plot_app1_onlymc(constants, data_foler, N_mc=4, save_plots=False, save_plot_
 
 
 def plot_app1(target, save_plot_path=None):
-    set_publication_plot_style()
+    set_publication_plot_style(font_size=16)
     parent_folder = "data/app1/"+target+"/prob/"
     def set_plots():
         if(target == "tar1"):
             pr_mcs = np.load(parent_folder+"mc.npy")
-            pr_nn_data_labels = [parent_folder+"pr_nn_Nd50_onlyphat.npy", 
+            pr_nn_data_labels = [parent_folder+"est_nres50.npy", 
                                 parent_folder+"num_integral_nres50.npy", 
-                                parent_folder+"num_integral_nres80.npy", 
+                                # parent_folder+"num_integral_nres80.npy", 
                                 parent_folder+"lp_nres50.npy", 
-                                parent_folder+"lp_nres80.npy", 
+                                # # parent_folder+"lp_nres80.npy", 
+                                parent_folder+"fo_gmmx16_nres50_100k.npy",
                                 parent_folder+"fo_gmmx32_nres50_100k.npy",
                                 parent_folder+"fo_gmmx48_nres50_100k.npy",
                                 parent_folder+"fo_gmmx64_nres50_100k.npy",
-                                parent_folder+"fo_gmmx80_nres50_100k.npy"
+                                parent_folder+"fo_gmmx80_nres50_100k.npy",
                                 # parent_folder+"pinnv0seq_diaggmmx64.npy", # error bound B is obtained by e1_net_seq1.pth and e1_net_seq2.pth
                                 ]
-            plot_labels = [r"$\mathbb{P}_{est}$ by $\hat{p}$",
-                        r"$\mathbb{P}^+$, NI($N=50^4$)", 
-                        r"$\mathbb{P}^+$, NI($N=80^4$)", 
-                        r"$\mathbb{P}^+$, LP($N=50^4$)", 
-                        r"$\mathbb{P}^+$, LP($N=80^4$)", 
-                        r"$\mathbb{P}^+$, FO($N=32$)", 
-                        r"$\mathbb{P}^+$, FO($N=48$)", 
-                        r"$\mathbb{P}^+$, FO($N=64$)", 
-                        r"$\mathbb{P}^+$, FO($N=80$)", 
-                        # r"FO($\hat{p},B_1,GMMx64$)",
+            plot_labels = [r"Only $\hat{p}$",
+                        r"NI$_{50}$", 
+                        # r"NI$_{80}$", 
+                        r"LP$_{50}$", 
+                        # r"LP$_{80}$", 
+                        r"FO$_{16}$", 
+                        r"FO$_{32}$", 
+                        r"FO$_{48}$", 
+                        r"FO$_{64}$", 
+                        r"FO$_{80}$",
                         ]
-            plot_fills  = [False, True, True, True, True, True, True, True, True]
-            plot_style =  ["--", "-", "-", "-", "-", "-", "-", "-", "-"]
-            marker = ["", ">", "<", "d", "x", "", "", "", ""]
+            plot_fills  = [False, False, 
+                           False, False, 
+                           False, False, 
+                           False, False, False]
+            plot_style =  ["--", "-", "-", "-", "-", "-", "-", "-", "-", "-"]
+            marker = ["", ">", "d", "", "", "", "", ""]
         elif(target == "tar2"):
             pr_mcs = np.load(parent_folder+"mc.npy")
             pr_nn_data_labels = [parent_folder+"ni_nres50.npy", 
@@ -695,15 +699,15 @@ def plot_app1(target, save_plot_path=None):
                  linestyle=plot_style[j], 
                  linewidth = 1.5,
                  marker=marker[j], label=plot_labels[j])
-        if(plot_fills[j]): 
-            plt.fill_between(t_span, y1=0.0*t_span, y2=pr_nn_data_i[:,1],
-                             color=colors[j], edgecolor="none", alpha=0.1)
+        # if(plot_fills[j]): 
+        #     plt.fill_between(t_span, y1=0.0*t_span, y2=pr_nn_data_i[:,1],
+        #                      color=colors[j], edgecolor="none", alpha=0.1)
 
     plt.grid(True)
-    plt.ylabel(r"$Pr(x \in X^{'})$")
+    plt.ylabel(r"$\mathbb{P}(X'_{tar})$")
     plt.xlabel("t")
-    plt.legend(loc="upper left", ncol=2)
-    plt.ylim([-0.05, 1.5])
+    plt.legend(loc="upper right", ncol=2)
+    plt.ylim([-0.05, 1.2])
     # plt.ylim([-0.01, 0.1])
     # Get current axes, and then obtain and reformat the xticks.
     plt.tight_layout(pad=0.2)
