@@ -450,7 +450,7 @@ def visual_phat_trainings(constants, p_net, data_foler, save_plots=False, save_p
         plt.show()
 
 
-def visual_e1hat_training(constants, networks, data_foler, save_plots=False, save_plot_path=None):
+def visual_e1hat_training(constants, networks, data_foler, save_plot_path=None):
     """
     visualize e1 networks training results using final or intermediate saved model
     NOTE: select the t_span
@@ -459,10 +459,10 @@ def visual_e1hat_training(constants, networks, data_foler, save_plots=False, sav
 
     set_publication_plot_style()
 
-    x1s = np.load(data_foler+"x1s.npy")
-    x2s = np.load(data_foler+"x2s.npy")
-    x3s = np.load(data_foler+"x3s.npy")
-    x4s = np.load(data_foler+"x4s.npy")
+    x1s = np.load("data/grids/x1s.npy")
+    x2s = np.load("data/grids/x2s.npy")
+    x3s = np.load("data/grids/x3s.npy")
+    x4s = np.load("data/grids/x4s.npy")
 
     fig, axs = plt.subplots(2, 1, figsize=(8, 6))
     ymin = [-0.025, -0.070]
@@ -502,18 +502,18 @@ def visual_e1hat_training(constants, networks, data_foler, save_plots=False, sav
         x = np.arange(len(e1_vec))[::gap]
         # Select every n-th element from the data array for the y-axis
         y1 = e1_vec[::gap]
-        # y2 = e1_nn_vec[::gap]
+        y2 = e1_nn_vec[::gap]
         axs[i].plot(x, y1, "black", linewidth=0.5, rasterized=True, label="MC")
-        # axs[i].plot(x, y2, "blue",  linewidth=0.5, rasterized=True, label="NN")
+        axs[i].plot(x, y2, "blue",  linewidth=0.5, rasterized=True, label="NN")
         # axs[i].fill_between(x, y1=0.0*x+B1, y2=0.0*0-B1, 
-        #                     color="green", edgecolor="none", alpha=0.1, label=r"$B_1$")
+        #                     color="green", edgecolor="none", alpha=0.1, label="Error bound")
         axs[i].set_ylabel("Error")
         axs[i].grid(True)
         axs[i].text(0.02, 0.98, f"t={t_prime:.2f}T", transform=axs[i].transAxes,
                     ha='left', va='top', color='black', fontsize=18,
                     bbox=dict(facecolor='white', edgecolor='black', boxstyle='round,pad=0.2'))
         axs[i].yaxis.set_major_formatter(mticker.FormatStrFormatter('%.2f'))
-        # axs[i].set_ylim([ymin[i], ymax[i]])
+        # axs[i].set_ylim([-1.5*B1, 1.5*B1])
         # ymin, ymax = axs[i].get_ylim()
         # print(f"Subplot {i}: ymin = {ymin}, ymax = {ymax}")
 
@@ -521,49 +521,40 @@ def visual_e1hat_training(constants, networks, data_foler, save_plots=False, sav
     axs[0].legend(loc="lower left", ncol=3)
     # fig.subplots_adjust(left=0.1)
     plt.tight_layout(pad=0.2)
-    if(save_plots):
-        if(save_plot_path is not None):
-            print("Save plot to: ", save_plot_path)
-            fig.savefig(save_plot_path, format='pdf')
+    if(save_plot_path is not None):
+        print("Save plot to: ", save_plot_path)
+        fig.savefig(save_plot_path, format='png', dpi=300)
     else:
         plt.show()
 
 
 def plot_train_loss(path):
+    set_publication_plot_style()
     print("[load pnet model from: "+ path)
     checkpoint = torch.load(path)
     loss_history = np.array(checkpoint['loss_history'])
     # Create a figure and plot the loss history.
     fig = plt.figure(figsize=(8, 6))
     plt.plot(loss_history, color='black')
-
     # Define epochs at which to scatter points and their corresponding labels
     # scatter_epochs = np.array([9, 4287, 17264, 49579]) # phat
     # scatter_epochs = np.array([92, 261, 2181, 49219]) # e1hat_seq1
-    scatter_epochs = np.array([51, 299, 4540, 47055]) # e1hat_seq2
+    scatter_epochs = np.array([128, 457, 5035, 19976]) # e1hat_seq2
     scatter_labels = ['a', 'b', 'c', 'd']
-
-    # For this example, we'll assume loss_history has enough entries;
-    # in practice, ensure that your loss_history length exceeds the maximum epoch in scatter_epochs.
-    # Extract the loss values at these epochs
     scatter_losses = loss_history[scatter_epochs]
-
     # Scatter the points using red markers
     plt.scatter(scatter_epochs, scatter_losses, color='blue', s=50, zorder=5)
-
     # Annotate each scatter point with its label (offset the text to avoid overlap)
     for epoch, loss_val, label in zip(scatter_epochs, scatter_losses, scatter_labels):
         plt.annotate(label, (epoch, loss_val), textcoords="offset points", xytext=(-12,-12),
                     fontsize=18, color='blue')
-
     plt.yscale('log')
     plt.xlabel("Epoch")
     plt.ylabel("Loss (log10 scale)")
     plt.grid(True)
-    plt.tight_layout(pad=0.2)
-    # fig.savefig("figs/v2e1hat_seq2_loss.pdf", format='pdf')
-    # Display the plot.
-    plt.show()
+    plt.tight_layout(pad=0.1)
+    fig.savefig("figs/case1_e1net_train_loss.pdf", format='pdf')
+    # plt.show()
 
 
 def plot_app1_onlymc(constants, data_foler, N_mc=4, save_plots=False, save_plot_path=None):

@@ -38,8 +38,8 @@ def main():
         "diff_opt_fcn": diff_opt,
         # "save_path": "output/v0/e1_net_seq1.pth",
         # "save_path_inter": "output/v0/e1_net_seq1_",
-        "save_path": "output/base/e1_net_seq1.pth",
-        "save_path_inter": "output/base/e1_net_seq1_",
+        "save_path": "output/base/e1_net.pth",
+        "save_path_inter": "output/base/e1_net_",
     }
 
     # --- Train e1 pinn over first time seq ---

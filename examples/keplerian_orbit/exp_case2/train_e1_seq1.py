@@ -7,7 +7,7 @@ import time
 import argparse
 from monte import p_init, get_p_init_max, get_max_e1_init
 from train_p import diff_opt_p
-from exp_utilities.plot_utilites import check_error_flatten
+from exp_utilities.plot_utilites import check_error_flatten, visual_e1hat_training, plot_train_loss
 from exp_utilities.constants import Case2_4D_Constants
 # import utilities
 import sys
@@ -51,8 +51,11 @@ def main():
     e1_net = load_trained_model(e1_net, path=configurations["save_path"]); e1_net.eval()
 
     # --- Post-process ---
-    for t_prime in constants.T_PRIME_SPAN:
-        check_error_flatten(constants, p_init, e1_net, p_net, t_prime, DATA_FOLDER)
+    # for t_prime in constants.T_PRIME_SPAN:
+    #     check_error_flatten(constants, p_init, e1_net, p_net, t_prime, DATA_FOLDER)
+    # visual_e1hat_training(constants, (p_net, e1_net, e1_net), DATA_FOLDER,
+    #                       save_plot_path="figs/case1_e1net_iter:19976.png")
+    plot_train_loss(path=configurations["save_path"])
 
 
 if __name__ == "__main__":

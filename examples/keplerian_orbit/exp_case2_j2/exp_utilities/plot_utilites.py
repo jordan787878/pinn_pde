@@ -638,18 +638,30 @@ def plot_app1(target, save_plot_path=None):
     def set_plots():
         if(target == "tar1"):
             pr_mcs = np.load(parent_folder+"mc.npy")
-            pr_nn_data_labels = [parent_folder+"ni_nres50.npy", 
+            pr_nn_data_labels = [
+                                parent_folder+"est_nres50.npy", 
+                                parent_folder+"ni_nres50.npy", 
                                 parent_folder+"lp_nres50.npy", 
-                                parent_folder+"fo_gmmx64_nres50_20k.npy"
+                                parent_folder+"fo_gmmx16_nres50_100k.npy",
+                                parent_folder+"fo_gmmx32_nres50_100k.npy",
+                                parent_folder+"fo_gmmx48_nres50_100k.npy",
+                                parent_folder+"fo_gmmx64_nres50_100k.npy",
+                                parent_folder+"fo_gmmx80_nres50_100k.npy",
                                 ]
             plot_labels = [
-                        r"NI($\hat{p},B_1,50$)", 
-                        r"LP($\hat{p},B_1,50$)", 
-                        r"FO($\hat{p},B_1,GMMx64$)",
+                        r"Only $\hat{p}$",
+                        r"NI$_{50}$", 
+                        r"LP$_{50}$", 
+                        r"FO$_{16}$",
+                        r"FO$_{32}$",
+                        r"FO$_{48}$",
+                        r"FO$_{64}$",
+                        r"FO$_{80}$",
                         ]
-            plot_fills  = [True, True, True, True, True, True]
-            plot_style =  ["-", "-", "-", "-", "-", "-"]
-            marker = [">", "d", ""]
+            plot_fills  = [False, False, False, False, False, False, False, False]
+            plot_style =  ["--", "-", "-", "-", "-", "-", "-", "-"]
+            marker = ["", ">", "d", "", "", "", "", ""]
+
         elif(target == "tar2"):
             pr_mcs = np.load(parent_folder+"mc.npy")
             pr_nn_data_labels = [parent_folder+"ni_nres50.npy", 
@@ -681,7 +693,7 @@ def plot_app1(target, save_plot_path=None):
     pr = pr_mcs[:,-1] # should change back to pr = pr_mcs[:,j+1] 
     mask = ~np.isnan(pr)
     plt.plot(t_span[mask], pr[mask], color="black", linestyle="", marker="o", markersize=4, 
-             label=r"$\mathbb{P}_{true}$ by MC")
+             label=r"$\mathbb{P}$ by MC")
     print("[check] Prob. by MC (time, Prob., Prob.)")
     print(np.round(pr_mcs,4))
 
@@ -699,10 +711,10 @@ def plot_app1(target, save_plot_path=None):
                              color=colors[j], edgecolor="none", alpha=0.1)
 
     plt.grid(True)
-    plt.ylabel(r"$Pr(x \in X^{'})$")
+    plt.ylabel(r"$\mathbb{P}(X'_{tar})$")
     plt.xlabel("t")
-    plt.legend(loc="upper left", ncol=2)
-    plt.ylim([-0.05, 1.5])
+    plt.legend(loc="upper right", ncol=2)
+    plt.ylim([-0.05, 1.2])
     # plt.ylim([-0.01, 0.1])
     # Get current axes, and then obtain and reformat the xticks.
     plt.tight_layout(pad=0.2)

@@ -13,12 +13,22 @@ constants = Case2_4D_Constants()
 
 
 def show_pdf(constants, options, p_net, target_r, target_phi):
-    t_span = np.arange(16, 20) / 100.0
-    p_gmm = funcOpt.models.TorchGMM(constants)
+    s = options['label']
+    num_components = int(s.split("gmmx",1)[1].split("_",1)[0])
+    p_gmm = funcOpt.models.TorchGMM(constants, num_components=num_components)
     p_gmm_path = options["path_pdf_models"]+options["label"]
-    for t in t_span:
+    dt = 0.01
+    tspan = np.arange(0.06, 0.11+dt, dt)
+    for t in tspan:
         if(options["show_pdf_gmm"]):
             p_gmm.load_state_dict(torch.load(p_gmm_path+"_t{:.3f}.pth".format(t)))
+            # print(p_gmm.logits)
+            _, mus, _ = p_gmm.get_gmm_paramters()
+            x_at_mus = torch.tensor(mus)
+            pdf_at_mus = p_gmm(x_at_mus)
+            print(pdf_at_mus)
+
+            # print("[debug] gmm parameters: ", theta_gmm)
             exp_plot.plot_pdf_gmm_wrt_pinn(constants, p_net, p_gmm, target_r, target_phi, t)
         else:
             exp_plot.plot_pdf_gmm_wrt_pinn(constants, p_net, None, target_r, target_phi, t)
@@ -65,6 +75,10 @@ def app1(constants, p_net, e1_net_seq1, e1_net_seq2, options):
     
 
 def main():
+    # funcOpt.helpers.scenario_base_guarantee(4, 50000, 1e-7); return 
+    # NOTE: although this approach gives good result for probabilistically satisfying the constraint, 
+    # it does not provide any additional 'confidence' to our problem for computing probability of an event ...
+
     global constants
     # --- Application ---
     target = "tar1"
@@ -73,10 +87,13 @@ def main():
                "target": target,
                "path_pdf_models": "data/app1/"+target+"/pdf_models/",
                "path_prob": "data/app1/"+target+"/prob/",
-               "label": "fo_gmmx64_nres50_20k", #fo_gmmx64_nres50_20k",
+               "label": "fo_gmmx80_nres50_100k",
                "solver": "fo",
                "run_solver": True,
-        # special options for solver: fo
+               "save_result": True,
+        # special options for FO solver
+               "num_iterations": 100000,
+               "label_parent_gmm": "fo_gmmx64_nres50_100k",
                "use_trained_gmm": False,
                "show_loss_landscape": False,
         # others
@@ -84,34 +101,34 @@ def main():
                "show_pdf": False,
                "show_pdf_gmm": False,
                "show_target": False,
+               "compute_prob_by_mc": False, 
+        # mc_data and pinn path
                "mc_folder": "data/1e+6/",
-               "compute_prob_by_mc": True,
-               "save_result": True,
-        # pinn path
                "pnet_path" : "output/v0/p_net.pth",
-               "e1net_path" : "output/v0/e1_net.pth",
+               "e1net_path" : "output/base/e1_net.pth",
                "e1net_path_seq1" : "output/v0/e1_net_seq1.pth",
                "e1net_path_seq2" : "output/v0/e1_net_seq2.pth"
                }
 
     # --- Visualization ---
     if(options["show_app1"]):
-        exp_plot.plot_app1(target, save_plot_path="figs/app1_"+target+"_pinnv0_diaggmmx64"); return
+        exp_plot.plot_app1(target, save_plot_path="figs/casestudy2_app1_"+target); return
     
     p_net = PNet(constants, scale=get_p_init_max(constants))
     p_net = load_trained_model(p_net, path=options["pnet_path"], method="new"); p_net.eval()
-    e1_net_seq1 = E1Net(constants, scale=get_max_e1_init(constants, p_net))
-    e1_net_seq1 = load_trained_model(e1_net_seq1, path=options["e1net_path_seq1"], method="new"); e1_net_seq1.eval()
-    e1_net_seq2 = E1Net(constants, scale=get_max_e1_init(constants, p_net))
-    e1_net_seq2 = load_trained_model(e1_net_seq2, path=options["e1net_path_seq2"], method="new"); e1_net_seq2.eval()
-
+    e1_net = E1Net(constants, scale=get_max_e1_init(constants, p_net))
+    e1_net = load_trained_model(e1_net, path=options["e1net_path"], method="new"); e1_net.eval()
+    # e1_net_seq1 = E1Net(constants, scale=get_max_e1_init(constants, p_net))
+    # e1_net_seq1 = load_trained_model(e1_net_seq1, path=options["e1net_path_seq1"], method="new"); e1_net_seq1.eval()
+    # e1_net_seq2 = E1Net(constants, scale=get_max_e1_init(constants, p_net))
+    # e1_net_seq2 = load_trained_model(e1_net_seq2, path=options["e1net_path_seq2"], method="new"); e1_net_seq2.eval()
 
     # --- Define a t_span to evaluate Pr(Event) ---
     dt = 0.01
     options['t_span'] = np.arange(0.00, 0.20+dt, dt)
 
     # --- Run application ---
-    app1(constants, p_net, e1_net_seq1, e1_net_seq2, options)
+    app1(constants, p_net, e1_net, e1_net, options)
 
     # --- Other Visualization ---
     # exp_plot.visual_phat_trainings(constants, p_net, DATA_FOLDER, save_plots=False,

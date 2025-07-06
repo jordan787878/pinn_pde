@@ -321,13 +321,14 @@ def train_pinn_e1seq1_base(constants, networks, configurations, iterations=50000
             beta = beta + np.float32(0.005)
             if(beta > 1.0):
                 beta = np.float32(1.0)
+
+            # --- Save intermediate model for debug/plot ---
             # if(save_model):
             #     FLAG_SAVE_INTER = FLAG_SAVE_INTER + 1
             #     if(FLAG_SAVE_INTER >= 10):
             #         INTER_COUNT = INTER_COUNT + 1
             #         torch.save({
             #             'epoch': epoch, 'model_state_dict': e1_net.state_dict(),
-            #             'optimizer_state_dict': optimizer.state_dict(),
             #             'loss_history': loss_history, 'train_time': train_time,
             #             }, save_path_inter+str(INTER_COUNT)+".pth")
             #         FLAG_SAVE_INTER = 0

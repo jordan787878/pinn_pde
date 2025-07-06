@@ -6,7 +6,7 @@ import sys
 sys.path.insert(0, '../utilities/')
 import FunctionalOpt.src as funcOpt
 from _General.util import get_valid_target_bounds, compute_volume
-from _General.generalsolvers import solve_numer_integral, solve_linearprogram
+from _General.generalsolvers import solve_numer_integral, solve_linearprogram, solve_estimate
 
 
 def get_prob_MC(constants, t_span, target_r, targer_ph):
@@ -33,7 +33,7 @@ def get_prob_PINN(constants, t_span, target_r, targer_ph, networks, options):
                 options["path_pdf_models"]+options["label"]+"_t{:.3f}.pth".format(t))
 
     data_array = np.array(data_list)
-    print("Prob result:")
+    print("Prob result of "+options["label"])
     print(data_array)
     # --- save results ---
     if(options['save_result']):
@@ -117,9 +117,13 @@ def compute_prob_event(constants, target_r, targer_ph, t, networks, options, N_d
         'target_V' : compute_volume(target_bounds),
         'time': t,
         'constants': constants,
+        'path_pdf_models' : options["path_pdf_models"],
+        'label': options['label'],
         'use_trained_gmm': options["use_trained_gmm"],
         'show_loss_landscape': options["show_loss_landscape"],
         'trained_gmm_path': options["path_pdf_models"]+options["label"],
+        'num_iterations': options["num_iterations"],
+        "label_parent_gmm": options["label_parent_gmm"],
     }
 
     # --- Solving ---
@@ -132,6 +136,9 @@ def compute_prob_event(constants, target_r, targer_ph, t, networks, options, N_d
     elif options["solver"] == "lp":
         problem = form_problem_exp_case2(problem)
         pr, model = solve_linearprogram(problem)
+    elif options["solver"] == "est":
+        problem = form_problem_exp_case2(problem)
+        pr, model = solve_estimate(problem)
     else:
         raise("solver in options is not implemented")
     return pr, model
@@ -178,6 +185,7 @@ def form_problem_exp_case2(problem, need_grid=False, N_res=50):
         e1_nn  = e1_net_seq2(grid_points_tensor, t_tensor).detach().numpy().ravel()
     problem['B'] = 2.0 * np.max(np.abs(e1_nn))
     problem['B_marginal'] = problem['B'] * problem["target_V"]
-    print("[debug] integral of B over target domain: {:.4f}".format(problem['B_marginal']))
-
+    print("[info] target domain volume: {:.4f}, error bound B1: {:.4f}".format(
+        problem['target_V'], problem['B']))
+    print("[info] integral of B over target domain: {:.4f}".format(problem['B_marginal']))
     return problem

@@ -136,7 +136,7 @@ def main():
 
     # --- Visualization ---
     if(options["show_app1"]):
-        exp_plot.plot_app1(target, save_plot_path="figs/app1_"+target+"_new"); return
+        exp_plot.plot_app1(target, save_plot_path="figs/casestudy1_app1_"+target); return
     
     p_net = PNet(constants, scale=get_p_init_max(constants))
     p_net = load_trained_model(p_net, path=options["pnet_path"], method="new"); p_net.eval()
