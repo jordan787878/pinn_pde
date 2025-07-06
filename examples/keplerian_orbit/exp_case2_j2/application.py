@@ -13,23 +13,28 @@ constants = Case2_4D_Constants()
 
 
 def show_pdf(constants, options, p_net, target_r, target_phi):
-    s = options['label']
-    num_components = int(s.split("gmmx",1)[1].split("_",1)[0])
-    p_gmm = funcOpt.models.TorchGMM(constants, num_components=num_components)
-    p_gmm_path = options["path_pdf_models"]+options["label"]
-    dt = 0.01
-    tspan = np.arange(0.06, 0.11+dt, dt)
+    # dt = 0.01
+    # tspan = np.arange(0.05, 0.05+dt, dt)
+    tspan = [0.06]
     for t in tspan:
         if(options["show_pdf_gmm"]):
+            s = options['label']
+            num_components = int(s.split("gmmx",1)[1].split("_",1)[0])
+            p_gmm = funcOpt.models.TorchGMM(constants, num_components=num_components)
+            p_gmm_path = options["path_pdf_models"]+options["label"]
             p_gmm.load_state_dict(torch.load(p_gmm_path+"_t{:.3f}.pth".format(t)))
-            # print(p_gmm.logits)
-            _, mus, _ = p_gmm.get_gmm_paramters()
-            x_at_mus = torch.tensor(mus)
-            pdf_at_mus = p_gmm(x_at_mus)
-            print(pdf_at_mus)
-
+            with torch.no_grad():
+                ws, mus, _ = p_gmm.get_gmm_paramters()
+                x_at_mus = torch.tensor(mus)
+                t_tensor = torch.full((x_at_mus.shape[0], 1), t)
+                pdf_at_mus = p_gmm(x_at_mus)
+                pinn_at_mus = p_net(x_at_mus, t_tensor).view(-1,)
+                print("[check] max deviation of pinn and gmm: ", torch.abs(pdf_at_mus - pinn_at_mus).max())
+                # print(ws)
             # print("[debug] gmm parameters: ", theta_gmm)
-            exp_plot.plot_pdf_gmm_wrt_pinn(constants, p_net, p_gmm, target_r, target_phi, t)
+            exp_plot.plot_pdf_gmm_wrt_pinn(constants, p_net, p_gmm, target_r, target_phi, t,
+                                           save_plot_path="figs/case2_target_and_fo"
+                                           )
         else:
             exp_plot.plot_pdf_gmm_wrt_pinn(constants, p_net, None, target_r, target_phi, t)
 
@@ -47,10 +52,12 @@ def set_target(constants, options):
         target_ph = np.array([-3.5, 1.5])*constants.PHI + constants.W*constants.T*(0.1)
     elif(options["target"] == "tar2"):
         # --- tar2 ---
-        target_r = np.array([21.6, 21.8])*constants.R
-        target_ph = np.array([-4.0, -3.5])*constants.PHI + constants.W*constants.T*(0.195)
+        target_r = np.array([20.6, 20.8])*constants.R
+        target_ph = np.array([-0.1, 0.1])*constants.PHI + constants.W*constants.T*(0.05)
     else:
         raise("targets in option is not specified")
+    print("[check] target region of Radius {:.2f} km and Translational Distance {:.2f} km".format(
+        (target_r[1]-target_r[0])/1000.0, 0.5*(target_r[1]+target_r[0])*(target_ph[1]-target_ph[0])/1000.0 ))
     return target_r, target_ph
 
 
@@ -81,16 +88,17 @@ def main():
 
     global constants
     # --- Application ---
-    target = "tar1"
+    target = "tar2"
     options = {
         # solver 
                "target": target,
                "path_pdf_models": "data/app1/"+target+"/pdf_models/",
                "path_prob": "data/app1/"+target+"/prob/",
-               "label": "fo_gmmx80_nres50_100k",
+               "label": "fo_gmmx80_nres50_100k", #fo_gmmx16_nres50_100k
                "solver": "fo",
                "run_solver": True,
                "save_result": True,
+               "compute_prob_by_mc": False, 
         # special options for FO solver
                "num_iterations": 100000,
                "label_parent_gmm": "fo_gmmx64_nres50_100k",
@@ -101,7 +109,6 @@ def main():
                "show_pdf": False,
                "show_pdf_gmm": False,
                "show_target": False,
-               "compute_prob_by_mc": False, 
         # mc_data and pinn path
                "mc_folder": "data/1e+6/",
                "pnet_path" : "output/v0/p_net.pth",
@@ -112,6 +119,7 @@ def main():
 
     # --- Visualization ---
     if(options["show_app1"]):
+        # exp_plot.plot_app1(target); return
         exp_plot.plot_app1(target, save_plot_path="figs/casestudy2_app1_"+target); return
     
     p_net = PNet(constants, scale=get_p_init_max(constants))
@@ -125,7 +133,8 @@ def main():
 
     # --- Define a t_span to evaluate Pr(Event) ---
     dt = 0.01
-    options['t_span'] = np.arange(0.00, 0.20+dt, dt)
+    # options['t_span'] = np.array([0.05])
+    options['t_span'] = np.arange(0.00, 0.08+dt, dt)
 
     # --- Run application ---
     app1(constants, p_net, e1_net, e1_net, options)

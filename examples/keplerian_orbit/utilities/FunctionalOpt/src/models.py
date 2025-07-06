@@ -6,7 +6,7 @@ from torch.distributions import Categorical, MixtureSameFamily, Independent, Nor
 
 
 class TorchGMM(nn.Module):
-    def __init__(self, constants, num_components=64, n_features=4, min_std=1e-2):
+    def __init__(self, constants, num_components=64, n_features=4, min_std=1e-2): #min_std=1e-2
         super().__init__()
         self.num_components = num_components
         self.n_features = n_features
@@ -22,13 +22,23 @@ class TorchGMM(nn.Module):
         # one “raw scale” per component per feature
         self.raw_scales = nn.Parameter(torch.randn(num_components, n_features))
 
+    def get_weights(self):
+        # K = self.num_components
+        # min_weight = 0.0
+        w2 = self.raw_weights.pow(2)               # square
+        p_i = w2 / w2.sum()                        # normalize
+        weights = p_i
+        # weights = min_weight + (1 - K*min_weight) * p_i
+        # sum_weights = weights.sum().detach().numpy()
+        # np.testing.assert_almost_equal(sum_weights, 1.0, decimal=5)
+        return weights
+
     def get_distribution(self):
         # ensure all std-devs are positive
         scales = F.softplus(self.raw_scales) + self.min_std      # [num_components, n_features]
 
         # 2) turn raw_weights into non-negative mixture probs
-        w2 = self.raw_weights.pow(2)                             # square
-        weights = w2 / (w2.sum() + 1e-12)                        # normalize
+        weights = self.get_weights()
 
         # 3) build the Mixture distribution
         cat  = Categorical(probs=weights)                       # batch_shape=[num_components]
@@ -50,8 +60,7 @@ class TorchGMM(nn.Module):
         # 1) Directly from your parameters:
         # ------------------------------------------------
         # (a) mixture weights
-        w2 = self.raw_weights.pow(2)                             # square
-        weights = w2 / (w2.sum() + 1e-12)                        # normalize
+        weights = self.get_weights()
 
         # (b) component means
         means = self.means                      # [num_components, n_features]
@@ -74,8 +83,7 @@ class TorchGMM(nn.Module):
         Returns the total probability mass in that hyper‐rectangle.
         """
         # 1) unpack parameters
-        w2 = self.raw_weights.pow(2)                             # square
-        weights = w2 / (w2.sum() + 1e-12)                        # normalize
+        weights = self.get_weights()
         means  = self.means                  # [C, D]
         scales = F.softplus(self.raw_scales) + self.min_std # [C, D]
 
@@ -104,54 +112,5 @@ class TorchGMM(nn.Module):
         return total_mass
 
 
-# class RBFDensity(nn.Module):
-#     def __init__(self, input_dim=4, num_basis=20):
-#         """
-#         Approximates a function p(x) as a weighted sum of normalized Gaussian RBFs,
-#         designed so that p(x) is a valid pdf:    
-#            p(x) = sum_i w_i * phi_i(x)      
-#         with phi_i(x) defined as a normalized Gaussian over R^4.     
-#         The centers of each RBF are adjusted by adding constant offsets defined in
-#         constants.N_MEAN_I.     
-#         Args:
-#             input_dim (int): Dimensionality of input (should be 4).
-#             num_basis (int): Number of RBF basis functions.
-#         """
-#         super(RBFDensity, self).__init__()
-#         self.input_dim = input_dim   # This should be 4.
-#         self.num_basis = num_basis     
-#         # Learnable centers: shape [num_basis, input_dim]
-#         self.centers = nn.Parameter(torch.randn(num_basis, input_dim))    
-#         # Learnable log-bandwidths (one per basis). Use softplus later to ensure positivity.
-#         self.covs = nn.Parameter(torch.ones(num_basis))      
-#         # Learnable logits for weights; using softmax will enforce nonnegativity and sum-to-one.
-#         self.A = nn.Parameter(torch.ones(num_basis)/num_basis)
-#     def forward(self, x):
-#         """
-#         Evaluate the density p(x) for a batch of input points x (shape [batch, input_dim]).     
-#         Returns:
-#             p (Tensor): The pdf evaluated at x, shape [batch].
-#         """
-#         batch = x.shape[0]
-#         K = self.num_basis      
-#         # Get sigma with softplus for numerical stability.
-#         covs = torch.square(self.covs) + 1e-10    
-#         # Compute normalized weights via softmax.
-#         A = self.A + 1e-10
-#         sum_A = torch.sum(A**2)
-#         weights = A**2 / sum_A  # shape: [K]      
-#         # Adjust centers by adding the constant offset.
-#         offset = torch.tensor(constants.N_MEAN_I, device=self.centers.device, dtype=self.centers.dtype)
-#         effective_centers = self.centers + offset.unsqueeze(0)  # shape: [K, input_dim]
-#         pdf = torch.zeros(batch)
-#         for i in range(K):
-#             mean_i = effective_centers[i, :]
-#             cov_i  = covs[i]
-#             m = torch.distributions.MultivariateNormal(
-#                 loc=mean_i,
-#                 covariance_matrix=cov_i * torch.eye(4)
-#             )
-#             pdf_values = m.log_prob(x).exp()
-#             pdf = pdf + weights[i] * pdf_values
-#         return pdf
+
    

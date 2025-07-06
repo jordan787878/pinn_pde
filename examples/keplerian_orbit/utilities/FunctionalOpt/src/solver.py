@@ -1,5 +1,6 @@
 import torch
 import numpy as np
+import gc
 from .models import TorchGMM
 from .train import train_model, visual_loss
 from .helpers import check_pdf_integral, check_pdf_interval, integral_torchgmm
@@ -23,9 +24,12 @@ def solve_funcopt(problem):
         with torch.no_grad():
             # 2) copy in the parent-component parameters
             trained_model.raw_weights.data[:num_parent_components] = gmm_parent.raw_weights.data
-            trained_model.raw_weights.data[num_parent_components:] = 1e-3 # small initialization
+            trained_model.raw_weights.data[num_parent_components:] = torch.randn(num_components-num_parent_components)*1e-3
             trained_model.means.data[:num_parent_components, :]   = gmm_parent.means.data
             trained_model.raw_scales.data[:num_parent_components, :] = gmm_parent.raw_scales.data
+        # release memory
+        del gmm_parent
+        gc.collect()
 
     # --- Train model ---
     if(problem['use_trained_gmm'] == False):
@@ -37,6 +41,7 @@ def solve_funcopt(problem):
             visual_loss(problem, trained_model)
     
     # --- Check constraints ---
+    assert trained_model is not None, "Training didn’t return a valid model!"
     trained_model.eval()
     check_pdf_integral(problem, trained_model, method="analy")
     check_pdf_interval(problem, trained_model)

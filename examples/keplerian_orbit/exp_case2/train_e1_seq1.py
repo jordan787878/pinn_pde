@@ -55,7 +55,7 @@ def main():
     #     check_error_flatten(constants, p_init, e1_net, p_net, t_prime, DATA_FOLDER)
     # visual_e1hat_training(constants, (p_net, e1_net, e1_net), DATA_FOLDER,
     #                       save_plot_path="figs/case1_e1net_iter:19976.png")
-    plot_train_loss(path=configurations["save_path"])
+    # plot_train_loss(path=configurations["save_path"])
 
 
 if __name__ == "__main__":

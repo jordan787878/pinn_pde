@@ -118,9 +118,9 @@ def main():
     p_net = load_trained_model(p_net, path=PNET_PATH, method="new"); p_net.eval()
 
     # --- Post-process ---
-    print_mc_time(MC_FOLDER)
+    # print_mc_time(MC_FOLDER)
     # check_pdf_Nrphi(constants, p_net=p_net)
-    # check_pdfnn_cartesian_wrt_monte(constants, p_net, MC_FOLDER)
+    check_pdfnn_cartesian_wrt_monte(constants, p_net, MC_FOLDER)
     # for t_prime in constants.T_PRIME_SPAN:
     #     check_error_flatten(constants, p_init, None, p_net, t_prime, MC_FOLDER)
     # check_pdf_cartesian_wrt_samples(constants, p_net=p_net)

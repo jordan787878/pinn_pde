@@ -503,8 +503,8 @@ def visual_e1hat_training(constants, networks, data_foler, save_plot_path=None):
         # Select every n-th element from the data array for the y-axis
         y1 = e1_vec[::gap]
         y2 = e1_nn_vec[::gap]
-        axs[i].plot(x, y1, "black", linewidth=0.5, rasterized=True, label="MC")
-        axs[i].plot(x, y2, "blue",  linewidth=0.5, rasterized=True, label="NN")
+        axs[i].plot(x, y1, "black", linewidth=0.5, rasterized=True, label=r"$e_1$")
+        axs[i].plot(x, y2, "blue",  linewidth=0.5, rasterized=True, label=r"$\hat{e}_1$")
         # axs[i].fill_between(x, y1=0.0*x+B1, y2=0.0*0-B1, 
         #                     color="green", edgecolor="none", alpha=0.1, label="Error bound")
         axs[i].set_ylabel("Error")
@@ -648,18 +648,33 @@ def plot_app1(target, save_plot_path=None):
             marker = ["", ">", "d", "", "", "", "", ""]
         elif(target == "tar2"):
             pr_mcs = np.load(parent_folder+"mc.npy")
-            pr_nn_data_labels = [parent_folder+"ni_nres50.npy", 
-                                parent_folder+"lp_nres50.npy", 
-                                parent_folder+"fo_gmmx64_nres50_20k.npy"
+            pr_nn_data_labels = [
+                                parent_folder+"est_nres50.npy", 
+                                # parent_folder+"ni_nres50.npy", 
+                                # parent_folder+"lp_nres50.npy", 
+                                parent_folder+"fo_gmmx16_nres50_100k.npy",
+                                # parent_folder+"fo_gmmx32_nres50_100k.npy",
+                                # parent_folder+"fo_gmmx48_nres50_100k.npy",
+                                # parent_folder+"fo_gmmx64_nres50_100k.npy",
+                                # parent_folder+"fo_gmmx80_nres50_100k.npy",
+                                # parent_folder+"pinnv0seq_diaggmmx64.npy", # error bound B is obtained by e1_net_seq1.pth and e1_net_seq2.pth
                                 ]
             plot_labels = [
-                        r"NI($\hat{p},B_1,50$)", 
-                        r"LP($\hat{p},B_1,50$)", 
-                        r"FO($\hat{p},B_1,GMMx64$)",
+                        r"Only $\hat{p}$",
+                        # r"NI$_{50}$", 
+                        # r"LP$_{50}$", 
+                        r"FO$_{16}$", 
+                        # r"FO$_{32}$", 
+                        # r"FO$_{48}$", 
+                        # r"FO$_{64}$", 
+                        # r"FO$_{80}$",
                         ]
-            plot_fills  = [True, True, True, True, True, True]
-            plot_style =  ["-", "-", "-", "-", "-", "-"]
-            marker = [">", "d", ""]
+            plot_fills  = [False, False, 
+                           False, False, 
+                           False, False, 
+                           False, False, False]
+            plot_style =  ["--", "-", "-", "-", "-", "-", "-", "-", "-", "-"]
+            marker = ["", ">", "d", "", "", "", "", ""]
         else:
             raise("this target is not runned")
         return pr_mcs, pr_nn_data_labels, plot_labels, plot_fills, plot_style, marker
@@ -676,7 +691,7 @@ def plot_app1(target, save_plot_path=None):
     t_span = pr_mcs[:,0]
     pr = pr_mcs[:,-1] # should change back to pr = pr_mcs[:,j+1] 
     mask = ~np.isnan(pr)
-    plt.plot(t_span[mask], pr[mask], color="black", linestyle="", marker="o", markersize=4, 
+    plt.plot(t_span[mask], pr[mask], color="black", linestyle=":", marker="o", markersize=4, 
              label=r"$\mathbb{P}$ by MC")
     print("[check] Prob. by MC (time, Prob., Prob.)")
     print(np.round(pr_mcs,4))
@@ -698,21 +713,16 @@ def plot_app1(target, save_plot_path=None):
     plt.ylabel(r"$\mathbb{P}(X'_{tar})$")
     plt.xlabel("t")
     plt.legend(loc="upper right", ncol=2)
-    plt.ylim([-0.05, 1.2])
-    # plt.ylim([-0.01, 0.1])
+    if(target == "tar2"):
+        plt.xlim([0.07, 0.09])
+        plt.ylim([0.0, 0.20])
     # Get current axes, and then obtain and reformat the xticks.
     plt.tight_layout(pad=0.2)
-    # Define the tick positions.
-    ticks = [0.0, 0.04, 0.08, 0.12, 0.16, 0.20]
-    # Create corresponding labels with "T" appended.
-    tick_labels = [f"{tick:.2f}T" for tick in ticks]
-
-    # Get the current axis.
-    ax = plt.gca()
-    # Set the tick positions.
-    ax.set_xticks(ticks)
-    # Set the tick labels.
-    ax.set_xticklabels(tick_labels)
+    # ticks = [0.0, 0.04, 0.08, 0.12, 0.16, 0.20]
+    # tick_labels = [f"{tick:.2f}T" for tick in ticks]
+    # ax = plt.gca()
+    # ax.set_xticks(ticks)
+    # ax.set_xticklabels(tick_labels)
     if(save_plot_path is not None):
         print("Save plot to: ", save_plot_path)
         fig.savefig(save_plot_path+".pdf", format='pdf')
@@ -1048,28 +1058,30 @@ def plot_pdf_gmm_wrt_pinn(constants, p_net, p_gmm, target_r, target_phi, t):
     dx2 = x2s[1] - x2s[0] # dphi'
     dx3 = x3s[1] - x3s[0]
     dx4 = x4s[1] - x4s[0]
-    pdf_pinn = p_net(grid_points_tensor, t_tensor).detach().numpy().reshape(x1_grid.shape)
+    with torch.no_grad():
+        pdf_pinn = p_net(grid_points_tensor, t_tensor).detach().numpy().reshape(x1_grid.shape)
 
     # marginalize to spherical position (r, phi)
     X, Y =  np.meshgrid(x1s, x2s, indexing="ij")
-    num_stride = 1
+    num_stride = 3
     pdf_pinn_marginal =  np.sum(pdf_pinn, axis=(2,3)) * dx3 * dx4
     surf1 = ax.plot_surface(
         X, Y, pdf_pinn_marginal,
         rstride=num_stride,
         cstride=num_stride,
-        cmap=cm.Reds,        # choose your colormap
+        # cmap=cm.Blues,        # choose your colormap
         linewidth=0.5,            # no grid lines
         antialiased=True,
-        # edgecolor='white',  
-        alpha=0.5,
+        edgecolor='blue', 
+        facecolor='blue', 
+        alpha=0.1,
     )
     # surf1 = ax.plot_surface(X, Y, pdf_pinn_marginal, 
     #                         color="none", rstride=num_stride, cstride=num_stride, edgecolor='black',  
     #                         linewidth=1.0, linestyle="-", label="PINN")
     
     if(p_gmm is not None):
-        N_dense = 2
+        N_dense = 1
         X_dense, Y_dense = np.meshgrid(densify(x1s, N_degree=N_dense), 
                                        densify(x2s, N_degree=N_dense), indexing="ij")
         Z = marginal_gmm_in_2d(X_dense, Y_dense, p_gmm)
@@ -1079,11 +1091,12 @@ def plot_pdf_gmm_wrt_pinn(constants, p_net, p_gmm, target_r, target_phi, t):
             X_dense, Y_dense, Z,
             rstride=num_stride,
             cstride=num_stride,
-            cmap=cm.viridis,        # choose your colormap
+            # cmap=cm.Greens,        # choose your colormap
             linewidth=0.5,            # no grid lines
             antialiased=True,
-            # edgecolor='white',  
-            alpha=0.9,
+            edgecolor='green',  
+            facecolor='green',
+            alpha=0.1,
         )
 
     # get normalized target bound
@@ -1107,4 +1120,6 @@ def plot_pdf_gmm_wrt_pinn(constants, p_net, p_gmm, target_r, target_phi, t):
     ax.set_ylabel(r"$\phi'$")
     ax.set_zlabel('PDF Value')
     ax.set_title('3D Surface Plot of PDF at t= {:.3f}'.format(t))
+    ax.view_init(30, -143)
     plt.show()
+    

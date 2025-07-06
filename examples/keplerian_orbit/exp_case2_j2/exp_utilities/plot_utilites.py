@@ -6,6 +6,8 @@ import seaborn as sns
 import torch
 from scipy.interpolate import griddata
 from matplotlib import cm
+from mpl_toolkits.axes_grid1.inset_locator import inset_axes, mark_inset
+from matplotlib.patches import Rectangle
 
 
 def set_publication_plot_style(font_family='Times New Roman', font_size=18):
@@ -244,8 +246,17 @@ def check_pdfnn_cartesian_wrt_monte(constants, p_net, mc_folder):
     set_publication_plot_style()
 
     # Create a figure
-    fig = plt.figure(figsize=(10, 8))
-    ax = fig.add_subplot(111, projection='3d')
+    fig = plt.figure(figsize=(8, 6), facecolor='black')
+    ax = fig.add_subplot(111, projection='3d', facecolor='black')
+    ax.xaxis.pane.set_facecolor('black')
+    ax.yaxis.pane.set_facecolor('black')
+    ax.zaxis.pane.set_facecolor('black')
+    ax.xaxis.line.set_color('white')
+    ax.yaxis.line.set_color('white')
+    ax.zaxis.line.set_color('white')
+    ax.tick_params(axis='x', colors='white')
+    ax.tick_params(axis='y', colors='white')
+    ax.tick_params(axis='z', colors='white')
 
     for t_prime in constants.T_PRIME_SPAN:
         if(t_prime < constants.T_PRIME_SPAN[3] or t_prime > constants.T_PRIME_SPAN[3]):
@@ -313,22 +324,69 @@ def check_pdfnn_cartesian_wrt_monte(constants, p_net, mc_folder):
         grid_z_nn = griddata((x, y), z_nn, (grid_x, grid_y), method='cubic')
         grid_z_mo = griddata((x, y), z_mo, (grid_x, grid_y), method='cubic')
 
-        if(t_prime == 0.0):
-            surf1 = ax.plot_surface(grid_x, grid_y, grid_z_nn, color="none", rstride=3, cstride=3, edgecolor='red',  linewidth=0.5, linestyle="--", label="NN")
-            surf2 = ax.plot_surface(grid_x, grid_y, grid_z_mo, color="none", rstride=3, cstride=3, edgecolor='blue', linewidth=0.5, label="Monte")
-        else:
-            surf1 = ax.plot_surface(grid_x, grid_y, grid_z_nn, color="none", rstride=3, cstride=3, edgecolor='black',  
-                                    linewidth=1.0, linestyle="--", label=r"MC $p(x,y, t=0.12T)$")
-            surf2 = ax.plot_surface(grid_x, grid_y, grid_z_mo, cmap=cm.viridis, rstride=3, cstride=3, edgecolor=None, 
-                                    label=r"PINN $\hat{p}(x,y, t=0.12T)$")
-        ax.view_init(30, -52)
+        surf1 = ax.plot_surface(grid_x, grid_y, grid_z_nn, color="none", rstride=3, cstride=3, 
+                                edgecolor='white',  
+                                linewidth=0.5, linestyle="-", 
+                                label=r"MC $p(x,y)$"+", t={:.3f}T".format(t_prime))
+        surf2 = ax.plot_surface(grid_x, grid_y, grid_z_mo, cmap=cm.viridis, rstride=3, cstride=3, edgecolor=None, 
+                                label=r"PINN $\hat{p}(x,y)$" + ", t={:.3f}T".format(t_prime))
+
+        # # 2) project the NN surface down onto the floor
+        # ax.contourf(
+        #     grid_x, grid_y, grid_z_nn,
+        #     zdir='x',                
+        #     offset=grid_x.min(),            
+        #     alpha=1.0,           
+        # )
+        # X_off = np.full_like(grid_x, grid_x.min())   # same shape as grid_x
+        # # ax.plot_wireframe(
+        # #     X_off,          # constant‐x plane
+        # #     grid_y, 
+        # #     grid_z_mo,
+        # #     rstride=3, 
+        # #     cstride=3,
+        # #     color='white',
+        # #     linewidth=0.5,
+        # #     linestyle='solid'
+        # # )
+        # ax.plot_wireframe(
+        #     X_off,          # constant‐x plane
+        #     grid_y, 
+        #     grid_z_nn,
+        #     rstride=3, 
+        #     cstride=3,
+        #     color='blue',
+        #     linewidth=0.5,
+        #     linestyle='solid'
+        # )
+
+        # ax.contourf(
+        #     grid_x, grid_y, grid_z_nn,
+        #     zdir='y',                # drop along the z‐axis
+        #     offset=grid_y.max(),            # onto the z=z_min plane
+        #     cmap=cm.viridis,  
+        #     alpha=.7,           # or any colormap you like
+        # )
+        # Y_off = np.full_like(grid_y, grid_y.max())   # same shape as grid_x
+        # ax.plot_wireframe(
+        #     grid_x,          # constant‐x plane
+        #     Y_off, 
+        #     grid_z_mo,
+        #     rstride=3, 
+        #     cstride=3,
+        #     color='white',
+        #     linewidth=0.5,
+        #     linestyle='solid'
+        # )
+
+        ax.view_init(25, -40)
         ax.legend()
-        ax.set_xlabel('\n X, m')
-        ax.set_ylabel('\n Y, m')
-        ax.set_zlabel('\n PDF Value')
+        ax.set_xlabel('\n X, m', color='white')
+        ax.set_ylabel('\n Y, m', color='white')
+        ax.set_zlabel('\n PDF Value', color='white')
         plt.tight_layout(pad=0.1)
-        fig.savefig("figs/case2_pinn_vs_monte_t{:.3f}.pdf".format(t_prime), format='pdf'); plt.close()
-        # plt.show()
+        # fig.savefig("figs/case2_pinn_vs_monte_t{:.3f}.pdf".format(t_prime), format='pdf'); plt.close()
+        plt.show()
 
 
 def visual_phat_trainings(constants, p_net, data_foler, save_plots=False, save_plot_path=None):
@@ -526,7 +584,7 @@ def visual_e1hat_training(constants, networks, data_foler, save_plot_path=None):
                     ha='left', va='top', color='black', fontsize=18,
                     bbox=dict(facecolor='white', edgecolor='black', boxstyle='round,pad=0.2'))
         axs[i].yaxis.set_major_formatter(mticker.FormatStrFormatter('%.2f'))
-        axs[i].set_ylim([-1.5*B1, 1.5*B1])
+        # axs[i].set_ylim([-1.5*B1, 1.5*B1])
         # ymin, ymax = axs[i].get_ylim()
         # print(f"Subplot {i}: ymin = {ymin}, ymax = {ymax}")
 
@@ -664,18 +722,29 @@ def plot_app1(target, save_plot_path=None):
 
         elif(target == "tar2"):
             pr_mcs = np.load(parent_folder+"mc.npy")
-            pr_nn_data_labels = [parent_folder+"ni_nres50.npy", 
+            pr_nn_data_labels = [
+                                parent_folder+"est_nres50.npy", 
+                                parent_folder+"ni_nres50.npy", 
                                 parent_folder+"lp_nres50.npy", 
-                                parent_folder+"fo_gmmx64_nres50_20k.npy"
+                                parent_folder+"fo_gmmx16_nres50_100k.npy",
+                                parent_folder+"fo_gmmx32_nres50_100k.npy",
+                                parent_folder+"fo_gmmx48_nres50_100k.npy",
+                                parent_folder+"fo_gmmx64_nres50_100k.npy",
+                                parent_folder+"fo_gmmx80_nres50_100k.npy",
                                 ]
             plot_labels = [
-                        r"NI($\hat{p},B_1,50$)", 
-                        r"LP($\hat{p},B_1,50$)", 
-                        r"FO($\hat{p},B_1,GMMx64$)",
+                        r"Only $\hat{p}$",
+                        r"NI$_{50}$", 
+                        r"LP$_{50}$", 
+                        r"FO$_{16}$",
+                        r"FO$_{32}$",
+                        r"FO$_{48}$",
+                        r"FO$_{64}$",
+                        r"FO$_{80}$",
                         ]
-            plot_fills  = [True, True, True, True, True, True]
-            plot_style =  ["-", "-", "-", "-", "-", "-"]
-            marker = [">", "d", ""]
+            plot_fills  = [False, False, False, False, False, False, False, False]
+            plot_style =  ["--", "-", "-", "-", "-", "-", "-", "-"]
+            marker = ["", ">", "d", "", "", "", "", ""]
         else:
             raise("this target is not runned")
         return pr_mcs, pr_nn_data_labels, plot_labels, plot_fills, plot_style, marker
@@ -687,12 +756,12 @@ def plot_app1(target, save_plot_path=None):
         pr_nn_data.append(np.load(pr_nn_data_labels[j]))
 
     fig = plt.figure(figsize=(8,6))
-    colors = sns.color_palette("husl", len(pr_nn_data_labels))
+    colors = sns.color_palette("husl", len(pr_nn_data_labels)+1)
 
-    t_span = pr_mcs[:,0]
-    pr = pr_mcs[:,-1] # should change back to pr = pr_mcs[:,j+1] 
+    t_span_mc = pr_mcs[:,0]
+    pr = pr_mcs[:,-1]
     mask = ~np.isnan(pr)
-    plt.plot(t_span[mask], pr[mask], color="black", linestyle="", marker="o", markersize=4, 
+    plt.plot(t_span_mc[mask], pr[mask], color="black", linestyle="", marker="o", markersize=4, 
              label=r"$\mathbb{P}$ by MC")
     print("[check] Prob. by MC (time, Prob., Prob.)")
     print(np.round(pr_mcs,4))
@@ -706,29 +775,64 @@ def plot_app1(target, save_plot_path=None):
                  linestyle=plot_style[j], 
                  linewidth = 1.5,
                  marker=marker[j], label=plot_labels[j])
-        if(plot_fills[j]): 
-            plt.fill_between(t_span, y1=0.0*t_span, y2=pr_nn_data_i[:,1],
-                             color=colors[j], edgecolor="none", alpha=0.1)
+        # if(plot_fills[j]): 
+        #     plt.fill_between(t_span, y1=0.0*t_span, y2=pr_nn_data_i[:,1],
+        #                      color=colors[j], edgecolor="none", alpha=0.1)
 
-    plt.grid(True)
+    # plt.grid(True)
     plt.ylabel(r"$\mathbb{P}(X'_{tar})$")
     plt.xlabel("t")
-    plt.legend(loc="upper right", ncol=2)
-    plt.ylim([-0.05, 1.2])
-    # plt.ylim([-0.01, 0.1])
-    # Get current axes, and then obtain and reformat the xticks.
-    plt.tight_layout(pad=0.2)
-    # Define the tick positions.
+    plt.legend(loc="upper right", ncol=3)
+    plt.xlim([0.0, 0.2])
+    plt.ylim([0.0, 1.2])
     ticks = [0.0, 0.04, 0.08, 0.12, 0.16, 0.20]
-    # Create corresponding labels with "T" appended.
     tick_labels = [f"{tick:.2f}T" for tick in ticks]
-
-    # Get the current axis.
     ax = plt.gca()
-    # Set the tick positions.
     ax.set_xticks(ticks)
-    # Set the tick labels.
     ax.set_xticklabels(tick_labels)
+
+    # create the inset axes in the lower-right corner
+    ax = plt.gca()
+    # 1) draw a red rectangle on the main plot showing the zoom window
+    zoom_rect = Rectangle((0.03, 0.0),        # lower-left corner
+                        0.07-0.03,          # width
+                        0.04-0.0,           # height
+                        linewidth=2.0,
+                        edgecolor='yellow',
+                        facecolor='none',
+                        linestyle='--')
+    ax.add_patch(zoom_rect)
+
+    # 2) create the inset as before
+    axins = inset_axes(ax,
+                    width="80%", 
+                    height="65%", 
+                    loc="lower right",
+                    bbox_to_anchor=(0.35, 0.1, 0.65, 0.90),
+                    bbox_transform=ax.transAxes)
+    # re-plot into the inset
+    axins.plot(t_span_mc[mask], pr[mask], color="black", linestyle="", marker="o", markersize=4)
+    for j in range(len(pr_nn_data_labels)):
+        data = pr_nn_data[j]
+        axins.plot(data[:,0], data[:,1],
+                color=colors[j],
+                linestyle=plot_style[j],
+                linewidth=1.5,
+                marker=marker[j])
+        if plot_fills[j]:
+            axins.fill_between(data[:,0], 0, data[:,1], color=colors[j], alpha=0.1)
+    # set zoom limits
+    axins.set_xlim(0.03, 0.07)
+    axins.set_ylim(-0.001, 0.04)
+    axins.grid(True)
+    # 3) make the inset’s border bold and red
+    for spine in axins.spines.values():
+        spine.set_edgecolor('yellow')
+        spine.set_linewidth(2.0)
+    # draw connector lines (you can also switch these to red if you like)
+    mark_inset(ax, axins, loc1=2, loc2=4, fc="none", ec="0.5")
+
+    plt.tight_layout(pad=0.2)
     if(save_plot_path is not None):
         print("Save plot to: ", save_plot_path)
         fig.savefig(save_plot_path+".pdf", format='pdf')
@@ -987,7 +1091,64 @@ def plot_target_volume(ax, target_r, target_ph, z_max, grid_resolution=30,
     return surfaces
 
 
-def plot_pdf_gmm_wrt_pinn(constants, p_net, p_gmm, target_r, target_phi, t):
+def densify(V, N_degree=1):
+    """
+    Given a 1D array V of length N, returns an array of length 2N−1
+    with V’s entries interleaved with the midpoints of each adjacent pair.
+    """
+    V = np.asarray(V, dtype=float)
+
+    for i in range(N_degree):
+        N = V.shape[0]
+        # new length = original + (N−1) midpoints
+        new_len = 2*N - 1
+        
+        new_V = np.empty(new_len, dtype=V.dtype)
+        # place original values at even indices
+        new_V[0::2] = V
+        # compute midpoints and place at odd indices
+        new_V[1::2] = (V[:-1] + V[1:]) / 2.0
+        V = new_V
+
+    return V
+
+
+def marginal_gmm_in_2d(X, Y, p_gmm):
+    w_np, m_np, cov_np = p_gmm.get_gmm_paramters()
+    K, D = m_np.shape
+
+    # 2) flatten grid, build full-D evaluation points
+    M, N = X.shape
+    fixed_vals = None 
+    pts12 = np.stack([X.ravel(), Y.ravel()], axis=1)  # [M*N, 2]
+    if fixed_vals is None:
+        fixed_vals = np.zeros(D - 2, dtype=float)
+    else:
+        fixed_vals = np.asarray(fixed_vals, dtype=float)
+        assert fixed_vals.shape == (D - 2,)
+    # tiled [M*N, D-2]
+    pts_rest = np.tile(fixed_vals[None, :], (M*N, 1))
+    pts_full = np.concatenate([pts12, pts_rest], axis=1)  # [M*N, D]
+    # 3) define a helper for 2-D diagonal‐Gaussian PDF
+    def gaussian2d_pdf(xy, mu, var):
+        # xy: [P,2], mu: [2,], var: [2,]
+        diff = xy - mu[None, :]
+        inv_var = 1.0 / var[None, :]
+        exp_term = -0.5 * np.sum(diff * diff * inv_var, axis=1)
+        norm = 1.0 / (2 * np.pi * np.sqrt(var[0] * var[1]))
+        return norm * np.exp(exp_term)
+    # 4) accumulate weighted marginals
+    pdf_vals = np.zeros(M * N, dtype=float)
+    for k in range(K):
+        mu_k = m_np[k, :2]
+        var_k = cov_np[k, :2]
+        pdf_k = gaussian2d_pdf(pts12, mu_k, var_k)
+        pdf_vals += w_np[k] * pdf_k
+    Z = pdf_vals.reshape(M, N)
+    return Z
+
+
+def plot_pdf_gmm_wrt_pinn(constants, p_net, p_gmm, target_r, target_phi, t, save_plot_path=None):
     set_publication_plot_style()
     # Create a figure
     fig = plt.figure(figsize=(10, 8))
@@ -1003,36 +1164,50 @@ def plot_pdf_gmm_wrt_pinn(constants, p_net, p_gmm, target_r, target_phi, t):
     grid_points = np.vstack([x1_grid.ravel(), x2_grid.ravel(), x3_grid.ravel(), x4_grid.ravel()]).T
     grid_points_tensor = torch.tensor(grid_points, dtype=torch.float32, requires_grad=False)
     t_tensor = (torch.ones(len(grid_points_tensor), 1, dtype=torch.float32) * t)
-    pdf_pinn = p_net(grid_points_tensor, t_tensor).detach().numpy().reshape(x1_grid.shape)
-    if(p_gmm is not None):
-        pdf_gmm = p_gmm(grid_points_tensor).detach().numpy().reshape(x1_grid.shape)
-
     dx1 = x1s[1] - x1s[0] # dr'
     dx2 = x2s[1] - x2s[0] # dphi'
     dx3 = x3s[1] - x3s[0]
     dx4 = x4s[1] - x4s[0]
+    with torch.no_grad():
+        pdf_pinn = p_net(grid_points_tensor, t_tensor).detach().numpy().reshape(x1_grid.shape)
 
     # marginalize to spherical position (r, phi)
-    num_stride = 2
-    pdf_pinn_marginal =  np.sum(pdf_pinn, axis=(2,3)) * dx3 * dx4
-    if(p_gmm is not None):
-        pdf_gmm_marginal =  np.sum(pdf_gmm, axis=(2,3)) * dx3 * dx4
     X, Y =  np.meshgrid(x1s, x2s, indexing="ij")
-    surf1 = ax.plot_surface(X, Y, pdf_pinn_marginal, 
-                            color="none", rstride=num_stride, cstride=num_stride, edgecolor='black',  
-                            linewidth=0.8, linestyle="-", label="PINN")
+    num_stride = 3
+    pdf_pinn_marginal =  np.sum(pdf_pinn, axis=(2,3)) * dx3 * dx4
+    surf1 = ax.plot_surface(
+        X, Y, pdf_pinn_marginal,
+        rstride=num_stride,
+        cstride=num_stride,
+        # cmap=cm.Blues,        # choose your colormap
+        linewidth=0.5,            # no grid lines
+        antialiased=True,
+        edgecolor='blue', 
+        facecolor='blue', 
+        alpha=0.1,
+        label=r"PINN $\hat{p}$"
+    )
+ 
     if(p_gmm is not None):
+        N_dense = 1
+        X_dense, Y_dense = np.meshgrid(densify(x1s, N_degree=N_dense), 
+                                       densify(x2s, N_degree=N_dense), indexing="ij")
+        Z = marginal_gmm_in_2d(X_dense, Y_dense, p_gmm)
+        # pdf_gmm = p_gmm(grid_points_tensor).detach().numpy().reshape(x1_grid.shape)
+        # pdf_gmm_marginal =  np.sum(pdf_gmm, axis=(2,3)) * dx3 * dx4
         surf2 = ax.plot_surface(
-            X, Y, pdf_gmm_marginal,
+            X_dense, Y_dense, Z,
             rstride=num_stride,
             cstride=num_stride,
-            cmap=cm.viridis,        # choose your colormap
+            # cmap=cm.Greens,        # choose your colormap
             linewidth=0.5,            # no grid lines
             antialiased=True,
-            edgecolor='white',  
-            alpha=0.6,
-            label="GMM"
+            edgecolor='green',  
+            facecolor='green',
+            alpha=0.1,
+            label=r"FO $\phi$"
         )
+
     # get normalized target bound
     r_bounds = target_r/constants.R    # [r_min, r_max]
     phi_bounds = (target_phi-constants.W*constants.T*t)/constants.PHI  # [phi_min, phi_max]
@@ -1053,5 +1228,11 @@ def plot_pdf_gmm_wrt_pinn(constants, p_net, p_gmm, target_r, target_phi, t):
     ax.set_xlabel(r"$r'$")
     ax.set_ylabel(r"$\phi'$")
     ax.set_zlabel('PDF Value')
-    ax.set_title('3D Surface Plot of PDF at t= {:.3f}'.format(t))
-    plt.show()
+    # ax.set_title('3D Surface Plot of PDF at t= {:.3f}'.format(t))
+    ax.view_init(33, -122)
+    plt.tight_layout(pad=0.1)
+    if(save_plot_path is None):
+        plt.show()
+    else:
+        fig.savefig(save_plot_path+".pdf", format='pdf'); plt.close()
+   

@@ -3,7 +3,7 @@ import numpy as np
 from .helpers import *
 
 
-def train_model(problem, model, num_iterations=1000, batch_size=512, device=torch.device("cpu")):
+def train_model(problem, model, num_iterations=1000, batch_size=512, grad_threshold=1e-3, device=torch.device("cpu")):
     # --- Extract problem ----
     problem['p_net'], _, _ = problem['networks']
     target_bounds = problem["target_bounds"]
@@ -11,65 +11,116 @@ def train_model(problem, model, num_iterations=1000, batch_size=512, device=torc
     target_bounds_tensor = torch.tensor(target_bounds, dtype=dtype)
 
     # --- Set optimizer ---
-    optimizer = torch.optim.Adam(model.parameters(), lr=1e-2)
+    optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
     scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=1000, gamma=0.9)
     
     # --- Select deterministic samples over domain and target ---
     x_dom, p0_dom, x_remains, p0_remains = get_samples_determin(problem, model, batch_size)
 
     # --- Run ---
+    # mu           = torch.tensor(0.0, device=device)   # dual variable
+    mu = 1000.0
+    # rho          = 10.0                               # penalty weight
+    best_model_state = None
     best_loss = np.inf
-    increment = 0.01
+    increment = 0.001 # 0.01
+    patient = 0.0
     for it in range(num_iterations):
         optimizer.zero_grad()
-            
         # --- Augment samples with random points --- 
         x_dom_train, p0_dom_train = aug_samples_random(problem, model, x_dom, p0_dom, batch_size)
 
-        # --- loss -- 
-        loss_hc, vio_percent = loss_hardconstraint(problem, model, x_dom_train, p0_dom_train)
-        
+        # --- hard constraint loss -- 
+        loss_hc, vio_percent, _x_vio_topk, _p0_vio_topk = loss_hardconstraint(problem, model, x_dom_train, p0_dom_train)
+        # if(vio_percent > 0.0 and best_model_state is not None):
+        #     x_dom = torch.cat((x_dom, _x_vio_topk), dim=0)
+        #     p0_dom = torch.cat((p0_dom, _p0_vio_topk), dim=0)
+        #     print("[check] after adding loss_hc violation:", x_dom.shape[0], x_remains.shape[0])
+
         Pr = model.region_prob(target_bounds_tensor)
-        total_loss = loss_hc - Pr
+        loss_obj               = -Pr   # we *minimize* −Pr to *maximize* Pr
+
+        # 3) augmented Lagrangian
+        total_loss = (
+            loss_obj
+            + mu * loss_hc
+            # + 0.5 * rho * loss_hc.pow(2)
+        )
+        total_loss.backward(retain_graph=True)
+        patient += 1
+        
+        # --- Early stopping ---
+        # gn = get_grad_norm(model)
+        # if gn < grad_threshold:
+        #     if(best_model_state is not None):
+        #         print(f"[info] early stopping at iter {it}, grad_norm={gn:.2e} < {grad_threshold:.2e}")
+        #         break
+        if patient > 20000:
+            if(best_model_state is not None):
+                print(f"[info] early stoppint at iter {it}, exceeds patient")
+                break
 
         # --- Print progress ---
-        if it % int(num_iterations/100) == 0:
+        if it % int(num_iterations/50) == 0:
             print(f"Iteration {it:4d}, loss: {total_loss.item()}, loss hc: {loss_hc.item()}, Pr: {Pr.item()}")
             print(f"   violation percent: {vio_percent:.4f}%")
+            print(f"   mu: {mu:.4f}")
+            # print(f"   grad_norm={gn:.2e}, {grad_threshold:.2e}")
 
         # --- Update the best model ---
-        if(total_loss.item() < best_loss*(1.0+increment) and vio_percent <= 0.0):
+        if(total_loss.item() < best_loss-increment and vio_percent <= 0.0):
             # --- Augment by checking violation on grid ---
             _x_vio, _p0_vio, x_remains, p0_remains = aug_samples_violate(
                 problem, model, x_remains, p0_remains, batch_size)
-            
-            # --- Scenario-based Approach vertification ---
-            _x_rand, _p0_rand = get_samples_random(problem, 10000)
-            _, vio_rand_hc_check = loss_hardconstraint(problem, model, _x_rand, _p0_rand)
-
-            if(_x_vio is None and vio_rand_hc_check <= 0.0):    
-                best_model_state = {k: v.cpu().clone() for k, v in model.state_dict().items()}
-                best_loss = total_loss.item()
-                # if it % int(num_iterations/100) == 0:
-                if(True):
-                    print(f"[Best] Iteration {it:4d}, loss: {total_loss.item()}, {loss_hc.item()}")
-                    print(f"   violation percent: {vio_percent:.4f}%")
-                    print(f"   Pr: {Pr:.4f}")
-                    # print(model.get_gmm_paramters())
-            # --- If exists violation on grids, add it to deterministic samples ---
-            elif (_x_vio is not None):
+            # if exists violation on grids, add it to deterministic samples ---
+            if(_x_vio is not None):
                 x_dom   = torch.cat([x_dom,   _x_vio], dim=0)         
                 p0_dom  = torch.cat([p0_dom, _p0_vio], dim=0)
-                print("[check] sample size:", x_dom.shape[0], x_remains.shape[0])
-        total_loss.backward(retain_graph=True)
+                print("[check] after grid aug. sample size:", x_dom.shape[0], x_remains.shape[0])
+            else:
+                # --- Scenario-based Approach vertification ---
+                _x_rand, _p0_rand = get_samples_random(problem, 80000) #10000
+                _, vio_rand_hc_check, _x_vio_topk, _p0_vio_topk = loss_hardconstraint(problem, model, _x_rand, _p0_rand)
+                # [testing...] --- RAR ---
+                print("[info] scenaro-based checking")
+                if(vio_rand_hc_check > 0.0):
+                    x_dom = torch.cat((x_dom, _x_vio_topk), dim=0)
+                    p0_dom = torch.cat((p0_dom, _p0_vio_topk), dim=0)
+                    print("[check] after rand aug. sample size:", x_dom.shape[0], x_remains.shape[0])
+                else:
+                    best_model_state = {k: v.cpu().clone() for k, v in model.state_dict().items()}
+                    best_loss = total_loss.item()
+                    ws, _, _ = model.get_gmm_paramters()
+                    if(True):
+                        print(f"[Best] Iteration {it:4d}, loss: {total_loss.item()}, {loss_hc.item()}")
+                        print(f"   violation percent: {vio_percent:.4f}%")
+                        print(f"   Pr: {Pr:.4f}")
+                        print(ws)
+                        patient = 0
         optimizer.step()
         scheduler.step()
+        # # 5) dual update: μ ← max(0, μ + ρ · loss_hc)
+        # with torch.no_grad():
+        #     mu.add_(rho * loss_hc)
+        #     mu.clamp_(min=0.0)
             
     # --- Return best model ---
     if best_model_state is not None:
         model.load_state_dict(best_model_state)
         print(f"Returning best model with total loss: {best_loss}")
-    return model
+        return model
+    else:
+        return None
+
+
+def get_grad_norm(model):
+    grad_l2_norm = torch.sqrt(
+        sum(p.grad.detach().pow(2).sum()
+            for p in ([model.logits] if hasattr(model, 'logits') else [])
+            + [model.raw_weights, model.means]
+        )
+    )
+    return grad_l2_norm.item()
 
 
 def get_samples_determin(problem, model, batch_size):
@@ -235,15 +286,22 @@ def loss_hardconstraint(problem, model, x_dom, p0_dom):
     hc = (p_dom >= (p0_dom - B)) & (p_dom <= (p0_dom + B))
     violation_mask = ~hc  # True for datapoints that do NOT satisfy the constraint
     vio_percent = 100.0*(violation_mask.sum()/p0_dom.shape[0])
-
     # loss_hc = torch.relu(p_dom - (p0_dom + B)).sum() + \
-    #           torch.relu(p0_dom - B - p_dom).sum()
+    #           torch.relu((p0_dom - B) - p_dom).sum()
     # loss_hc *= domain_V
     if(sum(violation_mask) > 0):
-        loss_hc = torch.mean(0.5*(p_dom[violation_mask] - p0_dom[violation_mask]) ** 2)*domain_V
+        # loss_hc = torch.mean(0.5*(p_dom[violation_mask] - p0_dom[violation_mask]) ** 2)*domain_V
+        viol_mag = torch.relu((p_dom - p0_dom).abs() - B)
+        _, max_index = torch.topk(torch.abs(viol_mag.squeeze()), 16)
+        _x_top_vio = x_dom[max_index, :].clone()
+        _p0_top_vio = p0_dom[max_index].clone()
     else:
         loss_hc = torch.zeros(1)
-
+        _x_top_vio = None
+        _p0_top_vio = None
+    loss_hc = torch.sum(torch.relu(p_dom - (p0_dom + B))) + torch.sum(torch.relu((p0_dom - B) - p_dom))
+    # loss_hc = torch.sum((torch.relu((p_dom - (p0_dom+B)).abs() - B))**2)*domain_V
+    
     # --- maximize prob. over target loss ---
     # p_tar = model(x_tar).view(-1,)
     # target_mass_estimate = torch.mean(p_tar)*target_V
@@ -251,4 +309,5 @@ def loss_hardconstraint(problem, model, x_dom, p0_dom):
     # loss_tar = -integral_torchgmm(model.get_gmm_paramters(), problem['target_bounds'])
     # --- Combine loss and optimize ---
     # total_loss = loss_hc + loss_tar*1e-1
-    return loss_hc, vio_percent
+
+    return loss_hc, vio_percent, _x_top_vio, _p0_top_vio

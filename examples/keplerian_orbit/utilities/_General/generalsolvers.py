@@ -1,6 +1,6 @@
 import numpy as np
 import cvxpy as cp
-
+import matplotlib.pyplot as plt
 
 def solve_numer_integral(problem):
     """
@@ -20,12 +20,14 @@ def solve_numer_integral(problem):
     Pr = 0.0
     for p in p0_inside:
         Pr += (p+B)*dV
+
     # 1 - integral outside target
     Pr_neg = 0.0
     for p in p0_outside:
         if((p-B) >= 0):
             Pr_neg += (p-B)*dV
     Pr_neg = 1 - Pr_neg
+    print(Pr, Pr_neg)
     Pr_opt = min(Pr, Pr_neg)
     print(" [Solved] time:{:.3f}, Pr_tar: {:.4f}".format(problem["time"], Pr_opt))
     return Pr_opt, None
@@ -52,7 +54,7 @@ def solve_estimate(problem):
     return Pr, None
 
 
-def solve_linearprogram(problem):
+def solve_linearprogram(problem, show_plots=False):
     """
     linear program 
     # NOTE: we assume that the discretization over state space is small enough such that
@@ -96,6 +98,17 @@ def solve_linearprogram(problem):
     deviation = np.abs(p_result - p0)
     np.testing.assert_array_less(deviation, B+delta)
     np.testing.assert_array_less(p_total, 1.0+delta)
+    if(show_plots):
+        plt.figure()
+        plt.plot(p0[:front_count]*dV, color="black", linestyle="--", label="PINN p")
+        plt.plot(p_ub[:front_count]*dV, color="red", linestyle="--", label="Error Bounds")
+        plt.plot(p_lb[:front_count]*dV, color="red", linestyle="--")
+        plt.plot(p_result[:front_count]*dV, color="blue", label="LP sol.")
+        plt.legend()
+        plt.xlabel("4D cell index")
+        plt.ylabel("p_i * dV")
+        plt.title(r"$\mathbb{P}^+ =$"+"{:.4f}".format(Pr))
+        plt.show()
     return Pr, None
 
     # --- Solving via cvxpy (Very slow) ---
