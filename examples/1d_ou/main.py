@@ -167,7 +167,6 @@ def pos_p_net_train(p_net, PATH, PATH_LOSS):
     # plot loss history
     loss_history = np.load(PATH_LOSS)
     min_loss = min(loss_history)
-    print(len(loss_history))
     plt.figure()
     plt.plot(np.arange(len(loss_history)), loss_history)
     plt.ylim([min_loss, 10*min_loss])
@@ -436,7 +435,7 @@ def plot_tight_error_bounds(p_net, e1_net):
         eB = np.round(eB,3)
         eL = 2*max(abs(e1_hat))
         eL = np.round(eL,3)
-        print("Error Bounds: tight, special", eB, eL)
+        print("Error Bounds: 2nd, 1st", eB, eL)
         if i == 0:
             axs[i].plot(x, e1, color=colors[i], linestyle="-", linewidth=1.0, label=r"$e_1$")
             axs[i].plot(x, e1_hat, linestyle="--", color = "red", linewidth=1.0, label=r"$\hat{e}_1$")
@@ -611,34 +610,7 @@ def plot_alphas(p_net, e1_net):
     y_2 = a2_list*(1+a2_list)
 
     plot_compare_error_bounds(t1s, eB_list, eS_list, e1_list)
-
     plot_conditions(t1s, a1_list, a2_list, 1, 1-a1_list, a2_list*(1+a2_list), a1_list**2)
-
-    # plot_dummy(t1s, eB_list, eS_list, e1_list)
-
-    # plt.figure(figsize=(6, 6))
-    # plt.plot(t1s, a1_list, color="black", linestyle="--", linewidth=1.0, label=r"$\alpha_1$")
-    # plt.legend(loc="upper right", framealpha=0.3, fontsize=26)
-    # plt.xlabel("t")
-    # plt.tight_layout()
-    # plt.savefig(FOLDER+'figs/error_and_conditions_2.pdf', format='pdf', dpi=300)
-    # plt.close()
-    # plt.figure(figsize=(6, 6))
-    # plt.plot(t1s, cond_1, color="red", linewidth=1.0, linestyle="-", label=r"$1-\alpha_1$")
-    # plt.plot(t1s, y_1, color="black", linewidth=1.0, linestyle="--", label=r"$\alpha_2$")
-    # plt.legend(loc="upper left", bbox_to_anchor=(0.4, 0.8), framealpha=0.3, fontsize=26)
-    # plt.xlabel("t")
-    # plt.tight_layout()
-    # plt.savefig(FOLDER+'figs/error_and_conditions_3.pdf', format='pdf', dpi=300)
-    # plt.close()
-    # plt.figure(figsize=(6, 6))
-    # plt.plot(t1s, cond_2, color="red", linewidth=1.0, linestyle="-", label=r"$\alpha_1^2$")
-    # plt.plot(t1s, y_2, color="black", linewidth=1.0, linestyle="--", label=r"$\alpha_2(1+\alpha_2)$")
-    # plt.legend(loc="upper right", framealpha=0.3, fontsize=26)
-    # plt.xlabel("t")
-    # plt.tight_layout()
-    # plt.savefig(FOLDER+'figs/error_and_conditions_4.pdf', format='pdf', dpi=300)
-    # plt.close()
 
 
 def plot_train_loss(path_1, path_2):
@@ -803,14 +775,10 @@ def plot_e1_surface(p_net, e1_net, num=100):
 
 def main():
     mse_cost_function = torch.nn.MSELoss() # Mean squared error
-
     p_net = Net().to(device)
     p_net.apply(init_weights)
     e1_net = E1Net().to(device)
     e1_net.apply(init_weights)
-
-    print(p_net)
-
     p_net.scale = get_p_normalize()
     optimizer = torch.optim.Adam(p_net.parameters())
     scheduler_p_model = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.95)
@@ -829,9 +797,8 @@ def main():
     plot_tight_error_bounds(p_net, e1_net)
     plot_train_loss(FOLDER+"output/p_net_train_loss.npy", FOLDER+"output/e1_net_train_loss.npy")
     plot_alphas(p_net, e1_net)
-    # plot_p_surface(p_net)
-    # plot_e1_surface(p_net, e1_net)
-    print("[complete 1d OU]")
+    plot_p_surface(p_net)
+    plot_e1_surface(p_net, e1_net)
 
 
 if __name__ == "__main__":
