@@ -697,7 +697,6 @@ def show_results(pnet, enet):
     plt.rcParams['font.size'] = 18
     x = np.load(DATA_FOLDER + datas[0] + "xsim.npy").reshape(-1,1)
     dx = x[1] - x[0]
-    print(x.shape)
     pt_x = Variable(torch.from_numpy(x).float(), requires_grad=True).to(device)
     limit_margin = 0.1
 
@@ -786,7 +785,7 @@ def show_results(pnet, enet):
                          color=palette[2], alpha=0.5, label=r"$B_1$")
         ax1.plot(x, p_gmm, color="blue", linewidth = 1.5, linestyle="--", label=r"$\tilde{p}_{GM}$")
         # ax1.plot(x[::6], p_gmm[::6], color=palette[4], linewidth = 0.0, linestyle="-", marker="x", markersize=8, label=r"$\tilde{p}_{GM}$")
-        print("[check] mean: ", np.sum(x*p_monte)*dx, np.sum(x*p_gmm)*dx)
+        # print("[check] mean: ", np.sum(x*p_monte)*dx, np.sum(x*p_gmm)*dx)
         if i == 0:
             ax1.legend(loc="upper right", ncol=2, fontsize=24)
         if i == 2:
@@ -826,15 +825,15 @@ def show_results(pnet, enet):
         # if i == 5:
         #     ax1 = axs[2,1]
         #     ax1.set_xlabel("x")
-        eL = 2.0 * np.max(np.abs(e1_hat))
-        eL = np.round(eL, 3)
+        B1 = 2.0 * np.max(np.abs(e1_hat))
+        B1 = np.round(B1, 3)
         alpha = np.max(np.abs(e1_true-e1_hat))/ np.max(np.abs(e1_hat))
         alpha = np.round(alpha, 3)
-        print("eL: ", np.round(eL, 3), "\t alpha: ", np.round(alpha,3))
+        print("B1: ", np.round(B1, 3), "\t alpha: ", np.round(alpha,3))
         ax1 = axs[i]
         ax1.plot(x, e1_true, "black", linewidth=1.0, label=r"$e_1$")
         ax1.plot(x, e1_hat,  "red", linewidth=1.0, linestyle="--", label=r"$\hat{e}_1$")
-        ax1.fill_between(x.reshape(-1), y1=0.0*p_hat.reshape(-1)+eL, y2=0.0*p_hat.reshape(-1)-eL, 
+        ax1.fill_between(x.reshape(-1), y1=0.0*p_hat.reshape(-1)+B1, y2=0.0*p_hat.reshape(-1)-B1, 
                          color="green", alpha=0.3, label=r"$e_S$")
         if i == 0:
             ax1.legend(loc="upper right")
@@ -844,7 +843,7 @@ def show_results(pnet, enet):
             ax1.set_xlabel("x")
 
         ax1.set_xlim([x_low, x_hig])
-        ax1.set_ylim(-(1.5*eL), 1.5*eL)
+        ax1.set_ylim(-(1.5*B1), 1.5*B1)
         # ax1.set_ylim(-(global_max), global_max)
         # ax1.grid(True, which='both', linestyle='-', linewidth=0.5)
         ax1.text(0.01, 0.98, r"$t:$ "+str(t1s[i]) + r", $\alpha_1:$ "+str(alpha), 
@@ -894,7 +893,6 @@ def show_results(pnet, enet):
     # # plt.savefig(FOLDER+"figs/enet_res.png")
     # fig.savefig(FOLDER+'figs/p_res.pdf', format='pdf', dpi=300)
     # plt.close()
-
     # global_max = float('-inf')
     # for i, (e1hat, eres, pres) in enumerate(zip(e1_hat_list, e_res_list, p_res_list)):
     #     max_value = max(np.max(np.abs(eres/enet.scale)), 0.0)**2
@@ -1305,11 +1303,11 @@ def main():
     show_results(p_model, e_model)
     # plot_a1_data()
     plot_p_surface(p_model)
-    # plot_pres_surface(p_model)
+    plot_pres_surface(p_model)
     plot_e1_surface(p_model, e_model)
-    # plot_e1res_surface(p_model, e_model)
-    # plot_train_loss(FOLDER+"output/p_net_train_loss.npy", 
-    #                FOLDER+"output/e1_net_train_loss.npy")
+    plot_e1res_surface(p_model, e_model)
+    plot_train_loss(FOLDER+"output/p_net_train_loss.npy", 
+                   FOLDER+"output/e1_net_train_loss.npy")
 
 
 if __name__ == "__main__":
