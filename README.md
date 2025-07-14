@@ -18,6 +18,13 @@ Follow these steps to set up your environment:
 2. **activate python virtual environment** run: source venv/bin/activate
 3. **install required packages** run: pip3 install -r requirements.txt
 
+## PDF Evolution in time with Error Bound
+1D Nonlinear example
+
+
+https://github.com/user-attachments/assets/bb7b200d-7ce6-4bec-9ca0-ec4c11409ec7
+
+
 ## Running Examples
 
 ### 1D OU process
