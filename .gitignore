@@ -1,3 +1,6 @@
 venv/
 .DS_Store
 test/.DS_Store
+__pycache__/
+__pycache__
+

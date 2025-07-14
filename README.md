@@ -1,6 +1,10 @@
-# PINN_PDE_ERROR
+# Error Bounds for Physics-Informed Neural Networks in Fokker-Planck PDEs
 
-Provide 5 examples of solving PDEs, as well as constructing the error bounds.
+Our recent research "[Error Bounds for Physics-Informed Neural Networks in Fokker-Planck PDEs](https://openreview.net/forum?id=qjzjZCLkZA)", explores solving the Fokker-Planck PDE.
+The Fokker-Planck PDE represents the time-evolving probability density function (PDF) of uncertain physical processes, modeled as stochastic differential equaitons (SDEs).
+
+We approximate the solution to Fokker-Planck PDE by physics-informed neural networks (PINNs) and construct tight error bounds.
+Here, we provide some small-scale examples.
 
 ## Prerequisites
 
@@ -78,6 +82,11 @@ The data (of the Monte-Carlo simulation for "true" solution) is in the folder: e
 - python main.py --train=0 (this will generate plots using pretrained models)
 - python main.py --train=1 (this will train the models and generate plots)
 
+example figure of the constructed time-evolving error bound
+
+<img src="examples/2d_duffing/exp/1/figs/2dduff_errorbound.png" width="500" />
+
+
 ### 1D Heat Equation
 The models are stored in the folder: examples/1d_heat/output/
 
@@ -87,6 +96,11 @@ The plots are saved in the folder: examples/1d_heat/figs/
 - python main.py (this will and generate plots using the pre-trained model)
 
 You can uncomment the train_p_net() and train_e1_net() in main to train new models.
+
+example figures of the PINN solution $\hat{u}$ and error $\hat{e}_1$ approximations
+
+<img src="examples/1d_heat/figs/1dheat_sol_surface.png" height="200" />
+<img src="examples/1d_heat/figs/1dheat_error_surface.png" height="200" />
 
 ### 3D, 7D, 10D Time-varying OU processes
 The models are stored in the folder: examples/10d_linear/exp/(3d_2,7d_2,10d_2)/output/
