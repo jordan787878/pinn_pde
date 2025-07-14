@@ -962,14 +962,11 @@ def main():
     if(TRAIN_FLAG):
         train_e1_net(e1_net, p_net, optimizer, scheduler, mse_cost_function, iterations=15005); print("e1_net train complete")
     e1_net = pos_e1_net_train(e1_net); e1_net.eval()
-    # check_e1nn_result(e1_net, p_net)
+    check_e1nn_result(e1_net, p_net)
 
-    # plot_train_loss(path_1="exp/1/output/p_net_train_loss.npy", path_2="exp/1/output/e1_net_train_loss.npy")
-    # show_p_net_results(p_net)
+    plot_train_loss(path_1="exp/1/output/p_net_train_loss.npy", path_2="exp/1/output/e1_net_train_loss.npy")
+    show_p_net_results(p_net)
     show_e1_net_results(p_net, e1_net)
-
-    
-
 
 
 if __name__ == "__main__":
