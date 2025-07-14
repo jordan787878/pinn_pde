@@ -631,7 +631,7 @@ def check_e1nn_result(e1_net, p_net):
         # compute p(true)
         start_time = time.time()
         pdf_true = constants.p_sol(grid_points, t)
-        print("N.I. time (sec): ", time.time() - start_time)
+        # print("N.I. time (sec): ", time.time() - start_time)
         # obtain pdf(nn)
         grid_points_tensor = torch.tensor(grid_points, dtype=torch.float32, requires_grad=False)
         t_tensor = torch.ones(len(grid_points_tensor), 1, dtype=torch.float32) * t

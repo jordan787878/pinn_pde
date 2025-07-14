@@ -662,71 +662,71 @@ def check_e1nn_result(e1_net, p_net):
         # fig.write_image(constants._FOLDER+'figs/p_t'+str(t)+'.pdf',
         #         width=600, height=600)
         
-        fig = go.Figure(data=go.Volume(
-                x=x1_grid.flatten(), y=x2_grid.flatten(), z=x3_grid.flatten(),
-                value= (pdf_nn.reshape(x1_grid.shape)).flatten(),
-                isomin=0.0,
-                isomax=2.0,
-                opacity=0.2 ,
-                surface_count=12,
-                coloraxis="coloraxis",
-                caps=dict(x_show=False, y_show=False, z_show=False),
-            )
-        )
-        fig.update_layout(      
-            width=600,        # pick whatever pixel dims you like
-            height=600,
-            autosize=False,
-            margin=dict(l=0, r=0, t=0, b=0),
+        # fig = go.Figure(data=go.Volume(
+        #         x=x1_grid.flatten(), y=x2_grid.flatten(), z=x3_grid.flatten(),
+        #         value= (pdf_nn.reshape(x1_grid.shape)).flatten(),
+        #         isomin=0.0,
+        #         isomax=2.0,
+        #         opacity=0.2 ,
+        #         surface_count=12,
+        #         coloraxis="coloraxis",
+        #         caps=dict(x_show=False, y_show=False, z_show=False),
+        #     )
+        # )
+        # fig.update_layout(      
+        #     width=600,        # pick whatever pixel dims you like
+        #     height=600,
+        #     autosize=False,
+        #     margin=dict(l=0, r=0, t=0, b=0),
 
-            # make sure the scene fills the full figure
-            scene=dict(
-                domain=dict(x=[0,1], y=[0,1]),
-                xaxis=dict(
-                    title=dict(text="x1", font=dict(size=20)),
-                    tickfont=dict(size=14)
-                ),
-                yaxis=dict(
-                    title=dict(text="x2", font=dict(size=20)),
-                    tickfont=dict(size=14)
-                ),
-                zaxis=dict(
-                    title=dict(text="x3", font=dict(size=20)),
-                    tickfont=dict(size=14)
-                ),
+        #     # make sure the scene fills the full figure
+        #     scene=dict(
+        #         domain=dict(x=[0,1], y=[0,1]),
+        #         xaxis=dict(
+        #             title=dict(text="x1", font=dict(size=20)),
+        #             tickfont=dict(size=14)
+        #         ),
+        #         yaxis=dict(
+        #             title=dict(text="x2", font=dict(size=20)),
+        #             tickfont=dict(size=14)
+        #         ),
+        #         zaxis=dict(
+        #             title=dict(text="x3", font=dict(size=20)),
+        #             tickfont=dict(size=14)
+        #         ),
 
-                camera=dict(
-                    eye=dict(x=-1.5, y=-1.5, z=1.5),
-                    ),
-            ),
-            coloraxis=dict(
-            colorscale="rainbow",  # Choose your desired colorscale
-            colorbar=dict(
-                x=0.9,  # Move colorbar towards the right
-                y=0.5,   # Center colorbar vertically
-                xanchor='left',  # Anchor colorbar to the left
-                yanchor='middle',  # Anchor colorbar to the middle
-                thickness=10,  # Reduce the thickness of the colorbar (default is 20)
-                tickfont=dict(size=16),  # Reduce font size of colorbar ticks
-                len=0.6,
-                )
-            ),
-        )
-        fig.update_layout(
-            font_family="Times New Roman",
-            title_font_family="Times New Roman",
-        )
-        fig.update_layout(
-            title={
-                'text': "<i>p&#770;</i>",
-                'font': {
-                    'size': 50,
-                }
-            },
-            title_y = 0.8
-        )
-        fig.write_image(constants._FOLDER+'figs/phat_t'+str(t)+'.pdf',
-                width=600, height=600)
+        #         camera=dict(
+        #             eye=dict(x=-1.5, y=-1.5, z=1.5),
+        #             ),
+        #     ),
+        #     coloraxis=dict(
+        #     colorscale="rainbow",  # Choose your desired colorscale
+        #     colorbar=dict(
+        #         x=0.9,  # Move colorbar towards the right
+        #         y=0.5,   # Center colorbar vertically
+        #         xanchor='left',  # Anchor colorbar to the left
+        #         yanchor='middle',  # Anchor colorbar to the middle
+        #         thickness=10,  # Reduce the thickness of the colorbar (default is 20)
+        #         tickfont=dict(size=16),  # Reduce font size of colorbar ticks
+        #         len=0.6,
+        #         )
+        #     ),
+        # )
+        # fig.update_layout(
+        #     font_family="Times New Roman",
+        #     title_font_family="Times New Roman",
+        # )
+        # fig.update_layout(
+        #     title={
+        #         'text': "<i>p&#770;</i>",
+        #         'font': {
+        #             'size': 50,
+        #         }
+        #     },
+        #     title_y = 0.8
+        # )
+        # fig.write_image(constants._FOLDER+'figs/phat_t'+str(t)+'.pdf',
+        #         width=600, height=600)
 
         # # 3D visualization (e1)
         # plot_max = np.max(np.abs(e1))
@@ -958,8 +958,7 @@ def main():
         train_e1_net(e1_net, p_net, optimizer, scheduler, mse_cost_function, iterations=5000); print("e1_net train complete")
     e1_net = pos_e1_net_train(e1_net); e1_net.eval()
     check_e1nn_result(e1_net, p_net)
-    
-    # plot_train_loss()
+    plot_train_loss()
 
 
 if __name__ == "__main__":

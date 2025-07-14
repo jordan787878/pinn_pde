@@ -537,7 +537,7 @@ def pos_e1_net_train(e1_net):
 
 def check_pnn_result(p_net):
     global constants
-    grid_points = constants.generate_random_samples(num_samples=1000000)
+    grid_points = constants.generate_random_samples(num_samples=10000000)
     for t in constants.T_SPAN:
         # print("[check] grid points shape type: ", grid_points.shape, grid_points.dtype)
         # compute p(true)
@@ -593,7 +593,7 @@ def check_e1nn_result(e1_net, p_net):
         # compute p(true)
         start_time = time.time()
         pdf_true = constants.p_sol(grid_points, t)
-        print("N.I. time (sec): ", time.time() - start_time)
+        # print("N.I. time (sec): ", time.time() - start_time)
         # obtain pdf(nn)
         grid_points_tensor = torch.tensor(grid_points, dtype=torch.float32, requires_grad=False)
         t_tensor = torch.ones(len(grid_points_tensor), 1, dtype=torch.float32) * t
@@ -680,7 +680,7 @@ def plot_train_loss():
 
 def get_e1init_max(p_net):
     global constants
-    grid_points = constants.generate_random_samples()
+    grid_points = constants.generate_random_samples(num_samples=10000000)
     t = constants.TI
     # print("[check] grid points shape type: ", grid_points.shape, grid_points.dtype)
     # compute p(true)
