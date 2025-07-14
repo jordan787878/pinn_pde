@@ -84,7 +84,7 @@ The data (of the Monte-Carlo simulation for "true" solution) is in the folder: e
 
 example figure of the constructed time-evolving error bound
 
-<img src="examples/2d_duffing/exp/1/figs/2dduff_errorbound.png" width="500" />
+<img src="examples/2d_duffing/exp/1/figs/2dduff_errorbound.png" width="700" />
 
 
 ### 1D Heat Equation
@@ -99,8 +99,7 @@ You can uncomment the train_p_net() and train_e1_net() in main to train new mode
 
 example figures of the PINN solution $\hat{u}$ and error $\hat{e}_1$ approximations
 
-<img src="examples/1d_heat/figs/1dheat_sol_surface.png" height="200" />
-<img src="examples/1d_heat/figs/1dheat_error_surface.png" height="200" />
+<img src="examples/1d_heat/figs/1dheat_sol_surface.png" height="300" /> <img src="examples/1d_heat/figs/1dheat_error_surface.png" height="300" />
 
 ### 3D, 7D, 10D Time-varying OU processes
 The models are stored in the folder: examples/10d_linear/exp/(3d_2,7d_2,10d_2)/output/
