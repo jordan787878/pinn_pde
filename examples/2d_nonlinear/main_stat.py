@@ -1340,10 +1340,10 @@ def main():
         train_e1_net(e1_net, optimizer, scheduler, mse_cost_function, p_net, max_abe_e1_ti, iterations=40000); print("e1_net train complete")
     e1_net = pos_e1_net_train(e1_net, PATH=FOLDER+"output/e1_net.pth", PATH_LOSS=FOLDER+"output/e1_net_train_loss.npy"); e1_net.eval()
     print("[load e1net model from: "+FOLDER+"output/e1_net.pth]")
-    # show_e1_net_results(p_net ,e1_net)
+    show_e1_net_results(p_net ,e1_net)
     show_table(p_net, e1_net)
-    # plot_train_loss(FOLDER+"output/p_net_train_loss.npy", FOLDER+"output/e1_net_train_loss.npy")
-    # plot_results_at_one_time(3.0, p_net, e1_net)
+    plot_train_loss(FOLDER+"output/p_net_train_loss.npy", FOLDER+"output/e1_net_train_loss.npy")
+    plot_results_at_one_time(3.0, p_net, e1_net)
     plot_paper(p_net, e1_net, t_eval=3.0)
 
     if(TRAIN_FLAG == False):
