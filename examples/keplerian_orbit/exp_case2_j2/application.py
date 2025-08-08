@@ -88,7 +88,7 @@ def main():
 
     global constants
     # --- Application ---
-    target = "tar2"
+    target = "tar1"
     options = {
         # solver 
                "target": target,
@@ -137,11 +137,12 @@ def main():
     options['t_span'] = np.arange(0.00, 0.08+dt, dt)
 
     # --- Run application ---
-    app1(constants, p_net, e1_net, e1_net, options)
+    # app1(constants, p_net, e1_net, e1_net, options)
 
     # --- Other Visualization ---
-    # exp_plot.visual_phat_trainings(constants, p_net, DATA_FOLDER, save_plots=False,
-    #                                save_plot_path=None)
+    exp_plot.visual_phat_trainings(constants, p_net, options["mc_folder"], 
+                                   save_plots=True, save_plot_path="figs/visual_mc_cartesian.pdf"
+                                   )
     # exp_plot.visual_e1hat_training(constants, (p_net, e1_net_seq1, e1_net_seq2), DATA_FOLDER)
     # exp_plot.plot_app1_onlymc(constants, "data/app1/tar1/pr_mcs.npy")
     # # plot_train_loss(E1NET_PATH_SEQ2)

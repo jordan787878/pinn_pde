@@ -416,10 +416,10 @@ def visual_phat_trainings(constants, p_net, data_foler, save_plots=False, save_p
     for t_prime in t_span:
     # for t_prime in np.linspace(constants.T_PRIME_SPAN[0], constants.T_PRIME_SPAN[-1], num=6):
         print("[test] pdf(nn) marginalized to xy at t'=", t_prime)
-        x1s = np.load(data_foler+"x1s.npy")
-        x2s = np.load(data_foler+"x2s.npy")
-        x3s = np.load(data_foler+"x3s.npy")
-        x4s = np.load(data_foler+"x4s.npy")
+        x1s = np.load("data/grids/x1s.npy")
+        x2s = np.load("data/grids/x2s.npy")
+        x3s = np.load("data/grids/x3s.npy")
+        x4s = np.load("data/grids/x4s.npy")
 
         # obtain pdf_nn on the domain
         x1_grid, x2_grid, x3_grid, x4_grid = np.meshgrid(x1s, x2s, x3s, x4s, indexing="ij") # the indexing is very important
@@ -490,18 +490,20 @@ def visual_phat_trainings(constants, p_net, data_foler, save_plots=False, save_p
             if(t_label in constants.T_PRIME_SPAN):
                 surf2 = ax.plot_wireframe(grid_x, grid_y, grid_z_mo, color="none", rstride=num_strides, cstride=num_strides, 
                                         edgecolor='white', linewidth=1.0, linestyle="-", label="MC")
+                # surf2 = ax.plot_surface(grid_x, grid_y, grid_z_mo, cmap='viridis', alpha=0.8, label="MC")
                 x_text = (grid_x.min() + grid_x.max()) / 2
                 y_text = (grid_y.min() + grid_y.max()) / 2
-                ax.text(x_text, y_text, 1.1*np.max(z_nn), f"t={t_label:.2f}", color="white", fontsize=14)
+                ax.text(x_text, y_text, 1.1*np.max(z_nn), f"t={t_label:.2f}T", color="white", fontsize=14)
 
         else:
             surf1 = ax.plot_surface(grid_x, grid_y, grid_z_nn, cmap='viridis', alpha=0.8)
             if(t_label in constants.T_PRIME_SPAN):
                 surf2 = ax.plot_wireframe(grid_x, grid_y, grid_z_mo, color="none", rstride=num_strides, cstride=num_strides, 
                                         edgecolor='white', linewidth=1.0, linestyle="-")
+                # surf2 = ax.plot_surface(grid_x, grid_y, grid_z_mo, cmap='viridis', alpha=0.8)
                 x_text = (grid_x.min() + grid_x.max()) / 2
                 y_text = (grid_y.min() + grid_y.max()) / 2
-                ax.text(x_text, y_text, 1.1*np.max(z_nn), f"t={t_label:.2f}", color="white", fontsize=14)
+                ax.text(x_text, y_text, 1.1*np.max(z_nn), f"t={t_label:.2f}T", color="white", fontsize=14)
         # fig.colorbar(surf, ax=ax, shrink=0.5, aspect=5)  # Optional: Add a color bar
     # Labels and title
     ax.legend()
@@ -761,8 +763,17 @@ def plot_app1(target, save_plot_path=None):
     t_span_mc = pr_mcs[:,0]
     pr = pr_mcs[:,-1]
     mask = ~np.isnan(pr)
-    plt.plot(t_span_mc[mask], pr[mask], color="black", linestyle="", marker="o", markersize=4, 
-             label=r"$\mathbb{P}$ by MC")
+    pr_err = 1.96*np.sqrt(pr*(1-pr)/(1E+8))
+    plt.errorbar(
+        t_span_mc[mask],
+        pr[mask],
+        yerr=pr_err[mask],
+        fmt='o',              # marker only, no connecting line
+        color='black',
+        markersize=4,
+        capsize=3,            # little horizontal caps on the error bars
+        label=r"$\mathbb{P}$ by MC"
+    )
     print("[check] Prob. by MC (time, Prob., Prob.)")
     print(np.round(pr_mcs,4))
 
@@ -791,46 +802,46 @@ def plot_app1(target, save_plot_path=None):
     ax.set_xticks(ticks)
     ax.set_xticklabels(tick_labels)
 
-    # create the inset axes in the lower-right corner
-    ax = plt.gca()
-    # 1) draw a red rectangle on the main plot showing the zoom window
-    zoom_rect = Rectangle((0.03, 0.0),        # lower-left corner
-                        0.07-0.03,          # width
-                        0.04-0.0,           # height
-                        linewidth=2.0,
-                        edgecolor='yellow',
-                        facecolor='none',
-                        linestyle='--')
-    ax.add_patch(zoom_rect)
+    # # create the inset axes in the lower-right corner
+    # ax = plt.gca()
+    # # 1) draw a red rectangle on the main plot showing the zoom window
+    # zoom_rect = Rectangle((0.03, 0.0),        # lower-left corner
+    #                     0.07-0.03,          # width
+    #                     0.04-0.0,           # height
+    #                     linewidth=2.0,
+    #                     edgecolor='yellow',
+    #                     facecolor='none',
+    #                     linestyle='--')
+    # ax.add_patch(zoom_rect)
 
-    # 2) create the inset as before
-    axins = inset_axes(ax,
-                    width="80%", 
-                    height="65%", 
-                    loc="lower right",
-                    bbox_to_anchor=(0.35, 0.1, 0.65, 0.90),
-                    bbox_transform=ax.transAxes)
-    # re-plot into the inset
-    axins.plot(t_span_mc[mask], pr[mask], color="black", linestyle="", marker="o", markersize=4)
-    for j in range(len(pr_nn_data_labels)):
-        data = pr_nn_data[j]
-        axins.plot(data[:,0], data[:,1],
-                color=colors[j],
-                linestyle=plot_style[j],
-                linewidth=1.5,
-                marker=marker[j])
-        if plot_fills[j]:
-            axins.fill_between(data[:,0], 0, data[:,1], color=colors[j], alpha=0.1)
-    # set zoom limits
-    axins.set_xlim(0.03, 0.07)
-    axins.set_ylim(-0.001, 0.04)
-    axins.grid(True)
-    # 3) make the inset’s border bold and red
-    for spine in axins.spines.values():
-        spine.set_edgecolor('yellow')
-        spine.set_linewidth(2.0)
-    # draw connector lines (you can also switch these to red if you like)
-    mark_inset(ax, axins, loc1=2, loc2=4, fc="none", ec="0.5")
+    # # 2) create the inset as before
+    # axins = inset_axes(ax,
+    #                 width="80%", 
+    #                 height="65%", 
+    #                 loc="lower right",
+    #                 bbox_to_anchor=(0.35, 0.1, 0.65, 0.90),
+    #                 bbox_transform=ax.transAxes)
+    # # re-plot into the inset
+    # axins.plot(t_span_mc[mask], pr[mask], color="black", linestyle="", marker="o", markersize=4)
+    # for j in range(len(pr_nn_data_labels)):
+    #     data = pr_nn_data[j]
+    #     axins.plot(data[:,0], data[:,1],
+    #             color=colors[j],
+    #             linestyle=plot_style[j],
+    #             linewidth=1.5,
+    #             marker=marker[j])
+    #     if plot_fills[j]:
+    #         axins.fill_between(data[:,0], 0, data[:,1], color=colors[j], alpha=0.1)
+    # # set zoom limits
+    # axins.set_xlim(0.03, 0.07)
+    # axins.set_ylim(-0.001, 0.04)
+    # axins.grid(True)
+    # # 3) make the inset’s border bold and red
+    # for spine in axins.spines.values():
+    #     spine.set_edgecolor('yellow')
+    #     spine.set_linewidth(2.0)
+    # # draw connector lines (you can also switch these to red if you like)
+    # mark_inset(ax, axins, loc1=2, loc2=4, fc="none", ec="0.5")
 
     plt.tight_layout(pad=0.2)
     if(save_plot_path is not None):
