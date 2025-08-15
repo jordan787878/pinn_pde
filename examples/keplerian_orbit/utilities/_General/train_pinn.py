@@ -6,7 +6,7 @@ import time
 device = "cpu"
 
 
-def train_pinn_sol_base(constants, p_net, configurations, iterations=50000, save_model=False):
+def train_pinn_sol_base(constants, p_net, configurations, iterations=50000, save_model=False, beta_incre=0.02):
     mse_cost_function = torch.nn.MSELoss()
     optimizer = torch.optim.Adam(p_net.parameters(), lr=1e-3)
     scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.95)
@@ -67,7 +67,7 @@ def train_pinn_sol_base(constants, p_net, configurations, iterations=50000, save
             min_loss = loss.data
             FLAG = True
             
-            beta = beta + np.float32(0.02)
+            beta = beta + np.float32(beta_incre)
             if(beta > 1.0):
                 beta = np.float32(1.0)
 
@@ -118,7 +118,7 @@ def train_pinn_sol_base(constants, p_net, configurations, iterations=50000, save
             scheduler.step()
 
 
-def train_pinn_sol_v0(constants, p_net, configurations, iterations=50000, save_model=False):
+def train_pinn_sol_v0(constants, p_net, configurations, iterations=50000, save_model=False, beta_incre=0.02):
     mse_cost_function = torch.nn.MSELoss()
     optimizer = torch.optim.Adam(p_net.parameters(), lr=1e-3)
     scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.95)
@@ -141,8 +141,7 @@ def train_pinn_sol_v0(constants, p_net, configurations, iterations=50000, save_m
     S = 30000
     RAR_eps = 1e-1
     FLAG = False
-    beta = np.float32(0.0)
-    # beta = np.float32(1.0)
+    beta = np.float32(0.0) # beta = np.float32(1.0) # beta set to 1.0 means no curriculur training is employed
     FLAG_SAVE_INTER = 0
     INTER_COUNT = 0
     
@@ -176,7 +175,8 @@ def train_pinn_sol_v0(constants, p_net, configurations, iterations=50000, save_m
         if(loss.data < 0.95*min_loss):
             train_time = time.time() - start_time
             print("save epoch:", epoch, ",loss:", loss.data, 
-                  ",ic:", mse_u.data, ",res:", mse_res.data,
+                  ",ic:", mse_u.data, 
+                  ",res:", mse_res.data,
                   ",tv:", tv_loss.data,
                   ",beta: ", beta
                    )
@@ -188,27 +188,25 @@ def train_pinn_sol_v0(constants, p_net, configurations, iterations=50000, save_m
                         }, pnet_path)
             min_loss = loss.data
             FLAG = True
-            
-            beta = beta + np.float32(0.02)
+            beta = beta + np.float32(beta_incre)
             if(beta > 1.0):
                 beta = np.float32(1.0)
 
-            FLAG_SAVE_INTER = FLAG_SAVE_INTER + 1
-            if(FLAG_SAVE_INTER >= 10):
-                INTER_COUNT = INTER_COUNT + 1
-                if(save_model):
-                    torch.save({
-                        'epoch': epoch, 'model_state_dict': p_net.state_dict(),
-                        'optimizer_state_dict': optimizer.state_dict(),
-                        'loss_history': loss_history, 'train_time': train_time,
-                        }, pnet_path_inter+str(INTER_COUNT)+".pth")
-                    FLAG_SAVE_INTER = 0
+            # FLAG_SAVE_INTER = FLAG_SAVE_INTER + 1
+            # if(FLAG_SAVE_INTER >= 10):
+            #     INTER_COUNT = INTER_COUNT + 1
+            #     if(save_model):
+            #         torch.save({
+            #             'epoch': epoch, 'model_state_dict': p_net.state_dict(),
+            #             'optimizer_state_dict': optimizer.state_dict(),
+            #             'loss_history': loss_history, 'train_time': train_time,
+            #             }, pnet_path_inter+str(INTER_COUNT)+".pth")
+            #         FLAG_SAVE_INTER = 0
 
         # RAR
         if(epoch % 100 == 0 and FLAG):
-            x_bc_rar, t_bc_rar = constants.sample_init_points(S)
-            x_rar, t_rar = constants.sample_res_points(S)
             # add initial points
+            x_bc_rar, t_bc_rar = constants.sample_init_points(S)
             p_i = p_init(constants, x_bc_rar.detach().numpy())
             p_i = torch.tensor(p_i, dtype=torch.float32, requires_grad=False)
             phat_i = p_net(x_bc_rar, t_bc_rar).to(device)
@@ -221,6 +219,7 @@ def train_pinn_sol_v0(constants, p_net, configurations, iterations=50000, save_m
                 t_bc = torch.cat((t_bc, t_max), dim=0)
                 print("... RAR IC, add: ", t_max[0].item(), max_error.item())
             # add residual points
+            x_rar, t_rar = constants.sample_res_points(S)
             res_p = diff_opt(x_rar, t_rar, p_net)/normalize
             max_error= torch.max(torch.abs(res_p))
             if(max_error > RAR_eps):
@@ -230,8 +229,7 @@ def train_pinn_sol_v0(constants, p_net, configurations, iterations=50000, save_m
                 x = torch.cat((x, x_max), dim=0)
                 t = torch.cat((t, t_max), dim=0)
                 print("... RAR Res, add: ", t_max[0].item(), max_error.item())
-            # reset flag
-            FLAG = False
+            FLAG = False # reset flag
 
         loss.backward(retain_graph=True) 
         optimizer.step()
