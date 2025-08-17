@@ -32,12 +32,13 @@ class PNet(nn.Module):
 
 
 class E1Net(nn.Module):
-    def __init__(self, constants, scale=1.0): 
+    def __init__(self, constants, scale=1.0, input_feature=5): 
         super(E1Net, self).__init__()
         neurons = 50
         self.constants = constants
         self.scale = scale
-        self.hidden_layer1 = (nn.Linear(5,neurons))
+        self.input_feature = input_feature
+        self.hidden_layer1 = (nn.Linear(input_feature, neurons))
         self.hidden_layer2 = (nn.Linear(neurons,neurons))
         self.hidden_layer3 = (nn.Linear(neurons,neurons))
         self.hidden_layer4 = (nn.Linear(neurons,neurons))
@@ -46,7 +47,12 @@ class E1Net(nn.Module):
         self.hidden_layer7 = (nn.Linear(neurons,neurons))
         self.output_layer =  (nn.Linear(neurons,1))
     def forward(self, x, t):
-        inputs = normalize_inputs(x, t, self.constants)
+        if(self.input_feature == 5):
+            inputs = normalize_inputs(x, t, self.constants)
+        elif(self.input_feature == 7):
+            inputs = normalize_inputs_6d(x, t, self.constants)
+        else:
+            raise("this PINN is not yet implemented for input feature: {self.input_feature}")
         layer1_out = ((self.hidden_layer1(inputs)))
         layer2_out = F.gelu((self.hidden_layer2(layer1_out)))   
         layer3_out = ((self.hidden_layer3(layer2_out)))

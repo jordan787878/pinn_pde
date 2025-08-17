@@ -7,7 +7,7 @@ from typing import Sequence, Tuple, List
 from scipy.stats import norm, multivariate_normal
 from scipy.interpolate import griddata
 from exp_utilities.constants import Case1_6D_Constants
-from exp_utilities.plot_util import compute_marginals_over_time, plot_time_curves_3d
+from exp_utilities.plot_util import compute_marginals_over_time, plot_time_curves_3d, precompute_pdf_init_streaming
 # from exp_utilities.plot_utilites import check_pdf_Nrphi, check_pdf_cartesian_wrt_samples
 import sys
 sys.path.insert(0, '../utilities/')
@@ -378,25 +378,27 @@ def main():
     print_mc_time(data_folder)
 
     # --- Pre-computation for plotting data ---
+    # 1) save p(t0) max
     # p_max = p_init(constants, constants.N_MEAN_I) # compute maximum PDF at t0 (directly evaluated at the mean of initial Gaussian)
-    # print(np.float32(p_max.item()))
     # np.savez(data_folder+"pre_compute/p_init_max.npz", value=np.float32(p_max.item()), label="mean at Gaussian")
 
+    # 2) save marginal pdf over time
     # for i in range(1,7): # compute marginalized PDF (to each dimension) over discrete time
     #     x, t_kept, M = compute_marginals_over_time(
     #         times=constants.T_PRIME_SPAN,   # time array you mentioned
-    #         pdf_dir="data/1e+5",
+    #         data_dir="data/1e+6",
     #         grid_dir="data/grids",
     #         keep_axis=(i-1),                # first dimension
     #         filename_fmt="pdf_t{:.3f}.npy",
-    #         clip_negatives=True,
     #     )
-    #     np.savez(data_folder+"pre_compute/marginal_data_x"+str(i)+"_t_M.npz", x=x, times=t_kept, M=M)
+    #     np.savez(data_folder+"pre_compute/marginal_p_x"+str(i)+"_t_M.npz", x=x, times=t_kept, M=M)
+
+    precompute_pdf_init_streaming(constants, p_init, "data/1e+6")
     
     # --- Plots ---
-    for i in range(1, 7):
-        _data = np.load(data_folder+"pre_compute/marginal_data_x"+str(i)+"_t_M.npz")
-        plot_time_curves_3d(_data, title="Marginal p(x"+str(i)+"|t): curves (no interpolation)")
+    # for i in range(1, 7):
+    #     _data = np.load(data_folder+"pre_compute/marginal_p_x"+str(i)+"_t_M.npz")
+    #     plot_time_curves_3d(_data, title="Marginal p(x"+str(i)+"|t): curves (no interpolation)")
 
     # test_monte_accuracy()
     # check_pdf_Nrphi(constants, mc_folder=data_folder)

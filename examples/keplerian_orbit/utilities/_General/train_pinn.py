@@ -28,7 +28,7 @@ def train_pinn_sol_base(constants, p_net, configurations, iterations=50000, save
     S = 30000
     RAR_eps = 1e-1
     FLAG = False
-    beta = np.float32(1.0)
+    beta = np.float32(0.0)
     FLAG_SAVE_INTER = 0
     INTER_COUNT = 0
     
@@ -71,16 +71,16 @@ def train_pinn_sol_base(constants, p_net, configurations, iterations=50000, save
             if(beta > 1.0):
                 beta = np.float32(1.0)
 
-            FLAG_SAVE_INTER = FLAG_SAVE_INTER + 1
-            if(FLAG_SAVE_INTER >= 10):
-                INTER_COUNT = INTER_COUNT + 1
-                if(save_model):
-                    torch.save({
-                        'epoch': epoch, 'model_state_dict': p_net.state_dict(),
-                        'optimizer_state_dict': optimizer.state_dict(),
-                        'loss_history': loss_history, 'train_time': train_time,
-                        }, pnet_path_inter+str(INTER_COUNT)+".pth")
-                    FLAG_SAVE_INTER = 0
+            # FLAG_SAVE_INTER = FLAG_SAVE_INTER + 1
+            # if(FLAG_SAVE_INTER >= 10):
+            #     INTER_COUNT = INTER_COUNT + 1
+            #     if(save_model):
+            #         torch.save({
+            #             'epoch': epoch, 'model_state_dict': p_net.state_dict(),
+            #             'optimizer_state_dict': optimizer.state_dict(),
+            #             'loss_history': loss_history, 'train_time': train_time,
+            #             }, pnet_path_inter+str(INTER_COUNT)+".pth")
+            #         FLAG_SAVE_INTER = 0
 
         # RAR
         if(epoch % 100 == 0 and FLAG):
@@ -116,6 +116,7 @@ def train_pinn_sol_base(constants, p_net, configurations, iterations=50000, save
         # Exponential learning rate decay
         if (epoch + 1) % iterations_per_decay == 0:
             scheduler.step()
+            print("[info] training epoch: ", epoch)
 
 
 def train_pinn_sol_v0(constants, p_net, configurations, iterations=50000, save_model=False, beta_incre=0.02):
@@ -238,7 +239,155 @@ def train_pinn_sol_v0(constants, p_net, configurations, iterations=50000, save_m
             scheduler.step()
 
 
+def train_pinn_e1_v0(constants, networks, configurations, iterations=50000, save_model=False, beta_incre=0.005):
+    """
+    no TV loss
+    """
+    p_init = configurations["ic_fcn"]
+    diff_opt = configurations["diff_opt_fcn"]
+    save_path = configurations["save_path"]
+    save_path_inter = configurations["save_path_inter"]
+    p_net, e1_net = networks
+
+    mse_cost_function = torch.nn.MSELoss()
+    optimizer = torch.optim.Adam(e1_net.parameters(), lr=1e-3)
+    scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.95)
+
+    min_loss = np.inf
+    iterations_per_decay = 10000
+    loss_history = []
+    normalize = e1_net.scale
+    print("normalize: ", normalize)
+
+    N0_samples = 2000
+    Nr_samples = 2000
+    # x_bc, t_bc = constants.sample_init_points(N0_samples)
+    # x, t = constants.sample_res_points(Nr_samples)
+    x_bc, t_bc = constants.sample_init_points(N0_samples)
+    x, t = constants.sample_res_points(Nr_samples)
+
+    # RAR
+    S = 30000
+    RAR_eps = 1e-1
+    FLAG = False
+    beta = np.float32(0.0)
+    FLAG_SAVE_INTER = 0
+    INTER_COUNT = 0
+
+    keys = ['epoch', 'model_state_dict', 'loss_history', 'train_time']
+    best_model_dict = dict.fromkeys(keys)
+    
+    start_time = time.time()
+    for epoch in range(iterations):
+        optimizer.zero_grad()
+
+        # Loss based on boundary conditions
+        p_i = p_init(constants, x_bc.detach().numpy())
+        p_i = torch.tensor(p_i, dtype=torch.float32, requires_grad=False)
+        phat_i = p_net(x_bc, t_bc).to(device)
+        e_i = p_i - phat_i
+        ehat_i = e1_net(x_bc, t_bc).to(device)
+        mse_u = mse_cost_function(ehat_i/normalize, e_i.detach()/normalize)
+        alpha_i = torch.max(torch.abs(e_i - ehat_i)) / torch.max(torch.abs(ehat_i))
+
+        # Loss based on PDE
+        # res_p = diff_opt(x, t, p_net, beta=beta)
+        # res_e = diff_opt(x, t, e1_net, beta=beta)
+        # res = res_e + res_p
+        # mse_res = mse_cost_function(res_e/normalize, -res_p.detach()/normalize)
+
+        # res_t = torch.autograd.grad(res/normalize, t, 
+        #                             grad_outputs=torch.ones_like(res), create_graph=True)[0]
+        # tv_t = (res_t ** 2).sum(dim=1, keepdim=True)  # shape: (N, 1)
+        # tv_loss = torch.mean(tv_t)
+
+        loss = mse_u #+ mse_res #+ 1e-3*tv_loss
+        loss_history.append(loss.item())
+
+        # Save the min loss model
+        if(loss.data < 0.95*min_loss):
+            print("[best model] epoch:", epoch, ",loss:", loss.data, 
+                  ",ic:", mse_u.data, ", alpha_i:", alpha_i.item(),
+                #   ",res:", mse_res.data,
+                #   ",tv:", tv_loss.data,
+                  ",beta: {:.3f}".format(beta)
+                   )
+            train_time = time.time() - start_time
+            best_model_dict['epoch'] = epoch
+            best_model_dict['model_state_dict'] = e1_net.state_dict()
+            best_model_dict['loss_history'] = loss_history
+            best_model_dict['train_time'] = train_time
+
+            min_loss = loss.data
+            FLAG = True
+            beta = beta + np.float32(beta_incre)
+            if(beta > 1.0):
+                beta = np.float32(1.0)
+
+            # --- Save intermediate model for debug/plot ---
+            # if(save_model):
+            #     FLAG_SAVE_INTER = FLAG_SAVE_INTER + 1
+            #     if(FLAG_SAVE_INTER >= 10):
+            #         INTER_COUNT = INTER_COUNT + 1
+            #         torch.save({
+            #             'epoch': epoch, 'model_state_dict': e1_net.state_dict(),
+            #             'loss_history': loss_history, 'train_time': train_time,
+            #             }, save_path_inter+str(INTER_COUNT)+".pth")
+            #         FLAG_SAVE_INTER = 0
+
+        # RAR
+        if(epoch % 100 == 0 and FLAG and epoch > 0):
+            x_bc_rar, t_bc_rar = constants.sample_init_points(S)
+            # add initial points
+            p_i = p_init(constants, x_bc_rar.detach().numpy())
+            p_i = torch.tensor(p_i, dtype=torch.float32, requires_grad=False)
+            phat_i = p_net(x_bc_rar, t_bc_rar).to(device)
+            e_i = p_i - phat_i
+            ehat_i = e1_net(x_bc_rar, t_bc_rar).to(device)
+            max_error = torch.max(torch.abs(e_i - ehat_i))/normalize
+            alpha_bc = torch.max(torch.abs(e_i - ehat_i)) / torch.max(torch.abs(ehat_i))
+            if(max_error > RAR_eps):
+                max_value, max_index = torch.topk(torch.abs(e_i.squeeze() - ehat_i.squeeze()), 20)
+                x_max = x_bc_rar[max_index,:].clone().detach()
+                t_max = t_bc_rar[max_index].clone().detach()
+                x_bc = torch.cat((x_bc, x_max), dim=0)
+                t_bc = torch.cat((t_bc, t_max), dim=0)
+                # print("... RAR IC, add: ", t_max[0].item(), max_error.item())
+                print("RAC IC: ", alpha_bc.item())
+            del x_bc_rar, t_bc_rar, p_i, phat_i, e_i, ehat_i
+
+            # # # add residual points
+            # x_rar, t_rar = constants.sample_res_points(S)
+            # res_p = diff_opt(x_rar, t_rar, p_net, beta=beta)
+            # res_e = diff_opt(x_rar, t_rar, e1_net, beta=beta)
+            # res = (res_e + res_p)/normalize
+            # max_error= torch.max(torch.abs(res))
+            # if(max_error > RAR_eps):
+            #     max_value, max_index = torch.topk(torch.abs(res.squeeze()), 10)
+            #     x_max = x_rar[max_index,:].clone()
+            #     t_max = t_rar[max_index].clone()
+            #     x = torch.cat((x, x_max), dim=0)
+            #     t = torch.cat((t, t_max), dim=0)
+            #     print("... RAR Res, add: ", t_max[0].item(), max_error.item())
+
+            # # reset flag
+            FLAG = False
+
+        loss.backward(retain_graph=True) 
+        optimizer.step()
+        # Exponential learning rate decay
+        if (epoch + 1) % iterations_per_decay == 0:
+            scheduler.step()
+            print("[debug] training epoch: ", epoch)
+    # --- Save best model ---
+    if(save_model):
+        torch.save(best_model_dict, save_path)
+
+
 def train_pinn_e1seq1_base(constants, networks, configurations, iterations=50000, save_model=False):
+    """
+    base: no TV loss
+    """
     p_init = configurations["ic_fcn"]
     diff_opt = configurations["diff_opt_fcn"]
     save_path = configurations["save_path"]
