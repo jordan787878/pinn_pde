@@ -64,6 +64,36 @@ class E1Net(nn.Module):
         return output
     
 
+class E1Net_Equin(nn.Module):
+    def __init__(self, constants, scale=1.0, input_feature=5, p_net=None): 
+        super(E1Net_Equin, self).__init__()
+        neurons = 80
+        self.scale = scale
+        self.constants = constants
+        self.input_feature = input_feature
+        self.p_net = p_net
+        self.hidden_layer1 = (nn.Linear(input_feature, neurons))
+        self.hidden_layer2 = (nn.Linear(neurons,neurons))
+        self.hidden_layer3 = (nn.Linear(neurons,neurons))
+        self.hidden_layer4 = (nn.Linear(neurons,neurons))
+        self.output_layer =  (nn.Linear(neurons,1))
+    def forward(self, x, t):
+        if(self.input_feature == 5):
+            inputs = normalize_inputs(x, t, self.constants)
+        elif(self.input_feature == 7):
+            inputs = normalize_inputs_6d(x, t, self.constants)
+        else:
+            raise("this PINN is not yet implemented for input feature: {self.input_feature}")
+        layer1_out = F.tanh((self.hidden_layer1(inputs)))
+        layer2_out = F.tanh((self.hidden_layer2(layer1_out)))
+        layer3_out = F.tanh((self.hidden_layer3(layer2_out)))
+        layer4_out = F.tanh((self.hidden_layer4(layer3_out)))
+        output = (self.output_layer(layer4_out)) * self.p_net.scale
+        p_net_out = self.p_net(x, t)
+        output = output - p_net_out
+        return output
+    
+
 # helper functions
 def normalize_inputs(x, t, constants):
     _x1 = (x[:,0].view(-1, 1) - 0.5*(constants.X1_RANGE[1]+constants.X1_RANGE[0]))/(0.5*(constants.X1_RANGE[1]-constants.X1_RANGE[0]))

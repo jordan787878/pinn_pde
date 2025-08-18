@@ -96,7 +96,8 @@ def RV2COE(input_array, mu_gravity):
         RAAN = np.arccos(n_vec[0]/n)
         if(n_vec[1] < 0):
             RAAN = 2.0*np.pi - RAAN
-        w = np.arccos(np.dot(n_vec, e_vec)/ (n*e))
+        arg_w = np.dot(n_vec, e_vec) / (n * e)
+        w = np.arccos(np.clip(arg_w, -1.0, 1.0))
         if(e_vec[2] < 0):
             w = 2.0*np.pi - w
         lonper = RAAN + w
