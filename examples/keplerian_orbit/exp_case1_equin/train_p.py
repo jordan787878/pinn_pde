@@ -108,23 +108,23 @@ def main():
     p_net = load_trained_model(p_net, path=OUTPUT_PATH+"/p_net.pth"); p_net.eval()
 
     # --- checking joint PDF against p_sol ---
-    N_samples = 1000000
-    for t in constants.T_PRIME_SPAN:
-        _x = np.column_stack([
-            np.random.uniform(constants.X1_RANGE[0], constants.X1_RANGE[1], N_samples),
-            np.random.uniform(constants.X2_RANGE[0], constants.X2_RANGE[1], N_samples),
-            np.random.uniform(constants.X3_RANGE[0], constants.X3_RANGE[1], N_samples),
-            np.random.uniform(constants.X4_RANGE[0], constants.X4_RANGE[1], N_samples),
-            np.random.uniform(constants.X5_RANGE[0], constants.X5_RANGE[1], N_samples),
-            np.random.uniform(constants.X6_RANGE[0], constants.X6_RANGE[1], N_samples),
-        ])
-        _x_tensor = torch.tensor(_x, dtype=torch.float32, requires_grad=True)
-        _t = np.ones((len(_x_tensor), 1)) * t
-        _t_tensor = torch.tensor(_t, dtype=torch.float32, requires_grad=True).view(-1,1)
-        pdf_pinn = p_net(_x_tensor, _t_tensor).detach().cpu().numpy().reshape(-1,)
-        pdf_sol = p_sol(constants, _x, t).reshape(-1,)
-        rel_error = np.max(np.abs(pdf_sol-pdf_pinn)) / np.max(pdf_sol) # NOTE this metric needs sufficient large samples.
-        print(rel_error.item())
+    # N_samples = 1000000
+    # for t in constants.T_PRIME_SPAN:
+    #     _x = np.column_stack([
+    #         np.random.uniform(constants.X1_RANGE[0], constants.X1_RANGE[1], N_samples),
+    #         np.random.uniform(constants.X2_RANGE[0], constants.X2_RANGE[1], N_samples),
+    #         np.random.uniform(constants.X3_RANGE[0], constants.X3_RANGE[1], N_samples),
+    #         np.random.uniform(constants.X4_RANGE[0], constants.X4_RANGE[1], N_samples),
+    #         np.random.uniform(constants.X5_RANGE[0], constants.X5_RANGE[1], N_samples),
+    #         np.random.uniform(constants.X6_RANGE[0], constants.X6_RANGE[1], N_samples),
+    #     ])
+    #     _x_tensor = torch.tensor(_x, dtype=torch.float32, requires_grad=True)
+    #     _t = np.ones((len(_x_tensor), 1)) * t
+    #     _t_tensor = torch.tensor(_t, dtype=torch.float32, requires_grad=True).view(-1,1)
+    #     pdf_pinn = p_net(_x_tensor, _t_tensor).detach().cpu().numpy().reshape(-1,)
+    #     pdf_sol = p_sol(constants, _x, t).reshape(-1,)
+    #     rel_error = np.max(np.abs(pdf_sol-pdf_pinn)) / np.max(pdf_sol) # NOTE this metric needs sufficient large samples.
+    #     print(rel_error.item())
 
 
     # --- Pre-computation for plotting data ---

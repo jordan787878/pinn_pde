@@ -9,6 +9,26 @@ from matplotlib.lines import Line2D
 from mpl_toolkits.mplot3d import Axes3D  # noqa: F401  (needed for 3D projection)
 
 
+
+def set_publication_plot_style(font_family='Times New Roman', font_size=18):
+    """
+    Update Matplotlib settings to use publication-ready fonts.
+
+    Parameters:
+        font_family (str): Font family to be used for all texts.
+        font_size (int): Base font size for labels, titles, legends, and ticks.
+    """
+    plt.rcParams['font.family'] = font_family
+    plt.rcParams['font.size'] = font_size
+    plt.rcParams['axes.labelsize'] = font_size
+    plt.rcParams['axes.titlesize'] = font_size
+    plt.rcParams['xtick.labelsize'] = font_size
+    plt.rcParams['ytick.labelsize'] = font_size
+    plt.rcParams['legend.fontsize'] = font_size
+    plt.rcParams['figure.titlesize'] = font_size
+    plt.rcParams['lines.linewidth'] = 2
+
+
 def _integrate_out_others(pdf: np.ndarray, axes_coords: Sequence[np.ndarray], keep_axis: int) -> Tuple[np.ndarray, np.ndarray]:
     """Integrate a 6-D PDF over all axes except keep_axis using trapezoids (non-uniform grids OK)."""
     f = np.asarray(pdf, dtype=float)
@@ -83,6 +103,7 @@ def plot_time_curves_3d(x_components, constants, data1, data2=None, p_init=None,
     Plot one 3D curve per time: (x1, t_fixed, p(x1|t_fixed)).
     No faces between times -> no interpolation across time.
     """
+    set_publication_plot_style()
 
     # pick a seaborn color palette
     colors = sns.color_palette("tab10")
@@ -94,8 +115,8 @@ def plot_time_curves_3d(x_components, constants, data1, data2=None, p_init=None,
     x_keep = data1["x"]; times = data1["times"]; M = data1["M"]
     for j, t in enumerate(times):
         color = colors[j % len(colors)]
-        ax.plot(np.full_like(x_keep, t), x_keep, M[:, j], lw=1.7,
-                color=color, linestyle="-")
+        ax.plot(np.full_like(x_keep, t), x_keep, M[:, j],
+                color="blue", linestyle="--")
         # if abs(t) < 1e-5 and p_init is not None:
         #     p_init_mc_marginal = M[:, j]
         #     pdf_func = multivariate_normal(
@@ -113,8 +134,8 @@ def plot_time_curves_3d(x_components, constants, data1, data2=None, p_init=None,
         x_keep = data2["x"]; times = data2["times"]; M = data2["M"]
         for j, t in enumerate(times):
             color = colors[j % len(colors)]
-            ax.plot(np.full_like(x_keep, t), x_keep, M[:, j], lw=1.7,
-                    color=color, linestyle="--")
+            ax.plot(np.full_like(x_keep, t), x_keep, M[:, j],
+                    color="black", linestyle="-", marker="o", markersize=4)
             if abs(t) < 1e-5 and p_init is not None:
                 p_init_mc_marginal = M[:, j]
                 pdf_func = multivariate_normal(
@@ -125,35 +146,40 @@ def plot_time_curves_3d(x_components, constants, data1, data2=None, p_init=None,
                           / np.max(np.abs(p_init_analy_marginal)))
                 print(f"[check] rel. accuracy of MC   (marginal to x{x_components:1d}) "
                       f"--> the deviation between p(t0) MC and p(t0): {100.0*rel_acc:.2f} %")
-                ax.plot(np.full_like(x_keep, t), x_keep, p_init_analy_marginal, lw=2.0, color="black", linestyle=":")
+                # ax.plot(np.full_like(x_keep, t), x_keep, p_init_analy_marginal, lw=2.0, color="green", linestyle=":")
 
-    # axis labels and title
-    print("\n")
-    ax.set_xlabel("time t")
-    ax.set_ylabel(r"$x$"+str(x_components))
-    ax.set_zlabel(r"$p(x$"+str(x_components)+r"$,t)$")
-    ax.set_title(title)
+    # labels — add padding to avoid collisions with tick labels
+    ax.set_xlabel(r"$t/T$", labelpad=8)
+    ax.set_ylabel(r"$x$" + str(x_components), labelpad=10)
+    ax.set_zlabel(r"$p(x$" + str(x_components) + r"$,t)$", labelpad=8)
+
+    # give tick labels a bit of breathing room
+    ax.tick_params(axis='x', pad=2)
+    ax.tick_params(axis='y', pad=2)
+    ax.tick_params(axis='z', pad=2)
+
     ax.view_init(elev=25, azim=-60)
-    fig.tight_layout()
 
-    # --- legend with linestyle meaning ---
+    # legend
     legend_elements = [
-        Line2D([0], [0], color="black", linestyle="-", lw=1.7, label=r"$\hat{p}$"),
-        Line2D([0], [0], color="black", linestyle="--", lw=1.7, label=r"$p_{MC}$")
+        Line2D([0], [0], color="blue", linestyle="--", label=r"$\hat{p}$"),
+        Line2D([0], [0], color="black", linestyle="-", marker="o", markersize=4, label=r"$p$"),
+        # Line2D([0], [0], color="green", linestyle=":",  lw=2.0, label=r"$p(t_0)$ (analy.)")
     ]
-    if(leg_txt is not None):
-        legend_elements = [
-            Line2D([0], [0], color="black", linestyle="-", lw=1.7, label=leg_txt[0]),
-            Line2D([0], [0], color="black", linestyle="--", lw=1.7, label=leg_txt[1])
-        ]
-    ax.legend(handles=legend_elements, loc="best")
+    ax.legend(handles=legend_elements, loc="upper left", frameon=True)
 
-    plt.show()
+    # No tight_layout with big pad — constrained_layout already did the work.
+    # For export: trim outer whitespace aggressively.
+    savepath = f"figs/Case_6D_Equin_marginal_PDF{int(x_components)}.pdf"
+    plt.savefig(savepath, format="pdf", dpi=300,
+                bbox_inches='tight', pad_inches=0.5)
+    plt.close()
 
 
 def plot_e1_pinn_validation(data1, data2):
     """
     """
+    set_publication_plot_style()
 
     # pick a seaborn color palette
     colors = sns.color_palette("tab10")
@@ -177,13 +203,13 @@ def plot_e1_pinn_validation(data1, data2):
         color = colors[j % len(colors)]
         ax.plot(x, t, z[j, :], lw=0.3, alpha=0.5,
                 color="green", linestyle="-")
-    ax.plot(x[-1], y, z[:, -1], color="green", linestyle="-", label=r"$B_1$")
+    ax.plot(x[-1], y, z[:, -1], color="green", linestyle="-", label=r"$B_1(\hat{e}_1)$")
 
     # axis labels and title
     # print("\n")
-    ax.set_xlabel("N samples (1E+6)")
-    ax.set_ylabel(r"$t/T$")
-    ax.set_zlabel("Rel. Error (Scaled by PDF)")
+    ax.set_xlabel("N samples (1E+6)", labelpad=8)
+    ax.set_ylabel(r"$t/T$", labelpad=8)
+    ax.set_zlabel("Error (Scaled by PDF)", labelpad=8)
     ax.view_init(elev=23, azim=-150)
     fig.tight_layout()
     ax.legend(loc="best")
@@ -194,8 +220,11 @@ def plot_e1_pinn_validation(data1, data2):
     #     Line2D([0], [0], color="black", linestyle="--", lw=1.7, label=r"$p_{MC}$")
     # ]
     # ax.legend(handles=legend_elements, loc="best")
-
-    plt.show()
+    savepath = "figs/Case_6D_Equin_validate_e1hat.pdf"
+    plt.savefig(savepath, format="pdf", dpi=300,
+                bbox_inches='tight', pad_inches=0.5)
+    plt.close()
+    # plt.show()
 
 
 def _iter_blocks(sizes, block_sizes):

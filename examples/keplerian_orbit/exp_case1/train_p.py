@@ -134,13 +134,13 @@ def main():
     # This print-out justifies why it is difficult to validate the error bound that defines on joint PDF
     # NOTE this illustrates the bottlneck of validating PINN method if an accurate joint PDF is not available (also mentioned in Sun and Kumar Pg. 19)
     # This is also validated in terms of e1(t0) using p(t0) analy v.s. e1(t0) using p(t0) MC ins train_e1.py code
-    p_init_analy = np.load(MC_FOLDER+"pdf_analy_t0.000.npy")
-    p_init_mc = np.load(MC_FOLDER+"pdf_t0.000.npy")
-    rel_acc = np.max(np.abs(p_init_mc - p_init_analy))/np.max(np.abs(p_init_analy))
+    p_init_analy = np.load(MC_FOLDER+"pdf_analy_t0.000.npy").reshape(-1,)
+    p_init_mc = np.load(MC_FOLDER+"pdf_t0.000.npy").reshape(-1,)
+    rel_acc = np.max(np.abs(p_init_mc - p_init_analy)) / np.max(np.abs(p_init_analy))
     del p_init_mc
     print("[check] rel. accuracy of MC   --> the deviation between p(t0) MC   and p(t0): {:.2f} %".format(
         100.0 * rel_acc.item()))
-    p_init_pinn = np.load(PNET_PATH+"/pdf_t0.000.npy")
+    p_init_pinn = np.load(PNET_PATH+"/pdf_t0.000.npy").reshape(-1,)
     rel_acc_pinn = np.max(np.abs(p_init_pinn - p_init_analy))/np.max(np.abs(p_init_analy))
     print("[check] rel. accuracy of PINN --> the deviation between p(t0) PINN and p(t0): {:.2f} %".format(
         100.0 * rel_acc_pinn.item()))
