@@ -1,5 +1,6 @@
 import torch
 import numpy as np
+from tqdm import tqdm
 from .helpers import *
 
 
@@ -23,9 +24,10 @@ def train_model(problem, model, num_iterations=1000, batch_size=512, grad_thresh
     # rho          = 10.0                               # penalty weight
     best_model_state = None
     best_loss = np.inf
-    increment = 0.001 # 0.01
+    # increment = 0.001 # 0.01
+    increment_factor = 0.05
     patient = 0.0
-    for it in range(num_iterations):
+    for it in tqdm(range(num_iterations), desc="training GMM"):
         optimizer.zero_grad()
         # --- Augment samples with random points --- 
         x_dom_train, p0_dom_train = aug_samples_random(problem, model, x_dom, p0_dom, batch_size)
@@ -55,20 +57,20 @@ def train_model(problem, model, num_iterations=1000, batch_size=512, grad_thresh
         #     if(best_model_state is not None):
         #         print(f"[info] early stopping at iter {it}, grad_norm={gn:.2e} < {grad_threshold:.2e}")
         #         break
-        if patient > 20000:
+        if patient > 10000:
             if(best_model_state is not None):
                 print(f"[info] early stoppint at iter {it}, exceeds patient")
                 break
 
         # --- Print progress ---
-        if it % int(num_iterations/50) == 0:
-            print(f"Iteration {it:4d}, loss: {total_loss.item()}, loss hc: {loss_hc.item()}, Pr: {Pr.item()}")
-            print(f"   violation percent: {vio_percent:.4f}%")
-            print(f"   mu: {mu:.4f}")
+        # if it % int(num_iterations/50) == 0:
+        #     print(f"Iteration {it:4d}, loss: {total_loss.item()}, loss hc: {loss_hc.item()}, Pr: {Pr.item()}")
+        #     print(f"   violation percent: {vio_percent:.4f}%")
+        #     print(f"   mu: {mu:.4f}")
             # print(f"   grad_norm={gn:.2e}, {grad_threshold:.2e}")
 
         # --- Update the best model ---
-        if(total_loss.item() < best_loss-increment and vio_percent <= 0.0):
+        if(total_loss.item() < (1.+increment_factor)*best_loss and vio_percent <= 0.0):
             # --- Augment by checking violation on grid ---
             _x_vio, _p0_vio, x_remains, p0_remains = aug_samples_violate(
                 problem, model, x_remains, p0_remains, batch_size)
@@ -76,27 +78,28 @@ def train_model(problem, model, num_iterations=1000, batch_size=512, grad_thresh
             if(_x_vio is not None):
                 x_dom   = torch.cat([x_dom,   _x_vio], dim=0)         
                 p0_dom  = torch.cat([p0_dom, _p0_vio], dim=0)
-                print("[check] after grid aug. sample size:", x_dom.shape[0], x_remains.shape[0])
+                # print("[check] after grid aug. sample size:", x_dom.shape[0], x_remains.shape[0])
             else:
                 # --- Scenario-based Approach vertification ---
-                _x_rand, _p0_rand = get_samples_random(problem, 80000) #10000
+                _x_rand, _p0_rand = get_samples_random(problem, 100000) #10000
                 _, vio_rand_hc_check, _x_vio_topk, _p0_vio_topk = loss_hardconstraint(problem, model, _x_rand, _p0_rand)
                 # [testing...] --- RAR ---
-                print("[info] scenaro-based checking")
+                # print("[info] scenaro-based checking")
                 if(vio_rand_hc_check > 0.0):
                     x_dom = torch.cat((x_dom, _x_vio_topk), dim=0)
                     p0_dom = torch.cat((p0_dom, _p0_vio_topk), dim=0)
-                    print("[check] after rand aug. sample size:", x_dom.shape[0], x_remains.shape[0])
+                    # print("[check] after rand aug. sample size:", x_dom.shape[0], x_remains.shape[0])
                 else:
                     best_model_state = {k: v.cpu().clone() for k, v in model.state_dict().items()}
                     best_loss = total_loss.item()
                     ws, _, _ = model.get_gmm_paramters()
                     if(True):
                         print(f"[Best] Iteration {it:4d}, loss: {total_loss.item()}, {loss_hc.item()}")
-                        print(f"   violation percent: {vio_percent:.4f}%")
-                        print(f"   Pr: {Pr:.4f}")
-                        print(ws)
+                        print(f"   violation percent: {vio_percent:.4f}%, Pr: {Pr:.4f}")
+                        # print(np.sum(ws))
                         patient = 0
+                del _x_rand, _p0_rand
+            del _x_vio, _p0_vio
         optimizer.step()
         scheduler.step()
         # # 5) dual update: μ ← max(0, μ + ρ · loss_hc)
@@ -253,7 +256,7 @@ def aug_samples_violate(problem, model, x_remains, p0_remains, batch_size):
     x_rem_new   = x_remains[keep_mask]             # [N-k, d]
     p0_rem_new  = p0_remains[keep_mask]            # [N-k]
 
-    print(f"Selected {k} violations out of {N} remains.")
+    # print(f"Selected {k} violations out of {N} remains.")
     return x_vio, p0_vio, x_rem_new, p0_rem_new
 
 

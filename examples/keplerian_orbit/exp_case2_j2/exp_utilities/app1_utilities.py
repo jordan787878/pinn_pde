@@ -185,7 +185,7 @@ def form_problem_exp_case2(problem, need_grid=False, N_res=50):
         e1_nn  = e1_net_seq2(grid_points_tensor, t_tensor).detach().numpy().ravel()
     problem['B'] = 2.0 * np.max(np.abs(e1_nn))
     problem['B_marginal'] = problem['B'] * problem["target_V"]
-    print("[info] target domain volume: {:.4f}, error bound B1: {:.4f}".format(
-        problem['target_V'], problem['B']))
-    print("[info] integral of B over target domain: {:.4f}".format(problem['B_marginal']))
+    # print("[info] target domain volume: {:.4f}, error bound B1: {:.4f}".format(
+    #     problem['target_V'], problem['B']))
+    # print("[info] integral of B over target domain: {:.4f}".format(problem['B_marginal']))
     return problem

@@ -16,9 +16,9 @@ def check_pdf_integral(problem, trained_model, method=""):
     else:
         p_opt = trained_model(x_grid).detach().cpu().numpy()
         Pr_opt = np.sum(p_opt) * domain_volume / N_grid
-    print("[check] integral pdf domain p0: {:.4f}, p_opt: {:.4f}".format(
-        Pr_p0, Pr_opt
-    ))
+    # print("[check] integral pdf domain p0: {:.4f}, p_opt: {:.4f}".format(
+        # Pr_p0, Pr_opt
+    # ))
 
 
 def check_pdf_interval(problem, trained_model):

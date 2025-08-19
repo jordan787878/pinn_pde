@@ -15,6 +15,12 @@ def solve_funcopt(problem):
     num_components = int(s.split("gmmx",1)[1].split("_",1)[0])
     trained_model = TorchGMM(problem['constants'], num_components=num_components).to(device)
 
+    with torch.no_grad():
+        trained_model.logits.fill_(0.0)
+    # trained_model.init_means_uniform(problem['constants'])
+    # w, m, cov = trained_model.get_gmm_paramters()
+    # print(w) # print(m) # print(cov)
+
     # --- Inherit from previously-trained GMM ---
     if(problem["label_parent_gmm"] is not None):
         s = problem["label_parent_gmm"]
@@ -23,9 +29,9 @@ def solve_funcopt(problem):
         gmm_parent.load_state_dict(torch.load(problem["path_pdf_models"]+problem["label_parent_gmm"]+"_t{:.3f}.pth".format(problem["time"])))
         with torch.no_grad():
             # 2) copy in the parent-component parameters
-            trained_model.raw_weights.data[:num_parent_components] = gmm_parent.raw_weights.data
-            trained_model.raw_weights.data[num_parent_components:] = torch.randn(num_components-num_parent_components)*1e-3
-            trained_model.means.data[:num_parent_components, :]   = gmm_parent.means.data
+            trained_model.logits.data[:num_parent_components] = gmm_parent.logits.data
+            trained_model.logits.data[num_parent_components:] = 5.*min(gmm_parent.logits.data)
+            trained_model.means.data[:num_parent_components, :] = gmm_parent.means.data
             trained_model.raw_scales.data[:num_parent_components, :] = gmm_parent.raw_scales.data
         # release memory
         del gmm_parent
@@ -48,6 +54,6 @@ def solve_funcopt(problem):
     
     # --- Evaluate Probability ---
     Pr_opt = integral_torchgmm(trained_model.get_gmm_paramters(), problem['target_bounds'])
-    print(" [Solved] time: {:.3f}, Pr_tar: {:.8f}".format(problem['time'], Pr_opt))
+    print("[Solved] time: {:.3f}, Pr_tar: {:.8f}".format(problem['time'], Pr_opt))
 
     return Pr_opt, trained_model

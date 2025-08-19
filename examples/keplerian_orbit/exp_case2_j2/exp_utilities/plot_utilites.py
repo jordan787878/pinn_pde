@@ -802,46 +802,51 @@ def plot_app1(target, save_plot_path=None):
     ax.set_xticks(ticks)
     ax.set_xticklabels(tick_labels)
 
-    # # create the inset axes in the lower-right corner
-    # ax = plt.gca()
-    # # 1) draw a red rectangle on the main plot showing the zoom window
-    # zoom_rect = Rectangle((0.03, 0.0),        # lower-left corner
-    #                     0.07-0.03,          # width
-    #                     0.04-0.0,           # height
-    #                     linewidth=2.0,
-    #                     edgecolor='yellow',
-    #                     facecolor='none',
-    #                     linestyle='--')
-    # ax.add_patch(zoom_rect)
+    if(target == "tar2"):
+        # create the inset axes in the lower-right corner
+        ax = plt.gca()
+        # 1) draw a red rectangle on the main plot showing the zoom window
+        zoom_rect = Rectangle((0.03, 0.0),        # lower-left corner
+                            0.07-0.03,          # width
+                            0.04-0.0,           # height
+                            linewidth=2.0,
+                            edgecolor='yellow',
+                            facecolor='none',
+                            linestyle='--')
+        ax.add_patch(zoom_rect)
 
-    # # 2) create the inset as before
-    # axins = inset_axes(ax,
-    #                 width="80%", 
-    #                 height="65%", 
-    #                 loc="lower right",
-    #                 bbox_to_anchor=(0.35, 0.1, 0.65, 0.90),
-    #                 bbox_transform=ax.transAxes)
-    # # re-plot into the inset
-    # axins.plot(t_span_mc[mask], pr[mask], color="black", linestyle="", marker="o", markersize=4)
-    # for j in range(len(pr_nn_data_labels)):
-    #     data = pr_nn_data[j]
-    #     axins.plot(data[:,0], data[:,1],
-    #             color=colors[j],
-    #             linestyle=plot_style[j],
-    #             linewidth=1.5,
-    #             marker=marker[j])
-    #     if plot_fills[j]:
-    #         axins.fill_between(data[:,0], 0, data[:,1], color=colors[j], alpha=0.1)
-    # # set zoom limits
-    # axins.set_xlim(0.03, 0.07)
-    # axins.set_ylim(-0.001, 0.04)
-    # axins.grid(True)
-    # # 3) make the inset’s border bold and red
-    # for spine in axins.spines.values():
-    #     spine.set_edgecolor('yellow')
-    #     spine.set_linewidth(2.0)
-    # # draw connector lines (you can also switch these to red if you like)
-    # mark_inset(ax, axins, loc1=2, loc2=4, fc="none", ec="0.5")
+        # 2) create the inset as before
+        axins = inset_axes(ax,
+                        width="80%", 
+                        height="65%", 
+                        loc="lower right",
+                        bbox_to_anchor=(0.35, 0.1, 0.65, 0.90),
+                        bbox_transform=ax.transAxes)
+        # re-plot into the inset
+        axins.plot(t_span_mc[mask], pr[mask], color="black", linestyle="", marker="o", markersize=4)
+        p_max_zoom = 0.0
+        is_gmm = [("gmm" in f.lower()) for f in pr_nn_data_labels]
+        for j in range(len(pr_nn_data_labels)):
+            if(is_gmm[j]):
+                data = pr_nn_data[j]
+                p_max_zoom = max(p_max_zoom, np.max(data[:,1]).item())
+                axins.plot(data[:,0], data[:,1],
+                        color=colors[j],
+                        linestyle=plot_style[j],
+                        linewidth=1.5,
+                        marker=marker[j])
+                if plot_fills[j]:
+                    axins.fill_between(data[:,0], 0, data[:,1], color=colors[j], alpha=0.1)
+        # set zoom limits
+        axins.set_xlim(0.025, 0.075)
+        axins.set_ylim(-0.001, p_max_zoom)
+        axins.grid(True)
+        # 3) make the inset’s border bold and red
+        for spine in axins.spines.values():
+            spine.set_edgecolor('yellow')
+            spine.set_linewidth(2.0)
+        # draw connector lines (you can also switch these to red if you like)
+        mark_inset(ax, axins, loc1=2, loc2=4, fc="none", ec="0.5")
 
     plt.tight_layout(pad=0.2)
     if(save_plot_path is not None):
@@ -1191,11 +1196,11 @@ def plot_pdf_gmm_wrt_pinn(constants, p_net, p_gmm, target_r, target_phi, t, save
         rstride=num_stride,
         cstride=num_stride,
         # cmap=cm.Blues,        # choose your colormap
-        linewidth=0.5,            # no grid lines
+        linewidth=0.2,            # no grid lines
         antialiased=True,
         edgecolor='blue', 
         facecolor='blue', 
-        alpha=0.1,
+        alpha=0.2,
         label=r"PINN $\hat{p}$"
     )
  
@@ -1211,11 +1216,11 @@ def plot_pdf_gmm_wrt_pinn(constants, p_net, p_gmm, target_r, target_phi, t, save
             rstride=num_stride,
             cstride=num_stride,
             # cmap=cm.Greens,        # choose your colormap
-            linewidth=0.5,            # no grid lines
+            linewidth=0.2,            # no grid lines
             antialiased=True,
             edgecolor='green',  
             facecolor='green',
-            alpha=0.1,
+            alpha=0.2,
             label=r"FO $\phi$"
         )
 
@@ -1240,7 +1245,7 @@ def plot_pdf_gmm_wrt_pinn(constants, p_net, p_gmm, target_r, target_phi, t, save
     ax.set_ylabel(r"$\phi'$")
     ax.set_zlabel('PDF Value')
     # ax.set_title('3D Surface Plot of PDF at t= {:.3f}'.format(t))
-    ax.view_init(33, -122)
+    ax.view_init(21, -152)
     plt.tight_layout(pad=0.1)
     if(save_plot_path is None):
         plt.show()
