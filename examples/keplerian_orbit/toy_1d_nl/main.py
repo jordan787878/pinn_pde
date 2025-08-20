@@ -337,6 +337,10 @@ def p_rel_worst_error(p1, p2):
     return 100.*rel_error.item()
 
 
+def p_rel_KL(p_at_x):
+    return np.mean(-np.log(p_at_x))
+
+
 def test_MC_accuracy(x):
     pdf_true = p_init(x)
     pdf_mc = np.load("data/psim_t0.0.npy")
@@ -380,6 +384,10 @@ def main(TRAIN_FLAG=False, RUN_BASELINE=False):
         "t": t_span
     }
     for t in t_span:
+        if(t > t0):
+            x_mc_samples = np.load("data/xsamples_t{:.1f}.npy".format(t)).astype(np.float32)
+        else:
+            x_mc_samples = None
         pdf_mc = np.load("data/psim_t{:.1f}.npy".format(t)).astype(np.float32).reshape(-1,)
         _t = np.ones(x.shape[0], dtype=x.dtype)*t
         t_tensor = torch.from_numpy(_t.reshape(-1,1)).to(device)
@@ -394,6 +402,9 @@ def main(TRAIN_FLAG=False, RUN_BASELINE=False):
             pdf_mass_lp = 100. *np.mean(pdf_mc[idx_in_one_std]) * (x_in_one_std[-1] - x_in_one_std[0])
         else:
             pdf_mass_lp = 0.0
+        if(x_mc_samples is not None):
+            _p_at_x_lp = pdf_func.pdf(x_mc_samples).reshape(-1,)
+            rel_kl_lp = p_rel_KL(_p_at_x_lp)
 
         _, _mu_ut, _cov_ut = data_ut.get(t)
         pdf_func = multivariate_normal(mean=_mu_ut, cov=_cov_ut)
@@ -405,8 +416,17 @@ def main(TRAIN_FLAG=False, RUN_BASELINE=False):
             pdf_mass_ut = 100. * np.mean(pdf_mc[idx_in_one_std]) * (x_in_one_std[-1] - x_in_one_std[0])
         else:
             pdf_mass_ut = 0.0
+        if(x_mc_samples is not None):
+            _p_at_x_ut = pdf_func.pdf(x_mc_samples).reshape(-1,)
+            rel_kl_ut = p_rel_KL(_p_at_x_ut)
 
         pdf_pinn = p_net(x_tensor, t_tensor).detach().cpu().numpy().reshape(pdf_mc.shape)
+        if(x_mc_samples is not None):
+            x_mc_samples_tensor = torch.from_numpy(x_mc_samples.reshape(-1,1)).to(device)
+            _t_mc_samples = np.ones(x_mc_samples_tensor.shape[0], dtype=x.dtype)*t
+            t_mc_samples_tensor = torch.from_numpy(_t_mc_samples.reshape(-1,1)).to(device)
+            _p_at_x_pinn = p_net(x_mc_samples_tensor, t_mc_samples_tensor).detach().cpu().numpy().reshape(-1,)
+            rel_kl_pinn = p_rel_KL(_p_at_x_pinn)
 
         rel_error_lp = p_rel_worst_error(pdf_lp, pdf_mc)
         tv_lp = p_total_variation(pdf_lp, pdf_mc)
@@ -420,6 +440,10 @@ def main(TRAIN_FLAG=False, RUN_BASELINE=False):
         print("time {:.2f} worst rel. error, PINN: {:.5f} %,  LP: {:.5f} %,  UT: {:.5f} %".format(
             t, rel_error_pinn, rel_error_lp, rel_error_ut
         ))
+        if(x_mc_samples is not None):
+            print("time {:.2f} rel. KL, PINN: {:.5f},  LP: {:.5f},  UT: {:.5f}".format(
+                t, rel_kl_pinn, rel_kl_lp, rel_kl_ut
+            ))
         metrics["rel_error_lp"].append(rel_error_lp)
         metrics["rel_error_ut"].append(rel_error_ut)
         metrics["rel_error_pinn"].append(rel_error_pinn)
