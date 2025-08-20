@@ -196,5 +196,5 @@ def meta_app():
 
 
 if __name__ == "__main__":
-    meta_app()
-    # show_plot(show_meta=False, show_pdf=True, gmm_basis=80)
+    # meta_app()
+    show_plot(show_meta=True, show_pdf=True, gmm_basis=80)

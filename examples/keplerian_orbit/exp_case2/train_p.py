@@ -49,6 +49,7 @@ def dyn_f3(x):
     return constants.T**2 *x[:,0] *(constants.W +constants.PHI *x[:,3]/constants.T)**2 -constants.T**2 *constants.MU_EARTH/(constants.R**3 * x[:,0]**2)
 
 def dyn_f4(x):
+    global constants
     return -2*constants.T*x[:,2]*(constants.W + constants.PHI * x[:,3]/constants.T)/(x[:,0]*constants.PHI)
 
 def diff_opt_p(x, t, p_net, beta=1.0, verbose=False):

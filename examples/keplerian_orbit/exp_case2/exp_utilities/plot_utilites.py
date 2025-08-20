@@ -1122,4 +1122,3 @@ def plot_pdf_gmm_wrt_pinn(constants, p_net, p_gmm, target_r, target_phi, t):
     ax.set_title('3D Surface Plot of PDF at t= {:.3f}'.format(t))
     ax.view_init(30, -143)
     plt.show()
-    
