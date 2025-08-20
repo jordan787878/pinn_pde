@@ -8,7 +8,7 @@ import warnings
 import time
 
 
-DATA_FOLDER = "exp1/data/10+6_samples/"
+DATA_FOLDER = "data/10+7_samples/"
 device = "cpu"; print(device)
 
 # Set a fixed seed for reproducibility
@@ -78,8 +78,9 @@ def p_sol_monte(linespace_num=200, stat_sample=100000000):
     frequency = frequency / stat_sample
     dx = bins_x1[1]-bins_x1[0]
     frequency = frequency/(dx**n_d)
-    # np.save(DATA_FOLDER+"psim_t"+str(0.0)+".npy", frequency)
-    # np.save(DATA_FOLDER+"xsim.npy", midpoints_x1)
+    np.save(DATA_FOLDER+"psim_t"+str(0.0)+".npy", frequency)
+    np.save(DATA_FOLDER+"xsim.npy", midpoints_x1)
+    np.save(DATA_FOLDER+"xsamples_t"+str(0.0)+".npy", X_last)
 
     # Vectorized simulation of the SDE
     for step in tqdm(range(1, num_steps + 1), desc="Simulating samples"):
@@ -106,14 +107,16 @@ def p_sol_monte(linespace_num=200, stat_sample=100000000):
             frequency = frequency / stat_sample
             dx = bins_x1[1]-bins_x1[0]
             frequency = frequency/(dx**n_d)
+            np.save(DATA_FOLDER+"psim_t"+str(t_k)+".npy", frequency)
+            np.save(DATA_FOLDER+"xsamples_t"+str(t_k)+".npy", X_last)
     comp_time = time.time() - start_time
     print("MC time (sec): ", comp_time)
-            # np.save(DATA_FOLDER+"psim_t"+str(t_k)+".npy", frequency)
+    np.save(DATA_FOLDER+"mctime.npy", comp_time)
 
 
 def main():
     # exp1/data
-    p_sol_monte(linespace_num=200, stat_sample=100000000)
+    p_sol_monte(linespace_num=200, stat_sample=10000000)
 
 
 if __name__ == "__main__":
