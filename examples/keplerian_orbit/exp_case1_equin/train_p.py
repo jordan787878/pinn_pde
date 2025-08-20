@@ -10,6 +10,7 @@ from monte import p_init, p_sol, print_mc_time
 # from exp_utilities.plot_utilites import check_pdf_Nrphi, check_pdfnn_cartesian_wrt_monte, check_pdf_cartesian_wrt_samples, check_error_flatten
 from exp_utilities.constants import Case1_6D_Constants_Equin
 from exp_utilities.plot_util import precompute_pdf_streaming, precompute_error, compute_marginals_over_time, plot_time_curves_3d
+from baseline_methods import SAVE_PATH_LINEAR_PROPAGATE, SAVE_PATH_UNSCENT_PROPAGATE, PropagationData
 # import utilities
 import sys
 sys.path.insert(0, '../utilities/')
@@ -162,11 +163,14 @@ def main():
     # NOTE: the fact that two joint PDFs can be very different but have similar marginal PDF is illustrated by: 
     # exp_utilities/test_joint_vs_marginal.py
     # NOTE: this is consistent with how RMS error is computed (on 2D marginal) in Sun and Kumar
+    data_lp = PropagationData(SAVE_PATH_LINEAR_PROPAGATE)
+    data_us = PropagationData(SAVE_PATH_UNSCENT_PROPAGATE)
     for i in range(1, 7):
         data_mc = np.load(MC_FOLDER+"pre_compute/marginal_p_x"+str(i)+"_t_M.npz")
         data_sol = np.load("data/pre_compute/marginal_pdfsol_x"+str(i)+"_t_M.npz")
         data_pinn = np.load(OUTPUT_PATH+"/pre_compute/marginal_p_x"+str(i)+"_t_M.npz")
-        plot_time_curves_3d(i, constants, data_pinn, data_sol, p_init=p_init, leg_txt=["p PINN", "p sol."], title="Marginal p(x"+str(i)+",t)")
+        plot_time_curves_3d(i, constants, data_pinn, data_sol, 
+                            data_lp=data_us, p_init=p_init, leg_txt=["p PINN", "p sol."], title="Marginal p(x"+str(i)+",t)")
 
 
 if __name__ == "__main__":

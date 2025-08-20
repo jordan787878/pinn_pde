@@ -9,7 +9,6 @@ from matplotlib.lines import Line2D
 from mpl_toolkits.mplot3d import Axes3D  # noqa: F401  (needed for 3D projection)
 
 
-
 def set_publication_plot_style(font_family='Times New Roman', font_size=18):
     """
     Update Matplotlib settings to use publication-ready fonts.
@@ -98,7 +97,8 @@ def compute_marginals_over_time(
     return x_keep, times_kept, M
 
 # ---------- plotting ----------
-def plot_time_curves_3d(x_components, constants, data1, data2=None, p_init=None, leg_txt=None, title="Marginal p(x1|t): curves (no interpolation)"):
+def plot_time_curves_3d(x_components, constants, data_sol, data_pinn, data_lp=None, data_ut=None,
+                        p_init=None, leg_txt=None, title="Marginal p(x1|t): curves (no interpolation)"):
     """
     Plot one 3D curve per time: (x1, t_fixed, p(x1|t_fixed)).
     No faces between times -> no interpolation across time.
@@ -106,17 +106,31 @@ def plot_time_curves_3d(x_components, constants, data1, data2=None, p_init=None,
     set_publication_plot_style()
 
     # pick a seaborn color palette
-    colors = sns.color_palette("tab10")
-
-    fig = plt.figure(figsize=(9, 6))
+    colors = sns.color_palette("husl", 3)
+    fig = plt.figure(figsize=(12, 8))
     ax = fig.add_subplot(111, projection="3d")
 
-    # --- first dataset ---
-    x_keep = data1["x"]; times = data1["times"]; M = data1["M"]
+    if data_sol is not None:
+        x_keep = data_sol["x"]; times = data_sol["times"]; M = data_sol["M"]
+        for j, t in enumerate(times):
+            ax.plot(np.full_like(x_keep, t), x_keep, M[:, j],
+                    color="black", linestyle="-")
+            # if abs(t) < 1e-5 and p_init is not None:
+            #     p_init_mc_marginal = M[:, j]
+            #     pdf_func = multivariate_normal(
+            #         mean=constants.MEAN_I[x_components-1],
+            #         cov=constants.COV_I[x_components-1, x_components-1])
+            #     p_init_analy_marginal = pdf_func.pdf(x_keep).astype(x_keep.dtype)
+            #     rel_acc = (np.max(np.abs(p_init_mc_marginal - p_init_analy_marginal))
+            #               / np.max(np.abs(p_init_analy_marginal)))
+            #     print(f"[check] rel. accuracy of MC   (marginal to x{x_components:1d}) "
+            #           f"--> the deviation between p(t0) MC and p(t0): {100.0*rel_acc:.2f} %")
+                # ax.plot(np.full_like(x_keep, t), x_keep, p_init_analy_marginal, lw=2.0, color="green", linestyle=":")
+
+    x_keep = data_pinn["x"]; times = data_pinn["times"]; M = data_pinn["M"]
     for j, t in enumerate(times):
-        color = colors[j % len(colors)]
         ax.plot(np.full_like(x_keep, t), x_keep, M[:, j],
-                color="blue", linestyle="--")
+                color=colors[0], linestyle="--")
         # if abs(t) < 1e-5 and p_init is not None:
         #     p_init_mc_marginal = M[:, j]
         #     pdf_func = multivariate_normal(
@@ -129,24 +143,29 @@ def plot_time_curves_3d(x_components, constants, data1, data2=None, p_init=None,
         #             f"--> the deviation between p(t0) PINN and p(t0): {100.0*rel_acc:.2f} %")
         #     ax.plot(np.full_like(x_keep, t), x_keep, p_init_analy_marginal, lw=2.0, color="black", linestyle=":")
 
-    # --- second dataset ---
-    if data2 is not None:
-        x_keep = data2["x"]; times = data2["times"]; M = data2["M"]
+    if data_lp is not None:
+        # x_keep = data1["x"]; times = data1["times"]
+        # x_keep = densify_between(x_keep, n_between=2)
         for j, t in enumerate(times):
-            color = colors[j % len(colors)]
-            ax.plot(np.full_like(x_keep, t), x_keep, M[:, j],
-                    color="black", linestyle="-", marker="o", markersize=4)
-            if abs(t) < 1e-5 and p_init is not None:
-                p_init_mc_marginal = M[:, j]
-                pdf_func = multivariate_normal(
-                    mean=constants.MEAN_I[x_components-1],
-                    cov=constants.COV_I[x_components-1, x_components-1])
-                p_init_analy_marginal = pdf_func.pdf(x_keep).astype(x_keep.dtype)
-                rel_acc = (np.max(np.abs(p_init_mc_marginal - p_init_analy_marginal))
-                          / np.max(np.abs(p_init_analy_marginal)))
-                print(f"[check] rel. accuracy of MC   (marginal to x{x_components:1d}) "
-                      f"--> the deviation between p(t0) MC and p(t0): {100.0*rel_acc:.2f} %")
-                # ax.plot(np.full_like(x_keep, t), x_keep, p_init_analy_marginal, lw=2.0, color="green", linestyle=":")
+            _, _mu_lp, _cov_lp = data_lp.get(t)
+            _pdf_func = multivariate_normal(
+                mean=_mu_lp[x_components-1],
+                cov=_cov_lp[x_components-1, x_components-1])
+            pdf_lp = _pdf_func.pdf(x_keep).astype(x_keep.dtype)
+            ax.plot(np.full_like(x_keep, t), x_keep, pdf_lp,
+                    color=colors[1], linestyle="--")
+            
+    if data_ut is not None:
+        # x_keep = data1["x"]; times = data1["times"]
+        # x_keep = densify_between(x_keep, n_between=2)
+        for j, t in enumerate(times):
+            _, _mu_us, _cov_us = data_ut.get(t)
+            _pdf_func = multivariate_normal(
+                mean=_mu_us[x_components-1],
+                cov=_cov_us[x_components-1, x_components-1])
+            pdf_us = _pdf_func.pdf(x_keep).astype(x_keep.dtype)
+            ax.plot(np.full_like(x_keep, t), x_keep, pdf_us,
+                    color=colors[2], lw=3, linestyle=":")
 
     # labels — add padding to avoid collisions with tick labels
     ax.set_xlabel(r"$t/T$", labelpad=8)
@@ -158,22 +177,44 @@ def plot_time_curves_3d(x_components, constants, data1, data2=None, p_init=None,
     ax.tick_params(axis='y', pad=2)
     ax.tick_params(axis='z', pad=2)
 
-    ax.view_init(elev=25, azim=-60)
+    ax.view_init(elev=18, azim=-33)
 
     # legend
     legend_elements = [
-        Line2D([0], [0], color="blue", linestyle="--", label=r"$\hat{p}$"),
-        Line2D([0], [0], color="black", linestyle="-", marker="o", markersize=4, label=r"$p$"),
-        # Line2D([0], [0], color="green", linestyle=":",  lw=2.0, label=r"$p(t_0)$ (analy.)")
+        Line2D([0], [0], color="black", linestyle="-", label=r"$p$ MC"),
+        Line2D([0], [0], color=colors[0], linestyle="--", label=r"$\hat{p}$ PINN"),
+        Line2D([0], [0], color=colors[1], linestyle="--",  label=r"$p$ Linear Prop."),
+        Line2D([0], [0], color=colors[2], linestyle=":", lw=3, label=r"$p$ Unscent Trans.")
     ]
-    ax.legend(handles=legend_elements, loc="upper left", frameon=True)
+    ax.legend(handles=legend_elements, loc="best", frameon=True)
+    plt.show()
 
     # No tight_layout with big pad — constrained_layout already did the work.
     # For export: trim outer whitespace aggressively.
-    savepath = f"figs/Case_6D_Equin_marginal_PDF{int(x_components)}.pdf"
-    plt.savefig(savepath, format="pdf", dpi=300,
-                bbox_inches='tight', pad_inches=0.5)
-    plt.close()
+    # savepath = f"figs/Case_6D_Equin_marginal_PDF{int(x_components)}.pdf"
+    # plt.savefig(savepath, format="pdf", dpi=300,
+    #             bbox_inches='tight', pad_inches=0.5)
+    # plt.close()
+
+
+def plot_pdf_metrics(metrics):
+    colors = sns.color_palette("husl", 3)
+    plt.figure()
+    plt.plot(metrics["t"], metrics["rel_error_pinn"], color=colors[0], label=r"$\hat{p}$ PINN")
+    plt.plot(metrics["t"], metrics["rel_error_lp"], color=colors[1],   label=r"$p$ Linear Prop.")
+    plt.plot(metrics["t"], metrics["rel_error_ut"], color=colors[2],   label=r"$p$ Unscent Trans.")
+    plt.legend()
+    plt.xlabel("t")
+    plt.ylabel("worst rel. error %")
+
+    plt.figure()
+    plt.plot(metrics["t"], metrics["tv_pinn"], color=colors[0], label=r"$\hat{p}$ PINN")
+    plt.plot(metrics["t"], metrics["tv_lp"], color=colors[1],   label=r"$p$ Linear Prop.")
+    plt.plot(metrics["t"], metrics["tv_ut"], color=colors[2],   label=r"$p$ Unscent Trans.")
+    plt.legend()
+    plt.xlabel("t")
+    plt.ylabel("total variation %")
+    plt.show()
 
 
 def plot_e1_pinn_validation(data1, data2):
@@ -560,3 +601,14 @@ def precompute_e1hat_streaming(constants, net, out_dir, dtype=np.float32,
             # ensure data is flushed
             del pdf_mm
             print(f"[time {t:.3f}] done.")
+
+
+def densify_between(v, n_between=1):
+    """
+    Insert `n_between` evenly spaced points between each consecutive pair in v.
+    v: 1D numpy array
+    """
+    v = np.asarray(v, dtype=float)
+    pieces = [np.linspace(v[i], v[i+1], n_between + 2)[:-1]  # drop right endpoint
+              for i in range(len(v)-1)]
+    return np.concatenate(pieces + [v[-1:]])

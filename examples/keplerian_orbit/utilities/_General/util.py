@@ -26,3 +26,24 @@ def get_valid_target_bounds(domain_bounds, target_bounds):
     # Stack the lower and upper bounds to form a valid bounds array.
     valid_target_bounds = np.stack([valid_lower, valid_upper], axis=1)
     return valid_target_bounds
+
+
+def save_metrics_npz(metrics, path):
+    # convert lists to float arrays; keep 't' as-is if already np.ndarray
+    out = {}
+    for k, v in metrics.items():
+        if k == "t":
+            out[k] = np.asarray(v)
+        else:
+            out[k] = np.asarray(v, dtype=float)
+    # sanity: all series (except t) should match len(t)
+    n = len(out["t"])
+    for k, v in out.items():
+        if k != "t":
+            assert len(v) == n, f"Length mismatch for {k}: {len(v)} vs t={n}"
+    np.savez(path, **out)
+
+
+def load_metrics_npz(path):
+    data = np.load(path)
+    return {k: data[k] for k in data.files}
