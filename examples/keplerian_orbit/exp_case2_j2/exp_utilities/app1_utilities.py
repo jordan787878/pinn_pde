@@ -33,8 +33,8 @@ def get_prob_PINN(constants, t_span, target_r, targer_ph, networks, options):
                 options["path_pdf_models"]+options["label"]+"_t{:.3f}.pth".format(t))
 
     data_array = np.array(data_list)
-    print("Prob result of "+options["label"])
-    print(data_array)
+    # print("Prob result of "+options["label"])
+    # print(data_array)
     # --- save results ---
     if(options['save_result']):
         np.save(options["path_prob"]+options["label"]+".npy", data_array)
@@ -139,6 +139,11 @@ def compute_prob_event(constants, target_r, targer_ph, t, networks, options, N_d
     elif options["solver"] == "est":
         problem = form_problem_exp_case2(problem)
         pr, model = solve_estimate(problem)
+    elif options["solver"] == "show_pdf":
+        problem = form_problem_exp_case2(problem)
+        print("Error Bound: ", problem["B"])
+        pr = 0.
+        model = None
     else:
         raise("solver in options is not implemented")
     return pr, model

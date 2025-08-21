@@ -24,14 +24,14 @@ def show_pdf(constants, options, p_net, target_r, target_phi):
             file_path = p_gmm_path + "_t{:.3f}.pth".format(t)
             if os.path.exists(file_path):
                 p_gmm.load_state_dict(torch.load(file_path))
-                # with torch.no_grad():
-                    # ws, mus, _ = p_gmm.get_gmm_paramters()
-                    # print(np.sum(ws))
-                    # x_at_mus = torch.tensor(mus)
-                    # t_tensor = torch.full((x_at_mus.shape[0], 1), t)
-                    # pdf_at_mus = p_gmm(x_at_mus)
-                    # pinn_at_mus = p_net(x_at_mus, t_tensor).view(-1,)
-                    # print("[check] max deviation of pinn and gmm: ", torch.abs(pdf_at_mus - pinn_at_mus).max())
+                with torch.no_grad():
+                    ws, mus, _ = p_gmm.get_gmm_paramters()
+                    print(np.sum(ws))
+                    x_at_mus = torch.tensor(mus)
+                    t_tensor = torch.full((x_at_mus.shape[0], 1), t)
+                    pdf_at_mus = p_gmm(x_at_mus)
+                    pinn_at_mus = p_net(x_at_mus, t_tensor).view(-1,)
+                    print("[check] max deviation of pinn and gmm: ", torch.max(torch.abs(pdf_at_mus - pinn_at_mus)).item())
                 exp_plot.plot_pdf_gmm_wrt_pinn(constants, p_net, p_gmm, target_r, target_phi, t,
                                         #    save_plot_path="figs/case2_target_and_fo"
                                            )
@@ -70,7 +70,7 @@ def app1(constants, p_net, e1_net_seq1, e1_net_seq2, options):
     if(options['show_target']): 
         exp_plot.plot_target(constants, p_net, target_r, target_phi, options["mc_folder"]); return
     if(options['show_pdf']):
-        show_pdf(constants, options, p_net, target_r, target_phi); return
+        show_pdf(constants, options, p_net, target_r, target_phi)
 
     # Prob. (Event) when pdf are obtained by MC
     if(options["compute_prob_by_mc"]):
@@ -97,8 +97,8 @@ def show_plot(show_meta=True, show_pdf=False, gmm_basis=16):
                "path_pdf_models": "data/app1/"+target+"/pdf_models/",
                "path_prob": "data/app1/"+target+"/prob/",
                "label": "fo_gmmx"+str(gmm_basis)+"_nres50_100k", #fo_gmmx16_nres50_100k
-               "solver": "fo",
-               "run_solver": False,
+               "solver": "show_pdf",
+               "run_solver": True,
                "save_result": False,
                "compute_prob_by_mc": False, 
         # special options for FO solver
@@ -133,7 +133,7 @@ def show_plot(show_meta=True, show_pdf=False, gmm_basis=16):
     e1_net = load_trained_model(e1_net, path=options["e1net_path"], method="new"); e1_net.eval()
     # --- Define a t_span to evaluate Pr(Event) ---
     dt = 0.005
-    options['t_span'] = np.arange(0.00, 0.08+dt, dt)
+    options['t_span'] = np.arange(0.05, 0.05+dt, dt)
 
     # --- Run application ---
     app1(constants, p_net, e1_net, e1_net, options)
@@ -162,7 +162,7 @@ def meta_app():
         "save_result": True,
         "compute_prob_by_mc": False, 
     # special options for FO solver
-        "num_iterations": 50000,
+        "num_iterations": 100000,
         "label_parent_gmm": None,
         "use_trained_gmm": False,
         "show_loss_landscape": False,
@@ -185,10 +185,11 @@ def meta_app():
     e1_net = load_trained_model(e1_net, path=options["e1net_path"], method="new"); e1_net.eval()
 
     dt = 0.005
-    options['t_span'] = np.arange(0.00, 0.08+dt, dt)
+    options['t_span'] = np.arange(0.05, 0.05+dt, dt)
+    print(options['t_span'])
     
     gmm_basis = [16, 32, 48, 64, 80]
-    for i in range(len(gmm_basis)):
+    for i in range(0, len(gmm_basis)):
         options["label"] = "fo_gmmx"+str(gmm_basis[i])+"_nres50_100k"
         if(i > 0):
             options["label_parent_gmm"] = "fo_gmmx"+str(gmm_basis[i-1])+"_nres50_100k"
@@ -197,4 +198,4 @@ def meta_app():
 
 if __name__ == "__main__":
     # meta_app()
-    show_plot(show_meta=True, show_pdf=True, gmm_basis=80)
+    show_plot(show_meta=False, show_pdf=True, gmm_basis=80)

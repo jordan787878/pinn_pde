@@ -32,7 +32,7 @@ x_hig = 6
 
 t0 = 0.0
 T_end = 5.0
-t1s = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]
+t1s = np.arange(0.0, 5.0 + 0.5, 0.5)
 
 
 def p_init(x):
@@ -40,9 +40,19 @@ def p_init(x):
 
 
 def get_p_normalize():
-    x = np.linspace(x_low, x_hig, num=200, endpoint=True, dtype=np.float32)
+    x = np.linspace(x_low, x_hig, num=200, endpoint=True)
     p0_true = p_init(x)
     return np.max(np.abs(p0_true))
+
+
+def get_e1_normalize(pnet):
+    x = np.linspace(x_low, x_hig, num=200, endpoint=True).reshape(-1,1)
+    p0_true = p_init(x)
+    pt_x = torch.from_numpy(x).float()
+    pt_t = pt_x*0.0 + t0
+    p0_hat = pnet(pt_x, pt_t).data.cpu().numpy()
+    e0_true = p0_true - p0_hat
+    return np.max(np.abs(e0_true))
 
 
 class PNet(nn.Module):
@@ -61,11 +71,34 @@ class PNet(nn.Module):
         layer3_out = F.softplus((self.hidden_layer3(layer2_out)))
         output = F.softplus( self.output_layer(layer3_out) )
         return output
+    
+
+class E1Net(nn.Module):
+    def __init__(self, scale=1.0): 
+        neurons = 50
+        self.scale = scale
+        super(E1Net, self).__init__()
+        self.hidden_layer1 = (nn.Linear(2,neurons))
+        self.hidden_layer2 = (nn.Linear(neurons,neurons))
+        self.hidden_layer3 = (nn.Linear(neurons,neurons))
+        self.hidden_layer4 = (nn.Linear(neurons,neurons))
+        self.hidden_layer5 = (nn.Linear(neurons,neurons))
+        self.hidden_layer6 = (nn.Linear(neurons,neurons))
+        self.output_layer =  (nn.Linear(neurons,1))
+        self.activation = nn.GELU()
+    def forward(self, x, t):
+        inputs = torch.cat([x, t],axis=1)
+        layer1_out = self.activation((self.hidden_layer1(inputs)))
+        layer2_out = self.activation((self.hidden_layer2(layer1_out)))
+        layer3_out = self.activation((self.hidden_layer3(layer2_out)))
+        layer4_out = self.activation((self.hidden_layer4(layer3_out)))
+        layer5_out = self.activation((self.hidden_layer5(layer4_out)))
+        layer6_out = self.activation((self.hidden_layer6(layer5_out)))
+        output = self.output_layer(layer6_out)
+        output = self.scale * output
+        return output
 
 
-# --------------------------
-# Load best
-# --------------------------
 def load_train_model(net, PATH):
     checkpoint = torch.load(PATH)
     net.load_state_dict(checkpoint['model_state_dict'])
@@ -127,20 +160,7 @@ class PropagationData:
         f1 = A*x1**3 + B*x1**2 + C*x1 + D
         return f1
     
-    def get(self, time):
-        times = self.data["times"]
-        means = self.data["means"]
-        covs = self.data["covs"]
-        # dt_precision = self.data["dt_precision"]
-        # time_threshold = 10. *10**(-1. *dt_precision)
-        time = np.round(time, 3)
-        idx = np.where(abs(time-times)< 1e-2)[0]
-        if len(idx) == 0:
-            assert("The linear propagation result does not have data at this time")
-        idx = idx[0]
-        return times[idx], means[idx], covs[idx]
-    
-    def linear_propagation(self, dt_precision=6, dt_save=1.0, save_path=None):
+    def linear_propagation(self, dt_precision=6, dt_save=0.1, save_path=None):
         # --- initialization ---
         mu_i, cov_i = mu, std**2
         x = np.float64(mu_i)    # initial mean
@@ -240,7 +260,7 @@ class PropagationData:
         Wc[0] = lam / c + (1.0 - alpha**2 + beta)
         return X, Wm, Wc
     
-    def unscent_propagation(self, dt_precision=6, dt_save=1.0, save_path=None):
+    def unscent_propagation(self, dt_precision=6, dt_save=0.1, save_path=None):
         # --- initialization ---
         mu_i, cov_i = mu, std**2
         x = np.float64(mu_i)    # initial mean
@@ -346,7 +366,7 @@ def test_MC_accuracy(x):
     pdf_mc = np.load("data/psim_t0.0.npy")
     rel_error = p_rel_worst_error(pdf_mc, pdf_true)
     tv = p_total_variation(pdf_mc, pdf_true)
-    print("[test] Validate MC at t0 --- rel. error {:.5f}, tv {:.5f}".format(
+    print("[test] Validate MC at t0 --- rel. error {:.5f} %, tv {:.5f} %".format(
         rel_error, tv))
 
 
@@ -355,6 +375,10 @@ def main(TRAIN_FLAG=False, RUN_BASELINE=False):
     p_net.scale = get_p_normalize()
     p_net = load_train_model(p_net, PATH="data/p_net.pth")
 
+    e1_net = E1Net().to(device)
+    e1_net.scale = get_e1_normalize(p_net)
+    e1_net = load_train_model(e1_net, PATH="data/e1_net.pth")
+
     # --- Visual ---
     x = np.load("data/xsim.npy").astype(np.float32)
 
@@ -362,12 +386,15 @@ def main(TRAIN_FLAG=False, RUN_BASELINE=False):
 
     lp_path = os.path.join("data", "lp_np64_dt6.npz") # the last label specifies the precision used
     ut_path = os.path.join("data", "ut_np64_dt6.npz") # the last label specifies the precision used
+    ut_path_alpha0_1 = os.path.join("data", "ut_np64_dt6_alpha0.1.npz") # the last label specifies the precision used
     if(RUN_BASELINE):
         data_lp = PropagationData(path=lp_path, prop_method="LP")
         data_ut = PropagationData(path=ut_path, prop_method="UT")
-    else:
-        data_lp = PropagationData(path=lp_path)
-        data_ut = PropagationData(path=ut_path)
+        data_ut_alpha0_1 = PropagationData(path=ut_path_alpha0_1, prop_method="UT")
+    data_lp = PropagationData(path=lp_path)
+    data_ut = PropagationData(path=ut_path)
+    data_ut_alpha0_1 = PropagationData(path=ut_path_alpha0_1)
+    print(data_ut_alpha0_1.data["times"])
 
     colors = sns.color_palette("husl", 3)
     fig = plt.figure(figsize=(12, 8))
@@ -375,19 +402,20 @@ def main(TRAIN_FLAG=False, RUN_BASELINE=False):
     x_tensor = torch.from_numpy(x.reshape(-1,1)).to(device)
     t_span = np.array(t1s).astype(np.float32)
     metrics = {
+        "rel_error_pinn": [],
         "rel_error_lp": [],
         "rel_error_ut": [],
-        "rel_error_pinn": [],
+        "rel_error_ut_alpha_0_1": [],
+        "tv_pinn": [],
         "tv_lp": [],
         "tv_ut": [],
-        "tv_pinn": [],
+        "tv_ut_alpha_0_1": [],
+        "normalize_B1": [],
         "t": t_span
     }
+    x_mc_samples = None
     for t in t_span:
-        if(t > t0):
-            x_mc_samples = np.load("data/xsamples_t{:.1f}.npy".format(t)).astype(np.float32)
-        else:
-            x_mc_samples = None
+        x_mc_samples = np.load("data/xsamples_t{:.1f}.npy".format(t)).astype(np.float32)
         pdf_mc = np.load("data/psim_t{:.1f}.npy".format(t)).astype(np.float32).reshape(-1,)
         _t = np.ones(x.shape[0], dtype=x.dtype)*t
         t_tensor = torch.from_numpy(_t.reshape(-1,1)).to(device)
@@ -420,6 +448,10 @@ def main(TRAIN_FLAG=False, RUN_BASELINE=False):
             _p_at_x_ut = pdf_func.pdf(x_mc_samples).reshape(-1,)
             rel_kl_ut = p_rel_KL(_p_at_x_ut)
 
+        _, _mu_ut_alpha0_1, _cov_ut_alpha0_1 = data_ut_alpha0_1.get(t)
+        pdf_func = multivariate_normal(mean=_mu_ut_alpha0_1, cov=_cov_ut_alpha0_1)
+        pdf_ut_alpha0_1 = pdf_func.pdf(x).reshape(-1,).astype(x.dtype)
+
         pdf_pinn = p_net(x_tensor, t_tensor).detach().cpu().numpy().reshape(pdf_mc.shape)
         if(x_mc_samples is not None):
             x_mc_samples_tensor = torch.from_numpy(x_mc_samples.reshape(-1,1)).to(device)
@@ -428,28 +460,42 @@ def main(TRAIN_FLAG=False, RUN_BASELINE=False):
             _p_at_x_pinn = p_net(x_mc_samples_tensor, t_mc_samples_tensor).detach().cpu().numpy().reshape(-1,)
             rel_kl_pinn = p_rel_KL(_p_at_x_pinn)
 
+        e1_pinn = e1_net(x_tensor, t_tensor).detach().cpu().numpy().reshape(-1,)
+        B1 = 2.* np.max(np.abs(e1_pinn)).item()
+        p_true_max = np.max(pdf_mc).item()
+        normalize_B1 = 100.*B1/p_true_max
+
+        rel_error_pinn = p_rel_worst_error(pdf_pinn, pdf_mc)
+        tv_pinn = p_total_variation(pdf_pinn, pdf_mc)
         rel_error_lp = p_rel_worst_error(pdf_lp, pdf_mc)
         tv_lp = p_total_variation(pdf_lp, pdf_mc)
         rel_error_ut = p_rel_worst_error(pdf_ut, pdf_mc)
         tv_ut = p_total_variation(pdf_ut, pdf_mc)
-        rel_error_pinn = p_rel_worst_error(pdf_pinn, pdf_mc)
-        tv_pinn = p_total_variation(pdf_pinn, pdf_mc)
-        print("time {:.2f} total variation , PINN: {:.5f} %,  LP: {:.5f} %,  UT: {:.5f} %".format(
-            t, tv_pinn, tv_lp, tv_ut
+        rel_error_ut_alpha_0_1 = p_rel_worst_error(pdf_ut_alpha0_1, pdf_mc)
+        tv_ut_alpha_0_1 = p_total_variation(pdf_ut_alpha0_1, pdf_mc)
+
+        print("time {:.2f} total variation , PINN: {:.5f} %,  LP: {:.5f} %,  UT: {:.5f} %,  UT (alpha=0.1): {:.5f} %".format(
+            t, tv_pinn, tv_lp, tv_ut, tv_ut_alpha_0_1
         ))
-        print("time {:.2f} worst rel. error, PINN: {:.5f} %,  LP: {:.5f} %,  UT: {:.5f} %".format(
-            t, rel_error_pinn, rel_error_lp, rel_error_ut
+        print("time {:.2f} worst rel. error, PINN: {:.5f} %,  LP: {:.5f} %,  UT: {:.5f} %,  UT (alpha=0.1): {:.5f} %".format(
+            t, rel_error_pinn, rel_error_lp, rel_error_ut, rel_error_ut_alpha_0_1
         ))
         if(x_mc_samples is not None):
             print("time {:.2f} rel. KL, PINN: {:.5f},  LP: {:.5f},  UT: {:.5f}".format(
                 t, rel_kl_pinn, rel_kl_lp, rel_kl_ut
             ))
+
+        metrics["rel_error_pinn"].append(rel_error_pinn)
         metrics["rel_error_lp"].append(rel_error_lp)
         metrics["rel_error_ut"].append(rel_error_ut)
-        metrics["rel_error_pinn"].append(rel_error_pinn)
+        metrics["rel_error_ut_alpha_0_1"].append(rel_error_ut_alpha_0_1)
+
+        metrics["tv_pinn"].append(tv_pinn)
         metrics["tv_lp"].append(tv_lp)
         metrics["tv_ut"].append(tv_ut)
-        metrics["tv_pinn"].append(tv_pinn)
+        metrics["tv_ut_alpha_0_1"].append(tv_ut_alpha_0_1)
+
+        metrics["normalize_B1"].append(normalize_B1)
 
         mean_mc = empirical_moments(x, pdf_mc)
         cov_mc = empirical_moments(x, pdf_mc, N=2)
@@ -470,7 +516,6 @@ def main(TRAIN_FLAG=False, RUN_BASELINE=False):
                 color=colors[1], linestyle="--")
         ax.plot(np.full_like(x, t), x, pdf_ut,
                 color=colors[2], lw=3, linestyle=":")
-        print("\n")
 
     legend_elements = [
         Line2D([0], [0], color="black", linestyle="-", label=r"$p$ MC"),
@@ -484,8 +529,19 @@ def main(TRAIN_FLAG=False, RUN_BASELINE=False):
 
     plt.figure()
     plt.plot(metrics["t"], metrics["rel_error_pinn"], color=colors[0], label=r"$\hat{p}$ PINN")
+    # plt.plot(metrics["t"], metrics["normalize_B1"], color=colors[0], label=r"$Error Bound$ PINN")
+    plt.fill_between(
+        metrics["t"],
+        metrics["rel_error_pinn"],
+        metrics["normalize_B1"],
+        color=colors[0],
+        alpha=0.2,
+        label="PINN Error Bound"
+    )
+    
     plt.plot(metrics["t"], metrics["rel_error_lp"], color=colors[1],   label=r"$p$ Linear Prop.")
     plt.plot(metrics["t"], metrics["rel_error_ut"], color=colors[2],   label=r"$p$ Unscent Trans.")
+    plt.plot(metrics["t"], metrics["rel_error_ut_alpha_0_1"], color=colors[2], marker="o", label=r"$p$ Unscent Trans. $(\alpha=0.1)$")
     plt.legend()
     plt.xlabel("t")
     plt.ylabel("worst rel. error %")
@@ -494,6 +550,7 @@ def main(TRAIN_FLAG=False, RUN_BASELINE=False):
     plt.plot(metrics["t"], metrics["tv_pinn"], color=colors[0], label=r"$\hat{p}$ PINN")
     plt.plot(metrics["t"], metrics["tv_lp"], color=colors[1],   label=r"$p$ Linear Prop.")
     plt.plot(metrics["t"], metrics["tv_ut"], color=colors[2],   label=r"$p$ Unscent Trans.")
+    plt.plot(metrics["t"], metrics["tv_ut_alpha_0_1"], color=colors[2], marker="o", label=r"$p$ Unscent Trans. $(\alpha=0.1)$")
     plt.legend()
     plt.xlabel("t")
     plt.ylabel("total variation %")

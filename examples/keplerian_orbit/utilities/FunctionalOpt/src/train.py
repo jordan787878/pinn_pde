@@ -4,7 +4,7 @@ from tqdm import tqdm
 from .helpers import *
 
 
-def train_model(problem, model, num_iterations=1000, batch_size=512, grad_threshold=1e-3, device=torch.device("cpu")):
+def train_model(problem, model, num_iterations=1000, lower_bound=0.0, batch_size=512, grad_threshold=1e-3, device=torch.device("cpu")):
     # --- Extract problem ----
     problem['p_net'], _, _ = problem['networks']
     target_bounds = problem["target_bounds"]
@@ -20,7 +20,7 @@ def train_model(problem, model, num_iterations=1000, batch_size=512, grad_thresh
 
     # --- Run ---
     # mu           = torch.tensor(0.0, device=device)   # dual variable
-    mu = 1000.0
+    mu = 100.0
     # rho          = 10.0                               # penalty weight
     best_model_state = None
     best_loss = np.inf
@@ -63,14 +63,14 @@ def train_model(problem, model, num_iterations=1000, batch_size=512, grad_thresh
                 break
 
         # --- Print progress ---
-        # if it % int(num_iterations/50) == 0:
-        #     print(f"Iteration {it:4d}, loss: {total_loss.item()}, loss hc: {loss_hc.item()}, Pr: {Pr.item()}")
-        #     print(f"   violation percent: {vio_percent:.4f}%")
+        if it % int(num_iterations/20) == 0:
+            print(f"Iteration {it:4d}, loss: {total_loss.item()}, loss hc: {loss_hc.item()}, Pr: {Pr.item()}")
+            print(f"   violation percent: {vio_percent:.4f}%")
         #     print(f"   mu: {mu:.4f}")
             # print(f"   grad_norm={gn:.2e}, {grad_threshold:.2e}")
 
         # --- Update the best model ---
-        if(total_loss.item() < (1.+increment_factor)*best_loss and vio_percent <= 0.0):
+        if(total_loss.item() < (1.+increment_factor)*best_loss and vio_percent <= 0.0 and total_loss.item() <= -lower_bound):
             # --- Augment by checking violation on grid ---
             _x_vio, _p0_vio, x_remains, p0_remains = aug_samples_violate(
                 problem, model, x_remains, p0_remains, batch_size)
@@ -84,7 +84,7 @@ def train_model(problem, model, num_iterations=1000, batch_size=512, grad_thresh
                 _x_rand, _p0_rand = get_samples_random(problem, 100000) #10000
                 _, vio_rand_hc_check, _x_vio_topk, _p0_vio_topk = loss_hardconstraint(problem, model, _x_rand, _p0_rand)
                 # [testing...] --- RAR ---
-                # print("[info] scenaro-based checking")
+                print("[info] scenaro-based checking")
                 if(vio_rand_hc_check > 0.0):
                     x_dom = torch.cat((x_dom, _x_vio_topk), dim=0)
                     p0_dom = torch.cat((p0_dom, _p0_vio_topk), dim=0)

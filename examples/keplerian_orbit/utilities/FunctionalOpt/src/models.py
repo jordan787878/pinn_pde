@@ -10,6 +10,7 @@ class TorchGMM(nn.Module):
         super().__init__()
         self.num_components = num_components
         self.n_features = n_features
+        dtype = torch.float32
         # self.min_std = min_std
         
         self.ranges =  np.array([
@@ -18,22 +19,16 @@ class TorchGMM(nn.Module):
             constants.X3_RANGE,
             constants.X4_RANGE,
         ], dtype=np.float32)
-        span = torch.tensor(self.ranges[:, 1] - self.ranges[:, 0], dtype=torch.float32)
-        self.min_std = 0.03 * span  # shape [F]
+        span = torch.tensor(self.ranges[:, 1] - self.ranges[:, 0], dtype=dtype)
+        self.min_std = 0.02 * span  # shape [F]
         
-        # mixture weights
-        # self.logits = nn.Parameter(torch.zeros(num_components))
-        # self.raw_weights = nn.Parameter(torch.randn(num_components))
-        # mixture weights (logits, unconstrained)
-        self.logits = nn.Parameter(torch.randn(num_components))
-        self.weights = self.get_weights()
+        # self.logits = nn.Parameter(torch.randn(num_components))
+        self.logits = nn.Parameter(torch.zeros(num_components))
 
+        self.means  = nn.Parameter(torch.randn(num_components, n_features, dtype=dtype) + torch.from_numpy(constants.N_MEAN_I))
 
-        # means [num_components, n_features]
-        self.means  = nn.Parameter(torch.randn(num_components, n_features) + 
-                                   torch.from_numpy(constants.N_MEAN_I))
-        # one “raw scale” per component per feature
-        self.raw_scales = nn.Parameter(torch.randn(num_components, n_features))
+        # self.raw_scales = nn.Parameter(torch.randn(num_components, n_features))
+        self.raw_scales = nn.Parameter(torch.ones(num_components, n_features, dtype=dtype))
 
     def get_weights(self, tau=1.0):
         # # K = self.num_components
@@ -52,7 +47,7 @@ class TorchGMM(nn.Module):
         scales = F.softplus(self.raw_scales) + self.min_std      # [num_components, n_features]
 
         # 2) turn raw_weights into non-negative mixture probs
-        weights = self.weights
+        weights = self.get_weights()
 
         # 3) build the Mixture distribution
         cat  = Categorical(probs=weights)                       # batch_shape=[num_components]
@@ -67,6 +62,7 @@ class TorchGMM(nn.Module):
         x: [batch_size, n_features]
         returns: [batch_size] densities
         """
+        x = x.to(dtype=torch.float32)
         gmm = self.get_distribution()
         return gmm.log_prob(x).exp()
     
@@ -74,7 +70,7 @@ class TorchGMM(nn.Module):
         # 1) Directly from your parameters:
         # ------------------------------------------------
         # (a) mixture weights
-        weights = self.weights
+        weights = self.get_weights()
 
         # (b) component means
         means = self.means                      # [num_components, n_features]
@@ -97,7 +93,7 @@ class TorchGMM(nn.Module):
         Returns the total probability mass in that hyper‐rectangle.
         """
         # 1) unpack parameters
-        weights = self.weights
+        weights = self.get_weights()
         means  = self.means                  # [C, D]
         scales = F.softplus(self.raw_scales) + self.min_std # [C, D]
 
@@ -125,34 +121,4 @@ class TorchGMM(nn.Module):
 
         return total_mass
     
-    def init_means_uniform(self, constants, seed=None):
-        """
-        ranges: list/array of shape [n_features, 2]
-                Each row = [min_j, max_j] for feature j
-        seed: optional int for reproducibility
-        """
-        if seed is not None:
-            torch.manual_seed(seed)
-        
-        ranges = np.array([
-            constants.X1_RANGE,
-            constants.X2_RANGE,
-            constants.X3_RANGE,
-            constants.X4_RANGE,
-        ])
-
-        device = self.means.device
-        dtype  = self.means.dtype
-        ranges = torch.as_tensor(ranges, device=device, dtype=dtype)  # [F, 2]
-
-        lb = ranges[:, 0].view(1, self.n_features)  # lower bounds [1, F]
-        ub = ranges[:, 1].view(1, self.n_features)  # upper bounds [1, F]
-
-        with torch.no_grad():
-            u = torch.rand(self.num_components, self.n_features,
-                        device=device, dtype=dtype)
-            self.means.copy_(lb + u * (ub - lb))  # broadcast
-
-
-
    
