@@ -357,8 +357,28 @@ def p_rel_worst_error(p1, p2):
     return 100.*rel_error.item()
 
 
+def get_p_at_x_samples(x_mc_samples, pdf_func=None, pdf_pinn=None, t=None):
+    if(pdf_func is not None):
+        return pdf_func.pdf(x_mc_samples).reshape(-1,)
+    if(pdf_pinn is not None):
+        x_mc_samples_tensor = torch.from_numpy(x_mc_samples.reshape(-1,1)).to(device)
+        _t_mc_samples = np.ones(x_mc_samples_tensor.shape[0], dtype=x_mc_samples.dtype)*t
+        t_mc_samples_tensor = torch.from_numpy(_t_mc_samples.reshape(-1,1)).to(device)
+        return pdf_pinn(x_mc_samples_tensor, t_mc_samples_tensor).detach().cpu().numpy().reshape(-1,)
+
+
 def p_rel_KL(p_at_x):
     return np.mean(-np.log(p_at_x))
+
+
+def compute_metrics(t, x_mc_samples, pdf_mc, pdf_eval, pdf_func=None, pdf_pinn=None):
+    rel_error = p_rel_worst_error(pdf_eval, pdf_mc)
+    tv = p_total_variation(pdf_eval, pdf_mc)
+    if(pdf_func is not None):
+        rel_kl = p_rel_KL(get_p_at_x_samples(x_mc_samples, pdf_func=pdf_func))
+    if(pdf_pinn is not None):
+        rel_kl = p_rel_KL(get_p_at_x_samples(x_mc_samples, pdf_pinn=pdf_pinn, t=t))
+    return rel_error, tv, rel_kl
 
 
 def test_MC_accuracy(x):
@@ -410,6 +430,10 @@ def main(TRAIN_FLAG=False, RUN_BASELINE=False):
         "tv_lp": [],
         "tv_ut": [],
         "tv_ut_alpha_0_1": [],
+        "rel_kl_pinn": [],
+        "rel_kl_lp": [],
+        "rel_kl_ut": [],
+        "rel_kl_ut_alpha_0_1": [],
         "normalize_B1": [],
         "t": t_span
     }
@@ -420,9 +444,11 @@ def main(TRAIN_FLAG=False, RUN_BASELINE=False):
         _t = np.ones(x.shape[0], dtype=x.dtype)*t
         t_tensor = torch.from_numpy(_t.reshape(-1,1)).to(device)
 
+        # --- LP ---
         _, _mu_lp, _cov_lp = data_lp.get(t)
         pdf_func = multivariate_normal(mean=_mu_lp, cov=_cov_lp)
         pdf_lp = pdf_func.pdf(x).reshape(-1,).astype(x.dtype)
+        rel_error_lp, tv_lp, rel_kl_lp = compute_metrics(t, x_mc_samples, pdf_mc, pdf_lp, pdf_func=pdf_func)
         # compute coverage mass
         idx_in_one_std = data_lp.indices_in_range(x, np.array([_mu_lp-(_cov_lp)**0.5, _mu_lp+(_cov_lp)**0.5]))
         if(len(idx_in_one_std) > 0):
@@ -430,13 +456,12 @@ def main(TRAIN_FLAG=False, RUN_BASELINE=False):
             pdf_mass_lp = 100. *np.mean(pdf_mc[idx_in_one_std]) * (x_in_one_std[-1] - x_in_one_std[0])
         else:
             pdf_mass_lp = 0.0
-        if(x_mc_samples is not None):
-            _p_at_x_lp = pdf_func.pdf(x_mc_samples).reshape(-1,)
-            rel_kl_lp = p_rel_KL(_p_at_x_lp)
 
+        # --- UT ---
         _, _mu_ut, _cov_ut = data_ut.get(t)
         pdf_func = multivariate_normal(mean=_mu_ut, cov=_cov_ut)
         pdf_ut = pdf_func.pdf(x).reshape(-1,).astype(x.dtype)
+        rel_error_ut, tv_ut, rel_kl_ut = compute_metrics(t, x_mc_samples, pdf_mc, pdf_ut, pdf_func=pdf_func)
         # compute coverage mass
         idx_in_one_std = data_ut.indices_in_range(x, np.array([_mu_ut-(_cov_ut)**0.5, _mu_ut+(_cov_ut)**0.5]))
         if(len(idx_in_one_std) > 0):
@@ -444,35 +469,22 @@ def main(TRAIN_FLAG=False, RUN_BASELINE=False):
             pdf_mass_ut = 100. * np.mean(pdf_mc[idx_in_one_std]) * (x_in_one_std[-1] - x_in_one_std[0])
         else:
             pdf_mass_ut = 0.0
-        if(x_mc_samples is not None):
-            _p_at_x_ut = pdf_func.pdf(x_mc_samples).reshape(-1,)
-            rel_kl_ut = p_rel_KL(_p_at_x_ut)
 
+        # --- UT (alpha=0.1) ---
         _, _mu_ut_alpha0_1, _cov_ut_alpha0_1 = data_ut_alpha0_1.get(t)
         pdf_func = multivariate_normal(mean=_mu_ut_alpha0_1, cov=_cov_ut_alpha0_1)
         pdf_ut_alpha0_1 = pdf_func.pdf(x).reshape(-1,).astype(x.dtype)
+        rel_error_ut_alpha_0_1, tv_ut_alpha_0_1, rel_kl_ut_alpha_0_1 = compute_metrics(t, x_mc_samples, pdf_mc, pdf_ut_alpha0_1, pdf_func=pdf_func)
 
+        # --- PINN ---
         pdf_pinn = p_net(x_tensor, t_tensor).detach().cpu().numpy().reshape(pdf_mc.shape)
-        if(x_mc_samples is not None):
-            x_mc_samples_tensor = torch.from_numpy(x_mc_samples.reshape(-1,1)).to(device)
-            _t_mc_samples = np.ones(x_mc_samples_tensor.shape[0], dtype=x.dtype)*t
-            t_mc_samples_tensor = torch.from_numpy(_t_mc_samples.reshape(-1,1)).to(device)
-            _p_at_x_pinn = p_net(x_mc_samples_tensor, t_mc_samples_tensor).detach().cpu().numpy().reshape(-1,)
-            rel_kl_pinn = p_rel_KL(_p_at_x_pinn)
+        rel_error_pinn, tv_pinn, rel_kl_pinn = compute_metrics(t, x_mc_samples, pdf_mc, pdf_pinn, pdf_pinn=p_net)
 
+        # --- PINN Error Bound ---
         e1_pinn = e1_net(x_tensor, t_tensor).detach().cpu().numpy().reshape(-1,)
         B1 = 2.* np.max(np.abs(e1_pinn)).item()
         p_true_max = np.max(pdf_mc).item()
         normalize_B1 = 100.*B1/p_true_max
-
-        rel_error_pinn = p_rel_worst_error(pdf_pinn, pdf_mc)
-        tv_pinn = p_total_variation(pdf_pinn, pdf_mc)
-        rel_error_lp = p_rel_worst_error(pdf_lp, pdf_mc)
-        tv_lp = p_total_variation(pdf_lp, pdf_mc)
-        rel_error_ut = p_rel_worst_error(pdf_ut, pdf_mc)
-        tv_ut = p_total_variation(pdf_ut, pdf_mc)
-        rel_error_ut_alpha_0_1 = p_rel_worst_error(pdf_ut_alpha0_1, pdf_mc)
-        tv_ut_alpha_0_1 = p_total_variation(pdf_ut_alpha0_1, pdf_mc)
 
         print("time {:.2f} total variation , PINN: {:.5f} %,  LP: {:.5f} %,  UT: {:.5f} %,  UT (alpha=0.1): {:.5f} %".format(
             t, tv_pinn, tv_lp, tv_ut, tv_ut_alpha_0_1
@@ -494,6 +506,11 @@ def main(TRAIN_FLAG=False, RUN_BASELINE=False):
         metrics["tv_lp"].append(tv_lp)
         metrics["tv_ut"].append(tv_ut)
         metrics["tv_ut_alpha_0_1"].append(tv_ut_alpha_0_1)
+
+        metrics["rel_kl_pinn"].append(rel_kl_pinn)
+        metrics["rel_kl_lp"].append(rel_kl_lp)
+        metrics["rel_kl_ut"].append(rel_kl_ut)
+        metrics["rel_kl_ut_alpha_0_1"].append(rel_kl_ut_alpha_0_1)
 
         metrics["normalize_B1"].append(normalize_B1)
 
@@ -527,6 +544,7 @@ def main(TRAIN_FLAG=False, RUN_BASELINE=False):
     ax.set_ylabel("x")
     ax.legend(handles=legend_elements, loc="best", frameon=True)
 
+    # metric 1: worst relative error %
     plt.figure()
     plt.plot(metrics["t"], metrics["rel_error_pinn"], color=colors[0], label=r"$\hat{p}$ PINN")
     # plt.plot(metrics["t"], metrics["normalize_B1"], color=colors[0], label=r"$Error Bound$ PINN")
@@ -538,7 +556,6 @@ def main(TRAIN_FLAG=False, RUN_BASELINE=False):
         alpha=0.2,
         label="PINN Error Bound"
     )
-    
     plt.plot(metrics["t"], metrics["rel_error_lp"], color=colors[1],   label=r"$p$ Linear Prop.")
     plt.plot(metrics["t"], metrics["rel_error_ut"], color=colors[2],   label=r"$p$ Unscent Trans.")
     plt.plot(metrics["t"], metrics["rel_error_ut_alpha_0_1"], color=colors[2], marker="o", label=r"$p$ Unscent Trans. $(\alpha=0.1)$")
@@ -546,6 +563,7 @@ def main(TRAIN_FLAG=False, RUN_BASELINE=False):
     plt.xlabel("t")
     plt.ylabel("worst rel. error %")
 
+    # metric 2: total variation %
     plt.figure()
     plt.plot(metrics["t"], metrics["tv_pinn"], color=colors[0], label=r"$\hat{p}$ PINN")
     plt.plot(metrics["t"], metrics["tv_lp"], color=colors[1],   label=r"$p$ Linear Prop.")
@@ -554,6 +572,16 @@ def main(TRAIN_FLAG=False, RUN_BASELINE=False):
     plt.legend()
     plt.xlabel("t")
     plt.ylabel("total variation %")
+
+    # metric 3: negative log liklihood (relative KL)
+    plt.figure()
+    plt.plot(metrics["t"], metrics["rel_kl_pinn"], color=colors[0], label=r"$\hat{p}$ PINN")
+    plt.plot(metrics["t"], metrics["rel_kl_lp"], color=colors[1],   label=r"$p$ Linear Prop.")
+    plt.plot(metrics["t"], metrics["rel_kl_ut"], color=colors[2],   label=r"$p$ Unscent Trans.")
+    plt.plot(metrics["t"], metrics["rel_kl_ut_alpha_0_1"], color=colors[2], marker="o", label=r"$p$ Unscent Trans. $(\alpha=0.1)$")
+    plt.legend()
+    plt.xlabel("t")
+    plt.ylabel("Negative Log Likelihood")
 
     plt.show()
 
