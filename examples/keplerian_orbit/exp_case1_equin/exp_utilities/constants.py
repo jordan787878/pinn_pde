@@ -33,7 +33,6 @@ class Case1_6D_Constants_Equin:
     _X3_RANGE = np.float32(np.array([_CONSTANTS_DATA["min_vec"][2], _CONSTANTS_DATA["max_vec"][2]]))
     _X4_RANGE = np.float32(np.array([_CONSTANTS_DATA["min_vec"][3], _CONSTANTS_DATA["max_vec"][3]]))
     _X5_RANGE = np.float32(np.array([_CONSTANTS_DATA["min_vec"][4], _CONSTANTS_DATA["max_vec"][4]]))
-    # _X6_RANGE_FACTOR = np.float32(8.)
     _X6_RANGE = np.float32(np.array([-0.25, 1.])) # by MC
     
     # _MAX_PX1  = np.float32(3.0)
@@ -184,8 +183,20 @@ class Case1_6D_Constants_Equin:
         x6s = np.load(grid_folder+"x6s.npy")
         x1_grid, x2_grid, x3_grid, x4_grid, x5_grid, x6_grid = np.meshgrid(x1s, x2s, x3s, x4s, x5s, x6s, indexing="ij") # the indexing is very important
         grid_points = np.vstack([x1_grid.ravel(), x2_grid.ravel(), x3_grid.ravel(), x4_grid.ravel(), x5_grid.ravel(), x6_grid.ravel()]).T
-        x_tensor = torch.tensor(grid_points, dtype=torch.float32, requires_grad=False)
+        x_tensor = torch.tensor(grid_points, dtype=torch.float32, requires_grad=False).reshape(-1,6)
         return x_tensor
+    
+
+    def get_grid_numpy(self, grid_folder):
+        x1s = np.load(grid_folder+"x1s.npy").astype(np.float32)
+        x2s = np.load(grid_folder+"x2s.npy").astype(np.float32)
+        x3s = np.load(grid_folder+"x3s.npy").astype(np.float32)
+        x4s = np.load(grid_folder+"x4s.npy").astype(np.float32)
+        x5s = np.load(grid_folder+"x5s.npy").astype(np.float32)
+        x6s = np.load(grid_folder+"x6s.npy").astype(np.float32)
+        x1_grid, x2_grid, x3_grid, x4_grid, x5_grid, x6_grid = np.meshgrid(x1s, x2s, x3s, x4s, x5s, x6s, indexing="ij") # the indexing is very important
+        grid_points = np.vstack([x1_grid.ravel(), x2_grid.ravel(), x3_grid.ravel(), x4_grid.ravel(), x5_grid.ravel(), x6_grid.ravel()]).T
+        return grid_points
 
 
 class Case1_6D_Constants:

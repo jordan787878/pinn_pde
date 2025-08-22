@@ -7,6 +7,10 @@ import seaborn as sns
 from scipy.stats import norm, multivariate_normal
 from matplotlib.lines import Line2D
 from mpl_toolkits.mplot3d import Axes3D  # noqa: F401  (needed for 3D projection)
+import pandas as pd
+from matplotlib.colors import LogNorm
+from scipy.stats import gaussian_kde
+from matplotlib.ticker import MaxNLocator
 
 
 def set_publication_plot_style(font_family='Times New Roman', font_size=18):
@@ -36,66 +40,6 @@ def _integrate_out_others(pdf: np.ndarray, axes_coords: Sequence[np.ndarray], ke
     return np.asarray(axes_coords[keep_axis], dtype=float), f
 
 
-def compute_marginals_over_time(
-    times: np.ndarray,
-    data_dir: str = "data/1e+5",
-    grid_dir: str = "data/grids",
-    axes_files: Sequence[str] = ("x1s.npy","x2s.npy","x3s.npy","x4s.npy","x5s.npy","x6s.npy"),
-    keep_axis: int = 0,
-    filename_fmt: str = "pdf_t{:.3f}.npy",
-):
-    """Return x1 grid, kept times (filtered to existing files), and M[:, j]=p(x1|t_j)."""
-    times = np.asarray(times, dtype=float).ravel()
-
-    # load grids
-    axes = [np.load(os.path.join(grid_dir, fn)) for fn in axes_files]
-    x_keep = np.asarray(axes[keep_axis], dtype=float)
-
-    # filter to times with existing files
-    file_exists = np.array([os.path.isfile(os.path.join(data_dir, filename_fmt.format(t))) for t in times], dtype=bool)
-    times_kept = times[file_exists]
-    if times_kept.size == 0:
-        raise FileNotFoundError(f"No matching files in '{data_dir}' using format '{filename_fmt}'")
-    print(times_kept)
-
-    # preallocate
-    M = np.empty((x_keep.size, times_kept.size), dtype=float)
-
-    # process each snapshot
-    for j, t in enumerate(times_kept):
-        fpath = os.path.join(data_dir, filename_fmt.format(t))
-        f = np.load(fpath)
-        if f.ndim != 6:
-            raise ValueError(f"{fpath} is not 6-D (got {f.ndim})")
-        # shape checks
-        for i in range(6):
-            if f.shape[i] != axes[i].size:
-                raise ValueError(f"Shape mismatch at axis {i}: pdf {f.shape[i]} vs axis {axes[i].size} in {fpath}")
-
-        # if clip_negatives:
-        #     f = np.clip(f, 0.0, None)
-        # # normalize full 6-D snapshot
-        # g = f.copy()
-        # for ax in reversed(range(6)):
-        #     g = np.trapz(g, x=np.asarray(axes[ax], dtype=float), axis=ax)
-        # Z = float(g)
-        # if not np.isfinite(Z) or Z <= 0:
-        #     raise ValueError(f"Non-positive/invalid total mass in {fpath}")
-        # f /= Z
-
-        # marginal on keep_axis
-        xk, mk = _integrate_out_others(f, axes, keep_axis)
-        # mk = np.clip(mk, 0.0, None)
-        # # ensure each marginal integrates to ~1 over xk
-        area = np.trapz(mk, x=xk)
-        print("[check] pdf total: ", t, area)
-        # if area > 0 and np.isfinite(area):
-        #     mk /= area
-
-        M[:, j] = mk
-
-    return x_keep, times_kept, M
-
 # ---------- plotting ----------
 def plot_time_curves_3d(x_components, constants, data_sol, data_pinn, data_lp=None, data_ut=None,
                         p_init=None, leg_txt=None, title="Marginal p(x1|t): curves (no interpolation)"):
@@ -110,22 +54,21 @@ def plot_time_curves_3d(x_components, constants, data_sol, data_pinn, data_lp=No
     fig = plt.figure(figsize=(12, 8))
     ax = fig.add_subplot(111, projection="3d")
 
-    if data_sol is not None:
-        x_keep = data_sol["x"]; times = data_sol["times"]; M = data_sol["M"]
-        for j, t in enumerate(times):
-            ax.plot(np.full_like(x_keep, t), x_keep, M[:, j],
-                    color="black", linestyle="-")
-            # if abs(t) < 1e-5 and p_init is not None:
-            #     p_init_mc_marginal = M[:, j]
-            #     pdf_func = multivariate_normal(
-            #         mean=constants.MEAN_I[x_components-1],
-            #         cov=constants.COV_I[x_components-1, x_components-1])
-            #     p_init_analy_marginal = pdf_func.pdf(x_keep).astype(x_keep.dtype)
-            #     rel_acc = (np.max(np.abs(p_init_mc_marginal - p_init_analy_marginal))
-            #               / np.max(np.abs(p_init_analy_marginal)))
-            #     print(f"[check] rel. accuracy of MC   (marginal to x{x_components:1d}) "
-            #           f"--> the deviation between p(t0) MC and p(t0): {100.0*rel_acc:.2f} %")
-                # ax.plot(np.full_like(x_keep, t), x_keep, p_init_analy_marginal, lw=2.0, color="green", linestyle=":")
+    x_keep = data_sol["x"]; times = data_sol["times"]; M = data_sol["M"]
+    for j, t in enumerate(times):
+        ax.plot(np.full_like(x_keep, t), x_keep, M[:, j],
+                color="black", linestyle="-")
+        # if abs(t) < 1e-5 and p_init is not None:
+        #     p_init_mc_marginal = M[:, j]
+        #     pdf_func = multivariate_normal(
+        #         mean=constants.MEAN_I[x_components-1],
+        #         cov=constants.COV_I[x_components-1, x_components-1])
+        #     p_init_analy_marginal = pdf_func.pdf(x_keep).astype(x_keep.dtype)
+        #     rel_acc = (np.max(np.abs(p_init_mc_marginal - p_init_analy_marginal))
+        #               / np.max(np.abs(p_init_analy_marginal)))
+        #     print(f"[check] rel. accuracy of MC   (marginal to x{x_components:1d}) "
+        #           f"--> the deviation between p(t0) MC and p(t0): {100.0*rel_acc:.2f} %")
+            # ax.plot(np.full_like(x_keep, t), x_keep, p_init_analy_marginal, lw=2.0, color="green", linestyle=":")
 
     x_keep = data_pinn["x"]; times = data_pinn["times"]; M = data_pinn["M"]
     for j, t in enumerate(times):
@@ -197,10 +140,53 @@ def plot_time_curves_3d(x_components, constants, data_sol, data_pinn, data_lp=No
     # plt.close()
 
 
-def plot_pdf_metrics(metrics):
+def _indices_in_dense(time_dense, time_sparse, tol=None):
+    time_dense  = np.asarray(time_dense)
+    time_sparse = np.asarray(time_sparse)
+
+    if tol is None:  # exact match (fast)
+        mask = np.isin(time_dense, time_sparse)
+        return np.flatnonzero(mask)
+
+    # tolerant match (no huge memory use)
+    order = np.argsort(time_dense)
+    td    = time_dense[order]
+    mask_sorted = np.zeros(td.shape, dtype=bool)
+
+    for t in np.asarray(time_sparse).ravel():
+        left  = np.searchsorted(td, t - tol, side='left')
+        right = np.searchsorted(td, t + tol, side='right')
+        if right > left:
+            mask_sorted[left:right] = True
+
+    return order[np.flatnonzero(mask_sorted)]
+
+
+def plot_pdf_metrics(metrics, data_normalize_e1_pinn_max=None):
     colors = sns.color_palette("husl", 3)
+
+    # Get PINN Error Bound over time
+    if(data_normalize_e1_pinn_max is not None):
+        times = data_normalize_e1_pinn_max["times"]
+        # synchronize times
+        idx_times = _indices_in_dense(times, metrics["t"], tol=1e-4)
+        times = times[idx_times]
+        e1_pinn_max = data_normalize_e1_pinn_max["values"][:, -1]
+        B1 = 2.*e1_pinn_max[idx_times]
+        print(times)
+        print(B1)
+
     plt.figure()
     plt.plot(metrics["t"], metrics["rel_error_pinn"], color=colors[0], label=r"$\hat{p}$ PINN")
+    if(data_normalize_e1_pinn_max is not None):
+        plt.fill_between(
+            metrics["t"],
+            metrics["rel_error_pinn"],
+            100.*B1,
+            color=colors[0],
+            alpha=0.2,
+            label="PINN Error Bound"
+        )
     plt.plot(metrics["t"], metrics["rel_error_lp"], color=colors[1],   label=r"$p$ Linear Prop.")
     plt.plot(metrics["t"], metrics["rel_error_ut"], color=colors[2],   label=r"$p$ Unscent Trans.")
     plt.legend()
@@ -214,6 +200,17 @@ def plot_pdf_metrics(metrics):
     plt.legend()
     plt.xlabel("t")
     plt.ylabel("total variation %")
+
+    # metric 3: negative log liklihood (relative KL)
+    plt.figure()
+    plt.plot(metrics["t"], metrics["rel_kl_pinn"], color=colors[0], label=r"$\hat{p}$ PINN")
+    plt.plot(metrics["t"], metrics["rel_kl_lp"], color=colors[1],   label=r"$p$ Linear Prop.")
+    plt.plot(metrics["t"], metrics["rel_kl_ut"], color=colors[2],   label=r"$p$ Unscent Trans.")
+    # plt.plot(metrics["t"], metrics["rel_kl_ut_alpha_0_1"], color=colors[2], marker="o", label=r"$p$ Unscent Trans. $(\alpha=0.1)$")
+    plt.legend()
+    plt.xlabel("t")
+    plt.ylabel("Negative Log Likelihood")
+
     plt.show()
 
 
@@ -303,75 +300,8 @@ def _open_memmap_npy(path, shape, dtype=np.float32):
     # mode='w+' creates the file and allows writing
     return open_memmap(path, mode='w+', dtype=dtype, shape=shape)
 
+
 # ---- main computation ----
-
-def precompute_pdfsol_streaming(constants, p_sol, out_dir, dtype=np.float32,
-                             grid_dir="data/grids", block_target_points=1_000_000,
-                             inner_batch_points=500_000, device="cpu"):
-    """
-    Streams the 6D grid in blocks; for each time t in constants.T_PRIME_SPAN:
-      - writes pdf_t_<t>.npy incrementally using a memmap
-    No full 30^6 grid or pdf is ever kept in memory.
-    """
-    os.makedirs(out_dir, exist_ok=True)
-
-    # load per-axis grids (numpy 1D arrays)
-    x_axes = [
-        np.load(os.path.join(grid_dir, f"x{i}s.npy")).astype(dtype, copy=False)
-        for i in range(1, 7)
-    ]
-    sizes = [len(a) for a in x_axes]  # expect [30,30,30,30,30,30]
-
-    # choose roughly cubic block sizes so product ~ block_target_points (cap by axis length)
-    root = max(1, round(block_target_points ** (1/6)))
-    block_sizes = [min(n, root) for n in sizes]
-    # nudge down if still too big
-    def prod(v):
-        r = 1
-        for x in v: r *= x
-        return r
-    while prod(block_sizes) > block_target_points:
-        i = int(np.argmax(block_sizes))
-        block_sizes[i] = max(1, block_sizes[i]-1)
-
-    print(f"[info] grid sizes: {sizes}, block sizes: {block_sizes} (~{prod(block_sizes):,} pts/block)")
-
-    # iterate all requested times
-    for t in constants.T_PRIME_SPAN:
-        out_path = os.path.join(out_dir, f"pdfsol_t{t:.3f}.npy")
-        print(f"[time {t:.3f}] writing -> {out_path}")
-
-        # create memmap file for this time
-        pdf_mm = _open_memmap_npy(out_path, shape=tuple(sizes), dtype=dtype)
-
-        with torch.no_grad():
-            # constant time tensor will be built per inner batch
-            for idxs in _iter_blocks(sizes, block_sizes):
-                # build block points on device
-                pts_block, blk_shape = _make_block_points(x_axes, idxs, device, torch.float32)
-                K = pts_block.shape[0]
-
-                # process this block in inner batches to fit GPU/CPU memory
-                vals_list = []
-                for start in range(0, K, inner_batch_points):
-                    end = min(start + inner_batch_points, K)
-                    x_batch = pts_block[start:end, :6]
-                    x_batch_numpy = x_batch.detach().cpu().numpy()
-                    y = p_sol(constants, x_batch_numpy, t)           # (B,1) or (B,)
-                    vals_list.append(y)
-
-                vals = np.concatenate(vals_list, axis=0)   # (K,)
-                vals = vals.reshape(blk_shape)             # reshape to local block shape
-
-                # write into proper slice of the memmap
-                a1,b1,a2,b2,a3,b3,a4,b4,a5,b5,a6,b6 = idxs
-                pdf_mm[a1:b1, a2:b2, a3:b3, a4:b4, a5:b5, a6:b6] = vals
-
-        # ensure data is flushed
-        del pdf_mm
-        print(f"[time {t:.3f}] done.")
-
-
 def precompute_pdf_init_streaming(constants, p_init, out_dir, dtype=np.float32,
                              grid_dir="data/grids", block_target_points=1_000_000,
                              inner_batch_points=500_000, device="cpu"):
@@ -612,3 +542,250 @@ def densify_between(v, n_between=1):
     pieces = [np.linspace(v[i], v[i+1], n_between + 2)[:-1]  # drop right endpoint
               for i in range(len(v)-1)]
     return np.concatenate(pieces + [v[-1:]])
+
+
+def corner_plot_single(
+    constants,
+    X_samples,
+    pdf_vals=None,                # optional weights
+    bins=200,
+    labels=None,
+    figsize_per_dim=1.5,
+    normalize_weights=False,
+    max_points=500_000,           # for scatter mode speed
+    mode="heatmap",               # "scatter" or "heatmap"
+    cmap="viridis",
+    alpha=0.5,                    # scatter transparency
+    point_size=3
+):
+    """
+    Corner plot with 1D weighted histograms and either scatter or heatmap for off-diagonals.
+    """
+    X = np.asarray(X_samples)
+    if pdf_vals is None:
+        w = np.ones(X.shape[0])
+    else:
+        w = np.asarray(pdf_vals)
+    if normalize_weights and np.sum(w) > 0:
+        w = w / np.sum(w)
+
+    N, D = X.shape
+    if labels is None:
+        labels = [f"x{i+1}" for i in range(D)]
+
+    ranges = [
+        (constants.X1_RANGE[0],constants.X1_RANGE[1]),
+        (constants.X2_RANGE[0],constants.X2_RANGE[1]),
+        (constants.X3_RANGE[0],constants.X3_RANGE[1]),
+        (constants.X4_RANGE[0],constants.X4_RANGE[1]),
+        (constants.X5_RANGE[0],constants.X5_RANGE[1]),
+        (constants.X6_RANGE[0],constants.X6_RANGE[1]),
+    ]
+
+    fig, axes = plt.subplots(D, D, figsize=(figsize_per_dim*D, figsize_per_dim*D))
+    plt.subplots_adjust(wspace=0.08, hspace=0.08)
+
+    # Diagonals: weighted 1D histograms
+    for d in range(D):
+        ax = axes[d, d]
+        lo, hi = ranges[d]
+        ax.hist(
+            X[:, d],
+            bins=bins,
+            range=(lo, hi),
+            weights=w,
+            histtype="stepfilled",
+            alpha=0.8,
+            color="steelblue"
+        )
+        ax.set_xlim(lo, hi)
+        ax.yaxis.set_major_locator(MaxNLocator(nbins=4, prune="both"))
+        if d == D-1:
+            ax.set_xlabel(labels[d])
+        else:
+            ax.set_xticklabels([])
+        if d != 0:
+            ax.set_yticklabels([])
+
+        # Hide upper triangle
+        for k in range(d+1, D):
+            axes[d, k].axis("off")
+
+    # Off-diagonals: scatter or heatmap
+    for i in range(1, D):
+        for j in range(i):
+            ax = axes[i, j]
+            (xlo, xhi), (ylo, yhi) = ranges[j], ranges[i]
+
+            if mode == "scatter":
+                # Subsample for speed if too many points
+                idx = np.arange(N)
+                if max_points is not None and N > max_points:
+                    idx = np.random.default_rng(0).choice(N, size=max_points, replace=False)
+                sc = ax.scatter(
+                    X[idx, j], X[idx, i],
+                    c=w[idx],
+                    cmap=cmap,
+                    alpha=alpha,
+                    s=point_size,
+                    edgecolors="none"
+                )
+
+            elif mode == "heatmap":
+                H, xedges, yedges = np.histogram2d(
+                    X[:, j], X[:, i],
+                    bins=bins,
+                    range=[(xlo, xhi), (ylo, yhi)],
+                    weights=w
+                )
+                H = H.T
+                ax.imshow(
+                    H,
+                    origin="lower",
+                    extent=(xlo, xhi, ylo, yhi),
+                    aspect="auto",
+                    cmap=cmap,
+                    norm=LogNorm(vmax=H.max() if H.max() > 0 else 1)
+                )
+
+            ax.set_xlim(xlo, xhi)
+            ax.set_ylim(ylo, yhi)
+
+            if i == D-1:
+                ax.set_xlabel(labels[j])
+            else:
+                ax.set_xticklabels([])
+            if j == 0:
+                ax.set_ylabel(labels[i])
+            else:
+                ax.set_yticklabels([])
+
+    fig.tight_layout()
+
+
+def corner_compare_overlay_lower(
+    constants,
+    X, wA, wB,
+    bins=200,
+    labels=None,
+    figsize_per_dim=1.5,
+    normalize_weights=False,
+    cmapA="Blues",
+    cmapB="Reds",
+    alphaA=0.3,
+    alphaB=0.3,
+    add_contours=False,           # optional thin outlines to help in overlaps
+    contour_colorA="#1f4ab8",
+    contour_colorB="#9a1b1b",
+):
+    """
+    Corner plot comparing two weighted distributions using *overlaid* lower-triangle heatmaps.
+      - Diagonal: overlaid 1D weighted histograms (A vs B)
+      - Lower triangle: for each (i,j), overlay 2D weighted histograms of A and B
+      - Upper triangle: hidden
+
+    Args:
+        X:  (N,D) shared sample locations
+        wA: (N,) weights of distribution A (e.g., reference)
+        wB: (N,) weights of distribution B (e.g., PINN)
+    """
+    ranges = [
+        (constants.X1_RANGE[0],constants.X1_RANGE[1]),
+        (constants.X2_RANGE[0],constants.X2_RANGE[1]),
+        (constants.X3_RANGE[0],constants.X3_RANGE[1]),
+        (constants.X4_RANGE[0],constants.X4_RANGE[1]),
+        (constants.X5_RANGE[0],constants.X5_RANGE[1]),
+        (constants.X6_RANGE[0],constants.X6_RANGE[1]),
+    ]
+
+    X = np.asarray(X)
+    wA = np.asarray(wA).reshape(-1)
+    wB = np.asarray(wB).reshape(-1)
+    if X.ndim != 2: raise ValueError("X must be (N, D).")
+    if wA.shape[0] != X.shape[0] or wB.shape[0] != X.shape[0]:
+        raise ValueError("wA and wB must have length N.")
+    if normalize_weights:
+        sA, sB = wA.sum(), wB.sum()
+        if sA > 0: wA = wA / sA
+        if sB > 0: wB = wB / sB
+
+    N, D = X.shape
+    if labels is None:
+        labels = [f"x{i+1}" for i in range(D)]
+
+    fig, axes = plt.subplots(D, D, figsize=(figsize_per_dim*D, figsize_per_dim*D))
+    plt.subplots_adjust(wspace=0.08, hspace=0.08)
+
+    # Diagonals: overlay 1D histograms
+    for d in range(D):
+        ax = axes[d, d]
+        lo, hi = ranges[d]
+        ax.hist(X[:, d], bins=bins, range=(lo, hi), weights=wA,
+                histtype="stepfilled", alpha=0.55, color="#3b82f6", label="A")
+        ax.hist(X[:, d], bins=bins, range=(lo, hi), weights=wB,
+                histtype="stepfilled", alpha=0.55, color="#ef4444", label="B")
+        ax.hist(X[:, d], bins=bins, range=(lo, hi), weights=wA,
+                histtype="step", color="#1f4ab8", linewidth=0.9)
+        ax.hist(X[:, d], bins=bins, range=(lo, hi), weights=wB,
+                histtype="step", color="#9a1b1b", linewidth=0.9)
+        ax.set_xlim(lo, hi)
+        ax.yaxis.set_major_locator(MaxNLocator(nbins=4, prune="both"))
+        if d == D-1: ax.set_xlabel(labels[d])
+        else: ax.set_xticklabels([])
+        if d != 0: ax.set_yticklabels([])
+        for k in range(d+1, D):
+            axes[d, k].axis("off")
+
+    # Lower triangle: overlay heatmaps with shared vmax per cell
+    for i in range(1, D):
+        for j in range(i):
+            ax = axes[i, j]
+            (xlo, xhi), (ylo, yhi) = ranges[j], ranges[i]
+
+            HA, xedges, yedges = np.histogram2d(
+                X[:, j], X[:, i], bins=bins,
+                range=[(xlo, xhi), (ylo, yhi)], weights=wA
+            )
+            HB, _, _ = np.histogram2d(
+                X[:, j], X[:, i], bins=bins,
+                range=[(xlo, xhi), (ylo, yhi)], weights=wB
+            )
+            HA, HB = HA.T, HB.T
+            vmax = float(max(HA.max(), HB.max(), 1e-12))
+
+            # Plot A then B with transparency, same normalization
+            ax.imshow(
+                HA, origin="lower",
+                extent=(xlo, xhi, ylo, yhi), aspect="auto",
+                cmap=cmapA, alpha=alphaA,
+                norm=LogNorm(vmin=1e-12, vmax=vmax)
+            )
+            ax.imshow(
+                HB, origin="lower",
+                extent=(xlo, xhi, ylo, yhi), aspect="auto",
+                cmap=cmapB, alpha=alphaB,
+                norm=LogNorm(vmin=1e-12, vmax=vmax)
+            )
+
+            # Optional thin outlines to help where colors overlap
+            if add_contours and (HA.max() > 0 or HB.max() > 0):
+                levels = np.geomspace(max(vmax*1e-3, 1e-12), vmax, 5)
+                ax.contour(
+                    0.5*(xedges[:-1]+xedges[1:]),
+                    0.5*(yedges[:-1]+yedges[1:]),
+                    HA, levels=levels, colors=contour_colorA, linewidths=0.5
+                )
+                ax.contour(
+                    0.5*(xedges[:-1]+xedges[1:]),
+                    0.5*(yedges[:-1]+yedges[1:]),
+                    HB, levels=levels, colors=contour_colorB, linewidths=0.5, linestyles="--"
+                )
+
+            ax.set_xlim(xlo, xhi); ax.set_ylim(ylo, yhi)
+            if i == D-1: ax.set_xlabel(labels[j])
+            else: ax.set_xticklabels([])
+            if j == 0: ax.set_ylabel(labels[i])
+            else: ax.set_yticklabels([])
+
+    axes[0,0].legend(loc="upper right", fontsize=8, frameon=False)
+    fig.tight_layout()
