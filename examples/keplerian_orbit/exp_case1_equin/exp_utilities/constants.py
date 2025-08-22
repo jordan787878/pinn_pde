@@ -24,16 +24,40 @@ class Case1_6D_Constants_Equin:
     _CONSTANTS_DATA = np.load("data/constants.npz")
     _MEAN_I   = _CONSTANTS_DATA["mu_vec"]
     _COV_I    = _CONSTANTS_DATA["cov_diag"]
+
+    # whitening scaling: xi' = (xi - mui)/sqrt(Sigma_ii)
+    _N_MEAN_I = np.float32([0.,
+                            0., 
+                            0.,
+                            0.,
+                            0.,
+                            0.])  
+
+    _N_COV_I = np.eye(6, dtype=np.float32)
+
     _J2 = np.float32(1.0826e-3)
     _J2_VR = 2.0*(3*_T**2 * _J2 * _MU_EARTH * _R_EARTH**2)/(2*_R**5)
 
-    # Domain of TF = 0.1*T
+    # Scaled Domain of TF = 0.1*T
     _X1_RANGE = np.float32(np.array([_CONSTANTS_DATA["min_vec"][0], _CONSTANTS_DATA["max_vec"][0]]))
+    _N_X1_RANGE = (_X1_RANGE - _MEAN_I[0])/(_COV_I[0,0])**(0.5)
+    
     _X2_RANGE = np.float32(np.array([_CONSTANTS_DATA["min_vec"][1], _CONSTANTS_DATA["max_vec"][1]]))
+    _N_X2_RANGE = (_X2_RANGE - _MEAN_I[1])/(_COV_I[1,1])**(0.5)
+    
     _X3_RANGE = np.float32(np.array([_CONSTANTS_DATA["min_vec"][2], _CONSTANTS_DATA["max_vec"][2]]))
+    _N_X3_RANGE = (_X3_RANGE - _MEAN_I[2])/(_COV_I[2,2])**(0.5)
+    
     _X4_RANGE = np.float32(np.array([_CONSTANTS_DATA["min_vec"][3], _CONSTANTS_DATA["max_vec"][3]]))
+    _N_X4_RANGE = (_X4_RANGE - _MEAN_I[3])/(_COV_I[3,3])**(0.5)
+    
     _X5_RANGE = np.float32(np.array([_CONSTANTS_DATA["min_vec"][4], _CONSTANTS_DATA["max_vec"][4]]))
+    _N_X5_RANGE = (_X5_RANGE - _MEAN_I[4])/(_COV_I[4,4])**(0.5)
+    
     _X6_RANGE = np.float32(np.array([-0.25, 1.])) # by MC
+    _N_X6_RANGE = (_X6_RANGE - _MEAN_I[5])/(_COV_I[5,5])**(0.5)
+
+    _SCALING_PDF = np.float32( 1. / (_COV_I[0,0]*_COV_I[1,1]*_COV_I[2,2]*_COV_I[3,3]*_COV_I[4,4]*_COV_I[5,5])**0.5 )
     
     # _MAX_PX1  = np.float32(3.0)
     # _MAX_PX2  = np.float32(1.8)
@@ -90,6 +114,14 @@ class Case1_6D_Constants_Equin:
         return self._COV_I
     
     @property
+    def N_MEAN_I(self):
+        return self._N_MEAN_I
+    
+    @property
+    def N_COV_I(self):
+        return self._N_COV_I
+    
+    @property
     def J2(self):
         return self._J2
     
@@ -122,8 +154,36 @@ class Case1_6D_Constants_Equin:
         return self._X6_RANGE
     
     @property
+    def N_X1_RANGE(self):
+        return self._N_X1_RANGE
+    
+    @property
+    def N_X2_RANGE(self):
+        return self._N_X2_RANGE
+    
+    @property
+    def N_X3_RANGE(self):
+        return self._N_X3_RANGE
+    
+    @property
+    def N_X4_RANGE(self):
+        return self._N_X4_RANGE
+    
+    @property
+    def N_X5_RANGE(self):
+        return self._N_X5_RANGE
+    
+    @property
+    def N_X6_RANGE(self):
+        return self._N_X6_RANGE
+    
+    @property
     def T_PRIME_SPAN(self):
         return self._T_PRIME_SPAN
+    
+    @property
+    def SCALING_PDF(self):
+        return self._SCALING_PDF
     
     def test_printout(self):
         print("MU_EARTH: ", self.MU_EARTH)
@@ -140,6 +200,22 @@ class Case1_6D_Constants_Equin:
         print("X2_RANGE: ", self.X2_RANGE)
         print("X3_RANGE: ", self.X3_RANGE)
         print("X4_RANGE: ", self.X4_RANGE)
+        print("X5_RANGE: ", self.X5_RANGE)
+        print("X6_RANGE: ", self.X6_RANGE)
+        print("N_X1_RANGE: ", self.N_X1_RANGE)
+        print("N_X2_RANGE: ", self.N_X2_RANGE)
+        print("N_X3_RANGE: ", self.N_X3_RANGE)
+        print("N_X4_RANGE: ", self.N_X4_RANGE)
+        print("N_X5_RANGE: ", self.N_X5_RANGE)
+        print("N_X6_RANGE: ", self.N_X6_RANGE)
+
+    def scaled_x(self, x):
+        # scaled x points
+        _x_scaled = np.zeros(x.shape, dtype=np.float32)
+        for i in range(6):
+            _xi_scaled = (x[:,i] - self.MEAN_I[i])/ self.COV_I[i,i]**0.5
+            _x_scaled[:, i] = _xi_scaled
+        return _x_scaled
 
     def sample_init_points(self, N_samples):
         _x_bc_normal = np.random.multivariate_normal(self.MEAN_I, self.COV_I, size=N_samples).astype(np.float32)
@@ -174,6 +250,41 @@ class Case1_6D_Constants_Equin:
         t = torch.tensor(t, dtype=torch.float32, requires_grad=True).view(-1,1)
         return x, t
     
+
+    def sample_init_points_scaled(self, N_samples):
+        _x_bc_normal = np.random.multivariate_normal(self.N_MEAN_I, self.N_COV_I, size=N_samples).astype(np.float32)
+        _x_bc_normal = torch.tensor(_x_bc_normal, dtype=torch.float32, requires_grad=False)
+        _x_bc = np.column_stack([
+            np.random.uniform(self.N_X1_RANGE[0], self.N_X1_RANGE[1], N_samples),
+            np.random.uniform(self.N_X2_RANGE[0], self.N_X2_RANGE[1], N_samples),
+            np.random.uniform(self.N_X3_RANGE[0], self.N_X3_RANGE[1], N_samples),
+            np.random.uniform(self.N_X4_RANGE[0], self.N_X4_RANGE[1], N_samples),
+            np.random.uniform(self.N_X5_RANGE[0], self.N_X5_RANGE[1], N_samples),
+            np.random.uniform(self.N_X6_RANGE[0], self.N_X6_RANGE[1], N_samples),
+        ])
+        _x_bc = torch.tensor(_x_bc, dtype=torch.float32, requires_grad=False)
+        x_bc = torch.cat((_x_bc_normal, _x_bc), dim=0)
+        t_bc = (torch.ones(len(x_bc), 1, dtype=torch.float32) * self.TI)
+        return x_bc, t_bc
+    
+    def sample_res_points_scaled(self, N_samples):
+        _x_normal = np.random.multivariate_normal(self.N_MEAN_I, self.N_COV_I, size=N_samples).astype(np.float32)
+        _x_normal = torch.tensor(_x_normal, dtype=torch.float32, requires_grad=True)
+        _x = np.column_stack([
+            np.random.uniform(self.N_X1_RANGE[0], self.N_X1_RANGE[1], N_samples),
+            np.random.uniform(self.N_X2_RANGE[0], self.N_X2_RANGE[1], N_samples),
+            np.random.uniform(self.N_X3_RANGE[0], self.N_X3_RANGE[1], N_samples),
+            np.random.uniform(self.N_X4_RANGE[0], self.N_X4_RANGE[1], N_samples),
+            np.random.uniform(self.N_X5_RANGE[0], self.N_X5_RANGE[1], N_samples),
+            np.random.uniform(self.N_X6_RANGE[0], self.N_X6_RANGE[1], N_samples),
+        ])
+        _x = torch.tensor(_x, dtype=torch.float32, requires_grad=True)
+        x = torch.cat((_x_normal, _x), dim=0)
+        t = np.random.uniform(self._T_PRIME_SPAN[0], self._T_PRIME_SPAN[-1], len(x))
+        t = torch.tensor(t, dtype=torch.float32, requires_grad=True).view(-1,1)
+        return x, t
+    
+    
     def get_xinputs_on_grids(self, grid_folder):
         x1s = np.load(grid_folder+"x1s.npy")
         x2s = np.load(grid_folder+"x2s.npy")
@@ -185,7 +296,6 @@ class Case1_6D_Constants_Equin:
         grid_points = np.vstack([x1_grid.ravel(), x2_grid.ravel(), x3_grid.ravel(), x4_grid.ravel(), x5_grid.ravel(), x6_grid.ravel()]).T
         x_tensor = torch.tensor(grid_points, dtype=torch.float32, requires_grad=False).reshape(-1,6)
         return x_tensor
-    
 
     def get_grid_numpy(self, grid_folder):
         x1s = np.load(grid_folder+"x1s.npy").astype(np.float32)

@@ -110,6 +110,16 @@ def p_init(constants, x):
     return pdf_eval
 
 
+def p_init_scaled(constants, x):
+    """
+    x is from the scaled cooridnate: x_i = (x_i_notscaled - mu_i)/std
+    x is numpy array of shape (N x X_dim), N is the sample size
+    """
+    pdf_func = multivariate_normal(mean=constants.N_MEAN_I, cov=constants.N_COV_I)
+    pdf_eval = pdf_func.pdf(x).reshape(-1,1).astype(x.dtype)
+    return pdf_eval
+
+
 def p_sol(constants, x, t_prime):
     """
     x is numpy array of shape (N x X_dim), N is the sample size
@@ -121,6 +131,25 @@ def p_sol(constants, x, t_prime):
     pdf_eval = np.float32(1.0)
     for i in range(6):
         pdf_func_i = multivariate_normal(mean=constants.MEAN_I[i], cov=constants.COV_I[i,i])
+        if(i == 5):
+            x_i = x6_shift
+        else:
+            x_i = x[:,i].astype(np.float32)
+        pdf_eval = pdf_eval * pdf_func_i.pdf(x_i).reshape(-1,1).astype(x_i.dtype)
+    return pdf_eval
+
+
+def p_sol_scaled(constants, x, t_prime):
+    """
+    x is numpy array of shape (N x X_dim), N is the sample size
+    """
+    # shift x
+    x1 = x[:, 0]*constants.COV_I[0,0]**0.5 + constants.MEAN_I[0]
+    x6 = x[:, 5]
+    x6_shift = x6 - (t_prime) * np.sqrt(constants.MU_EARTH/ x1**3) * constants.T / (constants.COV_I[5,5]**0.5)
+    pdf_eval = np.float32(1.0)
+    for i in range(6):
+        pdf_func_i = multivariate_normal(mean=constants.N_MEAN_I[i], cov=constants.N_COV_I[i,i])
         if(i == 5):
             x_i = x6_shift
         else:

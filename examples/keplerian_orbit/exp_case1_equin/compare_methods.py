@@ -1,14 +1,14 @@
 import numpy as np
 import torch
 from scipy.stats import multivariate_normal, norm
-from monte import p_init, p_sol, print_mc_time
+from monte import p_init, p_init_scaled, p_sol, print_mc_time
 from exp_utilities.constants import Case1_6D_Constants_Equin
 from exp_utilities.plot_util import plot_time_curves_3d, plot_pdf_metrics, corner_plot_single, corner_compare_overlay_lower, plt
 from baseline_methods import SAVE_PATH_LINEAR_PROPAGATE, SAVE_PATH_UNSCENT_PROPAGATE, PropagationData
 # import utilities
 import sys
 sys.path.insert(0, '../utilities/')
-from _General.neuralnetworks import PNet, load_trained_model
+from _General.neuralnetworks import PNet, PNet_Scaled, load_trained_model
 from _General.util import compute_volume, save_metrics_npz, load_metrics_npz
 from functools import partial
 constants = Case1_6D_Constants_Equin()
@@ -144,10 +144,11 @@ def compute_relKL_and_update_metrics(metrics, t, X, p_data_normal=None, p_net=No
     global constants
     eps = np.finfo(np.float32).tiny   # machine precision of np.float32 ≈ 1.175e-38
     if(p_net is not None):
-        _x_tensor = torch.tensor(X, dtype=torch.float32, requires_grad=False)
+        X_scaled = constants.scaled_x(X)
+        _x_tensor = torch.tensor(X_scaled, dtype=torch.float32, requires_grad=False)
         _t = np.ones((len(_x_tensor), 1)) * t
         _t_tensor = torch.tensor(_t, dtype=torch.float32, requires_grad=False).view(-1,1)
-        pdf_eval = p_net(_x_tensor, _t_tensor).detach().cpu().numpy().reshape(-1,)
+        pdf_eval = constants.SCALING_PDF * p_net(_x_tensor, _t_tensor).detach().cpu().numpy().reshape(-1,)
     if(p_data_normal is not None):
         _, _mu, _cov = p_data_normal.get(t)
         _mu = np.float32(_mu)
@@ -175,12 +176,13 @@ def compute_pdf_variations(p_net=None, data_lp=None, data_ut=None, save_path=Non
         "rel_kl_lp": [],
         "rel_kl_ut": [],
         "rel_kl_pinn": [],
-        "t": data_lp.data["times"]
+        "t": np.array([0.0, 0.02, 0.05, 0.08, 0.1], dtype=np.float32) # data_lp.data["times"]
     } 
 
     N_samples = 10000000
     X = get_uniform_Xsamples_numpy(N_samples=N_samples) # samples from random uniform
-    _x_tensor = torch.tensor(X, dtype=torch.float32, requires_grad=False)
+    X_scaled = constants.scaled_x(X)
+    _x_tensor = torch.tensor(X_scaled, dtype=torch.float32, requires_grad=False)
 
     for idx, t in enumerate(metrics["t"]):
         print("\ntime {:.4f}".format(t))
@@ -192,7 +194,7 @@ def compute_pdf_variations(p_net=None, data_lp=None, data_ut=None, save_path=Non
         print("[info] pdf PINN")
         _t = np.ones((len(_x_tensor), 1)) * t
         _t_tensor = torch.tensor(_t, dtype=torch.float32, requires_grad=False).view(-1,1)
-        pdf_pinn = p_net(_x_tensor, _t_tensor).detach().cpu().numpy().reshape(-1,)
+        pdf_pinn = constants.SCALING_PDF * p_net(_x_tensor, _t_tensor).detach().cpu().numpy().reshape(-1,)
         compute_and_update_metrics(metrics, pdf_eval=pdf_pinn, pdf_ref=pdf_ref, key="pinn")
         compute_relKL_and_update_metrics(metrics, t, X_mc, p_net=p_net, key="pinn")
 
@@ -217,72 +219,77 @@ def compute_pdf_variations(p_net=None, data_lp=None, data_ut=None, save_path=Non
 
 def compare_corner_plots(p_net=None, data_lp=None, data_ut=None, save_path=None):
     global constants
-    t_show = np.array([0.0, 0.05, 0.1], dtype=np.float32)
+    t_show = np.array([0.1], dtype=np.float32)
 
     N_samples = 1000000
     X = get_uniform_Xsamples_numpy(N_samples=N_samples) # samples from random uniform
-    _x_tensor = torch.tensor(X, dtype=torch.float32, requires_grad=False)
+    X_scaled = constants.scaled_x(X)
+    _x_tensor = torch.tensor(X_scaled, dtype=torch.float32, requires_grad=False)
 
     for idx, t in enumerate(t_show):
         print("\ntime {:.4f}".format(t))
 
         print("[info] pdf ref")
         pdf_ref = p_sol(constants, X, t).reshape(-1,)
-        # corner_plot_single(constants,
-        #     X, pdf_ref,
-        #     labels=["x1","x2","x3","x4","x5","x6"],
-        #     mode="heatmap",
-        #     cmap="Blues"
-        # )
+        corner_plot_single(constants,
+            X, pdf_ref,
+            labels=["x1","x2","x3","x4","x5","x6"],
+            mode="heatmap", cmap="Reds"
+        )
 
-        print("[info] pdf PINN")
-        _t = np.ones((len(_x_tensor), 1)) * t
-        _t_tensor = torch.tensor(_t, dtype=torch.float32, requires_grad=False).view(-1,1)
-        pdf_pinn = p_net(_x_tensor, _t_tensor).detach().cpu().numpy().reshape(-1,)
-        # corner_plot_single(constants,
-        #     X, pdf_pinn,
-        #     labels=["x1","x2","x3","x4","x5","x6"],
-        #     mode="heatmap",
-        #     cmap="Reds"
-        # )
+        # print("[info] pdf PINN")
+        # _t = np.ones((len(_x_tensor), 1)) * t
+        # _t_tensor = torch.tensor(_t, dtype=torch.float32, requires_grad=False).view(-1,1)
+        # pdf_pinn = constants.SCALING_PDF * p_net(_x_tensor, _t_tensor).detach().cpu().numpy().reshape(-1,)
+        # # corner_plot_single(constants,
+        # #     X, pdf_pinn,
+        # #     labels=["x1","x2","x3","x4","x5","x6"],
+        # #     mode="heatmap", cmap="Reds"
+        # # )
 
-        # print("[info] pdf LP")
-        # _, _mu_lp, _cov_lp = data_lp.get(t)
-        # _mu_lp = np.float32(_mu_lp)
-        # _cov_lp = np.float32(_cov_lp)
-        # pdf_lp = p_normal(X, _mu_lp, _cov_lp).reshape(-1,)
+        # # print("[info] pdf LP")
+        # # _, _mu_lp, _cov_lp = data_lp.get(t)
+        # # _mu_lp = np.float32(_mu_lp)
+        # # _cov_lp = np.float32(_cov_lp)
+        # # pdf_lp = p_normal(X, _mu_lp, _cov_lp).reshape(-1,)
 
-        print("[info] pdf UT")
-        _, _mu_ut, _cov_ut = data_ut.get(t)
-        _mu_ut = np.float32(_mu_ut)
-        _cov_ut = np.float32(_cov_ut)
-        pdf_ut = p_normal(X, _mu_ut, _cov_ut).reshape(-1,)
-        # corner_plot_single(constants,
-        #     X, pdf_ut,
-        #     labels=["x1","x2","x3","x4","x5","x6"],
-        #     mode="heatmap",
-        #     cmap="Greens"
-        # )
+        # print("[info] pdf UT")
+        # _, _mu_ut, _cov_ut = data_ut.get(t)
+        # _mu_ut = np.float32(_mu_ut)
+        # _cov_ut = np.float32(_cov_ut)
+        # pdf_ut = p_normal(X, _mu_ut, _cov_ut).reshape(-1,)
 
-        corner_compare_overlay_lower(constants,
-            X, pdf_ref, pdf_pinn,
-            labels=["x1","x2","x3","x4","x5","x6"],)
+        # corner_compare_overlay_lower(constants,
+        #     X, pdf_ref, pdf_pinn,
+        #     labels=["x1","x2","x3","x4","x5","x6"],)
         
-        corner_compare_overlay_lower(constants,
-            X, pdf_ref, pdf_ut,
-            labels=["x1","x2","x3","x4","x5","x6"],)
+        # corner_compare_overlay_lower(constants,
+        #     X, pdf_ref, pdf_ut,
+        #     labels=["x1","x2","x3","x4","x5","x6"],)
 
         plt.show()
 
 
 def compare_methods():
     global constants
-    p_net = PNet(constants, input_feature=7)
-    scale = np.load("data/pre_compute/p_init_max.npz")["value"]
+
+    # p_net = PNet(constants, input_feature=7)
+    # scale = np.load("data/pre_compute/p_init_max.npz")["value"]
+    # scale_torch = torch.tensor(scale, dtype=torch.float32)
+    # p_net.scale = scale_torch
+
+    p_net = PNet_Scaled(constants, input_feature=7)
+    _x_at_mean = constants.N_MEAN_I.copy()
+    p_max = p_init_scaled(constants, _x_at_mean.reshape(-1, 6)).item()
+    scale = p_max
     scale_torch = torch.tensor(scale, dtype=torch.float32)
+
     p_net.scale = scale_torch
-    OUTPUT_PATH = "output/v0"
+    print("p net scale: ", p_net.scale)
+
+    OUTPUT_PATH = "output/v0_scaled"
     p_net = load_trained_model(p_net, path=OUTPUT_PATH+"/p_net.pth"); p_net.eval()
+
     data_lp = PropagationData(SAVE_PATH_LINEAR_PROPAGATE)
     data_ut = PropagationData(SAVE_PATH_UNSCENT_PROPAGATE)
     metrics_path = "output/baseline_methods/metrics.npz"
@@ -291,10 +298,10 @@ def compare_methods():
     metrics = load_metrics_npz(metrics_path)
 
     # --- Visualize ---
-    # compare_corner_plots(p_net=p_net, data_lp=data_lp, data_ut=data_ut)
+    compare_corner_plots(p_net=p_net, data_lp=data_lp, data_ut=data_ut)
 
-    data_normalize_e1_pinn_max = np.load(OUTPUT_PATH+"/data_e1_pinn_max.npz")
-    plot_pdf_metrics(metrics, data_normalize_e1_pinn_max=data_normalize_e1_pinn_max)
+    # data_normalize_e1_pinn_max = np.load(OUTPUT_PATH+"/data_e1_pinn_max.npz")
+    plot_pdf_metrics(metrics, data_normalize_e1_pinn_max=None)
 
     # for i in range(1, 7):
     #     # data_mc = np.load("data/1e+6/pre_compute/marginal_p_x"+str(i)+"_t_M.npz")
