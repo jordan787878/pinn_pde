@@ -9,7 +9,6 @@ from matplotlib.lines import Line2D
 from mpl_toolkits.mplot3d import Axes3D  # noqa: F401  (needed for 3D projection)
 import pandas as pd
 from matplotlib.colors import LogNorm
-from scipy.stats import gaussian_kde
 from matplotlib.ticker import MaxNLocator
 
 
@@ -38,6 +37,18 @@ def _integrate_out_others(pdf: np.ndarray, axes_coords: Sequence[np.ndarray], ke
     for ax in sorted([i for i in range(f.ndim) if i != keep_axis], reverse=True):
         f = np.trapz(f, x=np.asarray(axes_coords[ax], dtype=float), axis=ax)
     return np.asarray(axes_coords[keep_axis], dtype=float), f
+
+
+def p_normal(x, mean, cov):
+    """
+    x is numpy array of shape (N x X_dim), N is the sample size
+    """
+    scales = np.sqrt(np.diag(cov))  # std per dimension
+    cov_scaled = cov / np.outer(scales, scales)
+    x_scaled = (x - mean) / scales
+    rv = multivariate_normal(mean=np.zeros(len(mean)), cov=cov_scaled)
+    pdf_eval = rv.pdf(x_scaled) / np.prod(scales)  # back-transform
+    return pdf_eval.reshape(-1,)
 
 
 # ---------- plotting ----------
@@ -544,272 +555,104 @@ def densify_between(v, n_between=1):
     return np.concatenate(pieces + [v[-1:]])
 
 
-def corner_plot_single(
-    constants,
-    X_samples,
-    pdf_vals=None,                # optional weights
+def compare_marginal_plot(constants, 
+    x_coord1=1, x_coord2=1,
+    X_samples=None,
+    data_marginal_pinn=None,
+    gaussian_lp=None,
+    gaussian_ut=None,
     bins=200,
-    labels=None,
-    figsize_per_dim=1.5,
-    normalize_weights=False,
-    max_points=10_000,           # for scatter mode speed
-    mode="heatmap",               # "scatter" or "heatmap"
+    mode="heatmap",            # "scatter" or "heatmap"
     cmap="viridis",
-    alpha=1.0,                    # scatter transparency
-    point_size=3
-):
-    """
-    Corner plot with 1D weighted histograms and either scatter or heatmap for off-diagonals.
-    """
-    X = np.asarray(X_samples)
-    if pdf_vals is None:
-        w = np.ones(X.shape[0])
+    ranges=None,               # list of (lo,hi) per dim; if None -> data-driven
+    quantile_range=(0.001, 0.999),  # set to None to use full min/max
+    log_counts=True,           # log color scale for heatmap
+    ):
+
+    labels=["x"+str(x_coord1), "x"+str(x_coord2)]
+
+    fig, ax = plt.subplots(figsize=(10, 8))
+    colors = sns.color_palette("husl", 3)
+
+    # contour plot from data_marginal_pinn
+    x_first = data_marginal_pinn['x_first']
+    x_second = data_marginal_pinn['x_second']
+    pdf_values = data_marginal_pinn['pdf']
+    x_first_unscaled = x_first*constants.COV_I[x_coord1-1, x_coord1-1]**0.5 + constants.MEAN_I[x_coord1-1]
+    x_second_unscaled = x_second*constants.COV_I[x_coord2-1, x_coord2-1]**0.5 + constants.MEAN_I[x_coord2-2]
+    X_grid, Y_grid = np.meshgrid(x_first_unscaled, x_second_unscaled, indexing="ij")
+    pdf_max = np.max(pdf_values[pdf_values > 0])
+    # Define levels as percentages of the maximum value
+    relative_levels = np.array([0.01, 0.25, 0.50, 0.75, 0.99])
+    levels = relative_levels * pdf_max
+    # Draw the contour lines with the custom levels
+    ax.contour(X_grid, Y_grid, pdf_values, levels=levels, colors=[colors[0]], 
+               linewidths=1.5)
+    
+    # heatmap plot from samples drawn from the true distribution
+    xlo = x_first_unscaled.min()
+    xhi = x_first_unscaled.max()
+    ylo = x_second_unscaled.min()
+    yhi = x_second_unscaled.max()
+    H, xedges, yedges = np.histogram2d(
+        X_samples[:, x_coord1-1], X_samples[:, x_coord2-1],
+        bins=bins,
+        range=[(xlo, xhi), (ylo, yhi)],
+    )
+    H = H.T
+    if log_counts:
+        pos = H[H > 0]
+        vmax = float(pos.max()) if pos.size else 1.0
+        vmin = float(pos.min()) if pos.size else 1.0  # >=1 to avoid zeros in LogNorm
+        norm = LogNorm(vmin=vmin, vmax=vmax)
     else:
-        w = np.asarray(pdf_vals)
-    if normalize_weights and np.sum(w) > 0:
-        w = w / np.sum(w)
+        norm = None
+    ax.imshow(
+        H, origin="lower",
+        extent=(xlo, xhi, ylo, yhi),
+        aspect="auto", cmap=cmap, norm=norm, interpolation="nearest",
+        alpha=0.5
+    )
 
-    N, D = X.shape
-    if labels is None:
-        labels = [f"x{i+1}" for i in range(D)]
+    # contour of LP
+    if(gaussian_lp is not None):
+        mu_6d, cov_6d = gaussian_lp
+        plot_axes = (x_coord1-1, x_coord2-1)
+        marginal_mu = mu_6d[list(plot_axes)]
+        marginal_cov = cov_6d[np.ix_(list(plot_axes), list(plot_axes))]
+        grid_pts = np.vstack([X_grid.ravel(), Y_grid.ravel()]).T
+        # print(marginal_mu.shape, marginal_cov.shape, grid_pts.shape)
+        pdf_values = p_normal(grid_pts, marginal_mu, marginal_cov).reshape(X_grid.shape)
+        pdf_max = np.max(pdf_values[pdf_values > 0])
+        # Define levels as percentages of the maximum value
+        levels = relative_levels * pdf_max
+        # Draw the contour lines with the custom levels
+        ax.contour(X_grid, Y_grid, pdf_values, levels=levels, colors=[colors[1]], 
+                linewidths=1.5)
 
-    ranges = [
-        (constants.X1_RANGE[0],constants.X1_RANGE[1]),
-        (constants.X2_RANGE[0],constants.X2_RANGE[1]),
-        (constants.X3_RANGE[0],constants.X3_RANGE[1]),
-        (constants.X4_RANGE[0],constants.X4_RANGE[1]),
-        (constants.X5_RANGE[0],constants.X5_RANGE[1]),
-        (constants.X6_RANGE[0],constants.X6_RANGE[1]),
-    ]
-    # mins = np.quantile(X, 0.001, axis=0)
-    # maxs = np.quantile(X, 0.999, axis=0)
-    # pad  = 0.02 * (maxs - mins + 1e-12)
-    # ranges = [(float(mins[i]-pad[i]), float(maxs[i]+pad[i])) for i in range(X.shape[1])]
+    # contour of UT
+    if(gaussian_ut is not None):
+        mu_6d, cov_6d = gaussian_ut
+        plot_axes = (x_coord1-1, x_coord2-1)
+        marginal_mu = mu_6d[list(plot_axes)]
+        marginal_cov = cov_6d[np.ix_(list(plot_axes), list(plot_axes))]
+        grid_pts = np.vstack([X_grid.ravel(), Y_grid.ravel()]).T
+        # print(marginal_mu.shape, marginal_cov.shape, grid_pts.shape)
+        pdf_values = p_normal(grid_pts, marginal_mu, marginal_cov).reshape(X_grid.shape)
+        pdf_max = np.max(pdf_values[pdf_values > 0])
+        # Define levels as percentages of the maximum value
+        levels = relative_levels * pdf_max
+        # Draw the contour lines with the custom levels
+        ax.contour(X_grid, Y_grid, pdf_values, levels=levels, colors=[colors[2]], 
+                linewidths=1.5)
 
+    ax.set_xlim(X_samples[:, x_coord1-1].min(), X_samples[:, x_coord1-1].max())
+    ax.set_ylim(X_samples[:, x_coord2-1].min(), X_samples[:, x_coord2-1].max())
+    ax.set_xlabel(labels[0])
+    ax.set_ylabel(labels[1])
+    ax.set_title(f'2D Marginal PDF for {labels[0]} and {labels[1]}')
+    return ax
 
-    fig, axes = plt.subplots(D, D, figsize=(figsize_per_dim*D, figsize_per_dim*D))
-    plt.subplots_adjust(wspace=0.08, hspace=0.08)
-
-    # Diagonals: weighted 1D histograms
-    for d in range(D):
-        ax = axes[d, d]
-        lo, hi = ranges[d]
-        ax.hist(
-            X[:, d],
-            bins=bins,
-            range=(lo, hi),
-            weights=w,
-            histtype="stepfilled",
-            alpha=0.8,
-            color="steelblue"
-        )
-        ax.set_xlim(lo, hi)
-        ax.yaxis.set_major_locator(MaxNLocator(nbins=4, prune="both"))
-        if d == D-1:
-            ax.set_xlabel(labels[d])
-        else:
-            ax.set_xticklabels([])
-        if d != 0:
-            ax.set_yticklabels([])
-
-        # Hide upper triangle
-        for k in range(d+1, D):
-            axes[d, k].axis("off")
-
-    # Off-diagonals: scatter or heatmap
-    for i in range(1, D):
-        for j in range(i):
-            ax = axes[i, j]
-            (xlo, xhi), (ylo, yhi) = ranges[j], ranges[i]
-
-            if mode == "scatter":
-                # Subsample for speed if too many points
-                idx = np.arange(N)
-                if max_points is not None and N > max_points:
-                    idx = np.random.default_rng(0).choice(N, size=max_points, replace=False)
-                sc = ax.scatter(
-                    X[idx, j], X[idx, i],
-                    c=w[idx],
-                    cmap=cmap,
-                    # alpha=alpha,
-                    s=point_size,
-                    edgecolors="none"
-                )
-
-            elif mode == "heatmap":
-                H, xedges, yedges = np.histogram2d(
-                    X[:, j], X[:, i],
-                    bins=bins,
-                    range=[(xlo, xhi), (ylo, yhi)],
-                    weights=w
-                )
-                H = H.T
-                ax.imshow(
-                    H,
-                    origin="lower",
-                    extent=(xlo, xhi, ylo, yhi),
-                    aspect="auto",
-                    cmap=cmap,
-                    norm=LogNorm(vmax=H.max() if H.max() > 0 else 1)
-                )
-
-            ax.set_xlim(xlo, xhi)
-            ax.set_ylim(ylo, yhi)
-
-            if i == D-1:
-                ax.set_xlabel(labels[j])
-            else:
-                ax.set_xticklabels([])
-            if j == 0:
-                ax.set_ylabel(labels[i])
-            else:
-                ax.set_yticklabels([])
-
-    fig.tight_layout()
-
-
-def dim_ranges_minmax(X, ignore_nan=True):
-    X = np.asarray(X)
-    mins = np.nanmin(X, axis=0) if ignore_nan else np.min(X, axis=0)
-    maxs = np.nanmax(X, axis=0) if ignore_nan else np.max(X, axis=0)
-    # shape (6, 2): [[x1_min, x1_max], ..., [x6_min, x6_max]]
-    return np.stack([mins, maxs], axis=1)
-
-
-def corner_compare_overlay_lower(
-    constants,
-    X, wA, wB,
-    bins=200,
-    labels=None,
-    figsize_per_dim=1.5,
-    normalize_weights=False,
-    cmapA="Blues",
-    cmapB="Reds",
-    alphaA=0.3,
-    alphaB=0.3,
-    add_contours=False,           # optional thin outlines to help in overlaps
-    contour_colorA="#1f4ab8",
-    contour_colorB="#9a1b1b",
-):
-    """
-    Corner plot comparing two weighted distributions using *overlaid* lower-triangle heatmaps.
-      - Diagonal: overlaid 1D weighted histograms (A vs B)
-      - Lower triangle: for each (i,j), overlay 2D weighted histograms of A and B
-      - Upper triangle: hidden
-
-    Args:
-        X:  (N,D) shared sample locations
-        wA: (N,) weights of distribution A (e.g., reference)
-        wB: (N,) weights of distribution B (e.g., PINN)
-    """
-    range_npy = dim_ranges_minmax(X)  # array of shape (6, 2)
-    print(range_npy)
-    # ranges = [tuple(r) for r in range_npy]
-    ranges = [
-        (constants.X1_RANGE[0],constants.X1_RANGE[1]),
-        (constants.X2_RANGE[0],constants.X2_RANGE[1]),
-        (constants.X3_RANGE[0],constants.X3_RANGE[1]),
-        (constants.X4_RANGE[0],constants.X4_RANGE[1]),
-        (constants.X5_RANGE[0],constants.X5_RANGE[1]),
-        (constants.X6_RANGE[0],constants.X6_RANGE[1]),
-    ]
-
-    X = np.asarray(X)
-    wA = np.asarray(wA).reshape(-1)
-    wB = np.asarray(wB).reshape(-1)
-    if X.ndim != 2: raise ValueError("X must be (N, D).")
-    if wA.shape[0] != X.shape[0] or wB.shape[0] != X.shape[0]:
-        raise ValueError("wA and wB must have length N.")
-    if normalize_weights:
-        sA, sB = wA.sum(), wB.sum()
-        if sA > 0: wA = wA / sA
-        if sB > 0: wB = wB / sB
-
-    N, D = X.shape
-    if labels is None:
-        labels = [f"x{i+1}" for i in range(D)]
-
-    fig, axes = plt.subplots(D, D, figsize=(figsize_per_dim*D, figsize_per_dim*D))
-    plt.subplots_adjust(wspace=0.08, hspace=0.08)
-
-    # Diagonals: overlay 1D histograms
-    for d in range(D):
-        ax = axes[d, d]
-        lo, hi = ranges[d]
-        ax.hist(X[:, d], bins=bins, range=(lo, hi), weights=wA,
-                histtype="stepfilled", alpha=0.55, color="#3b82f6", label="A")
-        ax.hist(X[:, d], bins=bins, range=(lo, hi), weights=wB,
-                histtype="stepfilled", alpha=0.55, color="#ef4444", label="B")
-        ax.hist(X[:, d], bins=bins, range=(lo, hi), weights=wA,
-                histtype="step", color="#1f4ab8", linewidth=0.9)
-        ax.hist(X[:, d], bins=bins, range=(lo, hi), weights=wB,
-                histtype="step", color="#9a1b1b", linewidth=0.9)
-        ax.set_xlim(lo, hi)
-        ax.yaxis.set_major_locator(MaxNLocator(nbins=4, prune="both"))
-        if d == D-1: ax.set_xlabel(labels[d])
-        else: ax.set_xticklabels([])
-        if d != 0: ax.set_yticklabels([])
-        for k in range(d+1, D):
-            axes[d, k].axis("off")
-
-    # Lower triangle: overlay heatmaps with shared vmax per cell
-    for i in range(1, D):
-        for j in range(i):
-            ax = axes[i, j]
-            (xlo, xhi), (ylo, yhi) = ranges[j], ranges[i]
-
-            HA, xedges, yedges = np.histogram2d(
-                X[:, j], X[:, i], bins=bins,
-                range=[(xlo, xhi), (ylo, yhi)], weights=wA
-            )
-            HB, _, _ = np.histogram2d(
-                X[:, j], X[:, i], bins=bins,
-                range=[(xlo, xhi), (ylo, yhi)], weights=wB
-            )
-            HA, HB = HA.T, HB.T
-            vmax = float(max(HA.max(), HB.max(), 1e-12))
-
-            # Plot A then B with transparency, same normalization
-            ax.imshow(
-                HA, origin="lower",
-                extent=(xlo, xhi, ylo, yhi), aspect="auto",
-                cmap=cmapA, alpha=alphaA,
-                norm=LogNorm(vmin=1e-12, vmax=vmax)
-            )
-            ax.imshow(
-                HB, origin="lower",
-                extent=(xlo, xhi, ylo, yhi), aspect="auto",
-                cmap=cmapB, alpha=alphaB,
-                norm=LogNorm(vmin=1e-12, vmax=vmax)
-            )
-
-            # Optional thin outlines to help where colors overlap
-            if add_contours and (HA.max() > 0 or HB.max() > 0):
-                levels = np.geomspace(max(vmax*1e-3, 1e-12), vmax, 5)
-                ax.contour(
-                    0.5*(xedges[:-1]+xedges[1:]),
-                    0.5*(yedges[:-1]+yedges[1:]),
-                    HA, levels=levels, colors=contour_colorA, linewidths=0.5
-                )
-                ax.contour(
-                    0.5*(xedges[:-1]+xedges[1:]),
-                    0.5*(yedges[:-1]+yedges[1:]),
-                    HB, levels=levels, colors=contour_colorB, linewidths=0.5, linestyles="--"
-                )
-
-            ax.set_xlim(xlo, xhi); ax.set_ylim(ylo, yhi)
-            if i == D-1: ax.set_xlabel(labels[j])
-            else: ax.set_xticklabels([])
-            if j == 0: ax.set_ylabel(labels[i])
-            else: ax.set_yticklabels([])
-
-    axes[0,0].legend(loc="upper right", fontsize=8, frameon=False)
-    fig.tight_layout()
-
-
-
-from matplotlib.colors import LogNorm
-from matplotlib.ticker import MaxNLocator
 
 def corner_plot_from_samples(constants,
     X_samples,
@@ -825,13 +668,14 @@ def corner_plot_from_samples(constants,
     quantile_range=(0.001, 0.999),  # set to None to use full min/max
     pad_frac=0.02,
     log_counts=True,           # log color scale for heatmap
+    data_marginal_pinn=None
 ):
     X = np.asarray(X_samples)
     N, D = X.shape
     if labels is None:
         labels = [f"x{i+1}" for i in range(D)]
 
-    # ---- ranges ----
+    # ---- auto ranges ----
     # if ranges is None:
     #     if quantile_range is None:
     #         lo = np.min(X, axis=0)
@@ -846,6 +690,7 @@ def corner_plot_from_samples(constants,
     #     if len(ranges) != D:
     #         raise ValueError(f"`ranges` must have length {D}")
     #     ranges = [(float(a), float(b)) for (a, b) in ranges]
+    # --- fixed ranges ---
     ranges = [
         (constants.X1_RANGE[0],constants.X1_RANGE[1]),
         (constants.X2_RANGE[0],constants.X2_RANGE[1]),
@@ -913,6 +758,23 @@ def corner_plot_from_samples(constants,
                     extent=(xlo, xhi, ylo, yhi),
                     aspect="auto", cmap=cmap, norm=norm, interpolation="nearest"
                 )
+
+            # contour plots overlaid
+            if(i == 5 and j == 0 and data_marginal_pinn is not None):
+                # ax.scatter(constants.MEAN_I[0], constants.MEAN_I[5], 100)
+                x_first = data_marginal_pinn['x_second']
+                x_second = data_marginal_pinn['x_second']
+                pdf_values = data_marginal_pinn['pdf']
+                x_first_unscaled = x_first*constants.COV_I[0,0]**0.5 + constants.MEAN_I[0]
+                x_second_unscaled = x_second*constants.COV_I[5,5]**0.5 + constants.MEAN_I[5]
+                X_grid, Y_grid = np.meshgrid(x_first_unscaled, x_second_unscaled, indexing="ij")
+                pdf_max = np.max(pdf_values[pdf_values > 0])
+                # Define levels as percentages of the maximum value
+                # For example, levels at 5%, 25%, 50%, 75%, and 95% of the max
+                relative_levels = np.array([0.01, 0.05, 0.25, 0.50, 0.75, 0.95, 0.99])
+                levels = relative_levels * pdf_max
+                # Draw the contour lines with the custom levels
+                ax.contour(X_grid, Y_grid, pdf_values, levels=levels, colors='blue', linewidths=1.0)
 
             ax.set_xlim(xlo, xhi); ax.set_ylim(ylo, yhi)
             if i == D - 1: ax.set_xlabel(labels[j])

@@ -3,7 +3,8 @@ import torch
 from scipy.stats import multivariate_normal, norm
 from monte import p_init, p_init_scaled, p_sol, print_mc_time
 from exp_utilities.constants import Case1_6D_Constants_Equin
-from exp_utilities.plot_util import plot_time_curves_3d, plot_pdf_metrics, corner_plot_single, corner_compare_overlay_lower, corner_plot_from_samples, plt
+from exp_utilities.plot_util import (plot_time_curves_3d, plot_pdf_metrics, 
+                                     corner_plot_from_samples, compare_marginal_plot, plt)
 from baseline_methods import SAVE_PATH_LINEAR_PROPAGATE, SAVE_PATH_UNSCENT_PROPAGATE, PropagationData
 # import utilities
 import sys
@@ -66,7 +67,7 @@ def p_normal(x, mean, cov):
     scales = np.sqrt(np.diag(cov))  # std per dimension
     cov_scaled = cov / np.outer(scales, scales)
     x_scaled = (x - mean) / scales
-    rv = multivariate_normal(mean=np.zeros(6), cov=cov_scaled)
+    rv = multivariate_normal(mean=np.zeros(len(mean)), cov=cov_scaled)
     pdf_eval = rv.pdf(x_scaled) / np.prod(scales)  # back-transform
     return pdf_eval.reshape(-1,)
     # print(constants.COV_I)
@@ -166,7 +167,7 @@ def compute_pdf_variations(p_net=None, data_lp=None, data_ut=None, save_path=Non
         "t": np.array([0.0, 0.02, 0.05, 0.08, 0.1], dtype=np.float32) # data_lp.data["times"]
     } 
 
-    N_samples = 10000000
+    N_samples = 30000000
     X = get_uniform_Xsamples_numpy(N_samples=N_samples) # samples from random uniform
     X_scaled = constants.scaled_x(X)
     _x_tensor = torch.tensor(X_scaled, dtype=torch.float32, requires_grad=False)
@@ -217,9 +218,10 @@ def get_uniform_Xsamples_numpy(N_samples=None):
     return X
 
 
-def compare_corner_plots(p_net=None, data_lp=None, data_ut=None, save_path=None):
+def compare_corner_plots(p_net=None, data_lp=None, data_ut=None, save_path=None, 
+                         OUTPUT_PATH="output/v0_scaled"):
     global constants
-    t_show = np.array([0.0, 0.05, 0.1], dtype=np.float32)
+    t_show = np.array([0.1], dtype=np.float32)
 
     N_samples = 1000000
     X = get_uniform_Xsamples_numpy(N_samples=N_samples) # samples from random uniform
@@ -229,45 +231,37 @@ def compare_corner_plots(p_net=None, data_lp=None, data_ut=None, save_path=None)
     for idx, t in enumerate(t_show):
         print("\ntime {:.4f}".format(t))
 
-        print("[info] pdf ref")
+        print("[info] ref")
         X_ref = sample_joint_pdf(constants, t, N_samples)
-        corner_plot_from_samples(constants, X_ref)
-        # pdf_ref = p_sol(constants, X, t).reshape(-1,)
-        # corner_plot_single(constants,
-        #     X, pdf_ref,
-        #     labels=["x1","x2","x3","x4","x5","x6"],
-        #     mode="scatter", cmap="Reds"
-        # )
 
-        # print("[info] pdf PINN")
-        # _t = np.ones((len(_x_tensor), 1)) * t
-        # _t_tensor = torch.tensor(_t, dtype=torch.float32, requires_grad=False).view(-1,1)
-        # pdf_pinn = constants.SCALING_PDF * p_net(_x_tensor, _t_tensor).detach().cpu().numpy().reshape(-1,)
-        # corner_plot_single(constants,
-        #     X, pdf_pinn,
-        #     labels=["x1","x2","x3","x4","x5","x6"],
-        #     mode="heatmap", cmap="Reds"
-        # )
+        print("[info] pinn")
+        data_marginal_pinn = np.load(
+            OUTPUT_PATH+"/pre_compute/marginal_pdfpinn_x1_x6_t{:.3f}.npz".format(t))
+        
+        # NOTE: this needs rework
+        # corner_plot_from_samples(constants, 
+        #     X_ref, 
+        #     data_marginal_pinn=data_marginal_pinn)
 
-        # # print("[info] pdf LP")
-        # # _, _mu_lp, _cov_lp = data_lp.get(t)
-        # # _mu_lp = np.float32(_mu_lp)
-        # # _cov_lp = np.float32(_cov_lp)
-        # # pdf_lp = p_normal(X, _mu_lp, _cov_lp).reshape(-1,)
+        print("[info] pdf LP")
+        _, _mu_lp, _cov_lp = data_lp.get(t)
+        _mu_lp = np.float32(_mu_lp)
+        _cov_lp = np.float32(_cov_lp)
+        gaussian_lp = (_mu_lp, _cov_lp)
 
         print("[info] pdf UT")
         _, _mu_ut, _cov_ut = data_ut.get(t)
         _mu_ut = np.float32(_mu_ut)
         _cov_ut = np.float32(_cov_ut)
-        pdf_ut = p_normal(X, _mu_ut, _cov_ut).reshape(-1,)
+        gaussian_ut = (_mu_ut, _cov_ut)
 
-        # corner_compare_overlay_lower(constants,
-        #     X, pdf_ref, pdf_pinn,
-        #     labels=["x1","x2","x3","x4","x5","x6"],)
-        
-        # corner_compare_overlay_lower(constants,
-        #     X, pdf_ref, pdf_ut,
-        #     labels=["x1","x2","x3","x4","x5","x6"],)
+        ax = compare_marginal_plot(
+            constants, x_coord1=1, x_coord2=6,
+            X_samples=X_ref,
+            data_marginal_pinn=data_marginal_pinn,
+            gaussian_lp=gaussian_lp,
+            gaussian_ut=gaussian_ut
+        )
 
         plt.show()
 
@@ -303,6 +297,7 @@ def compare_methods():
     # data_normalize_e1_pinn_max = np.load(OUTPUT_PATH+"/data_e1_pinn_max.npz")
     # plot_pdf_metrics(metrics, data_normalize_e1_pinn_max=None)
 
+    # Visualize marginal PDF
     compare_corner_plots(p_net=p_net, data_lp=data_lp, data_ut=data_ut)
         
 
