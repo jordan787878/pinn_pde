@@ -30,7 +30,7 @@ def _get_Jacobian_expression():
 def get_Jacobian(constants, x):
     x1 = x[0]
     J = np.zeros((6, 6))
-    J[0,0] = -1.5*constants.MU_EARTH**0.5*constants.T*(x1**(-2.5))
+    J[5,0] = -1.5*constants.MU_EARTH**0.5*constants.T*(x1**(-3))**0.5/x1
     return J
 
 

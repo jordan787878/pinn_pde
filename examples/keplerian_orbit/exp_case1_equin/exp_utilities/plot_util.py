@@ -212,15 +212,15 @@ def plot_pdf_metrics(metrics, data_normalize_e1_pinn_max=None):
     plt.xlabel("t")
     plt.ylabel("total variation %")
 
-    # metric 3: negative log liklihood (relative KL)
-    plt.figure()
-    plt.plot(metrics["t"], metrics["rel_kl_pinn"], color=colors[0], label=r"$\hat{p}$ PINN")
-    plt.plot(metrics["t"], metrics["rel_kl_lp"], color=colors[1],   label=r"$p$ Linear Prop.")
-    plt.plot(metrics["t"], metrics["rel_kl_ut"], color=colors[2],   label=r"$p$ Unscent Trans.")
-    # plt.plot(metrics["t"], metrics["rel_kl_ut_alpha_0_1"], color=colors[2], marker="o", label=r"$p$ Unscent Trans. $(\alpha=0.1)$")
-    plt.legend()
-    plt.xlabel("t")
-    plt.ylabel("Negative Log Likelihood")
+    # # metric 3: negative log liklihood (relative KL)
+    # plt.figure()
+    # plt.plot(metrics["t"], metrics["rel_kl_pinn"], color=colors[0], label=r"$\hat{p}$ PINN")
+    # plt.plot(metrics["t"], metrics["rel_kl_lp"], color=colors[1],   label=r"$p$ Linear Prop.")
+    # plt.plot(metrics["t"], metrics["rel_kl_ut"], color=colors[2],   label=r"$p$ Unscent Trans.")
+    # # plt.plot(metrics["t"], metrics["rel_kl_ut_alpha_0_1"], color=colors[2], marker="o", label=r"$p$ Unscent Trans. $(\alpha=0.1)$")
+    # plt.legend()
+    # plt.xlabel("t")
+    # plt.ylabel("Negative Log Likelihood")
 
     plt.show()
 
@@ -555,45 +555,34 @@ def densify_between(v, n_between=1):
     return np.concatenate(pieces + [v[-1:]])
 
 
-def compare_marginal_plot(constants, 
+def plot_single_corner(constants, 
     x_coord1=1, x_coord2=1,
     X_samples=None,
     data_marginal_pinn=None,
     gaussian_lp=None,
     gaussian_ut=None,
     bins=200,
-    mode="heatmap",            # "scatter" or "heatmap"
-    cmap="viridis",
+    cmap="cividis",
     ranges=None,               # list of (lo,hi) per dim; if None -> data-driven
     quantile_range=(0.001, 0.999),  # set to None to use full min/max
     log_counts=True,           # log color scale for heatmap
     ):
+
+    xrange = getattr(constants, f"X{x_coord1}_RANGE")
+    yrange = getattr(constants, f"X{x_coord2}_RANGE")
+
+    set_publication_plot_style()
 
     labels=["x"+str(x_coord1), "x"+str(x_coord2)]
 
     fig, ax = plt.subplots(figsize=(10, 8))
     colors = sns.color_palette("husl", 3)
 
-    # contour plot from data_marginal_pinn
-    x_first = data_marginal_pinn['x_first']
-    x_second = data_marginal_pinn['x_second']
-    pdf_values = data_marginal_pinn['pdf']
-    x_first_unscaled = x_first*constants.COV_I[x_coord1-1, x_coord1-1]**0.5 + constants.MEAN_I[x_coord1-1]
-    x_second_unscaled = x_second*constants.COV_I[x_coord2-1, x_coord2-1]**0.5 + constants.MEAN_I[x_coord2-2]
-    X_grid, Y_grid = np.meshgrid(x_first_unscaled, x_second_unscaled, indexing="ij")
-    pdf_max = np.max(pdf_values[pdf_values > 0])
-    # Define levels as percentages of the maximum value
-    relative_levels = np.array([0.01, 0.25, 0.50, 0.75, 0.99])
-    levels = relative_levels * pdf_max
-    # Draw the contour lines with the custom levels
-    ax.contour(X_grid, Y_grid, pdf_values, levels=levels, colors=[colors[0]], 
-               linewidths=1.5)
-    
     # heatmap plot from samples drawn from the true distribution
-    xlo = x_first_unscaled.min()
-    xhi = x_first_unscaled.max()
-    ylo = x_second_unscaled.min()
-    yhi = x_second_unscaled.max()
+    xlo = X_samples[:, x_coord1-1].min()# x_first_unscaled.min()
+    xhi = X_samples[:, x_coord1-1].max()#x_first_unscaled.max()
+    ylo = X_samples[:, x_coord2-1].min()#x_second_unscaled.min()
+    yhi = X_samples[:, x_coord2-1].max()#x_second_unscaled.max()
     H, xedges, yedges = np.histogram2d(
         X_samples[:, x_coord1-1], X_samples[:, x_coord2-1],
         bins=bins,
@@ -611,24 +600,42 @@ def compare_marginal_plot(constants,
         H, origin="lower",
         extent=(xlo, xhi, ylo, yhi),
         aspect="auto", cmap=cmap, norm=norm, interpolation="nearest",
-        alpha=0.5
+        alpha=0.6
     )
 
+
+    relative_levels = np.array([0.001, 0.01, 0.25, 0.50, 0.75, 0.95])
+    # contour plot from data_marginal_pinn
+    if(data_marginal_pinn is not None):
+        X_grid = data_marginal_pinn['X_grid']
+        Y_grid = data_marginal_pinn['Y_grid']
+        pdf_values = data_marginal_pinn['pdf']
+        pdf_max = np.max(pdf_values[pdf_values > 0])
+        levels = relative_levels * pdf_max
+        print(levels)
+        # Draw the contour lines with the custom levels
+        ax.contour(X_grid, Y_grid, pdf_values, levels=levels, colors=[colors[0]], 
+                   linewidths=2)
+    
     # contour of LP
     if(gaussian_lp is not None):
         mu_6d, cov_6d = gaussian_lp
         plot_axes = (x_coord1-1, x_coord2-1)
         marginal_mu = mu_6d[list(plot_axes)]
         marginal_cov = cov_6d[np.ix_(list(plot_axes), list(plot_axes))]
+
+        # xs = np.linspace(xrange[0], xrange[1], num=100, endpoint=True)
+        # ys = np.linspace(yrange[0], yrange[1], num=100, endpoint=True)
+        # X_grid, Y_grid = np.meshgrid(xs, ys, indexing="ij")
         grid_pts = np.vstack([X_grid.ravel(), Y_grid.ravel()]).T
-        # print(marginal_mu.shape, marginal_cov.shape, grid_pts.shape)
+
         pdf_values = p_normal(grid_pts, marginal_mu, marginal_cov).reshape(X_grid.shape)
         pdf_max = np.max(pdf_values[pdf_values > 0])
         # Define levels as percentages of the maximum value
-        levels = relative_levels * pdf_max
+        # levels = relative_levels * pdf_max; print(levels)
         # Draw the contour lines with the custom levels
         ax.contour(X_grid, Y_grid, pdf_values, levels=levels, colors=[colors[1]], 
-                linewidths=1.5)
+                linewidths=2)
 
     # contour of UT
     if(gaussian_ut is not None):
@@ -636,25 +643,40 @@ def compare_marginal_plot(constants,
         plot_axes = (x_coord1-1, x_coord2-1)
         marginal_mu = mu_6d[list(plot_axes)]
         marginal_cov = cov_6d[np.ix_(list(plot_axes), list(plot_axes))]
+
+        # xs = np.linspace(xrange[0], xrange[1], num=100, endpoint=True)
+        # ys = np.linspace(yrange[0], yrange[1], num=100, endpoint=True)
+        # X_grid, Y_grid = np.meshgrid(xs, ys, indexing="ij")
         grid_pts = np.vstack([X_grid.ravel(), Y_grid.ravel()]).T
-        # print(marginal_mu.shape, marginal_cov.shape, grid_pts.shape)
+
         pdf_values = p_normal(grid_pts, marginal_mu, marginal_cov).reshape(X_grid.shape)
         pdf_max = np.max(pdf_values[pdf_values > 0])
         # Define levels as percentages of the maximum value
-        levels = relative_levels * pdf_max
+        # levels = relative_levels * pdf_max; print(levels)
         # Draw the contour lines with the custom levels
         ax.contour(X_grid, Y_grid, pdf_values, levels=levels, colors=[colors[2]], 
-                linewidths=1.5)
+                linewidths=2)
+        
+    # Create the legend handles
+    handles = []
+    if data_marginal_pinn is not None:
+        handles.append(plt.Line2D([], [], color=colors[0], label="PINN", linewidth=2))
+    if gaussian_lp is not None:
+        handles.append(plt.Line2D([], [], color=colors[1], label="LP", linewidth=2))
+    if gaussian_ut is not None:
+        handles.append(plt.Line2D([], [], color=colors[2], label="UT", linewidth=2))
+    ax.legend(handles=handles, loc='best')
 
-    ax.set_xlim(X_samples[:, x_coord1-1].min(), X_samples[:, x_coord1-1].max())
-    ax.set_ylim(X_samples[:, x_coord2-1].min(), X_samples[:, x_coord2-1].max())
+    b=0.05
+    ax.set_xlim(*np.ptp((x:=X_samples[:,x_coord1-1]))*np.array([-b,1+b])+x.min())
+    ax.set_ylim(*np.ptp((y:=X_samples[:,x_coord2-1]))*np.array([-b,1+b])+y.min())
     ax.set_xlabel(labels[0])
     ax.set_ylabel(labels[1])
     ax.set_title(f'2D Marginal PDF for {labels[0]} and {labels[1]}')
     return ax
 
 
-def corner_plot_from_samples(constants,
+def plot_full_corner(constants,
     X_samples,
     bins=200,
     labels=None,
@@ -760,18 +782,13 @@ def corner_plot_from_samples(constants,
                 )
 
             # contour plots overlaid
-            if(i == 5 and j == 0 and data_marginal_pinn is not None):
-                # ax.scatter(constants.MEAN_I[0], constants.MEAN_I[5], 100)
-                x_first = data_marginal_pinn['x_second']
-                x_second = data_marginal_pinn['x_second']
+            if(data_marginal_pinn is not None and i == 5 and j == 0):
                 pdf_values = data_marginal_pinn['pdf']
-                x_first_unscaled = x_first*constants.COV_I[0,0]**0.5 + constants.MEAN_I[0]
-                x_second_unscaled = x_second*constants.COV_I[5,5]**0.5 + constants.MEAN_I[5]
-                X_grid, Y_grid = np.meshgrid(x_first_unscaled, x_second_unscaled, indexing="ij")
+                X_grid, Y_grid = data_marginal_pinn["X_grid"], data_marginal_pinn["Y_grid"], 
                 pdf_max = np.max(pdf_values[pdf_values > 0])
                 # Define levels as percentages of the maximum value
                 # For example, levels at 5%, 25%, 50%, 75%, and 95% of the max
-                relative_levels = np.array([0.01, 0.05, 0.25, 0.50, 0.75, 0.95, 0.99])
+                relative_levels = np.array([0.001, 0.01, 0.05, 0.25, 0.50, 0.75, 0.95])
                 levels = relative_levels * pdf_max
                 # Draw the contour lines with the custom levels
                 ax.contour(X_grid, Y_grid, pdf_values, levels=levels, colors='blue', linewidths=1.0)

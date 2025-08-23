@@ -4,7 +4,7 @@ from scipy.stats import multivariate_normal, norm
 from monte import p_init, p_init_scaled, p_sol, print_mc_time
 from exp_utilities.constants import Case1_6D_Constants_Equin
 from exp_utilities.plot_util import (plot_time_curves_3d, plot_pdf_metrics, 
-                                     corner_plot_from_samples, compare_marginal_plot, plt)
+                                     plot_single_corner, plot_full_corner, plt)
 from baseline_methods import SAVE_PATH_LINEAR_PROPAGATE, SAVE_PATH_UNSCENT_PROPAGATE, PropagationData
 # import utilities
 import sys
@@ -148,6 +148,12 @@ def compute_relKL_and_update_metrics(metrics, t, X, p_data_normal=None, p_net=No
     else:
         print("All pdf_lp values are below machine precision!")
         KL = np.NaN
+    if(p_data_normal is not None):
+        KL += 1
+    if(p_net is not None):
+        # NOTE need to compute this, set to 1 for now
+        normal_constant = 1
+        KL += normal_constant
     metrics["rel_kl_"+key].append(KL)
     print(key, " - rel_kl: {:.2f}".format(KL))
 
@@ -161,10 +167,10 @@ def compute_pdf_variations(p_net=None, data_lp=None, data_ut=None, save_path=Non
         "tv_lp": [],
         "tv_ut": [],
         "tv_pinn": [],
-        "rel_kl_lp": [],
-        "rel_kl_ut": [],
-        "rel_kl_pinn": [],
-        "t": np.array([0.0, 0.02, 0.05, 0.08, 0.1], dtype=np.float32) # data_lp.data["times"]
+        # "rel_kl_lp": [],
+        # "rel_kl_ut": [],
+        # "rel_kl_pinn": [],
+        "t": constants.T_PRIME_SPAN,
     } 
 
     N_samples = 30000000
@@ -184,7 +190,7 @@ def compute_pdf_variations(p_net=None, data_lp=None, data_ut=None, save_path=Non
         _t_tensor = torch.tensor(_t, dtype=torch.float32, requires_grad=False).view(-1,1)
         pdf_pinn = constants.SCALING_PDF * p_net(_x_tensor, _t_tensor).detach().cpu().numpy().reshape(-1,)
         compute_and_update_metrics(metrics, pdf_eval=pdf_pinn, pdf_ref=pdf_ref, key="pinn")
-        compute_relKL_and_update_metrics(metrics, t, X_mc, p_net=p_net, key="pinn")
+        # compute_relKL_and_update_metrics(metrics, t, X_mc, p_net=p_net, key="pinn")
 
         print("[info] pdf LP")
         _, _mu_lp, _cov_lp = data_lp.get(t)
@@ -192,7 +198,7 @@ def compute_pdf_variations(p_net=None, data_lp=None, data_ut=None, save_path=Non
         _cov_lp = np.float32(_cov_lp)
         pdf_lp = p_normal(X, _mu_lp, _cov_lp).reshape(-1,)
         compute_and_update_metrics(metrics, pdf_eval=pdf_lp, pdf_ref=pdf_ref, key="lp")
-        compute_relKL_and_update_metrics(metrics, t, X_mc, p_data_normal=data_lp, key="lp")
+        # compute_relKL_and_update_metrics(metrics, t, X_mc, p_data_normal=data_lp, key="lp")
 
         print("[info] pdf UT")
         _, _mu_ut, _cov_ut = data_ut.get(t)
@@ -200,7 +206,7 @@ def compute_pdf_variations(p_net=None, data_lp=None, data_ut=None, save_path=Non
         _cov_ut = np.float32(_cov_ut)
         pdf_ut = p_normal(X, _mu_ut, _cov_ut).reshape(-1,)
         compute_and_update_metrics(metrics, pdf_eval=pdf_ut, pdf_ref=pdf_ref, key="ut")
-        compute_relKL_and_update_metrics(metrics, t, X_mc, p_data_normal=data_ut, key="ut")
+        # compute_relKL_and_update_metrics(metrics, t, X_mc, p_data_normal=data_ut, key="ut")
         
     save_metrics_npz(metrics, save_path)
 
@@ -219,29 +225,26 @@ def get_uniform_Xsamples_numpy(N_samples=None):
 
 
 def compare_corner_plots(p_net=None, data_lp=None, data_ut=None, save_path=None, 
-                         OUTPUT_PATH="output/v0_scaled"):
+                         OUTPUT_PATH=None):
     global constants
-    t_show = np.array([0.1], dtype=np.float32)
+    t_show = constants.T_PRIME_SPAN
 
     N_samples = 1000000
-    X = get_uniform_Xsamples_numpy(N_samples=N_samples) # samples from random uniform
+    # X = get_uniform_Xsamples_numpy(N_samples=N_samples) # samples from random uniform
     # X_scaled = constants.scaled_x(X)
     # _x_tensor = torch.tensor(X_scaled, dtype=torch.float32, requires_grad=False)
 
     for idx, t in enumerate(t_show):
         print("\ntime {:.4f}".format(t))
 
+        x_coords = (1, 6)
+
         print("[info] ref")
         X_ref = sample_joint_pdf(constants, t, N_samples)
 
         print("[info] pinn")
         data_marginal_pinn = np.load(
-            OUTPUT_PATH+"/pre_compute/marginal_pdfpinn_x1_x6_t{:.3f}.npz".format(t))
-        
-        # NOTE: this needs rework
-        # corner_plot_from_samples(constants, 
-        #     X_ref, 
-        #     data_marginal_pinn=data_marginal_pinn)
+            f"{OUTPUT_PATH}/pre_compute/marginal_pdfpinn_x{x_coords[0]}_x{x_coords[1]}_t{t:.3f}.npz")
 
         print("[info] pdf LP")
         _, _mu_lp, _cov_lp = data_lp.get(t)
@@ -255,13 +258,16 @@ def compare_corner_plots(p_net=None, data_lp=None, data_ut=None, save_path=None,
         _cov_ut = np.float32(_cov_ut)
         gaussian_ut = (_mu_ut, _cov_ut)
 
-        ax = compare_marginal_plot(
-            constants, x_coord1=1, x_coord2=6,
-            X_samples=X_ref,
+        # Singler corner plot as coordinate: x_coords
+        ax = plot_single_corner(
+            constants, x_coord1=x_coords[0], x_coord2=x_coords[1], X_samples=X_ref,
             data_marginal_pinn=data_marginal_pinn,
             gaussian_lp=gaussian_lp,
             gaussian_ut=gaussian_ut
         )
+
+        # Full corner plot
+        # plot_full_corner(constants, X_ref, data_marginal_pinn=data_marginal_pinn)
 
         plt.show()
 
@@ -283,7 +289,7 @@ def compare_methods():
     p_net.scale = scale_torch
     print("p net scale: ", p_net.scale)
 
-    OUTPUT_PATH = "output/v0_scaled"
+    OUTPUT_PATH = "output/v0_scaled_T0.3"
     p_net = load_trained_model(p_net, path=OUTPUT_PATH+"/p_net.pth"); p_net.eval()
 
     data_lp = PropagationData(SAVE_PATH_LINEAR_PROPAGATE)
@@ -291,16 +297,15 @@ def compare_methods():
     metrics_path = "output/baseline_methods/metrics.npz"
 
     # compute_pdf_variations(p_net=p_net, data_lp=data_lp, data_ut=data_ut, save_path=metrics_path)
-    metrics = load_metrics_npz(metrics_path)
 
     # --- Visualize ---
     # data_normalize_e1_pinn_max = np.load(OUTPUT_PATH+"/data_e1_pinn_max.npz")
+    # metrics = load_metrics_npz(metrics_path)
     # plot_pdf_metrics(metrics, data_normalize_e1_pinn_max=None)
 
     # Visualize marginal PDF
-    compare_corner_plots(p_net=p_net, data_lp=data_lp, data_ut=data_ut)
+    compare_corner_plots(p_net=p_net, data_lp=data_lp, data_ut=data_ut, OUTPUT_PATH=OUTPUT_PATH)
         
-
 
 def main():
     compare_methods()

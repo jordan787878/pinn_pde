@@ -20,7 +20,8 @@ class Case1_6D_Constants_Equin:
     _THETA    = np.float32(0.015)
     _PHI      = np.float32(0.0387)
     _TI       = np.float32(0.0)
-    _TF       = np.float32(0.1*_T)
+    # _TF       = np.float32(0.1*_T)
+    _TF       = np.float32(0.3*_T)
     _CONSTANTS_DATA = np.load("data/constants.npz")
     _MEAN_I   = _CONSTANTS_DATA["mu_vec"]
     _COV_I    = _CONSTANTS_DATA["cov_diag"]
@@ -54,7 +55,8 @@ class Case1_6D_Constants_Equin:
     _X5_RANGE = np.float32(np.array([_CONSTANTS_DATA["min_vec"][4], _CONSTANTS_DATA["max_vec"][4]]))
     _N_X5_RANGE = (_X5_RANGE - _MEAN_I[4])/(_COV_I[4,4])**(0.5)
     
-    _X6_RANGE = np.float32(np.array([-0.25, 1.])) # by MC
+    # _X6_RANGE = np.float32(np.array([-0.25, 1.])) # by MC
+    _X6_RANGE = np.float32(np.array([-0.25, 2.7])) # by MC
     _N_X6_RANGE = (_X6_RANGE - _MEAN_I[5])/(_COV_I[5,5])**(0.5)
 
     _SCALING_PDF = np.float32( 1. / (_COV_I[0,0]*_COV_I[1,1]*_COV_I[2,2]*_COV_I[3,3]*_COV_I[4,4]*_COV_I[5,5])**0.5 )
@@ -63,7 +65,8 @@ class Case1_6D_Constants_Equin:
     # _MAX_PX2  = np.float32(1.8)
     # _MAX_PX3  = np.float32(0.35)
     # _MAX_PX4  = np.float32(0.2)
-    _T_PRIME_SPAN   = np.float32(np.array([0.0, 0.02, 0.04, 0.06, 0.08, 0.1]))
+    # _T_PRIME_SPAN   = np.float32(np.array([0.0, 0.02, 0.04, 0.06, 0.08, 0.1]))
+    _T_PRIME_SPAN   = np.float32(3. *np.array([0.0, 0.02, 0.04, 0.06, 0.08, 0.1]))
 
     @property
     def NAME(self):

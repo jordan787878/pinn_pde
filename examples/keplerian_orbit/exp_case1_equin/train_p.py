@@ -130,7 +130,7 @@ def main():
     print("p net scale: ", p_net.scale)
 
     # --- v0 --- with regularization and curriculum training to enable subsequent training of e1_net
-    OUTPUT_PATH = "output/v0_scaled"
+    OUTPUT_PATH = "output/v0_scaled_T0.3"
     
     # --- base --- the most basic PINN training attempted to compare with standard MC
     # OUTPUT_PATH = "output/base"
@@ -144,10 +144,7 @@ def main():
         }
         # --- v0 ---
         # PINN.train_pinn_sol_v0(constants, p_net, configurations, iterations=10000, save_model=True)
-        PINN.train_pinn_sol_v0_scaled(constants, p_net, configurations, iterations=50000, save_model=True)
-        
-        # --- base ---
-        # PINN.train_pinn_sol_base(constants, p_net, configurations, iterations=100000, save_model=True)
+        PINN.train_pinn_sol_v0_scaled_improved(constants, p_net, configurations, iterations=100000, save_model=True)
     
     # --- Load the best network after training ---   
     p_net = load_trained_model(p_net, path=OUTPUT_PATH+"/p_net.pth"); p_net.eval()
@@ -167,16 +164,17 @@ def main():
     # scaled x points
     _x_scaled = constants.scaled_x(_x)
 
-    # checking in scaled x
-    for t in constants.T_PRIME_SPAN:
-        pdf_sol_scaled = p_sol_scaled(constants, _x_scaled, t).reshape(-1,)
+    # # checking in scaled x
+    # for t in constants.T_PRIME_SPAN:
+    #     pdf_sol_scaled = p_sol_scaled(constants, _x_scaled, t).reshape(-1,)
 
-        _x_tensor = torch.tensor(_x_scaled, dtype=torch.float32, requires_grad=True)
-        _t = np.ones((len(_x_tensor), 1)) * t
-        _t_tensor = torch.tensor(_t, dtype=torch.float32, requires_grad=True).view(-1,1)
-        pdf_pinn = p_net(_x_tensor, _t_tensor).detach().cpu().numpy().reshape(-1,)
-        rel_error = np.max(np.abs(pdf_sol_scaled-pdf_pinn)) / np.max(pdf_sol_scaled) # NOTE this metric needs sufficient large samples.
-        print(100. *rel_error.item())
+    #     _x_tensor = torch.tensor(_x_scaled, dtype=torch.float32, requires_grad=True)
+    #     _t = np.ones((len(_x_tensor), 1)) * t
+    #     _t_tensor = torch.tensor(_t, dtype=torch.float32, requires_grad=True).view(-1,1)
+    #     pdf_pinn = p_net(_x_tensor, _t_tensor).detach().cpu().numpy().reshape(-1,)
+    #     rel_error = np.max(np.abs(pdf_sol_scaled-pdf_pinn)) / np.max(pdf_sol_scaled) # NOTE this metric needs sufficient large samples.
+    #     print(100. *rel_error.item())
+    
     # checking in x
     for t in constants.T_PRIME_SPAN:
         pdf_sol = p_sol(constants, _x, t).reshape(-1,)

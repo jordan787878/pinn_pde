@@ -363,6 +363,146 @@ def train_pinn_sol_v0_scaled(constants, p_net, configurations, iterations=50000,
             print("[info] training epoch: ", epoch)
 
 
+def train_pinn_sol_v0_scaled_improved(constants, p_net, configurations, 
+                                      iterations=50000, save_model=False, beta_incre=0.02):
+    """
+    Improved training loop for the physics-informed neural network.
+    """
+    p_net.train()
+    p_net.to(device)
+    
+    mse_cost_function = torch.nn.MSELoss()
+    optimizer = torch.optim.Adam(p_net.parameters(), lr=1e-3)
+    scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.95)
+    
+    p_init = configurations["ic_fcn"]
+    diff_opt = configurations["diff_opt_fcn"]
+    pnet_path = configurations["pnet_path"]
+    pnet_path_inter = configurations["pnet_path_inter"]
+
+    min_loss = np.inf
+    iterations_per_decay = 1000
+    loss_history = []
+    normalize = p_net.scale
+    
+    N0_samples_initial = 2000
+    Nr_samples_initial = 2000
+    
+    N_RAR = 30000
+    x_bc_rar = torch.empty(0, 6, device=device)
+    t_bc_rar = torch.empty(0, 1, device=device)
+    x_res_rar = torch.empty(0, 6, device=device)
+    t_res_rar = torch.empty(0, 1, device=device)
+    FLAG = False
+
+    beta = np.float32(0.0)
+    RAR_eps = 0.05
+    inter_count = 0
+    
+    start_time = time.time()
+    for epoch in range(iterations):
+        optimizer.zero_grad()
+        
+        # Sample new points at each epoch for better generalization
+        x_bc_new, t_bc_new = constants.sample_init_points_scaled(N0_samples_initial)
+        x_res_new, t_res_new = constants.sample_res_points_scaled(Nr_samples_initial)
+        
+        # Combine with RAR points and ensure they are on the correct device
+        x_bc = torch.cat((x_bc_new.to(device), x_bc_rar), dim=0)
+        t_bc = torch.cat((t_bc_new.to(device), t_bc_rar), dim=0)
+        x_res = torch.cat((x_res_new.to(device), x_res_rar), dim=0)
+        t_res = torch.cat((t_res_new.to(device), t_res_rar), dim=0)
+
+        # FIX: Set requires_grad=True for x_res before using it in diff_opt_scaled
+        x_res.requires_grad_(True)
+        
+        # --- Loss based on initial conditions ---
+        p_i = p_init(constants, x_bc.detach().cpu().numpy())
+        p_i = torch.tensor(p_i, dtype=torch.float32, device=device)
+        phat_i = p_net(x_bc, t_bc)
+        mse_u = mse_cost_function(phat_i / normalize, p_i / normalize)
+
+        # --- Loss based on PDE ---
+        # The create_graph=True is necessary for the nested gradients.
+        res_p = diff_opt(x_res, t_res, p_net, beta=beta)
+        all_zeros = torch.zeros_like(res_p)
+        mse_res = mse_cost_function(res_p / normalize, all_zeros)
+
+        # --- Total Loss ---
+        loss = mse_u + mse_res
+        loss_history.append(loss.item())
+        
+        # --- Backpropagation ---
+        # `retain_graph=True` is needed for the nested gradient calls inside diff_opt_scaled
+        # This will be handled implicitly if create_graph=True is used in the inner grad calls
+        # and not explicitly set for loss.backward().
+        loss.backward(retain_graph=True)
+        
+        # Gradient Clipping
+        torch.nn.utils.clip_grad_norm_(p_net.parameters(), max_norm=1.0)
+        
+        optimizer.step()
+        
+        # --- Learning rate decay ---
+        if (epoch + 1) % iterations_per_decay == 0:
+            scheduler.step()
+            print(f"[info] Training epoch: {epoch+1}, LR: {optimizer.param_groups[0]['lr']:.2e}")
+
+        # --- Save min loss model and update beta ---
+        if loss.data < 0.95 * min_loss:
+            train_time = time.time() - start_time
+            print(f"--- Save Epoch: {epoch+1}, Loss: {loss.item():.4f}, IC: {mse_u.item():.4f}, Res: {mse_res.item():.4f}, Beta: {beta:.2f} ---")
+            if save_model:
+                torch.save({
+                    'epoch': epoch, 'model_state_dict': p_net.state_dict(),
+                    'optimizer_state_dict': optimizer.state_dict(),
+                    'loss_history': loss_history, 'train_time': train_time,
+                }, pnet_path)
+            min_loss = loss.data
+            beta = min(1.0, beta + beta_incre)
+            FLAG = True
+
+        # --- RAR ---
+        if epoch % 100 == 0 and FLAG:
+            FLAG = False
+
+            # Add IC points
+            with torch.no_grad():
+                x_bc_check, t_bc_check = constants.sample_init_points_scaled(N_RAR)
+                x_bc_check, t_bc_check = x_bc_check.to(device), t_bc_check.to(device)
+                p_i = p_init(constants, x_bc_check.detach().cpu().numpy())
+                p_i = torch.tensor(p_i, dtype=torch.float32, device=device)
+                phat_i = p_net(x_bc_check, t_bc_check)
+                ic_errors = torch.abs(p_i - phat_i) / normalize
+                
+                max_error_ic = ic_errors.max().item()
+                if max_error_ic > RAR_eps:
+                    max_indices = torch.topk(ic_errors.squeeze(), 10).indices
+                    x_bc_rar = torch.cat((x_bc_rar, x_bc_check[max_indices, :]), dim=0)
+                    t_bc_rar = torch.cat((t_bc_rar, t_bc_check[max_indices]), dim=0)
+                    print(f"... RAR IC, added {len(max_indices)} points. Max IC error: {max_error_ic:.4f}")
+
+            # Add Residual points
+            x_res_check, t_res_check = constants.sample_res_points_scaled(N_RAR)
+            x_res_check, t_res_check = x_res_check.to(device), t_res_check.to(device)
+            res_p = diff_opt(x_res_check, t_res_check, p_net, beta=beta)
+            res_errors = torch.abs(res_p) / normalize
+            
+            max_error_res = res_errors.max().item()
+            if max_error_res > RAR_eps:
+                max_indices = torch.topk(res_errors.squeeze(), 10).indices
+                x_res_rar = torch.cat((x_res_rar, x_res_check[max_indices, :]), dim=0)
+                t_res_rar = torch.cat((t_res_rar, t_res_check[max_indices]), dim=0)
+                print(f"... RAR Res, added {len(max_indices)} points. Max Res error: {max_error_res:.4f}")
+        
+
+    end_time = time.time()
+    print(f"Total training time: {(end_time - start_time):.2f} seconds.")
+
+
+#################
+
+
 def train_pinn_e1_v0(constants, networks, configurations, iterations=50000, save_model=False, beta_incre=0.005):
     """
     no TV loss
