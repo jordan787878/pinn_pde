@@ -552,10 +552,10 @@ def corner_plot_single(
     labels=None,
     figsize_per_dim=1.5,
     normalize_weights=False,
-    max_points=500_000,           # for scatter mode speed
+    max_points=10_000,           # for scatter mode speed
     mode="heatmap",               # "scatter" or "heatmap"
     cmap="viridis",
-    alpha=0.5,                    # scatter transparency
+    alpha=1.0,                    # scatter transparency
     point_size=3
 ):
     """
@@ -581,6 +581,11 @@ def corner_plot_single(
         (constants.X5_RANGE[0],constants.X5_RANGE[1]),
         (constants.X6_RANGE[0],constants.X6_RANGE[1]),
     ]
+    # mins = np.quantile(X, 0.001, axis=0)
+    # maxs = np.quantile(X, 0.999, axis=0)
+    # pad  = 0.02 * (maxs - mins + 1e-12)
+    # ranges = [(float(mins[i]-pad[i]), float(maxs[i]+pad[i])) for i in range(X.shape[1])]
+
 
     fig, axes = plt.subplots(D, D, figsize=(figsize_per_dim*D, figsize_per_dim*D))
     plt.subplots_adjust(wspace=0.08, hspace=0.08)
@@ -626,7 +631,7 @@ def corner_plot_single(
                     X[idx, j], X[idx, i],
                     c=w[idx],
                     cmap=cmap,
-                    alpha=alpha,
+                    # alpha=alpha,
                     s=point_size,
                     edgecolors="none"
                 )
@@ -663,6 +668,14 @@ def corner_plot_single(
     fig.tight_layout()
 
 
+def dim_ranges_minmax(X, ignore_nan=True):
+    X = np.asarray(X)
+    mins = np.nanmin(X, axis=0) if ignore_nan else np.min(X, axis=0)
+    maxs = np.nanmax(X, axis=0) if ignore_nan else np.max(X, axis=0)
+    # shape (6, 2): [[x1_min, x1_max], ..., [x6_min, x6_max]]
+    return np.stack([mins, maxs], axis=1)
+
+
 def corner_compare_overlay_lower(
     constants,
     X, wA, wB,
@@ -689,6 +702,9 @@ def corner_compare_overlay_lower(
         wA: (N,) weights of distribution A (e.g., reference)
         wB: (N,) weights of distribution B (e.g., PINN)
     """
+    range_npy = dim_ranges_minmax(X)  # array of shape (6, 2)
+    print(range_npy)
+    # ranges = [tuple(r) for r in range_npy]
     ranges = [
         (constants.X1_RANGE[0],constants.X1_RANGE[1]),
         (constants.X2_RANGE[0],constants.X2_RANGE[1]),
@@ -788,4 +804,120 @@ def corner_compare_overlay_lower(
             else: ax.set_yticklabels([])
 
     axes[0,0].legend(loc="upper right", fontsize=8, frameon=False)
+    fig.tight_layout()
+
+
+
+from matplotlib.colors import LogNorm
+from matplotlib.ticker import MaxNLocator
+
+def corner_plot_from_samples(constants,
+    X_samples,
+    bins=200,
+    labels=None,
+    figsize_per_dim=1.5,
+    max_points=500_000,
+    mode="heatmap",            # "scatter" or "heatmap"
+    cmap="viridis",
+    alpha=0.4,
+    point_size=2,
+    ranges=None,               # list of (lo,hi) per dim; if None -> data-driven
+    quantile_range=(0.001, 0.999),  # set to None to use full min/max
+    pad_frac=0.02,
+    log_counts=True,           # log color scale for heatmap
+):
+    X = np.asarray(X_samples)
+    N, D = X.shape
+    if labels is None:
+        labels = [f"x{i+1}" for i in range(D)]
+
+    # ---- ranges ----
+    # if ranges is None:
+    #     if quantile_range is None:
+    #         lo = np.min(X, axis=0)
+    #         hi = np.max(X, axis=0)
+    #     else:
+    #         qlo, qhi = quantile_range
+    #         lo = np.quantile(X, qlo, axis=0)
+    #         hi = np.quantile(X, qhi, axis=0)
+    #     pad = pad_frac * (hi - lo + 1e-12)
+    #     ranges = [(float(lo[i] - pad[i]), float(hi[i] + pad[i])) for i in range(D)]
+    # else:
+    #     if len(ranges) != D:
+    #         raise ValueError(f"`ranges` must have length {D}")
+    #     ranges = [(float(a), float(b)) for (a, b) in ranges]
+    ranges = [
+        (constants.X1_RANGE[0],constants.X1_RANGE[1]),
+        (constants.X2_RANGE[0],constants.X2_RANGE[1]),
+        (constants.X3_RANGE[0],constants.X3_RANGE[1]),
+        (constants.X4_RANGE[0],constants.X4_RANGE[1]),
+        (constants.X5_RANGE[0],constants.X5_RANGE[1]),
+        (constants.X6_RANGE[0],constants.X6_RANGE[1]),
+    ]
+
+    fig, axes = plt.subplots(D, D, figsize=(figsize_per_dim*D, figsize_per_dim*D))
+    plt.subplots_adjust(wspace=0.08, hspace=0.08)
+
+    # Diagonals: 1D histograms (counts)
+    for d in range(D):
+        ax = axes[d, d]
+        lo, hi = ranges[d]
+        ax.hist(
+            X[:, d],
+            bins=bins,
+            range=(lo, hi),
+            histtype="stepfilled",
+            alpha=0.85,
+            color="steelblue"
+        )
+        ax.set_xlim(lo, hi)
+        ax.yaxis.set_major_locator(MaxNLocator(nbins=4, prune="both"))
+        if d == D - 1: ax.set_xlabel(labels[d])
+        else: ax.set_xticklabels([])
+        if d != 0: ax.set_yticklabels([])
+
+        # hide upper triangle in row d
+        for k in range(d + 1, D):
+            axes[d, k].axis("off")
+
+    # Off-diagonals: scatter or heatmap (counts)
+    for i in range(1, D):
+        for j in range(i):
+            ax = axes[i, j]
+            (xlo, xhi), (ylo, yhi) = ranges[j], ranges[i]
+
+            if mode == "scatter":
+                idx = np.arange(N)
+                if max_points is not None and N > max_points:
+                    idx = np.random.default_rng(0).choice(N, size=max_points, replace=False)
+                ax.scatter(
+                    X[idx, j], X[idx, i],
+                    s=point_size, alpha=alpha, edgecolors="none"
+                )
+            else:  # heatmap of counts
+                H, xedges, yedges = np.histogram2d(
+                    X[:, j], X[:, i],
+                    bins=bins,
+                    range=[(xlo, xhi), (ylo, yhi)],
+                )
+                H = H.T
+                if log_counts:
+                    pos = H[H > 0]
+                    vmax = float(pos.max()) if pos.size else 1.0
+                    vmin = float(pos.min()) if pos.size else 1.0  # >=1 to avoid zeros in LogNorm
+                    norm = LogNorm(vmin=vmin, vmax=vmax)
+                else:
+                    norm = None
+                ax.imshow(
+                    H, origin="lower",
+                    extent=(xlo, xhi, ylo, yhi),
+                    aspect="auto", cmap=cmap, norm=norm, interpolation="nearest"
+                )
+
+            ax.set_xlim(xlo, xhi); ax.set_ylim(ylo, yhi)
+            if i == D - 1: ax.set_xlabel(labels[j])
+            else: ax.set_xticklabels([])
+            if j == 0: ax.set_ylabel(labels[i])
+            else: ax.set_yticklabels([])
+
     fig.tight_layout()
