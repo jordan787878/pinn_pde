@@ -1,5 +1,6 @@
 import numpy as np
 import torch
+from tqdm import tqdm
 from scipy.stats import multivariate_normal, norm
 from monte import p_init, p_init_scaled, p_sol, print_mc_time
 from exp_utilities.constants import Case1_6D_Constants_Equin
@@ -9,7 +10,7 @@ from baseline_methods import SAVE_PATH_LINEAR_PROPAGATE, SAVE_PATH_UNSCENT_PROPA
 # import utilities
 import sys
 sys.path.insert(0, '../utilities/')
-from _General.neuralnetworks import PNet, PNet_Scaled, load_trained_model
+from _General.neuralnetworks import PNet, PNet_Scaled, PNet_XL, load_trained_model
 from _General.util import compute_volume, save_metrics_npz, load_metrics_npz
 from functools import partial
 constants = Case1_6D_Constants_Equin()
@@ -39,7 +40,6 @@ def sample_joint_pdf(constants, t_prime, n_samples=50_000, seed=0, dtype=np.floa
     X[:, 5] = X[:, 5] + shift.astype(dtype)
     return X
 
-
 # -----------------------------
 # Sampling from baseline joint PDF
 # -----------------------------
@@ -57,6 +57,19 @@ def sample_joint_pdf_baseline(data_lp, t_prime, n_samples=50_000, seed=0, dtype=
     X = rng.multivariate_normal(mean=means.astype(np.float64),
                                 cov=cov.astype(np.float64),
                                 size=n_samples).astype(dtype, copy=False)
+    return X
+
+
+def get_uniform_Xsamples_numpy(N_samples=None):
+    global constants
+    X = np.column_stack([
+        np.random.uniform(constants.X1_RANGE[0], constants.X1_RANGE[1], N_samples),
+        np.random.uniform(constants.X2_RANGE[0], constants.X2_RANGE[1], N_samples),
+        np.random.uniform(constants.X3_RANGE[0], constants.X3_RANGE[1], N_samples),
+        np.random.uniform(constants.X4_RANGE[0], constants.X4_RANGE[1], N_samples),
+        np.random.uniform(constants.X5_RANGE[0], constants.X5_RANGE[1], N_samples),
+        np.random.uniform(constants.X6_RANGE[0], constants.X6_RANGE[1], N_samples),
+    ])
     return X
 
 
@@ -170,66 +183,86 @@ def compute_pdf_variations(p_net=None, data_lp=None, data_ut=None, save_path=Non
         # "rel_kl_lp": [],
         # "rel_kl_ut": [],
         # "rel_kl_pinn": [],
-        "t": constants.T_PRIME_SPAN,
+        "t": constants.T_PRIME_SPAN #np.round(np.arange(0.0, 0.4+0.02, 0.02, dtype=np.float32),2)
     } 
-
-    N_samples = 30000000
-    X = get_uniform_Xsamples_numpy(N_samples=N_samples) # samples from random uniform
-    X_scaled = constants.scaled_x(X)
-    _x_tensor = torch.tensor(X_scaled, dtype=torch.float32, requires_grad=False)
-
+    print("evaluate metrics over times: ", metrics["t"])
+    N_samples = 1000000
+    N_batch = 100
     for idx, t in enumerate(metrics["t"]):
         print("\ntime {:.4f}".format(t))
+        pdf_ref_max = 0.0
+        delta_p_pinn_max = 0.0
+        tv_pinn = 0.0
+        delta_p_lp_max = 0.0
+        tv_lp = 0.0
+        delta_p_ut_max = 0.0
+        tv_ut = 0.0
+        for j in tqdm(range(1, N_batch+1), desc="Propagating batches"):
+            X = get_uniform_Xsamples_numpy(N_samples=N_samples) # samples from random uniform
+            X_scaled = constants.scaled_x(X)
+            _x_tensor = torch.tensor(X_scaled, dtype=torch.float32, requires_grad=False)
 
-        print("[info] pdf ref")
-        pdf_ref = p_sol(constants, X, t).reshape(-1,)
-        X_mc = sample_joint_pdf(constants, t_prime=t, n_samples=N_samples, seed=123)
+            # print("[info] pdf ref")
+            pdf_ref = p_sol(constants, X, t).reshape(-1,)
+            pdf_ref_max = max(pdf_ref_max, np.max(pdf_ref).item())
+            # X_mc = sample_joint_pdf(constants, t_prime=t, n_samples=N_samples, seed=123)
 
-        print("[info] pdf PINN")
-        _t = np.ones((len(_x_tensor), 1)) * t
-        _t_tensor = torch.tensor(_t, dtype=torch.float32, requires_grad=False).view(-1,1)
-        pdf_pinn = constants.SCALING_PDF * p_net(_x_tensor, _t_tensor).detach().cpu().numpy().reshape(-1,)
-        compute_and_update_metrics(metrics, pdf_eval=pdf_pinn, pdf_ref=pdf_ref, key="pinn")
-        # compute_relKL_and_update_metrics(metrics, t, X_mc, p_net=p_net, key="pinn")
+            # print("[info] pdf PINN")
+            _t = np.ones((len(_x_tensor), 1)) * t
+            _t_tensor = torch.tensor(_t, dtype=torch.float32, requires_grad=False).view(-1,1)
+            pdf_pinn = constants.SCALING_PDF * p_net(_x_tensor, _t_tensor).detach().cpu().numpy().reshape(-1,)
+            _delta_p = np.max(np.abs(pdf_pinn - pdf_ref)).item()
+            delta_p_pinn_max = max(delta_p_pinn_max, _delta_p)
+            _tv = p_total_variation(constants, pdf_pinn, pdf_ref)
+            tv_pinn += _tv/N_batch
+            del pdf_pinn, _t, _t_tensor, X_scaled, _x_tensor
 
-        print("[info] pdf LP")
-        _, _mu_lp, _cov_lp = data_lp.get(t)
-        _mu_lp = np.float32(_mu_lp)
-        _cov_lp = np.float32(_cov_lp)
-        pdf_lp = p_normal(X, _mu_lp, _cov_lp).reshape(-1,)
-        compute_and_update_metrics(metrics, pdf_eval=pdf_lp, pdf_ref=pdf_ref, key="lp")
-        # compute_relKL_and_update_metrics(metrics, t, X_mc, p_data_normal=data_lp, key="lp")
+            # print("[info] pdf LP")
+            _, _mu_lp, _cov_lp = data_lp.get(t)
+            _mu_lp = np.float32(_mu_lp)
+            _cov_lp = np.float32(_cov_lp)
+            pdf_lp = p_normal(X, _mu_lp, _cov_lp).reshape(-1,)
+            _delta_p = np.max(np.abs(pdf_lp - pdf_ref)).item()
+            delta_p_lp_max = max(delta_p_lp_max, _delta_p)
+            _tv = p_total_variation(constants, pdf_lp, pdf_ref)
+            tv_lp += _tv/N_batch
+            del pdf_lp
 
-        print("[info] pdf UT")
-        _, _mu_ut, _cov_ut = data_ut.get(t)
-        _mu_ut = np.float32(_mu_ut)
-        _cov_ut = np.float32(_cov_ut)
-        pdf_ut = p_normal(X, _mu_ut, _cov_ut).reshape(-1,)
-        compute_and_update_metrics(metrics, pdf_eval=pdf_ut, pdf_ref=pdf_ref, key="ut")
-        # compute_relKL_and_update_metrics(metrics, t, X_mc, p_data_normal=data_ut, key="ut")
+            # print("[info] pdf UT")
+            _, _mu_ut, _cov_ut = data_ut.get(t)
+            _mu_ut = np.float32(_mu_ut)
+            _cov_ut = np.float32(_cov_ut)
+            pdf_ut = p_normal(X, _mu_ut, _cov_ut).reshape(-1,)
+            _delta_p = np.max(np.abs(pdf_ut - pdf_ref)).item()
+            delta_p_ut_max = max(delta_p_ut_max, _delta_p)
+            _tv = p_total_variation(constants, pdf_ut, pdf_ref)
+            tv_ut += _tv/N_batch
+            del pdf_ut
         
+        # After all batch
+        metrics["rel_error_pinn"].append(100.*delta_p_pinn_max/pdf_ref_max)
+        metrics["tv_pinn"].append(tv_pinn)
+        metrics["rel_error_lp"].append(100.*delta_p_lp_max/pdf_ref_max)
+        metrics["tv_lp"].append(tv_lp)
+        metrics["rel_error_ut"].append(100.*delta_p_ut_max/pdf_ref_max)
+        metrics["tv_ut"].append(tv_ut)
+
+    print(metrics["rel_error_pinn"])
+    print(metrics["tv_pinn"])
+    print(metrics["rel_error_lp"])
+    print(metrics["tv_lp"])
+    print(metrics["rel_error_ut"])
+    print(metrics["tv_ut"])
     save_metrics_npz(metrics, save_path)
-
-
-def get_uniform_Xsamples_numpy(N_samples=None):
-    global constants
-    X = np.column_stack([
-        np.random.uniform(constants.X1_RANGE[0], constants.X1_RANGE[1], N_samples),
-        np.random.uniform(constants.X2_RANGE[0], constants.X2_RANGE[1], N_samples),
-        np.random.uniform(constants.X3_RANGE[0], constants.X3_RANGE[1], N_samples),
-        np.random.uniform(constants.X4_RANGE[0], constants.X4_RANGE[1], N_samples),
-        np.random.uniform(constants.X5_RANGE[0], constants.X5_RANGE[1], N_samples),
-        np.random.uniform(constants.X6_RANGE[0], constants.X6_RANGE[1], N_samples),
-    ])
-    return X
 
 
 def compare_corner_plots(p_net=None, data_lp=None, data_ut=None, save_path=None, 
                          OUTPUT_PATH=None):
     global constants
     t_show = constants.T_PRIME_SPAN
+    # t_show = np.array([0.4])
 
-    N_samples = 1000000
+    N_samples = 5000000
     # X = get_uniform_Xsamples_numpy(N_samples=N_samples) # samples from random uniform
     # X_scaled = constants.scaled_x(X)
     # _x_tensor = torch.tensor(X_scaled, dtype=torch.float32, requires_grad=False)
@@ -281,11 +314,13 @@ def compare_methods():
     # p_net.scale = scale_torch
 
     p_net = PNet_Scaled(constants, input_feature=7)
+
+    p_net = PNet_XL(constants, input_feature=7)
+
     _x_at_mean = constants.N_MEAN_I.copy()
     p_max = p_init_scaled(constants, _x_at_mean.reshape(-1, 6)).item()
     scale = p_max
     scale_torch = torch.tensor(scale, dtype=torch.float32)
-
     p_net.scale = scale_torch
     print("p net scale: ", p_net.scale)
 
@@ -297,11 +332,9 @@ def compare_methods():
     metrics_path = "output/baseline_methods/metrics.npz"
 
     # compute_pdf_variations(p_net=p_net, data_lp=data_lp, data_ut=data_ut, save_path=metrics_path)
-
-    # --- Visualize ---
     # data_normalize_e1_pinn_max = np.load(OUTPUT_PATH+"/data_e1_pinn_max.npz")
-    # metrics = load_metrics_npz(metrics_path)
-    # plot_pdf_metrics(metrics, data_normalize_e1_pinn_max=None)
+    metrics = load_metrics_npz(metrics_path)
+    plot_pdf_metrics(metrics, data_normalize_e1_pinn_max=None)
 
     # Visualize marginal PDF
     compare_corner_plots(p_net=p_net, data_lp=data_lp, data_ut=data_ut, OUTPUT_PATH=OUTPUT_PATH)

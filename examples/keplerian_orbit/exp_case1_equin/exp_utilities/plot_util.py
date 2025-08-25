@@ -188,6 +188,7 @@ def plot_pdf_metrics(metrics, data_normalize_e1_pinn_max=None):
         print(B1)
 
     plt.figure()
+    print(metrics["t"])
     plt.plot(metrics["t"], metrics["rel_error_pinn"], color=colors[0], label=r"$\hat{p}$ PINN")
     if(data_normalize_e1_pinn_max is not None):
         plt.fill_between(
@@ -603,8 +604,7 @@ def plot_single_corner(constants,
         alpha=0.6
     )
 
-
-    relative_levels = np.array([0.001, 0.01, 0.25, 0.50, 0.75, 0.95])
+    relative_levels = np.array([0.001, 0.01, 0.1, 0.25, 0.50, 0.75, 0.95, 0.99])
     # contour plot from data_marginal_pinn
     if(data_marginal_pinn is not None):
         X_grid = data_marginal_pinn['X_grid']
@@ -624,15 +624,15 @@ def plot_single_corner(constants,
         marginal_mu = mu_6d[list(plot_axes)]
         marginal_cov = cov_6d[np.ix_(list(plot_axes), list(plot_axes))]
 
-        # xs = np.linspace(xrange[0], xrange[1], num=100, endpoint=True)
-        # ys = np.linspace(yrange[0], yrange[1], num=100, endpoint=True)
-        # X_grid, Y_grid = np.meshgrid(xs, ys, indexing="ij")
+        xs = np.linspace(xrange[0], xrange[1], num=256, endpoint=True)
+        ys = np.linspace(yrange[0], yrange[1], num=256, endpoint=True)
+        X_grid, Y_grid = np.meshgrid(xs, ys, indexing="ij")
         grid_pts = np.vstack([X_grid.ravel(), Y_grid.ravel()]).T
 
         pdf_values = p_normal(grid_pts, marginal_mu, marginal_cov).reshape(X_grid.shape)
         pdf_max = np.max(pdf_values[pdf_values > 0])
         # Define levels as percentages of the maximum value
-        # levels = relative_levels * pdf_max; print(levels)
+        levels = relative_levels * pdf_max; print(levels)
         # Draw the contour lines with the custom levels
         ax.contour(X_grid, Y_grid, pdf_values, levels=levels, colors=[colors[1]], 
                 linewidths=2)
@@ -644,15 +644,15 @@ def plot_single_corner(constants,
         marginal_mu = mu_6d[list(plot_axes)]
         marginal_cov = cov_6d[np.ix_(list(plot_axes), list(plot_axes))]
 
-        # xs = np.linspace(xrange[0], xrange[1], num=100, endpoint=True)
-        # ys = np.linspace(yrange[0], yrange[1], num=100, endpoint=True)
-        # X_grid, Y_grid = np.meshgrid(xs, ys, indexing="ij")
+        xs = np.linspace(xrange[0], xrange[1], num=256, endpoint=True)
+        ys = np.linspace(yrange[0], yrange[1], num=256, endpoint=True)
+        X_grid, Y_grid = np.meshgrid(xs, ys, indexing="ij")
         grid_pts = np.vstack([X_grid.ravel(), Y_grid.ravel()]).T
 
         pdf_values = p_normal(grid_pts, marginal_mu, marginal_cov).reshape(X_grid.shape)
         pdf_max = np.max(pdf_values[pdf_values > 0])
         # Define levels as percentages of the maximum value
-        # levels = relative_levels * pdf_max; print(levels)
+        levels = relative_levels * pdf_max; print(levels)
         # Draw the contour lines with the custom levels
         ax.contour(X_grid, Y_grid, pdf_values, levels=levels, colors=[colors[2]], 
                 linewidths=2)

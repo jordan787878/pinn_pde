@@ -7,7 +7,7 @@ from tqdm import tqdm
 # Assuming the following imports and setup are the same as your original code
 from monte import p_init_scaled
 from exp_utilities.constants import Case1_6D_Constants_Equin
-from _General.neuralnetworks import PNet_Scaled, load_trained_model
+from _General.neuralnetworks import PNet_Scaled, PNet_XL, load_trained_model
 
 # --- Initial setup (as in your original script) ---
 constants = Case1_6D_Constants_Equin()
@@ -102,7 +102,8 @@ def marginal_pinn(
 if __name__ == '__main__':
     OUTPUT_PATH = "output/v0_scaled_T0.3"
 
-    p_net = PNet_Scaled(constants, input_feature=7)
+    # p_net = PNet_Scaled(constants, input_feature=7)
+    p_net = PNet_XL(constants, input_feature=7)
     _x_at_mean = constants.N_MEAN_I.copy()
     p_max = p_init_scaled(constants, _x_at_mean.reshape(-1, 6)).item()
     scale_torch = torch.tensor(p_max, dtype=torch.float32)
@@ -125,19 +126,3 @@ if __name__ == '__main__':
             batch_size=16,
             save_path=save_path
         )
-
-        # Quick visualization
-        # data = np.load(save_path)
-        # X_grid = data["X_grid"]; Y_grid = data["Y_grid"]; pdf_values = data["pdf"]
-        # pdf_max = np.max(pdf_values[pdf_values > 0])
-        # # Define levels as percentages of the maximum value
-        # relative_levels = np.array([0.01, 0.25, 0.50, 0.75, 0.99])
-        # levels = relative_levels * pdf_max
-        # fig, ax = plt.subplots(figsize=(10, 8))
-        # # Draw the contour lines with the custom levels
-        # ax.contour(X_grid, Y_grid, pdf_values, levels=levels, colors='black', linewidths=0.5)
-        # ax.set_xlim(X_grid.min(), X_grid.max())
-        # ax.set_ylim(Y_grid.min(), Y_grid.max())
-        # # ax.set_title(f'2D Marginal PDF for {labels[0]} and {labels[1]}')
-        # ax.grid(True)
-        # plt.show()

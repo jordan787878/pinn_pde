@@ -14,7 +14,7 @@ from baseline_methods import SAVE_PATH_LINEAR_PROPAGATE, SAVE_PATH_UNSCENT_PROPA
 # import utilities
 import sys
 sys.path.insert(0, '../utilities/')
-from _General.neuralnetworks import PNet, PNet_Scaled, load_trained_model, init_weights_He
+from _General.neuralnetworks import PNet, PNet_Scaled, PNet_XL, load_trained_model, init_weights_He
 import _General.train_pinn as PINN
 
 
@@ -46,7 +46,6 @@ def dyn_f6_scaled(x):
     global constants
     x1 = x[:,0]*(constants.COV_I[0,0]**0.5) + constants.MEAN_I[0]
     return torch.sqrt(constants.MU_EARTH/ x1**3) * constants.T / (constants.COV_I[5, 5]**0.5)
-
 
 def diff_opt(x, t, p_net, beta=1.0, verbose=False):
     global constants
@@ -80,48 +79,54 @@ def diff_opt(x, t, p_net, beta=1.0, verbose=False):
         print(residual.dtype, residual.shape, residual[0:3, :])
     return residual
 
-
 def diff_opt_scaled(x, t, p_net, beta=1.0, verbose=False):
     global constants
     output = p_net(x,t)
     output_x = torch.autograd.grad(output, x, grad_outputs=torch.ones_like(output), create_graph=True)[0]
     output_t = torch.autograd.grad(output, t, grad_outputs=torch.ones_like(output), create_graph=True)[0]
-    output_x1 = output_x[:,0].view(-1,1)
-    output_x2 = output_x[:,1].view(-1,1)
-    output_x3 = output_x[:,2].view(-1,1)
-    output_x4 = output_x[:,3].view(-1,1)
-    output_x5 = output_x[:,4].view(-1,1)
+    # output_x1 = output_x[:,0].view(-1,1)
+    # output_x2 = output_x[:,1].view(-1,1)
+    # output_x3 = output_x[:,2].view(-1,1)
+    # output_x4 = output_x[:,3].view(-1,1)
+    # output_x5 = output_x[:,4].view(-1,1)
     output_x6 = output_x[:,5].view(-1,1)
 
-    f1 = dyn_f1(x).view(-1,1)
-    f2 = dyn_f2(x).view(-1,1)
-    f3 = dyn_f3(x).view(-1,1)
-    f4 = dyn_f4(x).view(-1,1)
-    f5 = dyn_f5(x).view(-1,1)
+    # f1 = dyn_f1(x).view(-1,1)
+    # f2 = dyn_f2(x).view(-1,1)
+    # f3 = dyn_f3(x).view(-1,1)
+    # f4 = dyn_f4(x).view(-1,1)
+    # f5 = dyn_f5(x).view(-1,1)
     f6 = dyn_f6_scaled(x).view(-1,1)
 
-    f5_x = torch.autograd.grad(f5, x, grad_outputs=torch.ones_like(f5), create_graph=True)[0]
-    f5_x5 = f5_x[:,4].view(-1,1)
+    # f5_x = torch.autograd.grad(f5, x, grad_outputs=torch.ones_like(f5), create_graph=True)[0]
+    # f5_x5 = f5_x[:,4].view(-1,1)
 
-    f6_x = torch.autograd.grad(f6, x, grad_outputs=torch.ones_like(f6), create_graph=True)[0]
-    f6_x6 = f6_x[:,5].view(-1,1)
+    # f6_x = torch.autograd.grad(f6, x, grad_outputs=torch.ones_like(f6), create_graph=True)[0]
+    # f6_x6 = f6_x[:,5].view(-1,1)
 
-    residual = output_t + beta*(output_x1*f1 + output_x2*f2 + output_x3*f3 + output_x4*f4 + \
-                                output_x5*f5 + f5_x5*output + \
-                                output_x6*f6 + f6_x6*output)
+    # residual = output_t + beta*(output_x1*f1 + output_x2*f2 + output_x3*f3 + output_x4*f4 + \
+    #                             output_x5*f5 + f5_x5*output + \
+    #                             output_x6*f6 + f6_x6*output)
+    
+    # Reduced to this since f1=f2=f3=f4=f5=0, and f6_x6 = 0
+    residual = output_t + beta*(output_x6*f6)
+
     if(verbose):
         print(residual.dtype, residual.shape, residual[0:3, :])
     return residual
   
-
 def main():
     global constants
     # constants.test_printout()
 
     # Set a fixed seed for reproducibility
     torch.manual_seed(0); np.random.seed(0)
-    p_net = PNet_Scaled(constants, input_feature=7)
-    p_net.apply(init_weights_He)
+    
+    # p_net = PNet_Scaled(constants, input_feature=7)
+    # p_net.apply(init_weights_He)
+
+    p_net = PNet_XL(constants, input_feature=7)
+
     _x_at_mean = constants.N_MEAN_I.copy()
     p_max = p_init_scaled(constants, _x_at_mean.reshape(-1, 6)).item()
     scale = p_max
