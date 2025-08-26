@@ -1,6 +1,7 @@
 import numpy as np
 import torch
 from tqdm import tqdm
+import copy
 from scipy.stats import multivariate_normal, norm
 from monte import p_init, p_init_scaled, p_sol, print_mc_time
 from exp_utilities.constants import Case1_6D_Constants_Equin
@@ -10,7 +11,7 @@ from baseline_methods import SAVE_PATH_LINEAR_PROPAGATE, SAVE_PATH_UNSCENT_PROPA
 # import utilities
 import sys
 sys.path.insert(0, '../utilities/')
-from _General.neuralnetworks import PNet, PNet_Scaled, PNet_XL, load_trained_model
+from _General.neuralnetworks import PNet, PNet_Scaled, PNet_XL, E1Net_Scaled, E1Net_XL, load_trained_model
 from _General.util import compute_volume, save_metrics_npz, load_metrics_npz
 from functools import partial
 constants = Case1_6D_Constants_Equin()
@@ -171,7 +172,7 @@ def compute_relKL_and_update_metrics(metrics, t, X, p_data_normal=None, p_net=No
     print(key, " - rel_kl: {:.2f}".format(KL))
 
 
-def compute_pdf_variations(p_net=None, data_lp=None, data_ut=None, save_path=None):
+def compute_pdf_variations(p_net=None, data_lp=None, data_ut=None, e1_net=None, save_path=None):
     global constants
     metrics = {
         "rel_error_lp": [],
@@ -183,11 +184,12 @@ def compute_pdf_variations(p_net=None, data_lp=None, data_ut=None, save_path=Non
         # "rel_kl_lp": [],
         # "rel_kl_ut": [],
         # "rel_kl_pinn": [],
+        "B1_pinn": [],
         "t": constants.T_PRIME_SPAN #np.round(np.arange(0.0, 0.4+0.02, 0.02, dtype=np.float32),2)
     } 
     print("evaluate metrics over times: ", metrics["t"])
-    N_samples = 1000000
-    N_batch = 100
+    N_samples = 100000
+    N_batch = 1000
     for idx, t in enumerate(metrics["t"]):
         print("\ntime {:.4f}".format(t))
         pdf_ref_max = 0.0
@@ -197,6 +199,7 @@ def compute_pdf_variations(p_net=None, data_lp=None, data_ut=None, save_path=Non
         tv_lp = 0.0
         delta_p_ut_max = 0.0
         tv_ut = 0.0
+        e1_pinn_max = 0.0
         for j in tqdm(range(1, N_batch+1), desc="Propagating batches"):
             X = get_uniform_Xsamples_numpy(N_samples=N_samples) # samples from random uniform
             X_scaled = constants.scaled_x(X)
@@ -215,7 +218,14 @@ def compute_pdf_variations(p_net=None, data_lp=None, data_ut=None, save_path=Non
             delta_p_pinn_max = max(delta_p_pinn_max, _delta_p)
             _tv = p_total_variation(constants, pdf_pinn, pdf_ref)
             tv_pinn += _tv/N_batch
-            del pdf_pinn, _t, _t_tensor, X_scaled, _x_tensor
+            del pdf_pinn
+
+            if(e1_net is not None):
+                e1_pinn = constants.SCALING_PDF * e1_net(_x_tensor, _t_tensor).detach().cpu().numpy().reshape(-1,)
+                e1_pinn_max = max(e1_pinn_max, np.max(np.abs(e1_pinn)).item())
+                del e1_pinn
+            
+            del _t, _t_tensor, X_scaled, _x_tensor
 
             # print("[info] pdf LP")
             _, _mu_lp, _cov_lp = data_lp.get(t)
@@ -246,6 +256,9 @@ def compute_pdf_variations(p_net=None, data_lp=None, data_ut=None, save_path=Non
         metrics["tv_lp"].append(tv_lp)
         metrics["rel_error_ut"].append(100.*delta_p_ut_max/pdf_ref_max)
         metrics["tv_ut"].append(tv_ut)
+        metrics["B1_pinn"].append(100. * 2. * e1_pinn_max/pdf_ref_max)
+        # print("[check]: max e1: {:.4f}, max e1 pinn: {:.4f}".format(
+        #     delta_p_pinn_max, e1_pinn_max))
 
     print(metrics["rel_error_pinn"])
     print(metrics["tv_pinn"])
@@ -253,6 +266,7 @@ def compute_pdf_variations(p_net=None, data_lp=None, data_ut=None, save_path=Non
     print(metrics["tv_lp"])
     print(metrics["rel_error_ut"])
     print(metrics["tv_ut"])
+    print(metrics["B1_pinn"])
     save_metrics_npz(metrics, save_path)
 
 
@@ -312,29 +326,34 @@ def compare_methods():
     # scale = np.load("data/pre_compute/p_init_max.npz")["value"]
     # scale_torch = torch.tensor(scale, dtype=torch.float32)
     # p_net.scale = scale_torch
-
-    p_net = PNet_Scaled(constants, input_feature=7)
+    # p_net = PNet_Scaled(constants, input_feature=7)
 
     p_net = PNet_XL(constants, input_feature=7)
-
     _x_at_mean = constants.N_MEAN_I.copy()
     p_max = p_init_scaled(constants, _x_at_mean.reshape(-1, 6)).item()
     scale = p_max
     scale_torch = torch.tensor(scale, dtype=torch.float32)
     p_net.scale = scale_torch
     print("p net scale: ", p_net.scale)
-
     OUTPUT_PATH = "output/v0_scaled_T0.3"
     p_net = load_trained_model(p_net, path=OUTPUT_PATH+"/p_net.pth"); p_net.eval()
 
+    e1_net = E1Net_XL(constants, copy.deepcopy(p_net), scale=scale_torch, input_feature=7)
+    # print("[check] e1_net scale: {:.5f}, normalize: {:.5f}".format(
+    # e1_net.scale, e1_net.normalize))
+    # e1_net.normalize = scale_torch
+    # e1_net = E1Net_Scaled(constants)
+    # e1_net.scale = scale_torch*0.05 # assuming 10% percent error
+    # e1_net.set_p_net(p_net)
+    
+    e1_net = load_trained_model(e1_net, path=OUTPUT_PATH+"/e1_net.pth"); e1_net.eval()
     data_lp = PropagationData(SAVE_PATH_LINEAR_PROPAGATE)
     data_ut = PropagationData(SAVE_PATH_UNSCENT_PROPAGATE)
     metrics_path = "output/baseline_methods/metrics.npz"
 
-    # compute_pdf_variations(p_net=p_net, data_lp=data_lp, data_ut=data_ut, save_path=metrics_path)
-    # data_normalize_e1_pinn_max = np.load(OUTPUT_PATH+"/data_e1_pinn_max.npz")
-    metrics = load_metrics_npz(metrics_path)
-    plot_pdf_metrics(metrics, data_normalize_e1_pinn_max=None)
+    # compute_pdf_variations(p_net=p_net, data_lp=data_lp, data_ut=data_ut, e1_net=e1_net, save_path=metrics_path)
+    
+    metrics = load_metrics_npz(metrics_path); plot_pdf_metrics(metrics)
 
     # Visualize marginal PDF
     compare_corner_plots(p_net=p_net, data_lp=data_lp, data_ut=data_ut, OUTPUT_PATH=OUTPUT_PATH)

@@ -655,6 +655,300 @@ def train_pinn_e1_v0(constants, networks, configurations, iterations=50000, save
         torch.save(best_model_dict, save_path)
 
 
+def train_pinn_e1_v0_scaled(constants, networks, configurations, iterations=50000, save_model=False, beta_incre=0.005):
+    """
+    no TV loss
+    """
+    p_init = configurations["ic_fcn"]
+    diff_opt = configurations["diff_opt_fcn"]
+    save_path = configurations["save_path"]
+    p_net, e1_net = networks
+    p_net.eval()
+    # Freeze p_net parameters
+    for p in p_net.parameters():
+        p.requires_grad_(False)
+
+    mse_cost_function = torch.nn.MSELoss()
+    optimizer = torch.optim.Adam(e1_net.parameters(), lr=1e-4)
+    scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.95)
+
+    min_loss = np.inf
+    iterations_per_decay = 1000
+    loss_history = []
+    normalize = e1_net.scale
+    print("normalize: ", normalize)
+
+    N0_samples = 1
+    Nr_samples = 1
+    x_bc, t_bc = constants.sample_init_points_scaled(N0_samples)
+    x, t = constants.sample_res_points_scaled(Nr_samples)
+
+    # RAR
+    S = 30000
+    beta = np.float32(0.0)
+
+    keys = ['epoch', 'model_state_dict', 'loss_history', 'train_time']
+    best_model_dict = dict.fromkeys(keys)
+    
+    start_time = time.time()
+    for epoch in range(iterations):
+        optimizer.zero_grad()
+
+        # Loss based on boundary conditions
+        _x_bc, _t_bc = constants.sample_init_points_scaled(500)
+        # x_bc_train = x_bc 
+        x_bc_train = torch.cat((x_bc, _x_bc), dim=0)
+        # t_bc_train = t_bc 
+        t_bc_train = torch.cat((t_bc, _t_bc), dim=0)
+
+        p_i = p_init(constants, x_bc_train.detach().numpy())
+        p_i = torch.tensor(p_i, dtype=torch.float32, requires_grad=False)
+        phat_i = p_net(x_bc_train, t_bc_train).to(device)
+        e_i = p_i - phat_i
+        ehat_i = e1_net(x_bc_train, t_bc_train).to(device)
+        mse_u = mse_cost_function(ehat_i/normalize, e_i.detach()/normalize)
+
+        alpha_i = torch.max(torch.abs(ehat_i - e_i)) / torch.max(torch.abs(ehat_i))
+        max_e1 = torch.max(torch.abs(e_i)).item()
+        max_e1_pinn = torch.max(torch.abs(ehat_i)).item()
+
+        # Loss based on PDE
+        # _x, _t = constants.sample_res_points_scaled(500)
+        # x_train = torch.cat((x, _x), dim=0)
+        # t_train = torch.cat((t, _t), dim=0)
+        # res_p = diff_opt(x_train, t_train, p_net, beta=beta)
+        # res_e = diff_opt(x_train, t_train, e1_net, beta=beta)
+        # # res = res_e + res_p
+        # mse_res = mse_cost_function(res_e/normalize, -res_p.detach()/normalize)
+        # res_t = torch.autograd.grad(res/normalize, t, 
+        #                             grad_outputs=torch.ones_like(res), create_graph=True)[0]
+        # tv_t = (res_t ** 2).sum(dim=1, keepdim=True)  # shape: (N, 1)
+        # tv_loss = torch.mean(tv_t)
+
+        loss = mse_u #+ mse_res #+ 1e-3*tv_loss
+        loss_history.append(loss.item())
+
+        # Save the min loss model
+        if(loss.data < 0.95*min_loss):
+            print("[best model] epoch:", epoch, ",loss:", loss.data, 
+                  ",ic:", mse_u.data,
+                  ",alpha_i:", alpha_i.item(), max_e1, max_e1_pinn,
+                #   ",res:", mse_res.data,
+                #   ",tv:", tv_loss.data,
+                  ",beta: {:.3f}".format(beta)
+                   )
+            train_time = time.time() - start_time
+            best_model_dict['epoch'] = epoch
+            best_model_dict['model_state_dict'] = e1_net.state_dict()
+            best_model_dict['loss_history'] = loss_history
+            best_model_dict['train_time'] = train_time
+            min_loss = loss.data
+            beta = beta + np.float32(beta_incre)
+            if(beta > 1.0):
+                beta = np.float32(1.0)
+            # --- Save best model ---
+            if(save_model):
+                torch.save(best_model_dict, save_path)
+
+        loss.backward(retain_graph=True) 
+        optimizer.step()
+        # Exponential learning rate decay
+        if (epoch + 1) % iterations_per_decay == 0:
+            scheduler.step()
+            print("[debug] training epoch: ", epoch)
+
+
+def train_pinn_e1_v0_scaled_improved(
+    constants,
+    networks,                          # (p_net, e1_net)
+    configurations,
+    iterations=50000,
+    save_model=False,
+    beta_incre=0.02
+):
+    """
+    Improved training loop for the error network e1_net.
+    Uses same structure as train_pinn_sol_v0_scaled_improved.
+    """
+    import time
+    
+    # --- Unpack ---
+    p_net, e1_net = networks
+    e1_net.train().to(device)
+    p_net.eval().to(device)   # frozen reference
+    # Freeze p_net parameters
+    for p in p_net.parameters():
+        p.requires_grad_(False)
+
+    # -------- SAFETY CHECK 1: all p_net params frozen --------
+    assert all(p.requires_grad is False for p in p_net.parameters()), "p_net has trainable params!"
+
+    # --- Config ---
+    p_init   = configurations["ic_fcn"]
+    diff_opt = configurations["diff_opt_fcn"]
+    e1_path  = configurations["save_path"]
+    # e1_path_inter = configurations.get("save_path_inter", None)
+    
+    # --- Optimizer ---
+    mse = torch.nn.MSELoss()
+    optimizer = torch.optim.Adam(e1_net.parameters(), lr=1e-3)
+    scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.95)
+
+    # -------- SAFETY CHECK 2: optimizer only sees e1_net params --------
+    e1_param_ids = {id(p) for p in e1_net.parameters()}
+    opt_param_ids = {id(p) for g in optimizer.param_groups for p in g["params"]}
+    assert opt_param_ids <= e1_param_ids, "Optimizer includes non-e1_net parameters!"
+    
+    # --- Settings ---
+    min_loss = float("inf")
+    iterations_per_decay = 1000
+    loss_history = []
+    normalize = e1_net.normalize
+    
+    N0_samples_initial = 2000
+    Nr_samples_initial = 2000
+    N_RAR = 30000
+    RAR_eps = 1e-1
+    FLAG = False
+    # inter_count = 0
+    beta = np.float32(0.0)
+    
+    # Buffers for RAR points
+    x_bc_rar = torch.empty(0, 6, device=device)
+    t_bc_rar = torch.empty(0, 1, device=device)
+    x_res_rar = torch.empty(0, 6, device=device)
+    t_res_rar = torch.empty(0, 1, device=device)
+    
+    # Best model dict
+    best_model_dict = {
+        "epoch": -1,
+        "model_state_dict": None,
+        "optimizer_state_dict": None,
+        "loss_history": None,
+        "train_time": None,
+    }
+
+    # # -------- SAFETY CHECK 3: snapshot p_net weights --------
+    # with torch.no_grad():
+    #     pnet_ref = {k: v.detach().cpu().clone() for k, v in p_net.state_dict().items()}
+    # def _assert_pnet_unchanged(when: str, atol=0.0, rtol=0.0):
+    #     """Verifies p_net.state_dict matches the frozen snapshot exactly (float-exact)."""
+    #     cur = p_net.state_dict()
+    #     for k, v0 in pnet_ref.items():
+    #         v = cur[k].detach().cpu()
+    #         if v.dtype.is_floating_point:
+    #             if not torch.allclose(v, v0, atol=atol, rtol=rtol):
+    #                 raise RuntimeError(f"p_net changed at {when}: param {k} drift detected.")
+    #         else:
+    #             if not torch.equal(v, v0):
+    #                 raise RuntimeError(f"p_net changed at {when}: param {k} drift detected.")
+    # # First check before training
+    # _assert_pnet_unchanged("start")
+    
+    start_time = time.time()
+    for epoch in range(iterations):
+        optimizer.zero_grad()
+        
+        # --- New samples ---
+        x_bc_new, t_bc_new = constants.sample_init_points_scaled(N0_samples_initial)
+        x_res_new, t_res_new = constants.sample_res_points_scaled(Nr_samples_initial)
+        
+        x_bc = torch.cat((x_bc_new.to(device), x_bc_rar), dim=0)
+        t_bc = torch.cat((t_bc_new.to(device), t_bc_rar), dim=0)
+        x_res = torch.cat((x_res_new.to(device), x_res_rar), dim=0)
+        t_res = torch.cat((t_res_new.to(device), t_res_rar), dim=0)
+        x_res.requires_grad_(True)
+        
+        # --- IC loss: ehat ~ (p_init - p_net) ---
+        with torch.no_grad():
+            p_i_np = p_init(constants, x_bc.detach().cpu().numpy())
+            p_i = torch.tensor(p_i_np, dtype=torch.float32, device=device)
+            phat_i = p_net(x_bc, t_bc)
+            e_i = p_i - phat_i
+        ehat_i = e1_net(x_bc, t_bc)
+        mse_ic = mse(ehat_i / normalize, e_i / normalize)
+        
+        # --- PDE loss: diff_opt[e1] ~ -diff_opt[p] ---
+        res_p = diff_opt(x_res, t_res, p_net, beta=beta).detach()
+        res_e = diff_opt(x_res, t_res, e1_net, beta=beta)
+        mse_res = mse(res_e / normalize, (-res_p) / normalize)
+        
+        # --- Total loss ---
+        loss = mse_ic + mse_res
+        loss_history.append(loss.item())
+        
+        # --- Backward ---
+        loss.backward(retain_graph=True)
+        torch.nn.utils.clip_grad_norm_(e1_net.parameters(), max_norm=1.0)
+        optimizer.step()
+
+        # # -------- SAFETY CHECK 5: verify p_net weights unchanged after step --------
+        # _assert_pnet_unchanged(f"epoch {epoch+1}/post-step")
+        
+        # --- LR decay ---
+        if (epoch + 1) % iterations_per_decay == 0:
+            scheduler.step()
+            print(f"[info] epoch {epoch+1}, lr={optimizer.param_groups[0]['lr']:.2e}")
+        
+        # --- Save best ---
+        if loss.item() < 0.95 * min_loss:
+            train_time = time.time() - start_time
+            print(f"--- Save Epoch {epoch+1}, Loss={loss.item():.4f}, "
+                  f"IC={mse_ic.item():.4f}, Res={mse_res.item():.4f}, Beta={beta:.2f} ---")
+            # Res={mse_res.item():.4f}
+            
+            best_model_dict.update({
+                "epoch": epoch,
+                "model_state_dict": e1_net.state_dict(),
+                "optimizer_state_dict": optimizer.state_dict(),
+                "loss_history": loss_history,
+                "train_time": train_time,
+            })
+            
+            if save_model:
+                torch.save(best_model_dict, e1_path)
+            
+            min_loss = loss.item()
+            beta = min(1.0, beta + beta_incre)
+            FLAG = True
+
+        # --- RAR ---
+        if epoch % 100 == 0 and FLAG:
+            FLAG = False
+            # IC RAR
+            with torch.no_grad():
+                xb_chk, tb_chk = constants.sample_init_points_scaled(N_RAR)
+                xb_chk, tb_chk = xb_chk.to(device), tb_chk.to(device)
+                p_i_np = p_init(constants, xb_chk.detach().cpu().numpy())
+                p_i = torch.tensor(p_i_np, dtype=torch.float32, device=device)
+                phat_i = p_net(xb_chk, tb_chk)
+                e_i = p_i - phat_i
+                ehat_i = e1_net(xb_chk, tb_chk)
+                ic_err = torch.abs(e_i - ehat_i) / normalize
+                max_error_ic = ic_err.max().item()
+                if max_error_ic > RAR_eps:
+                    idx = torch.topk(ic_err.squeeze(), 10).indices
+                    x_bc_rar = torch.cat((x_bc_rar, xb_chk[idx, :]), dim=0)
+                    t_bc_rar = torch.cat((t_bc_rar, tb_chk[idx]), dim=0)
+                    print(f"... RAR IC, added {len(idx)} points. Max IC error: {max_error_ic:.4f}")
+            
+            # Residual RAR
+            xr_chk, tr_chk = constants.sample_res_points_scaled(N_RAR)
+            xr_chk, tr_chk = xr_chk.to(device), tr_chk.to(device)
+            res_p = diff_opt(xr_chk, tr_chk, p_net, beta=beta)
+            res_e = diff_opt(xr_chk, tr_chk, e1_net, beta=beta)
+            res_err = torch.abs(res_e + res_p) / normalize
+            max_error_res = res_err.max().item()
+            if max_error_res > RAR_eps:
+                idx = torch.topk(res_err.squeeze(), 10).indices
+                x_res_rar = torch.cat((x_res_rar, xr_chk[idx, :]), dim=0)
+                t_res_rar = torch.cat((t_res_rar, tr_chk[idx]), dim=0)
+                print(f"... RAR Res, added {len(idx)} points. Max Res error: {max_error_res:.4f}")
+
+    end_time = time.time()
+    print(f"Total training time: {end_time - start_time:.2f}s")
+
+
 def train_pinn_e1seq1_base(constants, networks, configurations, iterations=50000, save_model=False):
     """
     base: no TV loss

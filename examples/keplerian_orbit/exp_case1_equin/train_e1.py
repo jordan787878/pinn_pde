@@ -6,15 +6,15 @@ import torch
 from tqdm import tqdm
 import argparse
 import copy
-from monte import p_init, p_sol
-from train_p import diff_opt, MC_FOLDER
+from monte import p_init_scaled, p_sol
+from train_p import diff_opt_scaled, MC_FOLDER
 # from exp_utilities.plot_util import precompute_e1hat_streaming
 from exp_utilities.plot_util import plot_e1_pinn_validation
 from exp_utilities.constants import Case1_6D_Constants_Equin
 # import utilities
 import sys
 sys.path.insert(0, '../utilities/')
-from _General.neuralnetworks import PNet, E1Net, E1Net_Equin, load_trained_model, init_weights_He
+from _General.neuralnetworks import PNet, PNet_XL, E1Net_Equin, E1Net_Scaled, E1Net_XL, load_trained_model, init_weights_He
 import _General.train_pinn as PINN
 
 
@@ -74,26 +74,34 @@ def pre_compute_validation_data(p_net, e1_net, OUTPUT_PATH, PRE_COMPUTE_FLAG=Fal
 
 def main():
     global constants
-    OUTPUT_PATH = "output/v0"
+    OUTPUT_PATH = "output/v0_scaled_T0.3"
     
-    # --- Init e1 pinn ---
-    torch.manual_seed(0); np.random.seed(0) # set a fixed seed for reproducibility
-    e1_net = E1Net_Equin(constants)
-    e1_net.apply(init_weights_He)
-
     # --- Load pinn p_net and compute normalize scale ---
-    p_net = PNet(constants, input_feature=7)
-    scale = np.load("data/pre_compute/p_init_max.npz")["value"]
+    p_net = PNet_XL(constants, input_feature=7)
+    _x_at_mean = constants.N_MEAN_I.copy()
+    p_max = p_init_scaled(constants, _x_at_mean.reshape(-1, 6)).item()
+    scale = p_max
     scale_torch = torch.tensor(scale, dtype=torch.float32)
     p_net.scale = scale_torch
+    print("p net scale: ", p_net.scale)
     p_net = load_trained_model(p_net, path=OUTPUT_PATH+"/p_net.pth"); p_net.eval()
-    e1_net.scale = p_net.scale*0.1 # assuming 10% percent error
+
+    # --- Init e1 pinn ---
+    torch.manual_seed(0); np.random.seed(0) # set a fixed seed for reproducibility
+    
+    # e1_net = E1Net_Scaled(constants)
+    # e1_net.apply(init_weights_He)
+    # e1_net.scale = scale_torch*0.05 # assuming 10% percent error
+    # e1_net.set_p_net(copy.deepcopy(p_net))
     # print("[check] e1_net scale: ", e1_net.scale)
-    e1_net.p_net = copy.deepcopy(p_net)
+    e1_net = E1Net_XL(constants, copy.deepcopy(p_net), scale=scale_torch, input_feature=7)
+    e1_net.normalize = scale_torch*0.02
+    print("[check] e1_net scale: {:.5f}, normalize: {:.5f}".format(
+        e1_net.scale, e1_net.normalize))
 
     configurations = {
-        "ic_fcn": p_init,
-        "diff_opt_fcn": diff_opt,
+        "ic_fcn": p_init_scaled,
+        "diff_opt_fcn": diff_opt_scaled,
         "save_path": OUTPUT_PATH+"/e1_net.pth",
         "save_path_inter": OUTPUT_PATH+"/e1_net_",
     }
@@ -101,19 +109,19 @@ def main():
     # --- Train e1 pinn over first time seq ---
     if(TRAIN_FLAG):
         networks = (p_net, e1_net)
-        PINN.train_pinn_e1_v0(constants, networks, configurations, 
+        PINN.train_pinn_e1_v0_scaled_improved(constants, networks, configurations, 
                               iterations=50000, save_model=True, beta_incre=0.05)
     
     # --- Load best model after training ---
     e1_net = load_trained_model(e1_net, path=configurations["save_path"]); e1_net.eval()
+
+    # # --- Pre-computation ---
     PRE_COMPUTE_FLAG = False
+    # pre_compute_validation_data(p_net, e1_net, OUTPUT_PATH, PRE_COMPUTE_FLAG)
 
-    # --- Pre-computation ---
-    pre_compute_validation_data(p_net, e1_net, OUTPUT_PATH, PRE_COMPUTE_FLAG)
-
-    data_e1_max = np.load(OUTPUT_PATH+"/data_e1_max.npz")
-    data_e1_pinn_max = np.load(OUTPUT_PATH+"/data_e1_pinn_max.npz")
-    plot_e1_pinn_validation(data_e1_max, data_e1_pinn_max)
+    # data_e1_max = np.load(OUTPUT_PATH+"/data_e1_max.npz")
+    # data_e1_pinn_max = np.load(OUTPUT_PATH+"/data_e1_pinn_max.npz")
+    # plot_e1_pinn_validation(data_e1_max, data_e1_pinn_max)
 
     # 1) compute e1_init from analytical p_init
     # p_init_analy = np.load("data/1e+6/pdf_analy_t0.000.npy")

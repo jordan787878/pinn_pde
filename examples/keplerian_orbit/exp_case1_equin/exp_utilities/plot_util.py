@@ -173,28 +173,18 @@ def _indices_in_dense(time_dense, time_sparse, tol=None):
     return order[np.flatnonzero(mask_sorted)]
 
 
-def plot_pdf_metrics(metrics, data_normalize_e1_pinn_max=None):
+def plot_pdf_metrics(metrics):
     colors = sns.color_palette("husl", 3)
-
-    # Get PINN Error Bound over time
-    if(data_normalize_e1_pinn_max is not None):
-        times = data_normalize_e1_pinn_max["times"]
-        # synchronize times
-        idx_times = _indices_in_dense(times, metrics["t"], tol=1e-4)
-        times = times[idx_times]
-        e1_pinn_max = data_normalize_e1_pinn_max["values"][:, -1]
-        B1 = 2.*e1_pinn_max[idx_times]
-        print(times)
-        print(B1)
 
     plt.figure()
     print(metrics["t"])
     plt.plot(metrics["t"], metrics["rel_error_pinn"], color=colors[0], label=r"$\hat{p}$ PINN")
-    if(data_normalize_e1_pinn_max is not None):
+    all_zeros = not np.any(metrics["B1_pinn"])
+    if(all_zeros is False):
         plt.fill_between(
             metrics["t"],
             metrics["rel_error_pinn"],
-            100.*B1,
+            metrics["B1_pinn"],
             color=colors[0],
             alpha=0.2,
             label="PINN Error Bound"
