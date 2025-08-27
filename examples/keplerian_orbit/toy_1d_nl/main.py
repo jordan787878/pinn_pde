@@ -1,7 +1,6 @@
 import torch
 import torch.nn as nn
 import torch.nn.init as init
-import torch.nn.functional as F
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
@@ -11,6 +10,9 @@ import os
 from scipy.stats import multivariate_normal
 from scipy.linalg import expm, cholesky
 import seaborn as sns
+import time
+from pinn_train import train_pnet, train_pnet_v0
+from pinn_model import PNet, PNet_XL
 
 # --------------------------
 # Device & dtype
@@ -20,8 +22,8 @@ torch.set_default_dtype(torch.float32)
 torch.backends.cuda.matmul.allow_tf32 = True
 torch.backends.cudnn.allow_tf32 = True
 
-mu = -2.0
-std = 0.5
+const_mu = -2.0
+const_std = 0.5
 const_a = -0.1
 const_b = 0.1
 const_c = 0.5
@@ -29,14 +31,33 @@ const_d = 0.5
 const_e = 0.8
 x_low = -6
 x_hig = 6
-
 t0 = 0.0
 T_end = 5.0
 t1s = np.arange(0.0, 5.0 + 0.5, 0.5)
 
+# --- helper ---
+const_mu_tensor = torch.tensor(const_mu, dtype=torch.float32)
+const_std_tensor = torch.tensor(const_std, dtype=torch.float32)
+const_a_tensor = torch.tensor(const_a, dtype=torch.float32)
+const_b_tensor = torch.tensor(const_b, dtype=torch.float32)
+const_c_tensor = torch.tensor(const_c, dtype=torch.float32)
+const_d_tensor = torch.tensor(const_d, dtype=torch.float32)
+const_e_tensor = torch.tensor(const_e, dtype=torch.float32)
+
 
 def p_init(x):
-    return np.exp(-0.5*((x-mu)/std)**2) / (std*np.sqrt(2*np.pi))
+    """
+    taks numpy.array or torch.tensor as inputs
+    """
+    if isinstance(x, torch.Tensor):
+        x = torch.tensor(x, dtype=torch.float32) if not isinstance(x, torch.Tensor) else x
+        exponent = -0.5 * ((x - const_mu_tensor) / const_std_tensor) ** 2
+        normalization = const_std_tensor * torch.sqrt(torch.tensor(2 * torch.pi))
+        return torch.exp(exponent) / normalization
+    elif isinstance(x, np.ndarray):
+        return np.exp(-0.5*((x-const_mu)/const_std)**2) / (const_std*np.sqrt(2*np.pi))
+    else:
+        return "Neither PyTorch Tensor nor NumPy Array"
 
 
 def get_p_normalize():
@@ -55,22 +76,17 @@ def get_e1_normalize(pnet):
     return np.max(np.abs(e0_true))
 
 
-class PNet(nn.Module):
-    def __init__(self, scale=1.0): 
-        neurons = 50
-        self.scale = scale
-        super(PNet, self).__init__()
-        self.hidden_layer1 = (nn.Linear(2,neurons))
-        self.hidden_layer2 = (nn.Linear(neurons,neurons))
-        self.hidden_layer3 = (nn.Linear(neurons,neurons))
-        self.output_layer =  (nn.Linear(neurons,1))
-    def forward(self, x, t):
-        inputs = torch.cat([x, t],axis=1)
-        layer1_out = F.softplus((self.hidden_layer1(inputs)))
-        layer2_out = F.softplus((self.hidden_layer2(layer1_out)))
-        layer3_out = F.softplus((self.hidden_layer3(layer2_out)))
-        output = F.softplus( self.output_layer(layer3_out) )
-        return output
+def res_func(x, t, pnet, verbose=False, beta=1.):
+    p = pnet(x,t)
+    p_x = torch.autograd.grad(p, x, grad_outputs=torch.ones_like(p), create_graph=True)[0]
+    p_t = torch.autograd.grad(p, t, grad_outputs=torch.ones_like(p), create_graph=True)[0]
+    p_xx = torch.autograd.grad(p_x, x, grad_outputs=torch.ones_like(p_x), create_graph=True)[0]
+    residual = p_t + beta*( (3*const_a_tensor *x*x + 2*const_b_tensor *x + const_c_tensor)*p \
+                   + (const_a_tensor *x*x*x + const_b_tensor *x*x + const_c_tensor*x + const_d_tensor)*p_x \
+                   - 0.5*const_e_tensor*const_e_tensor *p_xx )
+    if(verbose):
+        print(p_xx[0:10,:]) #; print(p_x.shape, p_t.shape, p_xx.shape, residual.shape)
+    return residual
     
 
 class E1Net(nn.Module):
@@ -107,6 +123,18 @@ def load_train_model(net, PATH):
     print("best pnet epoch: ", epoch, ", loss:", loss, "train time:", checkpoint['train_time'])
     net.eval()
     return net
+
+
+def train_helper_sample_ic(batch_size):
+    x_bc = (torch.rand(batch_size, 1) * (x_hig - x_low) + x_low).to(device)
+    t_bc = (torch.ones(batch_size, 1) * t0).to(device)
+    return x_bc, t_bc
+
+
+def train_helper_sample_res(batch_size):
+    x = (torch.rand(batch_size, 1, requires_grad=True) * (x_hig - x_low) + x_low).to(device)
+    t = (torch.rand(batch_size, 1, requires_grad=True) * (T_end - t0) + t0).to(device)
+    return x, t
 
 
 class PropagationData:
@@ -162,7 +190,7 @@ class PropagationData:
     
     def linear_propagation(self, dt_precision=6, dt_save=0.1, save_path=None):
         # --- initialization ---
-        mu_i, cov_i = mu, std**2
+        mu_i, cov_i = const_mu, const_std**2
         x = np.float64(mu_i)    # initial mean
         Px = np.float64(cov_i)     # initial covariance
 
@@ -262,7 +290,7 @@ class PropagationData:
     
     def unscent_propagation(self, dt_precision=6, dt_save=0.1, save_path=None):
         # --- initialization ---
-        mu_i, cov_i = mu, std**2
+        mu_i, cov_i = const_mu, const_std**2
         x = np.float64(mu_i)    # initial mean
         Px = np.float64(cov_i)     # initial covariance
 
@@ -391,9 +419,26 @@ def test_MC_accuracy(x):
 
 
 def main(TRAIN_FLAG=False, RUN_BASELINE=False):
-    p_net = PNet().to(device)
-    p_net.scale = get_p_normalize()
-    p_net = load_train_model(p_net, PATH="data/p_net.pth")
+    torch.manual_seed(0); np.random.seed(0)
+
+    p_net = PNet(scale=get_p_normalize()).to(device)
+    # p_net = PNet_XL(scale=get_p_normalize()).to(device)
+
+    configuration = {
+        "iterations": 10000,
+        "sample_ic": train_helper_sample_ic,
+        "sample_res": train_helper_sample_res,
+        "p_ic": p_init,
+        "res_func": res_func,
+        "res_weight": 1.0,
+        "save_path": "data/p_net.pth"
+    }
+
+    if(TRAIN_FLAG):
+        # train_pnet_model(p_net)
+        train_pnet_v0(p_net, configuration)
+
+    p_net = load_train_model(p_net, PATH=configuration["save_path"])
 
     e1_net = E1Net().to(device)
     e1_net.scale = get_e1_normalize(p_net)
@@ -402,7 +447,7 @@ def main(TRAIN_FLAG=False, RUN_BASELINE=False):
     # --- Visual ---
     x = np.load("data/xsim.npy").astype(np.float32)
 
-    test_MC_accuracy(x)
+    # test_MC_accuracy(x)
 
     lp_path = os.path.join("data", "lp_np64_dt6.npz") # the last label specifies the precision used
     ut_path = os.path.join("data", "ut_np64_dt6.npz") # the last label specifies the precision used
@@ -587,5 +632,5 @@ def main(TRAIN_FLAG=False, RUN_BASELINE=False):
 
 
 if __name__ == "__main__":
-    main(TRAIN_FLAG=False, 
+    main(TRAIN_FLAG=True, 
          RUN_BASELINE=False)
