@@ -328,7 +328,7 @@ class E1Net_XL(nn.Module):
     def __init__(
         self,
         constants,
-        p_net,
+        p_net=None,
         scale=1.0,
         normalize=1.0,
         input_feature=7,
@@ -343,16 +343,21 @@ class E1Net_XL(nn.Module):
         super().__init__()
         self.constants = constants
         self.scale = scale
+        self.p_net = None
         self.normalize = normalize
         self.input_feature = input_feature
         self.width = int(width)
         self.depth = int(depth)
         self.use_layernorm = use_layernorm
         self.input_skip_at = input_skip_at if (0 < input_skip_at < depth) else -1
-        self.p_net = p_net
-        self.p_net.eval()
-        for p in self.p_net.parameters():
-            p.requires_grad_(False)
+        if(p_net is not None):
+            self.p_net = p_net
+            self.p_net.eval()
+            for p in self.p_net.parameters():
+                p.requires_grad_(False)
+        else:
+            # directly learning the error
+            self.scale = self.normalize
 
         # Time encoding
         self.use_fourier_t = bool(fourier_t)
@@ -427,8 +432,11 @@ class E1Net_XL(nn.Module):
 
         out_hidden = h + h0
         y = self.fc_out(out_hidden)
-        p_net_out = self.p_net(x, t)
-        return y * self.scale - p_net_out
+        if(self.p_net is not None):
+            p_net_out = self.p_net(x, t)
+            return y * self.scale - p_net_out
+        else:
+            return y * self.scale
 
 
 # helper functions

@@ -17,9 +17,9 @@ device = "cpu"
 def marginal_pinn(
     p_net, t_val, constants,
     plot_axes,
-    num_linespace=200,
+    num_linespace=256,
     num_samples_mc=10000,
-    batch_size=128,
+    batch_size=16,
     device="cpu",
     save_path=None,
     renormalize_over_window=True
@@ -98,6 +98,113 @@ def marginal_pinn(
     return X1_grid, X6_grid, pdf
 
 
+def marginal_pinn_1d(
+    p_net, t_val, constants,
+    plot_axis,                 # int in [0..5]
+    num_linespace=256,
+    num_samples_mc=500000,
+    batch_size=64,
+    device="cpu",
+    save_path=None,
+    renormalize_over_window=True,
+    mc_chunk=100000            # process MC samples in chunks to limit memory
+):
+    """
+    Monte-Carlo marginalization to a 1D PDF for x_{plot_axis} at time t_val.
+    Returns (X_grid, pdf), both in *unscaled* physical units.
+    """
+    # -----------------------------
+    # 1) Define evaluation grid (scaled space)
+    # -----------------------------
+    x_range = getattr(constants, f"N_X{plot_axis+1}_RANGE")
+    x_vals_scaled = np.linspace(x_range[0], x_range[1], num=num_linespace, endpoint=True)
+
+    # axes bookkeeping
+    all_axes = [0,1,2,3,4,5]
+    integration_axes = [i for i in all_axes if i != plot_axis]
+
+    # fixed integration ranges (scaled)
+    range_names = [f'N_X{i+1}_RANGE' for i in range(6)]
+    integration_ranges = [getattr(constants, range_names[i]) for i in integration_axes]
+    domain_volume = np.prod([r[1]-r[0] for r in integration_ranges])
+
+    # -----------------------------
+    # 2) One MC set reused for all grid points (scaled)
+    # -----------------------------
+    integration_samples = np.random.uniform(
+        low=[r[0] for r in integration_ranges],
+        high=[r[1] for r in integration_ranges],
+        size=(num_samples_mc, len(integration_axes))
+    ).astype(np.float32)
+
+    # -----------------------------
+    # 3) Batched evaluation over x-grid; stream MC in chunks
+    # -----------------------------
+    pdf_vals = np.zeros(len(x_vals_scaled), dtype=np.float32)
+
+    for s in tqdm(range(0, len(x_vals_scaled), batch_size), desc="1D marginal batches"):
+        e = min(s + batch_size, len(x_vals_scaled))
+        x_batch = x_vals_scaled[s:e]  # [B]
+
+        # We'll accumulate mean over MC with chunking to avoid huge tensors
+        acc = torch.zeros((e - s,), dtype=torch.float32, device=device)
+        n_total = 0
+
+        for mc_s in range(0, num_samples_mc, mc_chunk):
+            mc_e = min(mc_s + mc_chunk, num_samples_mc)
+            mc_block = integration_samples[mc_s:mc_e, :]  # [M_chunk, k]
+
+            # tile: for each x in batch, pair with all mc_block rows
+            B = (e - s)
+            M = (mc_e - mc_s)
+            # assemble full 6D inputs
+            full = np.empty((B * M, 6), dtype=np.float32)
+            # set the plotted axis
+            full[:, plot_axis] = np.repeat(x_batch, M)
+
+            # fill integration axes
+            for col_i, ax in enumerate(integration_axes):
+                full[:, ax] = np.tile(mc_block[:, col_i], B)
+
+            # tensors
+            x_tensor = torch.from_numpy(full).to(device)
+            t_tensor = torch.full((x_tensor.shape[0], 1), t_val, dtype=torch.float32, device=device)
+
+            with torch.no_grad():
+                vals = p_net(x_tensor, t_tensor).view(B, M).mean(dim=1)  # mean over MC chunk
+                acc += vals
+                n_total += 1
+
+        # average across chunks and scale by domain volume
+        pdf_vals[s:e] = (acc / max(1, n_total) * domain_volume).cpu().numpy()
+
+    # -----------------------------
+    # 4) Unscale x-axis to physical units
+    # -----------------------------
+    std_i = float(constants.COV_I[plot_axis, plot_axis]**0.5)
+    mu_i  = float(constants.MEAN_I[plot_axis])
+    x_vals = x_vals_scaled * std_i + mu_i
+
+    # -----------------------------
+    # 5) Optional renormalization over the plotted window (physical units)
+    # -----------------------------
+    if renormalize_over_window:
+        dx = (x_vals[-1] - x_vals[0]) / max(1, len(x_vals)-1)
+        Z = float(np.sum(pdf_vals) * dx)
+        if Z > 0:
+            pdf_vals = pdf_vals / Z
+
+    # -----------------------------
+    # 6) Save (optional) and return
+    # -----------------------------
+    if save_path:
+        np.savez(save_path, X_grid=x_vals, pdf=pdf_vals)
+        print(f"1D marginal saved to {save_path}.npz")
+
+    return x_vals, pdf_vals
+
+
+
 # --- Example Usage ---
 if __name__ == '__main__':
     OUTPUT_PATH = "output/v0_scaled_T0.3"
@@ -111,18 +218,20 @@ if __name__ == '__main__':
     # load p_net
     p_net = load_trained_model(p_net, path=OUTPUT_PATH+"/p_net.pth"); p_net.eval()
 
-    # Select coordinates to marginalize
-    x_coords = (1,6)
-
+    # marginalize 2D: select x_coords
+    x_coords = (4, 5)
     plot_axes = tuple(c - 1 for c in x_coords)
-    for t in constants.T_PRIME_SPAN:
+    for t in [constants.T_PRIME_SPAN[-1]]:
         save_path = f"{OUTPUT_PATH}/pre_compute/marginal_pdfpinn_x{x_coords[0]}_x{x_coords[1]}_t{t:.3f}.npz"
-
         X_grid, Y_grid, pdf_values = marginal_pinn(
             p_net, t, constants, #x1_vals_scaled, x6_vals_scaled,
             plot_axes,
-            num_linespace=256,
-            num_samples_mc=10000,
-            batch_size=16,
             save_path=save_path
         )
+
+    # Marginalize 1D: select x_coord
+    # x_coord = 6
+    # plot_axs = x_coord-1
+    # for t in [constants.T_PRIME_SPAN[-1]]:
+    #     save_path = f"{OUTPUT_PATH}/pre_compute/marginal_pdfpinn_x{x_coord}_t{t:.3f}.npz"
+    #     marginal_pinn_1d(p_net, t, constants, plot_axs, save_path=save_path)

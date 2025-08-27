@@ -94,8 +94,15 @@ def main():
     # e1_net.scale = scale_torch*0.05 # assuming 10% percent error
     # e1_net.set_p_net(copy.deepcopy(p_net))
     # print("[check] e1_net scale: ", e1_net.scale)
-    e1_net = E1Net_XL(constants, copy.deepcopy(p_net), scale=scale_torch, input_feature=7)
-    e1_net.normalize = scale_torch*0.02
+
+    # --- "output/v0_scaled_T0.3(E1Net_XL) ---"
+    # e1_net = E1Net_XL(constants, p_net=copy.deepcopy(p_net), scale=scale_torch, input_feature=7)
+    # e1_net.normalize = scale_torch*0.02
+    # print("[check] e1_net scale: {:.5f}, normalize: {:.5f}".format(
+    #     e1_net.scale, e1_net.normalize))
+    
+    # NOTE: test if e1_net needs p_net directly?
+    e1_net = E1Net_XL(constants, scale=scale_torch, normalize=scale_torch*0.02)
     print("[check] e1_net scale: {:.5f}, normalize: {:.5f}".format(
         e1_net.scale, e1_net.normalize))
 

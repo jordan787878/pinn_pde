@@ -9,7 +9,7 @@ from matplotlib.lines import Line2D
 from mpl_toolkits.mplot3d import Axes3D  # noqa: F401  (needed for 3D projection)
 import pandas as pd
 from matplotlib.colors import LogNorm
-from matplotlib.ticker import MaxNLocator
+from matplotlib.ticker import MaxNLocator, ScalarFormatter
 
 
 def set_publication_plot_style(font_family='Times New Roman', font_size=18):
@@ -203,15 +203,15 @@ def plot_pdf_metrics(metrics):
     plt.xlabel("t")
     plt.ylabel("total variation %")
 
-    # # metric 3: negative log liklihood (relative KL)
-    # plt.figure()
-    # plt.plot(metrics["t"], metrics["rel_kl_pinn"], color=colors[0], label=r"$\hat{p}$ PINN")
-    # plt.plot(metrics["t"], metrics["rel_kl_lp"], color=colors[1],   label=r"$p$ Linear Prop.")
-    # plt.plot(metrics["t"], metrics["rel_kl_ut"], color=colors[2],   label=r"$p$ Unscent Trans.")
-    # # plt.plot(metrics["t"], metrics["rel_kl_ut_alpha_0_1"], color=colors[2], marker="o", label=r"$p$ Unscent Trans. $(\alpha=0.1)$")
-    # plt.legend()
-    # plt.xlabel("t")
-    # plt.ylabel("Negative Log Likelihood")
+    # metric 3: negative log liklihood (relative KL)
+    plt.figure()
+    plt.plot(metrics["t"], metrics["g_kl_pinn"], color=colors[0], label=r"$\hat{p}$ PINN")
+    plt.plot(metrics["t"], metrics["g_kl_lp"], color=colors[1],   label=r"$p$ Linear Prop.")
+    plt.plot(metrics["t"], metrics["g_kl_ut"], color=colors[2],   label=r"$p$ Unscent Trans.")
+    # plt.plot(metrics["t"], metrics["rel_kl_ut_alpha_0_1"], color=colors[2], marker="o", label=r"$p$ Unscent Trans. $(\alpha=0.1)$")
+    plt.legend()
+    plt.xlabel("t")
+    plt.ylabel("General KL")
 
     plt.show()
 
@@ -666,7 +666,7 @@ def plot_single_corner(constants,
     return ax
 
 
-def plot_full_corner(constants,
+def plot_full_corner(constants, t,
     X_samples,
     bins=200,
     labels=None,
@@ -680,8 +680,10 @@ def plot_full_corner(constants,
     quantile_range=(0.001, 0.999),  # set to None to use full min/max
     pad_frac=0.02,
     log_counts=True,           # log color scale for heatmap
-    data_marginal_pinn=None
+    OUTPUT_PATH=None,
 ):
+    set_publication_plot_style(font_size=14)
+
     X = np.asarray(X_samples)
     N, D = X.shape
     if labels is None:
@@ -712,8 +714,24 @@ def plot_full_corner(constants,
         (constants.X6_RANGE[0],constants.X6_RANGE[1]),
     ]
 
+    sns_colors = sns.color_palette("husl", 3)
     fig, axes = plt.subplots(D, D, figsize=(figsize_per_dim*D, figsize_per_dim*D))
     plt.subplots_adjust(wspace=0.08, hspace=0.08)
+
+    def _plot_pinn_1d_marginal(x_coords):
+        data_marginal_pinn = np.load(
+        f"{OUTPUT_PATH}/pre_compute/marginal_pdfpinn_x{x_coords}_t{t:.3f}.npz")
+        if(data_marginal_pinn is not None):
+            pdf_values = data_marginal_pinn['pdf']
+            X_grid = data_marginal_pinn["X_grid"]
+            ax.plot(X_grid, pdf_values, color=sns_colors[0])
+        # pdf_max = np.max(pdf_values[pdf_values > 0])
+        # Define levels as percentages of the maximum value
+        # For example, levels at 5%, 25%, 50%, 75%, and 95% of the max
+        # relative_levels = np.array([0.001, 0.01, 0.05, 0.25, 0.50, 0.75, 0.95])
+        # levels = relative_levels * pdf_max
+        # Draw the contour lines with the custom levels
+        # ax.contour(X_grid, Y_grid, pdf_values, levels=levels, colors=[sns_colors[0]], linewidths=0.5)
 
     # Diagonals: 1D histograms (counts)
     for d in range(D):
@@ -725,17 +743,19 @@ def plot_full_corner(constants,
             range=(lo, hi),
             histtype="stepfilled",
             alpha=0.85,
-            color="steelblue"
+            color="steelblue",
+            density=True,
         )
         ax.set_xlim(lo, hi)
         ax.yaxis.set_major_locator(MaxNLocator(nbins=4, prune="both"))
         if d == D - 1: ax.set_xlabel(labels[d])
         else: ax.set_xticklabels([])
         if d != 0: ax.set_yticklabels([])
-
         # hide upper triangle in row d
         for k in range(d + 1, D):
             axes[d, k].axis("off")
+        if(OUTPUT_PATH is not None):
+            _plot_pinn_1d_marginal(d+1)
 
     # Off-diagonals: scatter or heatmap (counts)
     for i in range(1, D):
@@ -771,22 +791,30 @@ def plot_full_corner(constants,
                     aspect="auto", cmap=cmap, norm=norm, interpolation="nearest"
                 )
 
-            # contour plots overlaid
-            if(data_marginal_pinn is not None and i == 5 and j == 0):
-                pdf_values = data_marginal_pinn['pdf']
-                X_grid, Y_grid = data_marginal_pinn["X_grid"], data_marginal_pinn["Y_grid"], 
-                pdf_max = np.max(pdf_values[pdf_values > 0])
-                # Define levels as percentages of the maximum value
-                # For example, levels at 5%, 25%, 50%, 75%, and 95% of the max
-                relative_levels = np.array([0.001, 0.01, 0.05, 0.25, 0.50, 0.75, 0.95])
-                levels = relative_levels * pdf_max
-                # Draw the contour lines with the custom levels
-                ax.contour(X_grid, Y_grid, pdf_values, levels=levels, colors='blue', linewidths=1.0)
+            def _plot_pinn_contour(x_coords):
+                filename = f"{OUTPUT_PATH}/pre_compute/marginal_pdfpinn_x{x_coords[0]}_x{x_coords[1]}_t{t:.3f}.npz"
+                if(os.path.isfile(filename)):
+                    data_marginal_pinn = np.load(filename)
+                    pdf_values = data_marginal_pinn['pdf']
+                    X_grid, Y_grid = data_marginal_pinn["X_grid"], data_marginal_pinn["Y_grid"], 
+                    pdf_max = np.max(pdf_values[pdf_values > 0])
+                    # Define levels as percentages of the maximum value
+                    # For example, levels at 5%, 25%, 50%, 75%, and 95% of the max
+                    relative_levels = np.array([0.001, 0.01, 0.05, 0.25, 0.50, 0.75, 0.95])
+                    levels = relative_levels * pdf_max
+                    # Draw the contour lines with the custom levels
+                    ax.contour(X_grid, Y_grid, pdf_values, levels=levels, colors=[sns_colors[0]], linewidths=0.5)
+                # else:
+                #     print(x_coords)
+
+            if(OUTPUT_PATH is not None):
+                x_coords = (j+1, i+1)
+                _plot_pinn_contour(x_coords)
 
             ax.set_xlim(xlo, xhi); ax.set_ylim(ylo, yhi)
             if i == D - 1: ax.set_xlabel(labels[j])
             else: ax.set_xticklabels([])
             if j == 0: ax.set_ylabel(labels[i])
             else: ax.set_yticklabels([])
-
+    plt.tick_params(axis='both', which='major', labelsize=8)
     fig.tight_layout()

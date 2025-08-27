@@ -119,6 +119,22 @@ def p_total_variation(constants, p1, p2, verbose=False, eps=np.finfo(np.float32)
     return 100. *tv.item()
 
 
+def p_normalize_constant(constants, p1):
+    """
+    """
+    bounds = np.array([
+        constants.X1_RANGE,
+        constants.X2_RANGE,
+        constants.X3_RANGE,
+        constants.X4_RANGE,
+        constants.X5_RANGE,
+        constants.X6_RANGE,
+    ])
+    vol_est = compute_volume(bounds)
+    p1 = p1.reshape(-1,)
+    return np.mean(p1) * vol_est
+
+
 def p_rel_worst_error(p1, p2):
     p1 = p1.reshape(-1,)
     p2 = p2.reshape(-1,)
@@ -142,7 +158,7 @@ def compute_and_update_metrics(metrics, pdf_eval=None, pdf_ref=None, key=None):
     print(key, " - rel_error: {:.2f} %, tv: {:.2f} %".format(rel_error, tv))
 
 
-def compute_relKL_and_update_metrics(metrics, t, X, p_data_normal=None, p_net=None, key=None):
+def compute_generalKL(t, X, p_data_normal=None, p_net=None, key=None):
     global constants
     eps = np.finfo(np.float32).tiny   # machine precision of np.float32 ≈ 1.175e-38
     if(p_net is not None):
@@ -162,14 +178,7 @@ def compute_relKL_and_update_metrics(metrics, t, X, p_data_normal=None, p_net=No
     else:
         print("All pdf_lp values are below machine precision!")
         KL = np.NaN
-    if(p_data_normal is not None):
-        KL += 1
-    if(p_net is not None):
-        # NOTE need to compute this, set to 1 for now
-        normal_constant = 1
-        KL += normal_constant
-    metrics["rel_kl_"+key].append(KL)
-    print(key, " - rel_kl: {:.2f}".format(KL))
+    return KL
 
 
 def compute_pdf_variations(p_net=None, data_lp=None, data_ut=None, e1_net=None, save_path=None):
@@ -181,11 +190,12 @@ def compute_pdf_variations(p_net=None, data_lp=None, data_ut=None, e1_net=None, 
         "tv_lp": [],
         "tv_ut": [],
         "tv_pinn": [],
-        # "rel_kl_lp": [],
-        # "rel_kl_ut": [],
-        # "rel_kl_pinn": [],
+        "g_kl_lp": [],
+        "g_kl_ut": [],
+        "g_kl_pinn": [],
         "B1_pinn": [],
-        "t": constants.T_PRIME_SPAN #np.round(np.arange(0.0, 0.4+0.02, 0.02, dtype=np.float32),2)
+        # "t": constants.T_PRIME_SPAN,
+        "t": np.round(np.arange(0.0, 0.3+0.05, 0.05, dtype=np.float32),2)
     } 
     print("evaluate metrics over times: ", metrics["t"])
     N_samples = 100000
@@ -195,11 +205,16 @@ def compute_pdf_variations(p_net=None, data_lp=None, data_ut=None, e1_net=None, 
         pdf_ref_max = 0.0
         delta_p_pinn_max = 0.0
         tv_pinn = 0.0
+        gkl_pinn = 0.0
         delta_p_lp_max = 0.0
         tv_lp = 0.0
+        gkl_lp = 0.0
         delta_p_ut_max = 0.0
         tv_ut = 0.0
+        gkl_ut = 0.0
+        # additional data for pinn
         e1_pinn_max = 0.0
+        Z_pinn = 0.0
         for j in tqdm(range(1, N_batch+1), desc="Propagating batches"):
             X = get_uniform_Xsamples_numpy(N_samples=N_samples) # samples from random uniform
             X_scaled = constants.scaled_x(X)
@@ -208,7 +223,7 @@ def compute_pdf_variations(p_net=None, data_lp=None, data_ut=None, e1_net=None, 
             # print("[info] pdf ref")
             pdf_ref = p_sol(constants, X, t).reshape(-1,)
             pdf_ref_max = max(pdf_ref_max, np.max(pdf_ref).item())
-            # X_mc = sample_joint_pdf(constants, t_prime=t, n_samples=N_samples, seed=123)
+            X_mc = sample_joint_pdf(constants, t_prime=t, n_samples=N_samples, seed=j)
 
             # print("[info] pdf PINN")
             _t = np.ones((len(_x_tensor), 1)) * t
@@ -218,13 +233,16 @@ def compute_pdf_variations(p_net=None, data_lp=None, data_ut=None, e1_net=None, 
             delta_p_pinn_max = max(delta_p_pinn_max, _delta_p)
             _tv = p_total_variation(constants, pdf_pinn, pdf_ref)
             tv_pinn += _tv/N_batch
+            _gkl = compute_generalKL(t, X_mc, p_net=p_net)
+            gkl_pinn += _gkl/N_batch
+            _Z_pinn = p_normalize_constant(constants, pdf_pinn)
+            Z_pinn += _Z_pinn/N_batch
             del pdf_pinn
 
             if(e1_net is not None):
                 e1_pinn = constants.SCALING_PDF * e1_net(_x_tensor, _t_tensor).detach().cpu().numpy().reshape(-1,)
                 e1_pinn_max = max(e1_pinn_max, np.max(np.abs(e1_pinn)).item())
                 del e1_pinn
-            
             del _t, _t_tensor, X_scaled, _x_tensor
 
             # print("[info] pdf LP")
@@ -236,6 +254,8 @@ def compute_pdf_variations(p_net=None, data_lp=None, data_ut=None, e1_net=None, 
             delta_p_lp_max = max(delta_p_lp_max, _delta_p)
             _tv = p_total_variation(constants, pdf_lp, pdf_ref)
             tv_lp += _tv/N_batch
+            _gkl = compute_generalKL(t, X_mc, p_data_normal=data_lp)
+            gkl_lp += _gkl/N_batch
             del pdf_lp
 
             # print("[info] pdf UT")
@@ -247,36 +267,46 @@ def compute_pdf_variations(p_net=None, data_lp=None, data_ut=None, e1_net=None, 
             delta_p_ut_max = max(delta_p_ut_max, _delta_p)
             _tv = p_total_variation(constants, pdf_ut, pdf_ref)
             tv_ut += _tv/N_batch
+            _gkl = compute_generalKL(t, X_mc, p_data_normal=data_ut)
+            gkl_ut += _gkl/N_batch
             del pdf_ut
         
         # After all batch
+        gkl_pinn += Z_pinn
+        gkl_lp += 1
+        gkl_ut += 1
         metrics["rel_error_pinn"].append(100.*delta_p_pinn_max/pdf_ref_max)
         metrics["tv_pinn"].append(tv_pinn)
+        metrics["g_kl_pinn"].append(gkl_pinn)
         metrics["rel_error_lp"].append(100.*delta_p_lp_max/pdf_ref_max)
         metrics["tv_lp"].append(tv_lp)
+        metrics["g_kl_lp"].append(gkl_lp)
         metrics["rel_error_ut"].append(100.*delta_p_ut_max/pdf_ref_max)
         metrics["tv_ut"].append(tv_ut)
+        metrics["g_kl_ut"].append(gkl_ut)
         metrics["B1_pinn"].append(100. * 2. * e1_pinn_max/pdf_ref_max)
-        # print("[check]: max e1: {:.4f}, max e1 pinn: {:.4f}".format(
-        #     delta_p_pinn_max, e1_pinn_max))
+        print("[check]: max e1: {:.4f}, max e1 pinn: {:.4f}".format(
+            delta_p_pinn_max, e1_pinn_max))
+        print("[check] Z_pinn: {:.4f}".format(Z_pinn))
 
-    print(metrics["rel_error_pinn"])
-    print(metrics["tv_pinn"])
-    print(metrics["rel_error_lp"])
-    print(metrics["tv_lp"])
-    print(metrics["rel_error_ut"])
-    print(metrics["tv_ut"])
-    print(metrics["B1_pinn"])
+    # print(metrics["rel_error_pinn"])
+    # print(metrics["tv_pinn"])
+    # print(metrics["rel_error_lp"])
+    # print(metrics["tv_lp"])
+    # print(metrics["rel_error_ut"])
+    # print(metrics["tv_ut"])
+    # print(metrics["B1_pinn"])
+    
     save_metrics_npz(metrics, save_path)
 
 
 def compare_corner_plots(p_net=None, data_lp=None, data_ut=None, save_path=None, 
                          OUTPUT_PATH=None):
     global constants
-    t_show = constants.T_PRIME_SPAN
+    t_show = [constants.T_PRIME_SPAN[-1]]
     # t_show = np.array([0.4])
 
-    N_samples = 5000000
+    N_samples = 1000000
     # X = get_uniform_Xsamples_numpy(N_samples=N_samples) # samples from random uniform
     # X_scaled = constants.scaled_x(X)
     # _x_tensor = torch.tensor(X_scaled, dtype=torch.float32, requires_grad=False)
@@ -305,16 +335,16 @@ def compare_corner_plots(p_net=None, data_lp=None, data_ut=None, save_path=None,
         _cov_ut = np.float32(_cov_ut)
         gaussian_ut = (_mu_ut, _cov_ut)
 
-        # Singler corner plot as coordinate: x_coords
-        ax = plot_single_corner(
-            constants, x_coord1=x_coords[0], x_coord2=x_coords[1], X_samples=X_ref,
-            data_marginal_pinn=data_marginal_pinn,
-            gaussian_lp=gaussian_lp,
-            gaussian_ut=gaussian_ut
-        )
+        # # Singler corner plot as coordinate: x_coords
+        # ax = plot_single_corner(
+        #     constants, x_coord1=x_coords[0], x_coord2=x_coords[1], X_samples=X_ref,
+        #     data_marginal_pinn=data_marginal_pinn,
+        #     gaussian_lp=gaussian_lp,
+        #     gaussian_ut=gaussian_ut
+        # )
 
         # Full corner plot
-        # plot_full_corner(constants, X_ref, data_marginal_pinn=data_marginal_pinn)
+        plot_full_corner(constants, t, X_ref, OUTPUT_PATH=OUTPUT_PATH)
 
         plt.show()
 
@@ -338,7 +368,12 @@ def compare_methods():
     OUTPUT_PATH = "output/v0_scaled_T0.3"
     p_net = load_trained_model(p_net, path=OUTPUT_PATH+"/p_net.pth"); p_net.eval()
 
-    e1_net = E1Net_XL(constants, copy.deepcopy(p_net), scale=scale_torch, input_feature=7)
+    # --- "output/v0_scaled_T0.3(E1Net_XL) ---"
+    # e1_net = E1Net_XL(constants, p_net=copy.deepcopy(p_net), scale=scale_torch, input_feature=7)
+
+    # NOTE: test if e1_net needs p_net directly?
+    e1_net = E1Net_XL(constants, scale=scale_torch, normalize=scale_torch*0.02)
+
     # print("[check] e1_net scale: {:.5f}, normalize: {:.5f}".format(
     # e1_net.scale, e1_net.normalize))
     # e1_net.normalize = scale_torch
@@ -353,7 +388,7 @@ def compare_methods():
 
     # compute_pdf_variations(p_net=p_net, data_lp=data_lp, data_ut=data_ut, e1_net=e1_net, save_path=metrics_path)
     
-    metrics = load_metrics_npz(metrics_path); plot_pdf_metrics(metrics)
+    # metrics = load_metrics_npz(metrics_path); plot_pdf_metrics(metrics)
 
     # Visualize marginal PDF
     compare_corner_plots(p_net=p_net, data_lp=data_lp, data_ut=data_ut, OUTPUT_PATH=OUTPUT_PATH)
