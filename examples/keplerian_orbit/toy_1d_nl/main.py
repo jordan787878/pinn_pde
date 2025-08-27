@@ -13,6 +13,8 @@ import seaborn as sns
 import time
 from pinn_train import train_pnet, train_pnet_v0
 from pinn_model import PNet, PNet_XL
+from pinn_train import train_e1net_v0
+from pinn_model import E1Net, E1Net_Prior
 
 # --------------------------
 # Device & dtype
@@ -88,32 +90,6 @@ def res_func(x, t, pnet, verbose=False, beta=1.):
         print(p_xx[0:10,:]) #; print(p_x.shape, p_t.shape, p_xx.shape, residual.shape)
     return residual
     
-
-class E1Net(nn.Module):
-    def __init__(self, scale=1.0): 
-        neurons = 50
-        self.scale = scale
-        super(E1Net, self).__init__()
-        self.hidden_layer1 = (nn.Linear(2,neurons))
-        self.hidden_layer2 = (nn.Linear(neurons,neurons))
-        self.hidden_layer3 = (nn.Linear(neurons,neurons))
-        self.hidden_layer4 = (nn.Linear(neurons,neurons))
-        self.hidden_layer5 = (nn.Linear(neurons,neurons))
-        self.hidden_layer6 = (nn.Linear(neurons,neurons))
-        self.output_layer =  (nn.Linear(neurons,1))
-        self.activation = nn.GELU()
-    def forward(self, x, t):
-        inputs = torch.cat([x, t],axis=1)
-        layer1_out = self.activation((self.hidden_layer1(inputs)))
-        layer2_out = self.activation((self.hidden_layer2(layer1_out)))
-        layer3_out = self.activation((self.hidden_layer3(layer2_out)))
-        layer4_out = self.activation((self.hidden_layer4(layer3_out)))
-        layer5_out = self.activation((self.hidden_layer5(layer4_out)))
-        layer6_out = self.activation((self.hidden_layer6(layer5_out)))
-        output = self.output_layer(layer6_out)
-        output = self.scale * output
-        return output
-
 
 def load_train_model(net, PATH):
     checkpoint = torch.load(PATH)
@@ -381,8 +357,8 @@ def p_rel_worst_error(p1, p2):
     p1 = p1.reshape(-1,)
     p2 = p2.reshape(-1,)
     # print(np.max(p1), np.max(p2))
-    rel_error = np.max(np.abs(p1-p2)) / np.max(p2)
-    return 100.*rel_error.item()
+    norm_error = np.max(np.abs(p1-p2)) / np.max(p2)
+    return 100.*norm_error.item()
 
 
 def get_p_at_x_samples(x_mc_samples, pdf_func=None, pdf_pinn=None, t=None):
@@ -395,30 +371,50 @@ def get_p_at_x_samples(x_mc_samples, pdf_func=None, pdf_pinn=None, t=None):
         return pdf_pinn(x_mc_samples_tensor, t_mc_samples_tensor).detach().cpu().numpy().reshape(-1,)
 
 
-def p_rel_KL(p_at_x):
-    return np.mean(-np.log(p_at_x))
+def p_g_kl(p_at_x, Z_p):
+    return np.mean(-np.log(p_at_x)) + Z_p
 
 
 def compute_metrics(t, x_mc_samples, pdf_mc, pdf_eval, pdf_func=None, pdf_pinn=None):
-    rel_error = p_rel_worst_error(pdf_eval, pdf_mc)
+    norm_error = p_rel_worst_error(pdf_eval, pdf_mc)
     tv = p_total_variation(pdf_eval, pdf_mc)
     if(pdf_func is not None):
-        rel_kl = p_rel_KL(get_p_at_x_samples(x_mc_samples, pdf_func=pdf_func))
+        Z_p = 1.
+        g_kl = p_g_kl(get_p_at_x_samples(x_mc_samples, pdf_func=pdf_func), Z_p)
     if(pdf_pinn is not None):
-        rel_kl = p_rel_KL(get_p_at_x_samples(x_mc_samples, pdf_pinn=pdf_pinn, t=t))
-    return rel_error, tv, rel_kl
+        vol_est = x_hig - x_low
+        Z_p = np.mean(pdf_eval) * vol_est
+        print("[info] Z_p PINN: {:.5f}".format(Z_p))
+        g_kl = p_g_kl(get_p_at_x_samples(x_mc_samples, pdf_pinn=pdf_pinn, t=t), Z_p)
+    return norm_error, tv, g_kl
 
 
 def test_MC_accuracy(x):
     pdf_true = p_init(x)
     pdf_mc = np.load("data/psim_t0.0.npy")
-    rel_error = p_rel_worst_error(pdf_mc, pdf_true)
+    norm_error = p_rel_worst_error(pdf_mc, pdf_true)
     tv = p_total_variation(pdf_mc, pdf_true)
-    print("[test] Validate MC at t0 --- rel. error {:.5f} %, tv {:.5f} %".format(
-        rel_error, tv))
+    print("[test] Validate MC at t0 --- general error {:.5f} %, tv {:.5f} %".format(
+        norm_error, tv))
 
 
-def main(TRAIN_FLAG=False, RUN_BASELINE=False):
+def helper_save_metrics_npz(metrics, path):
+    # convert lists to float arrays; keep 't' as-is if already np.ndarray
+    out = {}
+    for k, v in metrics.items():
+        if k == "t":
+            out[k] = np.asarray(v)
+        else:
+            out[k] = np.asarray(v, dtype=float)
+    # sanity: all series (except t) should match len(t)
+    n = len(out["t"])
+    for k, v in out.items():
+        if k != "t":
+            assert len(v) == n, f"Length mismatch for {k}: {len(v)} vs t={n}"
+    np.savez(path, **out)
+
+
+def main(TRAIN_FLAG=False, RUN_BASELINE=False, LOAD_PRIOR=False):
     torch.manual_seed(0); np.random.seed(0)
 
     p_net = PNet(scale=get_p_normalize()).to(device)
@@ -433,16 +429,35 @@ def main(TRAIN_FLAG=False, RUN_BASELINE=False):
         "res_weight": 1.0,
         "save_path": "data/p_net.pth"
     }
-
     if(TRAIN_FLAG):
         # train_pnet_model(p_net)
         train_pnet_v0(p_net, configuration)
-
     p_net = load_train_model(p_net, PATH=configuration["save_path"])
 
-    e1_net = E1Net().to(device)
-    e1_net.scale = get_e1_normalize(p_net)
-    e1_net = load_train_model(e1_net, PATH="data/e1_net.pth")
+    if(LOAD_PRIOR):
+        p_net = load_train_model(p_net, PATH="data/p_net(prior).pth")
+
+    e1_net = E1Net(scale=get_e1_normalize(p_net),
+                   normalize=get_e1_normalize(p_net)).to(device)
+    configuration_e1 = {
+        "iterations": 20000,
+        "sample_ic": train_helper_sample_ic,
+        "sample_res": train_helper_sample_res,
+        "p_ic": p_init,
+        "res_func": res_func,
+        "res_weight": 1.0,
+        "save_path": "data/e1_net.pth"
+    }
+    if(TRAIN_FLAG):
+        train_e1net_v0((p_net, e1_net), configuration_e1)
+    e1_net = load_train_model(e1_net, PATH=configuration_e1["save_path"])
+
+    if(LOAD_PRIOR):
+        e1_net = E1Net_Prior(scale=get_e1_normalize(p_net)).to(device)
+        e1_net = load_train_model(e1_net, PATH="data/e1_net(prior).pth")
+
+    # 
+    p_net.eval(); e1_net.eval()
 
     # --- Visual ---
     x = np.load("data/xsim.npy").astype(np.float32)
@@ -467,22 +482,23 @@ def main(TRAIN_FLAG=False, RUN_BASELINE=False):
     x_tensor = torch.from_numpy(x.reshape(-1,1)).to(device)
     t_span = np.array(t1s).astype(np.float32)
     metrics = {
-        "rel_error_pinn": [],
-        "rel_error_lp": [],
-        "rel_error_ut": [],
-        "rel_error_ut_alpha_0_1": [],
+        "norm_error_pinn": [],
+        "norm_error_lp": [],
+        "norm_error_ut": [],
+        "norm_error_ut_alpha_0_1": [],
         "tv_pinn": [],
         "tv_lp": [],
         "tv_ut": [],
         "tv_ut_alpha_0_1": [],
-        "rel_kl_pinn": [],
-        "rel_kl_lp": [],
-        "rel_kl_ut": [],
-        "rel_kl_ut_alpha_0_1": [],
+        "g_kl_pinn": [],
+        "g_kl_lp": [],
+        "g_kl_ut": [],
+        "g_kl_ut_alpha_0_1": [],
         "normalize_B1": [],
         "t": t_span
     }
     x_mc_samples = None
+    B1 = None
     for t in t_span:
         x_mc_samples = np.load("data/xsamples_t{:.1f}.npy".format(t)).astype(np.float32)
         pdf_mc = np.load("data/psim_t{:.1f}.npy".format(t)).astype(np.float32).reshape(-1,)
@@ -493,7 +509,7 @@ def main(TRAIN_FLAG=False, RUN_BASELINE=False):
         _, _mu_lp, _cov_lp = data_lp.get(t)
         pdf_func = multivariate_normal(mean=_mu_lp, cov=_cov_lp)
         pdf_lp = pdf_func.pdf(x).reshape(-1,).astype(x.dtype)
-        rel_error_lp, tv_lp, rel_kl_lp = compute_metrics(t, x_mc_samples, pdf_mc, pdf_lp, pdf_func=pdf_func)
+        norm_error_lp, tv_lp, g_kl_lp = compute_metrics(t, x_mc_samples, pdf_mc, pdf_lp, pdf_func=pdf_func)
         # compute coverage mass
         idx_in_one_std = data_lp.indices_in_range(x, np.array([_mu_lp-(_cov_lp)**0.5, _mu_lp+(_cov_lp)**0.5]))
         if(len(idx_in_one_std) > 0):
@@ -506,7 +522,7 @@ def main(TRAIN_FLAG=False, RUN_BASELINE=False):
         _, _mu_ut, _cov_ut = data_ut.get(t)
         pdf_func = multivariate_normal(mean=_mu_ut, cov=_cov_ut)
         pdf_ut = pdf_func.pdf(x).reshape(-1,).astype(x.dtype)
-        rel_error_ut, tv_ut, rel_kl_ut = compute_metrics(t, x_mc_samples, pdf_mc, pdf_ut, pdf_func=pdf_func)
+        norm_error_ut, tv_ut, g_kl_ut = compute_metrics(t, x_mc_samples, pdf_mc, pdf_ut, pdf_func=pdf_func)
         # compute coverage mass
         idx_in_one_std = data_ut.indices_in_range(x, np.array([_mu_ut-(_cov_ut)**0.5, _mu_ut+(_cov_ut)**0.5]))
         if(len(idx_in_one_std) > 0):
@@ -519,11 +535,11 @@ def main(TRAIN_FLAG=False, RUN_BASELINE=False):
         _, _mu_ut_alpha0_1, _cov_ut_alpha0_1 = data_ut_alpha0_1.get(t)
         pdf_func = multivariate_normal(mean=_mu_ut_alpha0_1, cov=_cov_ut_alpha0_1)
         pdf_ut_alpha0_1 = pdf_func.pdf(x).reshape(-1,).astype(x.dtype)
-        rel_error_ut_alpha_0_1, tv_ut_alpha_0_1, rel_kl_ut_alpha_0_1 = compute_metrics(t, x_mc_samples, pdf_mc, pdf_ut_alpha0_1, pdf_func=pdf_func)
+        norm_error_ut_alpha_0_1, tv_ut_alpha_0_1, g_kl_ut_alpha_0_1 = compute_metrics(t, x_mc_samples, pdf_mc, pdf_ut_alpha0_1, pdf_func=pdf_func)
 
         # --- PINN ---
         pdf_pinn = p_net(x_tensor, t_tensor).detach().cpu().numpy().reshape(pdf_mc.shape)
-        rel_error_pinn, tv_pinn, rel_kl_pinn = compute_metrics(t, x_mc_samples, pdf_mc, pdf_pinn, pdf_pinn=p_net)
+        norm_error_pinn, tv_pinn, g_kl_pinn = compute_metrics(t, x_mc_samples, pdf_mc, pdf_pinn, pdf_pinn=p_net)
 
         # --- PINN Error Bound ---
         e1_pinn = e1_net(x_tensor, t_tensor).detach().cpu().numpy().reshape(-1,)
@@ -534,28 +550,32 @@ def main(TRAIN_FLAG=False, RUN_BASELINE=False):
         print("time {:.2f} total variation , PINN: {:.5f} %,  LP: {:.5f} %,  UT: {:.5f} %,  UT (alpha=0.1): {:.5f} %".format(
             t, tv_pinn, tv_lp, tv_ut, tv_ut_alpha_0_1
         ))
-        print("time {:.2f} worst rel. error, PINN: {:.5f} %,  LP: {:.5f} %,  UT: {:.5f} %,  UT (alpha=0.1): {:.5f} %".format(
-            t, rel_error_pinn, rel_error_lp, rel_error_ut, rel_error_ut_alpha_0_1
+        print("time {:.2f} worst general error, PINN: {:.5f} %,  LP: {:.5f} %,  UT: {:.5f} %,  UT (alpha=0.1): {:.5f} %".format(
+            t, norm_error_pinn, norm_error_lp, norm_error_ut, norm_error_ut_alpha_0_1
         ))
         if(x_mc_samples is not None):
-            print("time {:.2f} rel. KL, PINN: {:.5f},  LP: {:.5f},  UT: {:.5f}".format(
-                t, rel_kl_pinn, rel_kl_lp, rel_kl_ut
+            print("time {:.2f} general KL, PINN: {:.5f},  LP: {:.5f},  UT: {:.5f}".format(
+                t, g_kl_pinn, g_kl_lp, g_kl_ut
+            ))
+        if(B1 is not None):
+            print("time {:.2f}, norm. error PINN: {:.5f} %, norm. B1: {:.5f} %".format(
+                t, norm_error_pinn, normalize_B1
             ))
 
-        metrics["rel_error_pinn"].append(rel_error_pinn)
-        metrics["rel_error_lp"].append(rel_error_lp)
-        metrics["rel_error_ut"].append(rel_error_ut)
-        metrics["rel_error_ut_alpha_0_1"].append(rel_error_ut_alpha_0_1)
+        metrics["norm_error_pinn"].append(norm_error_pinn)
+        metrics["norm_error_lp"].append(norm_error_lp)
+        metrics["norm_error_ut"].append(norm_error_ut)
+        metrics["norm_error_ut_alpha_0_1"].append(norm_error_ut_alpha_0_1)
 
         metrics["tv_pinn"].append(tv_pinn)
         metrics["tv_lp"].append(tv_lp)
         metrics["tv_ut"].append(tv_ut)
         metrics["tv_ut_alpha_0_1"].append(tv_ut_alpha_0_1)
 
-        metrics["rel_kl_pinn"].append(rel_kl_pinn)
-        metrics["rel_kl_lp"].append(rel_kl_lp)
-        metrics["rel_kl_ut"].append(rel_kl_ut)
-        metrics["rel_kl_ut_alpha_0_1"].append(rel_kl_ut_alpha_0_1)
+        metrics["g_kl_pinn"].append(g_kl_pinn)
+        metrics["g_kl_lp"].append(g_kl_lp)
+        metrics["g_kl_ut"].append(g_kl_ut)
+        metrics["g_kl_ut_alpha_0_1"].append(g_kl_ut_alpha_0_1)
 
         metrics["normalize_B1"].append(normalize_B1)
 
@@ -573,11 +593,11 @@ def main(TRAIN_FLAG=False, RUN_BASELINE=False):
         ax.plot(np.full_like(x, t), x, pdf_mc,
                 color="black", linestyle="-")
         ax.plot(np.full_like(x, t), x, pdf_pinn,
-                color=colors[0], linestyle="--")
+                color=colors[0], linestyle="-")
         ax.plot(np.full_like(x, t), x, pdf_lp,
-                color=colors[1], linestyle="--")
+                color=colors[1], linestyle="-")
         ax.plot(np.full_like(x, t), x, pdf_ut,
-                color=colors[2], lw=3, linestyle=":")
+                color=colors[2], linestyle="-")
 
     legend_elements = [
         Line2D([0], [0], color="black", linestyle="-", label=r"$p$ MC"),
@@ -591,22 +611,23 @@ def main(TRAIN_FLAG=False, RUN_BASELINE=False):
 
     # metric 1: worst relative error %
     plt.figure()
-    plt.plot(metrics["t"], metrics["rel_error_pinn"], color=colors[0], label=r"$\hat{p}$ PINN")
+    plt.plot(metrics["t"], metrics["norm_error_pinn"], color=colors[0], label=r"$\hat{p}$ PINN")
     # plt.plot(metrics["t"], metrics["normalize_B1"], color=colors[0], label=r"$Error Bound$ PINN")
     plt.fill_between(
         metrics["t"],
-        metrics["rel_error_pinn"],
+        metrics["norm_error_pinn"],
         metrics["normalize_B1"],
         color=colors[0],
         alpha=0.2,
         label="PINN Error Bound"
     )
-    plt.plot(metrics["t"], metrics["rel_error_lp"], color=colors[1],   label=r"$p$ Linear Prop.")
-    plt.plot(metrics["t"], metrics["rel_error_ut"], color=colors[2],   label=r"$p$ Unscent Trans.")
-    plt.plot(metrics["t"], metrics["rel_error_ut_alpha_0_1"], color=colors[2], marker="o", label=r"$p$ Unscent Trans. $(\alpha=0.1)$")
+    plt.plot(metrics["t"], metrics["norm_error_lp"], color=colors[1],   label=r"$p$ Linear Prop.")
+    plt.plot(metrics["t"], metrics["norm_error_ut"], color=colors[2],   label=r"$p$ Unscent Trans.")
+    plt.plot(metrics["t"], metrics["norm_error_ut_alpha_0_1"], color=colors[2], marker="o", label=r"$p$ Unscent Trans. $(\alpha=0.1)$")
+    plt.grid(True)
     plt.legend()
     plt.xlabel("t")
-    plt.ylabel("worst rel. error %")
+    plt.ylabel("norm. worst error %")
 
     # metric 2: total variation %
     plt.figure()
@@ -614,23 +635,32 @@ def main(TRAIN_FLAG=False, RUN_BASELINE=False):
     plt.plot(metrics["t"], metrics["tv_lp"], color=colors[1],   label=r"$p$ Linear Prop.")
     plt.plot(metrics["t"], metrics["tv_ut"], color=colors[2],   label=r"$p$ Unscent Trans.")
     plt.plot(metrics["t"], metrics["tv_ut_alpha_0_1"], color=colors[2], marker="o", label=r"$p$ Unscent Trans. $(\alpha=0.1)$")
+    plt.grid(True)
     plt.legend()
     plt.xlabel("t")
     plt.ylabel("total variation %")
 
     # metric 3: negative log liklihood (relative KL)
     plt.figure()
-    plt.plot(metrics["t"], metrics["rel_kl_pinn"], color=colors[0], label=r"$\hat{p}$ PINN")
-    plt.plot(metrics["t"], metrics["rel_kl_lp"], color=colors[1],   label=r"$p$ Linear Prop.")
-    plt.plot(metrics["t"], metrics["rel_kl_ut"], color=colors[2],   label=r"$p$ Unscent Trans.")
-    plt.plot(metrics["t"], metrics["rel_kl_ut_alpha_0_1"], color=colors[2], marker="o", label=r"$p$ Unscent Trans. $(\alpha=0.1)$")
+    plt.plot(metrics["t"], metrics["g_kl_pinn"], color=colors[0], label=r"$\hat{p}$ PINN")
+    plt.plot(metrics["t"], metrics["g_kl_lp"], color=colors[1],   label=r"$p$ Linear Prop.")
+    plt.plot(metrics["t"], metrics["g_kl_ut"], color=colors[2],   label=r"$p$ Unscent Trans.")
+    plt.plot(metrics["t"], metrics["g_kl_ut_alpha_0_1"], color=colors[2], marker="o", label=r"$p$ Unscent Trans. $(\alpha=0.1)$")
+    plt.grid(True)
     plt.legend()
     plt.xlabel("t")
-    plt.ylabel("Negative Log Likelihood")
+    plt.ylabel("general KL")
 
     plt.show()
 
+    # save metrics
+    metrics_path = "data/metrics.npz"
+    if(LOAD_PRIOR):
+        metrics_path = "data/metrics(prior).npz"
+    helper_save_metrics_npz(metrics, metrics_path)
+
 
 if __name__ == "__main__":
-    main(TRAIN_FLAG=True, 
-         RUN_BASELINE=False)
+    main(TRAIN_FLAG=False, 
+         RUN_BASELINE=False,
+         LOAD_PRIOR=False)

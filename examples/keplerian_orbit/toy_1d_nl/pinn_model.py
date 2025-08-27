@@ -4,8 +4,10 @@ import torch.nn.init as init
 import torch.nn.functional as F
 import math
 
+##### PNet #####
 
-# --- Base Model (Does not work well with Base PNet training) ---
+
+# --- Base (Does not work well with Base training; Works very well with V0 training) ---
 class PNet(nn.Module):
     def __init__(self, scale=1.0, neurons=50): 
         super().__init__()
@@ -190,3 +192,60 @@ class PNet_XL(nn.Module):
         out_hidden = h + h0
         y = self.fc_out(out_hidden)
         return self.softplus_out(y) * self.scale
+
+
+################
+
+
+##### ENet #####
+
+# --- Prior ---
+class E1Net_Prior(nn.Module):
+    def __init__(self, scale=1.0): 
+        neurons = 50
+        self.scale = scale
+        super().__init__()
+        self.hidden_layer1 = (nn.Linear(2,neurons))
+        self.hidden_layer2 = (nn.Linear(neurons,neurons))
+        self.hidden_layer3 = (nn.Linear(neurons,neurons))
+        self.hidden_layer4 = (nn.Linear(neurons,neurons))
+        self.hidden_layer5 = (nn.Linear(neurons,neurons))
+        self.hidden_layer6 = (nn.Linear(neurons,neurons))
+        self.output_layer =  (nn.Linear(neurons,1))
+        self.activation = nn.GELU()
+    def forward(self, x, t):
+        inputs = torch.cat([x, t],axis=1)
+        layer1_out = self.activation((self.hidden_layer1(inputs)))
+        layer2_out = self.activation((self.hidden_layer2(layer1_out)))
+        layer3_out = self.activation((self.hidden_layer3(layer2_out)))
+        layer4_out = self.activation((self.hidden_layer4(layer3_out)))
+        layer5_out = self.activation((self.hidden_layer5(layer4_out)))
+        layer6_out = self.activation((self.hidden_layer6(layer5_out)))
+        output = self.output_layer(layer6_out)
+        output = self.scale * output
+        return output
+
+# --- Base ---
+class E1Net(nn.Module):
+    """
+    use Pytorch default initialization strategy
+    """
+    def __init__(self, scale=1.0, normalize=1.0, neurons=50): 
+        super().__init__()
+        self.scale = scale
+        self.normalize = normalize
+        self.hidden_layer1 = (nn.Linear(2,neurons))
+        self.hidden_layer2 = (nn.Linear(neurons,neurons))
+        self.hidden_layer3 = (nn.Linear(neurons,neurons))
+        self.output_layer =  (nn.Linear(neurons,1))
+        self.activation = nn.Tanh()
+        # self._init_weights()
+    def forward(self, x, t):
+        inputs = torch.cat([x, t],axis=1)
+        layer1_out = self.activation((self.hidden_layer1(inputs)))
+        layer2_out = self.activation((self.hidden_layer2(layer1_out)))
+        layer3_out = self.activation((self.hidden_layer3(layer2_out)))
+        output = self.output_layer(layer3_out)
+        output = self.scale * output
+        return output
+
