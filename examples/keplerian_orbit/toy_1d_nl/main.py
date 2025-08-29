@@ -128,7 +128,7 @@ class PropagationData:
             self.data = np.load(path)
         if(prop_method == "GMM"):
             self.data = None
-            self.gmm_propagation(save_path=path, input_data=input_data, dt_precision=6)
+            self.gmm_propagation(save_path=path, input_data=input_data, dt_precision=5)
         else:
             self.data = np.load(path)
 
@@ -341,7 +341,7 @@ class PropagationData:
 
         return np.arange(start_idx, end_idx)
     
-    def gmm_propagation(self, save_path=None, input_data=None, dt_precision=6, dt_save=0.1, verbose=False):
+    def gmm_propagation(self, save_path=None, input_data=None, dt_precision=6, dt_save=0.1, verbose=True):
         """
         NOTE: see unit test: test_fitgmm.py
         """
@@ -366,9 +366,8 @@ class PropagationData:
         t_to_save = current_time + dt_save
 
         # init
-        means_k = means_i
-        covs_k = cov_i
-        print(means_k)
+        means_k = means_i.copy()
+        covs_k = cov_i.copy()
 
         if(verbose):
             # quick show
@@ -405,6 +404,8 @@ class PropagationData:
                 covs.append(covs_k.copy())
                 t_to_save += dt_save
                 if(verbose):
+                    if not np.isclose(current_time, np.round(current_time), atol=1e-10):
+                        continue
                     # quick show
                     x_vals = np.linspace(x_low, x_hig, num=200, endpoint=True)
                     _pdf_func_gmm = make_gmm_pdf(weights, means_k, np.sqrt(covs_k))
@@ -454,7 +455,10 @@ def p_rel_worst_error(p1, p2):
 
 def get_p_at_x_samples(x_mc_samples, pdf_func=None, pdf_pinn=None, t=None):
     if(pdf_func is not None):
-        return pdf_func.pdf(x_mc_samples).reshape(-1,)
+        if hasattr(pdf_func, "pdf"):
+            return pdf_func.pdf(x_mc_samples).reshape(-1,)
+        else:
+            return pdf_func(x_mc_samples).reshape(-1,)
     if(pdf_pinn is not None):
         x_mc_samples_tensor = torch.from_numpy(x_mc_samples.reshape(-1,1)).to(device)
         _t_mc_samples = np.ones(x_mc_samples_tensor.shape[0], dtype=x_mc_samples.dtype)*t
@@ -581,14 +585,17 @@ def main(TRAIN_FLAG=False, RUN_BASELINE=False, LOAD_PRIOR=False):
         "norm_error_lp": [],
         "norm_error_ut": [],
         "norm_error_ut_alpha_0_1": [],
+        "norm_error_gmm": [],
         "tv_pinn": [],
         "tv_lp": [],
         "tv_ut": [],
         "tv_ut_alpha_0_1": [],
+        "tv_gmm": [],
         "g_kl_pinn": [],
         "g_kl_lp": [],
         "g_kl_ut": [],
         "g_kl_ut_alpha_0_1": [],
+        "g_kl_gmm": [],
         "normalize_B1": [],
         "t": t_span
     }
@@ -607,32 +614,33 @@ def main(TRAIN_FLAG=False, RUN_BASELINE=False, LOAD_PRIOR=False):
         # print(_cov_gmm)
         pdf_func_gmm = make_gmm_pdf(_w_gmm, _mu_gmm, np.sqrt(_cov_gmm))
         pdf_fmm = pdf_func_gmm(x).reshape(-1,).astype(x.dtype)
+        norm_error_gmm, tv_gmm, g_kl_gmm = compute_metrics(t, x_mc_samples, pdf_mc, pdf_fmm, pdf_func=pdf_func_gmm)
 
         # --- LP ---
         _, _mu_lp, _cov_lp = data_lp.get(t)
         pdf_func = multivariate_normal(mean=_mu_lp, cov=_cov_lp)
         pdf_lp = pdf_func.pdf(x).reshape(-1,).astype(x.dtype)
         norm_error_lp, tv_lp, g_kl_lp = compute_metrics(t, x_mc_samples, pdf_mc, pdf_lp, pdf_func=pdf_func)
-        # compute coverage mass
-        idx_in_one_std = data_lp.indices_in_range(x, np.array([_mu_lp-(_cov_lp)**0.5, _mu_lp+(_cov_lp)**0.5]))
-        if(len(idx_in_one_std) > 0):
-            x_in_one_std = x[idx_in_one_std]
-            pdf_mass_lp = 100. *np.mean(pdf_mc[idx_in_one_std]) * (x_in_one_std[-1] - x_in_one_std[0])
-        else:
-            pdf_mass_lp = 0.0
+        # # compute coverage mass
+        # idx_in_one_std = data_lp.indices_in_range(x, np.array([_mu_lp-(_cov_lp)**0.5, _mu_lp+(_cov_lp)**0.5]))
+        # if(len(idx_in_one_std) > 0):
+        #     x_in_one_std = x[idx_in_one_std]
+        #     pdf_mass_lp = 100. *np.mean(pdf_mc[idx_in_one_std]) * (x_in_one_std[-1] - x_in_one_std[0])
+        # else:
+        #     pdf_mass_lp = 0.0
 
         # --- UT ---
         _, _mu_ut, _cov_ut = data_ut.get(t)
         pdf_func = multivariate_normal(mean=_mu_ut, cov=_cov_ut)
         pdf_ut = pdf_func.pdf(x).reshape(-1,).astype(x.dtype)
         norm_error_ut, tv_ut, g_kl_ut = compute_metrics(t, x_mc_samples, pdf_mc, pdf_ut, pdf_func=pdf_func)
-        # compute coverage mass
-        idx_in_one_std = data_ut.indices_in_range(x, np.array([_mu_ut-(_cov_ut)**0.5, _mu_ut+(_cov_ut)**0.5]))
-        if(len(idx_in_one_std) > 0):
-            x_in_one_std = x[idx_in_one_std]
-            pdf_mass_ut = 100. * np.mean(pdf_mc[idx_in_one_std]) * (x_in_one_std[-1] - x_in_one_std[0])
-        else:
-            pdf_mass_ut = 0.0
+        # # compute coverage mass
+        # idx_in_one_std = data_ut.indices_in_range(x, np.array([_mu_ut-(_cov_ut)**0.5, _mu_ut+(_cov_ut)**0.5]))
+        # if(len(idx_in_one_std) > 0):
+        #     x_in_one_std = x[idx_in_one_std]
+        #     pdf_mass_ut = 100. * np.mean(pdf_mc[idx_in_one_std]) * (x_in_one_std[-1] - x_in_one_std[0])
+        # else:
+        #     pdf_mass_ut = 0.0
 
         # --- UT (alpha=0.1) ---
         _, _mu_ut_alpha0_1, _cov_ut_alpha0_1 = data_ut_alpha0_1.get(t)
@@ -671,16 +679,19 @@ def main(TRAIN_FLAG=False, RUN_BASELINE=False, LOAD_PRIOR=False):
         metrics["norm_error_lp"].append(norm_error_lp)
         metrics["norm_error_ut"].append(norm_error_ut)
         metrics["norm_error_ut_alpha_0_1"].append(norm_error_ut_alpha_0_1)
+        metrics["norm_error_gmm"].append(norm_error_gmm)
 
         metrics["tv_pinn"].append(tv_pinn)
         metrics["tv_lp"].append(tv_lp)
         metrics["tv_ut"].append(tv_ut)
         metrics["tv_ut_alpha_0_1"].append(tv_ut_alpha_0_1)
+        metrics["tv_gmm"].append(tv_gmm)
 
         metrics["g_kl_pinn"].append(g_kl_pinn)
         metrics["g_kl_lp"].append(g_kl_lp)
         metrics["g_kl_ut"].append(g_kl_ut)
         metrics["g_kl_ut_alpha_0_1"].append(g_kl_ut_alpha_0_1)
+        metrics["g_kl_gmm"].append(g_kl_gmm)
 
         metrics["normalize_B1"].append(normalize_B1)
 
@@ -692,8 +703,8 @@ def main(TRAIN_FLAG=False, RUN_BASELINE=False, LOAD_PRIOR=False):
         print("Cov , MC: {:.3f}, LP: {:.3f}, UT: {:.3f}".format(
             cov_mc, _cov_lp, _cov_ut
         ))
-        print("probability mass within +/- 1 std, LP: {:.3f} %, UT: {:.3f} %".format(
-            pdf_mass_lp, pdf_mass_ut))
+        # print("probability mass within +/- 1 std, LP: {:.3f} %, UT: {:.3f} %".format(
+        #     pdf_mass_lp, pdf_mass_ut))
 
         # Skip times that aren't approximately integer seconds
         if not np.isclose(t, np.round(t), atol=1e-6):
@@ -735,6 +746,7 @@ def main(TRAIN_FLAG=False, RUN_BASELINE=False, LOAD_PRIOR=False):
     plt.plot(metrics["t"], metrics["norm_error_lp"], color=colors[1],   label=r"$p$ Linear Prop.")
     plt.plot(metrics["t"], metrics["norm_error_ut"], color=colors[2],   label=r"$p$ Unscent Trans.")
     plt.plot(metrics["t"], metrics["norm_error_ut_alpha_0_1"], color=colors[2], marker="o", label=r"$p$ Unscent Trans. $(\alpha=0.1)$")
+    plt.plot(metrics["t"], metrics["norm_error_gmm"], color=colors[3],   label=r"$p$ GMM Linear Prop.")
     plt.grid(True)
     plt.legend()
     plt.xlabel("t")
@@ -746,6 +758,7 @@ def main(TRAIN_FLAG=False, RUN_BASELINE=False, LOAD_PRIOR=False):
     plt.plot(metrics["t"], metrics["tv_lp"], color=colors[1],   label=r"$p$ Linear Prop.")
     plt.plot(metrics["t"], metrics["tv_ut"], color=colors[2],   label=r"$p$ Unscent Trans.")
     plt.plot(metrics["t"], metrics["tv_ut_alpha_0_1"], color=colors[2], marker="o", label=r"$p$ Unscent Trans. $(\alpha=0.1)$")
+    plt.plot(metrics["t"], metrics["tv_gmm"], color=colors[3],   label=r"$p$ GMM Linear Prop.")
     plt.grid(True)
     plt.legend()
     plt.xlabel("t")
@@ -757,6 +770,7 @@ def main(TRAIN_FLAG=False, RUN_BASELINE=False, LOAD_PRIOR=False):
     plt.plot(metrics["t"], metrics["g_kl_lp"], color=colors[1],   label=r"$p$ Linear Prop.")
     plt.plot(metrics["t"], metrics["g_kl_ut"], color=colors[2],   label=r"$p$ Unscent Trans.")
     plt.plot(metrics["t"], metrics["g_kl_ut_alpha_0_1"], color=colors[2], marker="o", label=r"$p$ Unscent Trans. $(\alpha=0.1)$")
+    plt.plot(metrics["t"], metrics["g_kl_gmm"], color=colors[3],   label=r"$p$ GMM Linear Prop.")
     plt.grid(True)
     plt.legend()
     plt.xlabel("t")

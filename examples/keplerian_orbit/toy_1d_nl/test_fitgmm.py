@@ -261,38 +261,38 @@ if __name__ == "__main__":
         # two Gaussians (unnormalized on purpose; fitter will normalize)
         return np.exp(-0.5*((x-const_mu)/const_std)**2) / (const_std*np.sqrt(2*np.pi))
 
-    # fit = fit_gmm_to_p_init(
-    #     p_init,
-    #     n_components=26,
-    #     x_range=(-6.0, 6.0),
-    #     n_grid=512,
-    #     n_steps=10000,
-    #     lr=5e-3,
-    #     device="cpu",
-    #     dtype=torch.float32,
-    #     progress=True,
-    #     fix_means="uniform"
-    # )
+    fit = fit_gmm_to_p_init(
+        p_init,
+        n_components=32,
+        x_range=(-6.0, 6.0),
+        n_grid=512,
+        n_steps=10000,
+        lr=5e-3,
+        device="cpu",
+        dtype=torch.float32,
+        progress=True,
+        fix_means="uniform",
+    )
 
-    # print("\nFitted parameters:")
-    # print("weights:", fit["weights"].cpu().numpy())
-    # print("means  :", fit["means"].cpu().numpy())
-    # print("sigmas :", fit["sigmas"].cpu().numpy())
+    print("\nFitted parameters:")
+    print("weights:", fit["weights"].cpu().numpy())
+    print("means  :", fit["means"].cpu().numpy())
+    print("sigmas :", fit["sigmas"].cpu().numpy())
 
-    # plot_fit(p_init, fit, x_range=(-6.0, 6.0),
-    #          n_grid=512,
-    #          show_components=True,
-    #          show_residual=True,
-    #          title="3-component GMM fit")
+    plot_fit(p_init, fit, x_range=(-6.0, 6.0),
+             n_grid=512,
+             show_components=True,
+             show_residual=True,
+             title="3-component GMM fit")
     
-    # # After calling fit_gmm_to_p_init(...)
-    # np.savez(
-    #     "data/fitted_gmm_pinit.npz",
-    #     weights=fit["weights"].cpu().numpy(),
-    #     means=fit["means"].cpu().numpy(),
-    #     sigmas=fit["sigmas"].cpu().numpy()
-    # )
-    # print("Saved GMM parameters to fitted_gmm.npz")
+    # After calling fit_gmm_to_p_init(...)
+    np.savez(
+        "data/fitted_gmm_pinit.npz",
+        weights=fit["weights"].cpu().numpy(),
+        means=fit["means"].cpu().numpy(),
+        sigmas=fit["sigmas"].cpu().numpy()
+    )
+    print("Saved GMM parameters to fitted_gmm.npz")
 
     # Example loading code
     data = np.load("data/fitted_gmm_pinit.npz")
