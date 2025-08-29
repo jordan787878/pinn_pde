@@ -21,24 +21,34 @@ constants = Case1_6D_Constants()
 
 
 def dyn_f1(x):
-    return x[:,3]
+    r = x[:, 0]; th = x[:, 1]; ph = x[:, 2]
+    vr = x[:, 3]; vth = x[:, 4]; vph = x[:, 5]
+    return vr
 
 def dyn_f2(x):
-    return x[:,4]
+    r = x[:, 0]; th = x[:, 1]; ph = x[:, 2]
+    vr = x[:, 3]; vth = x[:, 4]; vph = x[:, 5]
+    return vth
 
 def dyn_f3(x):
-    return x[:,5]
+    r = x[:, 0]; th = x[:, 1]; ph = x[:, 2]
+    vr = x[:, 3]; vth = x[:, 4]; vph = x[:, 5]
+    return vph
 
 def dyn_f4(x):
     global constants
-    return x[:,0] *constants.THETA**2 *x[:,4]**2 \
-           + constants.T**2 *x[:,0] *torch.sin(constants.THETA*x[:,1])**2 *(constants.W +constants.PHI *x[:,5]/constants.T)**2 \
-           - constants.T**2 *constants.MU_EARTH/(constants.R**3 * x[:,0]**2)
+    r = x[:, 0]; th = x[:, 1]; ph = x[:, 2]
+    vr = x[:, 3]; vth = x[:, 4]; vph = x[:, 5]
+    return r *constants.THETA**2 *vth**2 \
+           + constants.T**2 *r *(torch.sin(constants.THETA *th))**2 *(constants.W +constants.PHI *vph/constants.T)**2 \
+           - constants.T**2 *constants.MU_EARTH/(constants.R**3 * r**2)
 
 def dyn_f5(x):
     global constants
-    return -2.*x[:,4]*x[:,5]/x[:,0] \
-           + constants.T**2 * torch.sin(2.*constants.THETA*x[:,1]) *(constants.W +constants.PHI *x[:,5]/constants.T)**2 /(2. *constants.THETA)
+    r = x[:, 0]; th = x[:, 1]; ph = x[:, 2]
+    vr = x[:, 3]; vth = x[:, 4]; vph = x[:, 5]
+    return -2. *vth *vr/r \
+           + constants.T**2 * torch.sin(2.*constants.THETA *th) *(constants.W +constants.PHI * vph/constants.T)**2 /(2. *constants.THETA)
 
 # helper for cot()
 def torch_cot(x: torch.Tensor) -> torch.Tensor:
@@ -46,8 +56,10 @@ def torch_cot(x: torch.Tensor) -> torch.Tensor:
 
 def dyn_f6(x):
     global constants
-    return -2. *x[:,4] *constants.THETA*constants.T *(constants.W +constants.PHI *x[:,5]/constants.T) *torch_cot(constants.THETA*x[:,1])/constants.PHI \
-           -2. *constants.T*x[:,3]*(constants.W + constants.PHI * x[:,5]/constants.T)/(x[:,0]*constants.PHI)
+    r = x[:, 0]; th = x[:, 1]; ph = x[:, 2]
+    vr = x[:, 3]; vth = x[:, 4]; vph = x[:, 5]
+    return -2. *vth *constants.THETA*constants.T *(constants.W +constants.PHI *vph/constants.T) *torch_cot(constants.THETA*th)/constants.PHI \
+           -2. *constants.T *vr *(constants.W + constants.PHI * vph/constants.T)/(r*constants.PHI)
 
 def diff_opt(x, t, p_net, beta=1.0, verbose=False):
     global constants
@@ -127,7 +139,7 @@ def main():
 
     configuration = {
         "constants": constants,
-        "iterations": 20000,
+        "iterations": 10000,
         "sample_ic": constants.sample_init_points,
         "sample_res": constants.sample_res_points,
         "p_ic": p_init,

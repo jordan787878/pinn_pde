@@ -37,14 +37,14 @@ def plot_full_corner(constants, t,
     figsize_per_dim=1.5,
     max_points=500_000,
     mode="heatmap",            # "scatter" or "heatmap"
-    cmap="viridis",
+    cmap="cividis",
     alpha=0.4,
     point_size=2,
-    ranges=None,               # list of (lo,hi) per dim; if None -> data-driven
-    quantile_range=(0.001, 0.999),  # set to None to use full min/max
+    ranges="fixed",               # list of (lo,hi) per dim; if None -> data-driven
     pad_frac=0.02,
     log_counts=True,           # log color scale for heatmap
     OUTPUT_PATH=None,
+    data_lp=None,
 ):
     set_publication_plot_style(font_size=14)
 
@@ -53,30 +53,38 @@ def plot_full_corner(constants, t,
     if labels is None:
         labels = [f"x{i+1}" for i in range(D)]
 
-    # ---- auto ranges ----
-    # if ranges is None:
-    #     if quantile_range is None:
-    #         lo = np.min(X, axis=0)
-    #         hi = np.max(X, axis=0)
-    #     else:
-    #         qlo, qhi = quantile_range
-    #         lo = np.quantile(X, qlo, axis=0)
-    #         hi = np.quantile(X, qhi, axis=0)
-    #     pad = pad_frac * (hi - lo + 1e-12)
-    #     ranges = [(float(lo[i] - pad[i]), float(hi[i] + pad[i])) for i in range(D)]
-    # else:
-    #     if len(ranges) != D:
-    #         raise ValueError(f"`ranges` must have length {D}")
-    #     ranges = [(float(a), float(b)) for (a, b) in ranges]
     # --- fixed ranges ---
-    ranges = [
-        (constants.X1_RANGE[0],constants.X1_RANGE[1]),
-        (constants.X2_RANGE[0],constants.X2_RANGE[1]),
-        (constants.X3_RANGE[0],constants.X3_RANGE[1]),
-        (constants.X4_RANGE[0],constants.X4_RANGE[1]),
-        (constants.X5_RANGE[0],constants.X5_RANGE[1]),
-        (constants.X6_RANGE[0],constants.X6_RANGE[1]),
-    ]
+    if ranges == "fixed":
+        ranges = [
+            (constants.X1_RANGE[0],constants.X1_RANGE[1]),
+            (constants.X2_RANGE[0],constants.X2_RANGE[1]),
+            (constants.X3_RANGE[0],constants.X3_RANGE[1]),
+            (constants.X4_RANGE[0],constants.X4_RANGE[1]),
+            (constants.X5_RANGE[0],constants.X5_RANGE[1]),
+            (constants.X6_RANGE[0],constants.X6_RANGE[1]),
+        ]
+    # ---- auto ranges ----
+    elif ranges == "auto":
+        # data-driven min/max
+        lo = np.min(X, axis=0)
+        hi = np.max(X, axis=0)
+        pad_frac = 0.03
+        D = X.shape[1]
+        # allow pad_frac to be a scalar or per-dimension iterable
+        if np.isscalar(pad_frac):
+            pad_frac_arr = np.full(D, float(pad_frac))
+        else:
+            pad_frac_arr = np.asarray(pad_frac, dtype=float).reshape(-1)
+            if pad_frac_arr.size != D:
+                raise ValueError(f"pad_frac has length {pad_frac_arr.size}, expected {D}")
+
+        span = hi - lo
+        # prevent zero span from collapsing range
+        eps = 1e-12
+        pad = pad_frac_arr * np.maximum(span, eps)
+        ranges = [(float(lo[i] - pad[i]), float(hi[i] + pad[i])) for i in range(D)]
+    else:
+        ranges = ranges
 
     sns_colors = sns.color_palette("husl", 3)
     fig, axes = plt.subplots(D, D, figsize=(figsize_per_dim*D, figsize_per_dim*D))
@@ -169,14 +177,31 @@ def plot_full_corner(constants, t,
                     relative_levels = np.array([0.01, 0.05, 0.25, 0.50, 0.75, 0.95])
                     levels = relative_levels * pdf_max
                     # Draw the contour lines with the custom levels
-                    ax.contour(X_grid, Y_grid, pdf_values, levels=levels, colors=[sns_colors[0]], linewidths=0.5)
-                # else:
-                #     print(x_coords)
+                    ax.contour(X_grid, Y_grid, pdf_values, levels=levels, colors=[sns_colors[0]], linewidths=1.5)
+                    return levels
 
             if(OUTPUT_PATH is not None):
                 x_coords = (j+1, i+1)
-                _plot_pinn_contour(x_coords)
+                pinn_levels = _plot_pinn_contour(x_coords)
 
+            if(data_lp is not None):
+                _, mu_6d, cov_6d = data_lp.get(t)
+                plot_axes = (x_coords[0]-1, x_coords[1]-1)
+                marginal_mu = mu_6d[list(plot_axes)]
+                marginal_cov = cov_6d[np.ix_(list(plot_axes), list(plot_axes))]
+                xs = np.linspace(xlo, xhi, num=64, endpoint=True)
+                ys = np.linspace(ylo, yhi, num=64, endpoint=True)
+                X_grid, Y_grid = np.meshgrid(xs, ys, indexing="ij")
+                grid_pts = np.vstack([X_grid.ravel(), Y_grid.ravel()]).T
+                pdf_values = p_normal(grid_pts, marginal_mu, marginal_cov).reshape(X_grid.shape)
+                relative_levels = np.array([0.01, 0.05, 0.25, 0.50, 0.75, 0.95])
+                pdf_max = np.max(pdf_values).item()
+                levels = relative_levels * pdf_max
+                # Draw the contour lines with the custom levels
+                ax.contour(X_grid, Y_grid, pdf_values, levels=levels, colors=[sns_colors[1]], 
+                           linewidths=1.5)
+
+            # set_axis_limits_with_buffer(ax, (xlo, xhi), (ylo, yhi))
             # ax.set_xlim(xlo, xhi); ax.set_ylim(ylo, yhi)
             if i == D - 1: ax.set_xlabel(labels[j])
             else: ax.set_xticklabels([])
@@ -185,6 +210,45 @@ def plot_full_corner(constants, t,
     plt.tick_params(axis='both', which='major', labelsize=8)
     fig.tight_layout()
 
+
+### helper
+
+def p_normal(x, mean, cov):
+    """
+    x is numpy array of shape (N x X_dim), N is the sample size
+    """
+    scales = np.sqrt(np.diag(cov))  # std per dimension
+    cov_scaled = cov / np.outer(scales, scales)
+    x_scaled = (x - mean) / scales
+    rv = multivariate_normal(mean=np.zeros(len(mean)), cov=cov_scaled)
+    pdf_eval = rv.pdf(x_scaled) / np.prod(scales)  # back-transform
+    return pdf_eval.reshape(-1,)
+
+
+def set_axis_limits_with_buffer(ax, xlim, ylim, buffer_frac=0.05):
+    """
+    Set axis limits with a relative buffer.
+
+    Parameters
+    ----------
+    ax : matplotlib.axes.Axes
+        The axis to modify.
+    xlim : tuple
+        (x_lo, x_hi)
+    ylim : tuple
+        (y_lo, y_hi)
+    buffer_frac : float
+        Fraction of the data range to use as buffer on both sides.
+    """
+    xlo, xhi = xlim
+    ylo, yhi = ylim
+
+    # compute buffers
+    xbuf = buffer_frac * (xhi - xlo)
+    ybuf = buffer_frac * (yhi - ylo)
+
+    ax.set_xlim(xlo - xbuf, xhi + xbuf)
+    ax.set_ylim(ylo - ybuf, yhi + ybuf)
 
 ##### Obsolete Below #####
 
