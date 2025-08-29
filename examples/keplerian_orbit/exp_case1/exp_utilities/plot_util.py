@@ -6,6 +6,8 @@ import torch
 import seaborn as sns
 from scipy.stats import norm, multivariate_normal
 from matplotlib.lines import Line2D
+from matplotlib.colors import LogNorm
+from matplotlib.ticker import MaxNLocator
 from mpl_toolkits.mplot3d import Axes3D  # noqa: F401  (needed for 3D projection)
 
 
@@ -26,6 +28,165 @@ def set_publication_plot_style(font_family='Times New Roman', font_size=18):
     plt.rcParams['legend.fontsize'] = font_size
     plt.rcParams['figure.titlesize'] = font_size
     plt.rcParams['lines.linewidth'] = 2
+
+
+def plot_full_corner(constants, t,
+    X_samples,
+    bins=200,
+    labels=None,
+    figsize_per_dim=1.5,
+    max_points=500_000,
+    mode="heatmap",            # "scatter" or "heatmap"
+    cmap="viridis",
+    alpha=0.4,
+    point_size=2,
+    ranges=None,               # list of (lo,hi) per dim; if None -> data-driven
+    quantile_range=(0.001, 0.999),  # set to None to use full min/max
+    pad_frac=0.02,
+    log_counts=True,           # log color scale for heatmap
+    OUTPUT_PATH=None,
+):
+    set_publication_plot_style(font_size=14)
+
+    X = np.asarray(X_samples)
+    N, D = X.shape
+    if labels is None:
+        labels = [f"x{i+1}" for i in range(D)]
+
+    # ---- auto ranges ----
+    # if ranges is None:
+    #     if quantile_range is None:
+    #         lo = np.min(X, axis=0)
+    #         hi = np.max(X, axis=0)
+    #     else:
+    #         qlo, qhi = quantile_range
+    #         lo = np.quantile(X, qlo, axis=0)
+    #         hi = np.quantile(X, qhi, axis=0)
+    #     pad = pad_frac * (hi - lo + 1e-12)
+    #     ranges = [(float(lo[i] - pad[i]), float(hi[i] + pad[i])) for i in range(D)]
+    # else:
+    #     if len(ranges) != D:
+    #         raise ValueError(f"`ranges` must have length {D}")
+    #     ranges = [(float(a), float(b)) for (a, b) in ranges]
+    # --- fixed ranges ---
+    ranges = [
+        (constants.X1_RANGE[0],constants.X1_RANGE[1]),
+        (constants.X2_RANGE[0],constants.X2_RANGE[1]),
+        (constants.X3_RANGE[0],constants.X3_RANGE[1]),
+        (constants.X4_RANGE[0],constants.X4_RANGE[1]),
+        (constants.X5_RANGE[0],constants.X5_RANGE[1]),
+        (constants.X6_RANGE[0],constants.X6_RANGE[1]),
+    ]
+
+    sns_colors = sns.color_palette("husl", 3)
+    fig, axes = plt.subplots(D, D, figsize=(figsize_per_dim*D, figsize_per_dim*D))
+    plt.subplots_adjust(wspace=0.08, hspace=0.08)
+
+    def _plot_pinn_1d_marginal(x_coords):
+        filename = f"{OUTPUT_PATH}/pre_compute/marginal_pdfpinn_x{x_coords}_t{t:.3f}.npz"
+        if(os.path.exists(filename)):
+            data_marginal_pinn = np.load(filename)
+            pdf_values = data_marginal_pinn['pdf']
+            X_grid = data_marginal_pinn["X_grid"]
+            ax.plot(X_grid, pdf_values, color=sns_colors[0])
+        # pdf_max = np.max(pdf_values[pdf_values > 0])
+        # Define levels as percentages of the maximum value
+        # For example, levels at 5%, 25%, 50%, 75%, and 95% of the max
+        # relative_levels = np.array([0.001, 0.01, 0.05, 0.25, 0.50, 0.75, 0.95])
+        # levels = relative_levels * pdf_max
+        # Draw the contour lines with the custom levels
+        # ax.contour(X_grid, Y_grid, pdf_values, levels=levels, colors=[sns_colors[0]], linewidths=0.5)
+
+    # Diagonals: 1D histograms (counts)
+    for d in range(D):
+        ax = axes[d, d]
+        lo, hi = ranges[d]
+        ax.hist(
+            X[:, d],
+            bins=bins,
+            range=(lo, hi),
+            histtype="stepfilled",
+            alpha=0.85,
+            color="steelblue",
+            density=True,
+        )
+        # ax.set_xlim(lo, hi)
+        ax.yaxis.set_major_locator(MaxNLocator(nbins=4, prune="both"))
+        if d == D - 1: ax.set_xlabel(labels[d])
+        else: ax.set_xticklabels([])
+        if d != 0: ax.set_yticklabels([])
+        # hide upper triangle in row d
+        for k in range(d + 1, D):
+            axes[d, k].axis("off")
+        if d == 0:
+            ax.set_ylabel(labels[d])
+        if(OUTPUT_PATH is not None):
+            _plot_pinn_1d_marginal(d+1)
+
+    # Off-diagonals: scatter or heatmap (counts)
+    for i in range(1, D):
+        for j in range(i):
+            ax = axes[i, j]
+            (xlo, xhi), (ylo, yhi) = ranges[j], ranges[i]
+
+            if mode == "scatter":
+                idx = np.arange(N)
+                if max_points is not None and N > max_points:
+                    idx = np.random.default_rng(0).choice(N, size=max_points, replace=False)
+                ax.scatter(
+                    X[idx, j], X[idx, i],
+                    s=point_size, alpha=alpha, edgecolors="none"
+                )
+            else:  # heatmap of counts
+                H, xedges, yedges = np.histogram2d(
+                    X[:, j], X[:, i],
+                    bins=bins,
+                    range=[(xlo, xhi), (ylo, yhi)],
+                )
+                H = H.T
+                if log_counts:
+                    pos = H[H > 0]
+                    vmax = float(pos.max()) if pos.size else 1.0
+                    vmin = float(pos.min()) if pos.size else 1.0  # >=1 to avoid zeros in LogNorm
+                    norm = LogNorm(vmin=vmin, vmax=vmax)
+                else:
+                    norm = None
+                ax.imshow(
+                    H, origin="lower",
+                    extent=(xlo, xhi, ylo, yhi),
+                    aspect="auto", cmap=cmap, norm=norm, interpolation="nearest"
+                )
+
+            def _plot_pinn_contour(x_coords):
+                filename = f"{OUTPUT_PATH}/pre_compute/marginal_pdfpinn_x{x_coords[0]}_x{x_coords[1]}_t{t:.3f}.npz"
+                if(os.path.isfile(filename)):
+                    data_marginal_pinn = np.load(filename)
+                    pdf_values = data_marginal_pinn['pdf']
+                    X_grid, Y_grid = data_marginal_pinn["X_grid"], data_marginal_pinn["Y_grid"], 
+                    pdf_max = np.max(pdf_values[pdf_values > 0])
+                    # Define levels as percentages of the maximum value
+                    # For example, levels at 5%, 25%, 50%, 75%, and 95% of the max
+                    relative_levels = np.array([0.01, 0.05, 0.25, 0.50, 0.75, 0.95])
+                    levels = relative_levels * pdf_max
+                    # Draw the contour lines with the custom levels
+                    ax.contour(X_grid, Y_grid, pdf_values, levels=levels, colors=[sns_colors[0]], linewidths=0.5)
+                # else:
+                #     print(x_coords)
+
+            if(OUTPUT_PATH is not None):
+                x_coords = (j+1, i+1)
+                _plot_pinn_contour(x_coords)
+
+            # ax.set_xlim(xlo, xhi); ax.set_ylim(ylo, yhi)
+            if i == D - 1: ax.set_xlabel(labels[j])
+            else: ax.set_xticklabels([])
+            if j == 0: ax.set_ylabel(labels[i])
+            else: ax.set_yticklabels([])
+    plt.tick_params(axis='both', which='major', labelsize=8)
+    fig.tight_layout()
+
+
+##### Obsolete Below #####
 
 
 def _integrate_out_others(pdf: np.ndarray, axes_coords: Sequence[np.ndarray], keep_axis: int) -> Tuple[np.ndarray, np.ndarray]:

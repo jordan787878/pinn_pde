@@ -7,7 +7,7 @@ import math
 
 class PNet(nn.Module):
     def __init__(self, constants, scale=1.0, input_feature=5): 
-        super(PNet, self).__init__()
+        super().__init__()
         neurons = 50
         self.scale = scale
         self.constants = constants
@@ -17,6 +17,7 @@ class PNet(nn.Module):
         self.hidden_layer3 = (nn.Linear(neurons,neurons))
         self.hidden_layer4 = (nn.Linear(neurons,neurons))
         self.output_layer =  (nn.Linear(neurons,1))
+        self._init_weights()
     def forward(self, x, t):
         if(self.input_feature == 5):
             inputs = normalize_inputs(x, t, self.constants)
@@ -30,7 +31,116 @@ class PNet(nn.Module):
         layer4_out = ((self.hidden_layer4(layer3_out)))
         output = F.softplus(self.output_layer(layer4_out + layer1_out)) * self.scale
         return output
-    
+    def _init_weights(self):
+        for m in self.modules():
+            if isinstance(m, nn.Linear):
+                # kaiming normal initialization for weights
+                nn.init.kaiming_normal_(m.weight)
+                # Initialize biases to zero
+                if m.bias is not None:
+                    nn.init.zeros_(m.bias)
+     
+
+class PNet_XL_Sphere(nn.Module):
+    def __init__(
+        self,
+        constants,
+        scale=1.0,
+        input_feature=7,
+        width=64,
+        depth=8,
+        act="silu",
+        use_layernorm=False,
+        fourier_t=False,
+        fourier_f=8,
+        input_skip_at=4
+    ):
+        super().__init__()
+        self.constants = constants
+        self.scale = scale
+        self.input_feature = input_feature
+        self.width = int(width)
+        self.depth = int(depth)
+        self.use_layernorm = use_layernorm
+        self.input_skip_at = input_skip_at if (0 < input_skip_at < depth) else -1
+
+        # Time encoding
+        self.use_fourier_t = bool(fourier_t)
+        if self.use_fourier_t:
+            self.time_embed = FourierFeatures(num_frequencies=fourier_f, include_input=True)
+            self.t_dim = 1 + 2 * fourier_f
+        else:
+            self.time_embed = nn.Identity()
+            self.t_dim = 1
+
+        in_dim = int(input_feature + (self.t_dim - 1))
+        self.fc_in = nn.Linear(in_dim, self.width)
+
+        # Residual trunk
+        self.blocks = nn.ModuleList([
+            ResidualBlock(self.width, act=act, use_layernorm=use_layernorm)
+            for _ in range(self.depth)
+        ])
+
+        if self.input_skip_at > 0:
+            self.proj_after_skip = nn.Linear(self.width + in_dim, self.width)
+        else:
+            self.proj_after_skip = None
+
+        self.fc_out = nn.Linear(self.width, 1)
+        self.act = get_activation(act)
+        self.softplus_out = nn.Softplus(beta=1.0)
+
+        # **Initialize weights after defining all layers**
+        self._init_weights()
+
+    def _init_weights(self):
+        """
+        Custom weight initialization:
+          - Kaiming init for hidden/residual layers (good for SiLU/GELU)
+          - Xavier init for output for smoother initial pdf scaling
+          - Zero bias where appropriate
+        """
+        for m in self.modules():
+            if isinstance(m, nn.Linear):
+                if m is self.fc_out:
+                    nn.init.xavier_uniform_(m.weight)
+                else:
+                    nn.init.kaiming_uniform_(m.weight, a=math.sqrt(5))
+                if m.bias is not None:
+                    fan_in, _ = nn.init._calculate_fan_in_and_fan_out(m.weight)
+                    bound = 1 / math.sqrt(fan_in)
+                    nn.init.uniform_(m.bias, -bound, bound)
+
+    def _build_inputs(self, x, t):
+        if self.input_feature == 5:
+            inputs = normalize_inputs(x, t, self.constants)
+        elif self.input_feature == 7:
+            inputs = normalize_inputs_6d(x, t, self.constants)
+        else:
+            raise RuntimeError(f"PINN not yet implemented for input feature: {self.input_feature}")
+
+        if self.use_fourier_t:
+            t_enc = self.time_embed(t if t.dim() == 2 else t.view(-1, 1))
+            inputs = torch.cat([inputs[:, :-1], t_enc], dim=1)
+        return inputs
+
+    def forward(self, x, t):
+        inputs = self._build_inputs(x, t)
+        h0 = self.fc_in(inputs)
+        h = h0
+        for i, block in enumerate(self.blocks):
+            h = block(h)
+            if i == self.input_skip_at and self.proj_after_skip is not None:
+                h = torch.cat([h, inputs], dim=1)
+                h = self.proj_after_skip(h)
+
+        out_hidden = h + h0
+        y = self.fc_out(out_hidden)
+        return self.softplus_out(y) * self.scale
+
+
+##### These are for Equinoctial in scaled dimension #####
 
 class PNet_Scaled(nn.Module):
     def __init__(self, constants, scale=1.0, input_feature=5): 
@@ -56,8 +166,7 @@ class PNet_Scaled(nn.Module):
         layer3_out = F.softplus((self.hidden_layer3(layer2_out)))
         layer4_out = ((self.hidden_layer4(layer3_out)))
         output = F.softplus(self.output_layer(layer4_out + layer1_out)) * self.scale
-        return output
-    
+        return output    
 
 # ---- small helpers ----
 def get_activation(name: str):
@@ -229,7 +338,10 @@ class PNet_XL(nn.Module):
         y = self.fc_out(out_hidden)
         return self.softplus_out(y) * self.scale
 
-
+#########################################################
+#
+#
+#
 ##### E1 Nueral Networks #####
 
 
@@ -294,7 +406,9 @@ class E1Net_Equin(nn.Module):
         p_net_out = self.p_net(x, t)
         output = output - p_net_out
         return output
-    
+
+
+##### These are for Equinoctial in scaled dimension #####
 
 class E1Net_Scaled(nn.Module):
     def __init__(self, constants, scale=1.0, input_feature=7): 
@@ -438,6 +552,7 @@ class E1Net_XL(nn.Module):
         else:
             return y * self.scale
 
+#########################################################
 
 # helper functions
 def normalize_inputs(x, t, constants):

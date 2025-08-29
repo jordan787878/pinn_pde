@@ -7,13 +7,11 @@ import numpy as np
 import torch
 import argparse
 from monte import p_init, print_mc_time
-# from exp_utilities.plot_utilites import check_pdf_Nrphi, check_pdfnn_cartesian_wrt_monte, check_pdf_cartesian_wrt_samples, check_error_flatten
 from exp_utilities.constants import Case1_6D_Constants
-from exp_utilities.plot_util import precompute_pdf_streaming, precompute_error, compute_marginals_over_time, plot_time_curves_3d
 # import utilities
 import sys
 sys.path.insert(0, '../utilities/')
-from _General.neuralnetworks import PNet, load_trained_model, init_weights_He
+from _General.neuralnetworks import PNet, PNet_XL_Sphere, load_trained_model
 import _General.train_pinn as PINN
 
 
@@ -84,40 +82,80 @@ def diff_opt(x, t, p_net, beta=1.0, verbose=False):
     return residual
                 
 
+def check_pnet_against_pinit(p_net):
+    # --- checking joint PDF against p_init ---
+    N_samples = 1000000
+
+    # x points
+    _x = np.column_stack([
+        np.random.uniform(constants.X1_RANGE[0], constants.X1_RANGE[1], N_samples),
+        np.random.uniform(constants.X2_RANGE[0], constants.X2_RANGE[1], N_samples),
+        np.random.uniform(constants.X3_RANGE[0], constants.X3_RANGE[1], N_samples),
+        np.random.uniform(constants.X4_RANGE[0], constants.X4_RANGE[1], N_samples),
+        np.random.uniform(constants.X5_RANGE[0], constants.X5_RANGE[1], N_samples),
+        np.random.uniform(constants.X6_RANGE[0], constants.X6_RANGE[1], N_samples),
+    ])
+
+    t = constants.T_PRIME_SPAN[0]
+
+    pdf_sol = p_init(constants, _x).reshape(-1,)
+
+    _x_tensor = torch.tensor(_x, dtype=torch.float32, requires_grad=True)
+    _t = np.ones((len(_x_tensor), 1)) * t
+    _t_tensor = torch.tensor(_t, dtype=torch.float32, requires_grad=True).view(-1,1)
+    pdf_pinn = p_net(_x_tensor, _t_tensor).detach().cpu().numpy().reshape(-1,)
+
+    rel_error = np.max(np.abs(pdf_sol-pdf_pinn)) / np.max(pdf_sol) # NOTE this metric needs sufficient large samples.
+    print(100. *rel_error.item())
+
+
 def main():
     global constants
     # Set a fixed seed for reproducibility
     torch.manual_seed(0); np.random.seed(0)
-    p_net = PNet(constants, input_feature=7)
-    p_net.apply(init_weights_He)
+
+    # Load p_net scale
     scale = np.load(MC_FOLDER+"pre_compute/p_init_max.npz")["value"]
     scale_torch = torch.tensor(scale, dtype=torch.float32)
-    p_net.scale = scale_torch
-    print("p net scale: ", p_net.scale)
 
-    # --- v0 --- with regularization and curriculum training to enable subsequent training of e1_net
-    # PNET_PATH = "output/v0"
+    # p_net = PNet(constants, input_feature=7)
+    # p_net.apply(init_weights_He)
     # --- base --- the most basic PINN training attempted to compare with standard MC
-    PNET_PATH = "output/base"
+    # PNET_PATH = "output/base"
+
+    p_net = PNet_XL_Sphere(constants, scale=scale_torch)
+
+    configuration = {
+        "constants": constants,
+        "iterations": 20000,
+        "sample_ic": constants.sample_init_points,
+        "sample_res": constants.sample_res_points,
+        "p_ic": p_init,
+        "res_func": diff_opt,
+        "res_weight": 1.0,
+        "save_path": "output/v0",
+        "beta_incre": 0.02,
+    }
 
     if(TRAIN_FLAG):
-        configurations = {
-            "ic_fcn": p_init,
-            "diff_opt_fcn": diff_opt,
-            "pnet_path": PNET_PATH+"/p_net.pth",
-            "pnet_path_inter": PNET_PATH+"/p_net_"
-        }
-        # --- v0 ---
-        # PINN.train_pinn_sol_v0(constants, p_net, configurations, iterations=100000, save_model=True)
+        # configuration = {
+        #     "ic_fcn": p_init,
+        #     "diff_opt_fcn": diff_opt,
+        #     "pnet_path": PNET_PATH+"/p_net.pth",
+        #     "pnet_path_inter": PNET_PATH+"/p_net_"
+        # }
         # --- base ---
-        PINN.train_pinn_sol_base(constants, p_net, configurations, iterations=100000, save_model=True)
+        # PINN.train_pinn_sol_base(constants, p_net, configuration, iterations=1000, save_model=True)
+        PINN.train_pinn_sol_v0(p_net, configuration)
     
     # --- Load the best network after training ---   
-    p_net = load_trained_model(p_net, path=PNET_PATH+"/p_net.pth"); p_net.eval()
+    p_net = load_trained_model(p_net, path=configuration["save_path"]+"/p_net.pth"); p_net.eval()
+
+    # --- Check PNet against p_init
+    check_pnet_against_pinit(p_net)
 
     # --- Pre-computation for plotting data ---
     # precompute_pdf_streaming(constants, p_net, PNET_PATH) # pre-compute pdf on grid
-
     # for i in range(1,7): # pre-compute marginal pdf over time
     #     x, t_kept, M = compute_marginals_over_time(
     #         times=constants.T_PRIME_SPAN,   # time array you mentioned
@@ -134,36 +172,26 @@ def main():
     # This print-out justifies why it is difficult to validate the error bound that defines on joint PDF
     # NOTE this illustrates the bottlneck of validating PINN method if an accurate joint PDF is not available (also mentioned in Sun and Kumar Pg. 19)
     # This is also validated in terms of e1(t0) using p(t0) analy v.s. e1(t0) using p(t0) MC ins train_e1.py code
-    p_init_analy = np.load(MC_FOLDER+"pdf_analy_t0.000.npy").reshape(-1,)
-    p_init_mc = np.load(MC_FOLDER+"pdf_t0.000.npy").reshape(-1,)
-    rel_acc = np.max(np.abs(p_init_mc - p_init_analy)) / np.max(np.abs(p_init_analy))
-    del p_init_mc
-    print("[check] rel. accuracy of MC   --> the deviation between p(t0) MC   and p(t0): {:.2f} %".format(
-        100.0 * rel_acc.item()))
-    p_init_pinn = np.load(PNET_PATH+"/pdf_t0.000.npy").reshape(-1,)
-    rel_acc_pinn = np.max(np.abs(p_init_pinn - p_init_analy))/np.max(np.abs(p_init_analy))
-    print("[check] rel. accuracy of PINN --> the deviation between p(t0) PINN and p(t0): {:.2f} %".format(
-        100.0 * rel_acc_pinn.item()))
-    del p_init_pinn; del p_init_analy
+    # p_init_analy = np.load(MC_FOLDER+"pdf_analy_t0.000.npy").reshape(-1,)
+    # p_init_mc = np.load(MC_FOLDER+"pdf_t0.000.npy").reshape(-1,)
+    # rel_acc = np.max(np.abs(p_init_mc - p_init_analy)) / np.max(np.abs(p_init_analy))
+    # del p_init_mc
+    # print("[check] rel. accuracy of MC   --> the deviation between p(t0) MC   and p(t0): {:.2f} %".format(
+    #     100.0 * rel_acc.item()))
+    # p_init_pinn = np.load(PNET_PATH+"/pdf_t0.000.npy").reshape(-1,)
+    # rel_acc_pinn = np.max(np.abs(p_init_pinn - p_init_analy))/np.max(np.abs(p_init_analy))
+    # print("[check] rel. accuracy of PINN --> the deviation between p(t0) PINN and p(t0): {:.2f} %".format(
+    #     100.0 * rel_acc_pinn.item()))
+    # del p_init_pinn; del p_init_analy
 
     # This print-out justifies why we visualize the marginal PDF of MC vs PINN even if the joint PDF of MC is very inaccurate
     # NOTE: the fact that two joint PDFs can be very different but have similar marginal PDF is illustrated by: 
     # exp_utilities/test_joint_vs_marginal.py
     # NOTE: this is consistent with how RMS error is computed (on 2D marginal) in Sun and Kumar
-    for i in range(1, 7):
-        data_mc = np.load(MC_FOLDER+"pre_compute/marginal_p_x"+str(i)+"_t_M.npz")
-        data_pinn = np.load(PNET_PATH+"/pre_compute/marginal_p_x"+str(i)+"_t_M.npz")
-        plot_time_curves_3d(i, constants, data_pinn, data_mc, p_init=p_init, title="Marginal p(x"+str(i)+",t)")
-
-    # NOTE: not yet implemented 
-    # check_pdf_Nrphi(constants, p_net=p_net)
-    # check_pdfnn_cartesian_wrt_monte(constants, p_net, MC_FOLDER)
-    # for t_prime in constants.T_PRIME_SPAN:
-    #     check_error_flatten(constants, p_init, None, p_net, t_prime, MC_FOLDER)
-    # check_pdf_cartesian_wrt_samples(constants, p_net=p_net)
-    # --- (obsolete) ---
-    # # check_pdfnn_marginalize(p_net, t=t_prime)
-    # # test_nn_cartesian_pdf_xy(p_net)
+    # for i in range(1, 7):
+    #     data_mc = np.load(MC_FOLDER+"pre_compute/marginal_p_x"+str(i)+"_t_M.npz")
+    #     data_pinn = np.load(PNET_PATH+"/pre_compute/marginal_p_x"+str(i)+"_t_M.npz")
+    #     plot_time_curves_3d(i, constants, data_pinn, data_mc, p_init=p_init, title="Marginal p(x"+str(i)+",t)")
 
 
 if __name__ == "__main__":

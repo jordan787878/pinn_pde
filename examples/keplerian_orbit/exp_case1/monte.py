@@ -4,11 +4,10 @@ from tqdm import tqdm
 import matplotlib.pyplot as plt
 import time
 from typing import Sequence, Tuple, List
-from scipy.stats import norm, multivariate_normal
+from scipy.stats import norm
 from scipy.interpolate import griddata
 from exp_utilities.constants import Case1_6D_Constants
 from exp_utilities.plot_util import compute_marginals_over_time, plot_time_curves_3d, precompute_pdf_init_streaming
-# from exp_utilities.plot_utilites import check_pdf_Nrphi, check_pdf_cartesian_wrt_samples
 import sys
 sys.path.insert(0, '../utilities/')
 from _General.astrodynamics import *
@@ -20,7 +19,7 @@ constants = Case1_6D_Constants()
 np.random.seed(0)
 
 
-def p_sol_monte(t=0.0, linespace_num=31, stat_sample=10000000):
+def p_sol_monte(t=0.0, linespace_num=31, stat_sample=1000000):
     global constants
     X = np.random.multivariate_normal(constants.N_MEAN_I, constants.N_COV_I, size=stat_sample).astype(np.float32)
     
@@ -97,125 +96,62 @@ def p_sol_monte(t=0.0, linespace_num=31, stat_sample=10000000):
     midpoints_x4 = (bins_x4[:-1] + bins_x4[1:]) / 2
     midpoints_x5 = (bins_x5[:-1] + bins_x5[1:]) / 2
     midpoints_x6 = (bins_x6[:-1] + bins_x6[1:]) / 2
-    return midpoints_x1, midpoints_x2, midpoints_x3, midpoints_x4, midpoints_x5, midpoints_x6, frequency
+    return midpoints_x1, midpoints_x2, midpoints_x3, midpoints_x4, midpoints_x5, midpoints_x6, frequency, X
 
 
 def p_init(constants, x):
     """
-    x is numpy array of shape (N x X_dim), N is the sample size
+    Evaluate the multivariate Gaussian PDF using NumPy or PyTorch depending on input type.
+
+    Parameters
+    ----------
+    constants : object
+        Must contain:
+        - N_MEAN_I: (D,) mean vector
+        - N_COV_I: (D,D) covariance matrix
+    x : ndarray or torch.Tensor
+        Input samples of shape (N, D).
+
+    Returns
+    -------
+    pdf_eval : ndarray or torch.Tensor
+        PDF values of shape (N, 1), matching the type of `x`.
     """
-    pdf_func = multivariate_normal(mean=constants.N_MEAN_I, cov=constants.N_COV_I)
-    pdf_eval = pdf_func.pdf(x).reshape(-1,1).astype(x.dtype)
-    return pdf_eval
+    # Check if input is torch tensor
+    use_torch = torch.is_tensor(x)
 
+    if use_torch:
+        # Torch computation
+        mu = torch.as_tensor(constants.N_MEAN_I, dtype=torch.float32, device=x.device)
+        cov = torch.as_tensor(constants.N_COV_I, dtype=torch.float32, device=x.device)
 
-# def get_p_init_max(constants):
-#     x1s = np.load("data/grids/x1s.npy")
-#     x2s = np.load("data/grids/x2s.npy")
-#     x3s = np.load("data/grids/x3s.npy")
-#     x4s = np.load("data/grids/x4s.npy")
-#     x5s = np.load("data/grids/x5s.npy")
-#     x6s = np.load("data/grids/x6s.npy")
-#     x1_grid, x2_grid, x3_grid, x4_grid, x5_grid, x6_grid = np.meshgrid(x1s, x2s, x3s, x4s, x5s, x6s, indexing="ij") # the indexing is very important
-#     grid_points = np.vstack([x1_grid.ravel(), x2_grid.ravel(), x3_grid.ravel(), x4_grid.ravel(), x5_grid.ravel(), x6_grid.ravel()]).T
-#     print(grid_points.shape)
-#     joint_pdf_true = p_init(constants, grid_points)
-#     p_init_max = np.max(joint_pdf_true)
-#     return p_init_max
-# def get_p_init_max_streaming(
-#     constants,
-#     p_init,                                # callable: p_init(constants, pts[(K,6)]) -> (K,) or (K,1)
-#     grid_dir: str = "data/grids",
-#     axes_files: Sequence[str] = ("x1s.npy","x2s.npy","x3s.npy","x4s.npy","x5s.npy","x6s.npy"),
-#     max_points_in_batch: int = 1_000_000,  # tune to your RAM/GPU
-#     return_argmax_point: bool = True,
-#     verbose: bool = True
-# ):
-#     # ---- Load per-axis grids ----
-#     axes: List[np.ndarray] = [np.load(f"{grid_dir}/{fn}") for fn in axes_files]
-#     sizes = [len(a) for a in axes]
-#     if verbose:
-#         total = 1
-#         for n in sizes: total *= n
-#         print(f"[info] grid sizes {sizes} -> ~{total:,} total points")
+        D = mu.shape[0]
+        cov_inv = torch.linalg.inv(cov)
+        cov_det = torch.linalg.det(cov)
+        norm_const = 1.0 / torch.sqrt((2 * torch.pi) ** D * cov_det)
 
-#     # ---- Choose block sizes so product <= max_points_in_batch ----
-#     # Start near the 6th root and clamp by axis sizes.
-#     root = max(1, round(max_points_in_batch ** (1/6)))
-#     block = [min(n, root) for n in sizes]
-#     # Nudge down if needed
-#     def prod(v):
-#         r = 1
-#         for x in v: r *= x
-#         return r
-#     while prod(block) > max_points_in_batch:
-#         i = int(np.argmax(block))
-#         block[i] = max(1, block[i]-1)
-#     if verbose:
-#         print(f"[info] using block sizes {block} -> {prod(block):,} points/batch")
+        diff = x.to(torch.float32) - mu
+        mahal = torch.einsum("ni,ij,nj->n", diff, cov_inv, diff)
+        pdf_eval = norm_const * torch.exp(-0.5 * mahal)
 
-#     # Precompute index ranges per axis
-#     index_blocks: List[List[Tuple[int,int]]] = []
-#     for n, b in zip(sizes, block):
-#         starts = list(range(0, n, b))
-#         index_blocks.append([(s, min(s+b, n)) for s in starts])
+        return pdf_eval.view(-1, 1)
 
-#     p_max = -np.inf
-#     argmax_point = None
+    else:
+        # NumPy computation
+        mu = np.asarray(constants.N_MEAN_I, dtype=np.float32)
+        cov = np.asarray(constants.N_COV_I, dtype=np.float32)
+        x = np.asarray(x, dtype=np.float32)
 
-#     # ---- Iterate over 6-D blocks; build *local* mesh only ----
-#     for (a1,b1) in index_blocks[0]:
-#         x1 = axes[0][a1:b1]
-#         for (a2,b2) in index_blocks[1]:
-#             x2 = axes[1][a2:b2]
-#             for (a3,b3) in index_blocks[2]:
-#                 x3 = axes[2][a3:b3]
-#                 for (a4,b4) in index_blocks[3]:
-#                     x4 = axes[3][a4:b4]
-#                     for (a5,b5) in index_blocks[4]:
-#                         x5 = axes[4][a5:b5]
-#                         for (a6,b6) in index_blocks[5]:
-#                             x6 = axes[5][a6:b6]
+        D = mu.shape[0]
+        cov_inv = np.linalg.inv(cov)
+        cov_det = np.linalg.det(cov)
+        norm_const = 1.0 / np.sqrt((2 * np.pi) ** D * cov_det)
 
-#                             # Local block mesh (sizes are small by construction)
-#                             g = np.meshgrid(x1, x2, x3, x4, x5, x6, indexing="ij")
-#                             pts = np.stack([gi.ravel() for gi in g], axis=1)  # (K, 6)
+        diff = x - mu
+        mahal = np.einsum("ni,ij,nj->n", diff, cov_inv, diff)
+        pdf_eval = norm_const * np.exp(-0.5 * mahal)
 
-#                             vals = np.asarray(p_init(constants, pts)).reshape(-1)
-#                             if vals.size == 0:
-#                                 continue
-#                             # Ignore NaNs; find local max
-#                             lm = np.nanmax(vals)
-#                             if lm > p_max:
-#                                 p_max = lm
-#                                 if return_argmax_point:
-#                                     k = int(np.nanargmax(vals))
-#                                     argmax_point = pts[k].copy()
-
-#     if not np.isfinite(p_max):
-#         raise RuntimeError("Failed to find a finite maximum over the grid.")
-
-#     if return_argmax_point:
-#         return float(p_max), argmax_point  # (max value, corresponding 6-D point)
-#     return float(p_max)
-
-
-def get_max_e1_init(constants, p_net):
-    t = constants.TI
-    x1s = np.load("data/grids/x1s.npy")
-    x2s = np.load("data/grids/x2s.npy")
-    x3s = np.load("data/grids/x3s.npy")
-    x4s = np.load("data/grids/x4s.npy")
-    x1_grid, x2_grid, x3_grid, x4_grid = np.meshgrid(x1s, x2s, x3s, x4s, indexing="ij") # the indexing is very important
-    grid_points = np.vstack([x1_grid.ravel(), x2_grid.ravel(), x3_grid.ravel(), x4_grid.ravel()]).T
-    pdf_true = p_init(constants, grid_points).reshape(x1_grid.shape) # obtain analytical p(true)
-    grid_points_tensor = torch.tensor(grid_points, dtype=torch.float32, requires_grad=False)
-    t_tensor = (torch.ones(len(grid_points_tensor), 1, dtype=torch.float32) * t)
-    pdf_nn = p_net(grid_points_tensor, t_tensor).detach().numpy().reshape(x1_grid.shape)
-    e1 = pdf_true - pdf_nn
-    e1_vec = e1.reshape(-1)
-    max_e1 = np.max(np.abs(e1_vec))
-    return max_e1
+        return pdf_eval.reshape(-1, 1).astype(np.float32)
 
 
 def test_monte_accuracy(constants, mc_folder):
@@ -288,55 +224,6 @@ def test_monte_accuracy(constants, mc_folder):
     plt.savefig("figs/figure.pdf", format="pdf", dpi=300, bbox_inches="tight")
     plt.show()
 
-"""
-def fourdorbit_generate_samples(constants, use_j2=False, N_samples=100, dtt=1e-4):
-    for t_prime in constants.T_PRIME_SPAN:
-        X = fourdorbit_propagate_samples(constants, use_j2=use_j2, t=t_prime, stat_sample=N_samples, dtt=dtt)
-        np.save(SAMPLES_FOLDER+"samples_t{:.3f}.npy".format(t_prime), X)
-
-
-def fourdorbit_propagate_samples(constants, use_j2=False, t=0.2, stat_sample=1, dtt=1e-4):
-    X_four_dim = np.random.multivariate_normal(constants.N_MEAN_I, constants.N_COV_I, size=stat_sample).astype(np.float32)
-    # append constant theta' = 0.5pi/THETA, theta'_dot = 0.0
-    X = np.zeros((stat_sample, 6))
-    X[:,0] = X_four_dim[:,0]
-    X[:,1] = np.ones((stat_sample,)) * 0.5 * np.float32(np.pi) / constants.THETA
-    X[:,2] = X_four_dim[:,1]
-    X[:,3] = X_four_dim[:,2]
-    X[:,5] = X_four_dim[:,3]
-    # convert rns to sphere
-    kf = int(t/dtt)
-    for i in range(stat_sample):
-        x = X[i, :]
-        # ode45 propogate the X_sph(t)
-        for k in range(kf):
-            x = x + fourdorbit_dyn_normsph(x, constants, use_j2) * dtt # + g*dw
-        X[i, :] = x
-    return X
-
-
-def fourdorbit_dyn_normsph(x, constants, use_j2):
-    # normalized spherical coordinate dynamics
-    if(use_j2):
-        J2 = constants.J2
-    else:
-        J2 = 0.0
-    r = x[0]
-    th = x[1]
-    phi = x[2]
-    vr = x[3]
-    vth = x[4]
-    vphi = x[5]
-    f1 = vr
-    f2 = 0.0 # (constants)
-    f3 = vphi
-    aux = constants.W + constants.PHI/constants.T * vphi
-    f4 = constants.T**2 * r * aux**2 - constants.T**2 * constants.MU_EARTH /(constants.R**3 * r**2) + \
-         2.0*(3*constants.T**2 * J2 * constants.MU_EARTH * constants.R_EARTH**2)/(2*constants.R**5 * r**4)
-    f5 = 0.0 # (constants)
-    f6 = -2*constants.T/(r * constants.PHI) * vr * aux
-    return np.array([f1, f2, f3, f4, f5, f6])
-"""
 
 def generate_data(data_folder, N_samples):
     t_span = constants.T_PRIME_SPAN
@@ -344,9 +231,10 @@ def generate_data(data_folder, N_samples):
     for t_prime in t_span:
         start_time = time.time()
         
-        x1s, x2s, x3s, x4s, x5s, x6s, pdf = p_sol_monte(t=t_prime, linespace_num=31, stat_sample=N_samples)   
+        x1s, x2s, x3s, x4s, x5s, x6s, pdf, X = p_sol_monte(t=t_prime, linespace_num=31, stat_sample=N_samples)   
         mc_time.append(time.time() - start_time)
         np.save(data_folder+"pdf_t{:.3f}.npy".format(t_prime), pdf)
+        np.save(data_folder+"xsamples_t{:.3f}.npy".format(t_prime), X)
         if t_prime == 0.0:
             np.save(GRID_FOLDER+"x1s.npy", x1s)
             np.save(GRID_FOLDER+"x2s.npy", x2s)
@@ -354,10 +242,6 @@ def generate_data(data_folder, N_samples):
             np.save(GRID_FOLDER+"x4s.npy", x4s)
             np.save(GRID_FOLDER+"x5s.npy", x5s)
             np.save(GRID_FOLDER+"x6s.npy", x6s)
-
-        # if(t_prime == constants.T_PRIME_SPAN[0] or t_prime == constants.T_PRIME_SPAN[-1]):
-        #     fig, axs = plot_marginals_6d([x1s,x2s,x3s,x4s,x5s,x6s], pdf)
-        #     plt.show()
 
     np.save(data_folder+"mc_time.npy", np.array(mc_time))
 
@@ -369,10 +253,10 @@ def print_mc_time(mc_folder):
     
 def main():
     global constants
+
     # --- Generate data ---
     data_folder = "data/1e+6/"
-    # generate_data(data_folder, 1000000)
-    # fourdorbit_generate_samples(constants, use_j2=False, N_samples=100, dtt=1e-4)
+    generate_data(data_folder, 1000000)
 
     # --- Test MC results ---
     print_mc_time(data_folder)
@@ -381,7 +265,6 @@ def main():
     # 1) save p(t0) max
     # p_max = p_init(constants, constants.N_MEAN_I) # compute maximum PDF at t0 (directly evaluated at the mean of initial Gaussian)
     # np.savez(data_folder+"pre_compute/p_init_max.npz", value=np.float32(p_max.item()), label="mean at Gaussian")
-
     # 2) save marginal pdf over time
     # for i in range(1,7): # compute marginalized PDF (to each dimension) over discrete time
     #     x, t_kept, M = compute_marginals_over_time(
@@ -392,14 +275,11 @@ def main():
     #         filename_fmt="pdf_t{:.3f}.npy",
     #     )
     #     np.savez(data_folder+"pre_compute/marginal_p_x"+str(i)+"_t_M.npz", x=x, times=t_kept, M=M)
-
-    precompute_pdf_init_streaming(constants, p_init, "data/1e+6")
-    
+    # precompute_pdf_init_streaming(constants, p_init, "data/1e+6")
     # --- Plots ---
     # for i in range(1, 7):
     #     _data = np.load(data_folder+"pre_compute/marginal_p_x"+str(i)+"_t_M.npz")
     #     plot_time_curves_3d(_data, title="Marginal p(x"+str(i)+"|t): curves (no interpolation)")
-
     # test_monte_accuracy()
     # check_pdf_Nrphi(constants, mc_folder=data_folder)
     # check_pdf_cartesian_wrt_samples(constants, mc_folder=data_folder)
