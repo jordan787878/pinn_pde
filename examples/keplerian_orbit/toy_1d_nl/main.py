@@ -11,6 +11,7 @@ from scipy.stats import multivariate_normal
 from scipy.linalg import expm, cholesky
 import seaborn as sns
 import time
+from test_fitgmm import make_gmm_pdf
 from pinn_train import train_pnet, train_pnet_v0
 from pinn_model import PNet, PNet_XL
 from pinn_train import train_e1net_v0
@@ -114,7 +115,7 @@ def train_helper_sample_res(batch_size):
 
 
 class PropagationData:
-    def __init__(self, path=None, prop_method=None):
+    def __init__(self, input_data=None, path=None, prop_method=None):
         if(prop_method == "LP"):
             self.data = None
             # self._get_Jacobian_expression()
@@ -125,10 +126,13 @@ class PropagationData:
             # self._get_Jacobian_expression()
             self.unscent_propagation(save_path=path, dt_precision=6)
             self.data = np.load(path)
+        if(prop_method == "GMM"):
+            self.data = None
+            self.gmm_propagation(save_path=path, input_data=input_data, dt_precision=6)
         else:
             self.data = np.load(path)
 
-    def get(self, time):
+    def get(self, time, label=None):
         if(self.data is None):
             raise("data has not been loaded") 
         times = self.data["times"]
@@ -141,6 +145,9 @@ class PropagationData:
         if len(idx) == 0:
             assert("The linear propagation result does not have data at this time")
         idx = idx[0]
+        if label == "GMM":
+            weights = self.data["weights"]
+            return times[idx], weights, means[idx], covs[idx]
         return times[idx], means[idx], covs[idx]
     
     def _get_Jacobian_expression(self):
@@ -333,6 +340,90 @@ class PropagationData:
             return np.array([], dtype=int)
 
         return np.arange(start_idx, end_idx)
+    
+    def gmm_propagation(self, save_path=None, input_data=None, dt_precision=6, dt_save=0.1, verbose=False):
+        """
+        NOTE: see unit test: test_fitgmm.py
+        """
+        # --- initialization ---
+        data_gmm_init = np.load(input_data)
+        weights = data_gmm_init["weights"]
+        means_i = data_gmm_init["means"]
+        sigmas = data_gmm_init["sigmas"]
+        cov_i = sigmas**2
+        N_gmm = len(weights)
+
+        dtt = np.float64(10**(-1*dt_precision))
+        tf = T_end
+        ti = t0
+        kf = int(np.ceil((tf-ti) / dtt))
+        current_time = ti
+
+        # --- storage arrays ---
+        times = [current_time]
+        means = [means_i.copy()]
+        covs = [cov_i.copy()]
+        t_to_save = current_time + dt_save
+
+        # init
+        means_k = means_i
+        covs_k = cov_i
+        print(means_k)
+
+        if(verbose):
+            # quick show
+            x_vals = np.linspace(x_low, x_hig, num=200, endpoint=True)
+            _pdf_func_gmm = make_gmm_pdf(weights, means_k, np.sqrt(covs_k))
+            pdf_gmm = _pdf_func_gmm(x_vals)
+            plt.figure()
+            plt.plot(x_vals, pdf_gmm)
+            plt.show()
+
+        # --- time stepping loop ---
+        for k in tqdm(range(kf), desc="propagting over time"):
+            for j in range(N_gmm):
+                x = means_k[j].copy() # 1D
+                Px = covs_k[j].copy() # 1D
+                # compute dynamics and Jacobian
+                fx = self.nl_dyn(x)
+                Jx = self.get_Jacobian(x)
+                # propagate mean and covariance
+                x = x + fx * dtt
+                Px = Px + (Jx*Px + Jx*Px + const_e**2)*dtt
+                means_k[j] = x.copy()
+                covs_k[j] = Px.copy()
+
+            # update time
+            current_time += dtt
+            # current_time = np.round(current_time, dt_precision)
+            if(abs(current_time-t_to_save) < dtt/2):
+                # store results
+                # print(means_k)
+                # print(covs_k)
+                times.append(np.round(current_time,2))
+                means.append(means_k.copy())
+                covs.append(covs_k.copy())
+                t_to_save += dt_save
+                if(verbose):
+                    # quick show
+                    x_vals = np.linspace(x_low, x_hig, num=200, endpoint=True)
+                    _pdf_func_gmm = make_gmm_pdf(weights, means_k, np.sqrt(covs_k))
+                    pdf_gmm = _pdf_func_gmm(x_vals)
+                    plt.figure()
+                    plt.plot(x_vals, pdf_gmm)
+                    plt.show()
+
+        # --- convert lists to arrays ---
+        times = np.array(times)
+        means = np.array(means)       # shape: (kf+1, n)
+        covs = np.array(covs)         # shape: (kf+1, n, n)
+        np.savez(save_path,
+                times=times,
+                weights=weights,
+                means=means,
+                covs=covs,
+                dt_precision=dt_precision,
+                label="GMM")
 
 
 def empirical_moments(x, p, N=1):
@@ -467,16 +558,20 @@ def main(TRAIN_FLAG=False, RUN_BASELINE=False, LOAD_PRIOR=False):
     lp_path = os.path.join("data", "lp_np64_dt6.npz") # the last label specifies the precision used
     ut_path = os.path.join("data", "ut_np64_dt6.npz") # the last label specifies the precision used
     ut_path_alpha0_1 = os.path.join("data", "ut_np64_dt6_alpha0.1.npz") # the last label specifies the precision used
+    gmm_path = os.path.join("data", "gmm_np64_dt6.npz")
     if(RUN_BASELINE):
-        data_lp = PropagationData(path=lp_path, prop_method="LP")
-        data_ut = PropagationData(path=ut_path, prop_method="UT")
-        data_ut_alpha0_1 = PropagationData(path=ut_path_alpha0_1, prop_method="UT")
+        print("run baseline methods")
+        # data_lp = PropagationData(path=lp_path, prop_method="LP")
+        # data_ut = PropagationData(path=ut_path, prop_method="UT")
+        # data_ut_alpha0_1 = PropagationData(path=ut_path_alpha0_1, prop_method="UT")
+        data_gmm = PropagationData(path=gmm_path, input_data="data/fitted_gmm_pinit.npz", prop_method="GMM")
     data_lp = PropagationData(path=lp_path)
     data_ut = PropagationData(path=ut_path)
     data_ut_alpha0_1 = PropagationData(path=ut_path_alpha0_1)
-    print(data_ut_alpha0_1.data["times"])
+    data_gmm = PropagationData(path=gmm_path)
+    # print(data_ut_alpha0_1.data["times"])
 
-    colors = sns.color_palette("husl", 3)
+    colors = sns.color_palette("husl", 4)
     fig = plt.figure(figsize=(12, 8))
     ax = fig.add_subplot(111, projection="3d")
     x_tensor = torch.from_numpy(x.reshape(-1,1)).to(device)
@@ -504,6 +599,14 @@ def main(TRAIN_FLAG=False, RUN_BASELINE=False, LOAD_PRIOR=False):
         pdf_mc = np.load("data/psim_t{:.1f}.npy".format(t)).astype(np.float32).reshape(-1,)
         _t = np.ones(x.shape[0], dtype=x.dtype)*t
         t_tensor = torch.from_numpy(_t.reshape(-1,1)).to(device)
+
+        # --- GMM ---
+        _, _w_gmm, _mu_gmm, _cov_gmm = data_gmm.get(t, label="GMM")
+        print("[debug] gmm means: ", _mu_gmm)
+        print("[debug] gmm weights sum: ", np.sum(_w_gmm))
+        # print(_cov_gmm)
+        pdf_func_gmm = make_gmm_pdf(_w_gmm, _mu_gmm, np.sqrt(_cov_gmm))
+        pdf_fmm = pdf_func_gmm(x).reshape(-1,).astype(x.dtype)
 
         # --- LP ---
         _, _mu_lp, _cov_lp = data_lp.get(t)
@@ -539,6 +642,7 @@ def main(TRAIN_FLAG=False, RUN_BASELINE=False, LOAD_PRIOR=False):
 
         # --- PINN ---
         pdf_pinn = p_net(x_tensor, t_tensor).detach().cpu().numpy().reshape(pdf_mc.shape)
+        e1_true = pdf_mc - pdf_pinn
         norm_error_pinn, tv_pinn, g_kl_pinn = compute_metrics(t, x_mc_samples, pdf_mc, pdf_pinn, pdf_pinn=p_net)
 
         # --- PINN Error Bound ---
@@ -546,6 +650,7 @@ def main(TRAIN_FLAG=False, RUN_BASELINE=False, LOAD_PRIOR=False):
         B1 = 2.* np.max(np.abs(e1_pinn)).item()
         p_true_max = np.max(pdf_mc).item()
         normalize_B1 = 100.*B1/p_true_max
+        alpha1 = np.max(np.abs(e1_true - e1_pinn)).item() / np.max(np.abs(e1_pinn)).item()
 
         print("time {:.2f} total variation , PINN: {:.5f} %,  LP: {:.5f} %,  UT: {:.5f} %,  UT (alpha=0.1): {:.5f} %".format(
             t, tv_pinn, tv_lp, tv_ut, tv_ut_alpha_0_1
@@ -558,8 +663,8 @@ def main(TRAIN_FLAG=False, RUN_BASELINE=False, LOAD_PRIOR=False):
                 t, g_kl_pinn, g_kl_lp, g_kl_ut
             ))
         if(B1 is not None):
-            print("time {:.2f}, norm. error PINN: {:.5f} %, norm. B1: {:.5f} %".format(
-                t, norm_error_pinn, normalize_B1
+            print("time {:.2f}, norm. error PINN: {:.5f} %, norm. B1: {:.5f} %, alpha1 {:.2f}".format(
+                t, norm_error_pinn, normalize_B1, alpha1
             ))
 
         metrics["norm_error_pinn"].append(norm_error_pinn)
@@ -590,6 +695,9 @@ def main(TRAIN_FLAG=False, RUN_BASELINE=False, LOAD_PRIOR=False):
         print("probability mass within +/- 1 std, LP: {:.3f} %, UT: {:.3f} %".format(
             pdf_mass_lp, pdf_mass_ut))
 
+        # Skip times that aren't approximately integer seconds
+        if not np.isclose(t, np.round(t), atol=1e-6):
+            continue
         ax.plot(np.full_like(x, t), x, pdf_mc,
                 color="black", linestyle="-")
         ax.plot(np.full_like(x, t), x, pdf_pinn,
@@ -598,12 +706,15 @@ def main(TRAIN_FLAG=False, RUN_BASELINE=False, LOAD_PRIOR=False):
                 color=colors[1], linestyle="-")
         ax.plot(np.full_like(x, t), x, pdf_ut,
                 color=colors[2], linestyle="-")
+        ax.plot(np.full_like(x, t), x, pdf_fmm,
+                color=colors[3], linestyle="--")
 
     legend_elements = [
         Line2D([0], [0], color="black", linestyle="-", label=r"$p$ MC"),
-        Line2D([0], [0], color=colors[0], linestyle="--", label=r"$\hat{p}$ PINN"),
-        Line2D([0], [0], color=colors[1], linestyle="--",  label=r"$p$ Linear Prop."),
-        Line2D([0], [0], color=colors[2], linestyle=":", lw=3, label=r"$p$ Unscent Trans.")
+        Line2D([0], [0], color=colors[0], linestyle="-", label=r"$\hat{p}$ PINN"),
+        Line2D([0], [0], color=colors[1], linestyle="-",  label=r"$p$ Linear Prop."),
+        Line2D([0], [0], color=colors[2], linestyle="-", label=r"$p$ Unscent Trans."),
+        Line2D([0], [0], color=colors[3], linestyle="--", label=r"$p$ GMM"),
     ]
     ax.set_xlabel("t")
     ax.set_ylabel("x")
