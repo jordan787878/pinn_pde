@@ -16,6 +16,8 @@ from pinn_train import train_pnet, train_pnet_v0
 from pinn_model import PNet, PNet_XL
 from pinn_train import train_e1net_v0
 from pinn_model import E1Net, E1Net_Prior
+from test_normalpnet import TimeToNormal1D
+from test_gmmpnet import TimeToGMM1D
 
 # --------------------------
 # Device & dtype
@@ -510,10 +512,21 @@ def helper_save_metrics_npz(metrics, path):
 
 
 def main(TRAIN_FLAG=False, RUN_BASELINE=False, LOAD_PRIOR=False):
+    """
+    LOAD_PRIOR (True): the best from prior work
+    Base: the baseline MLP model
+    Normal: PINN-Normal model
+    """
     torch.manual_seed(0); np.random.seed(0)
 
+    # --- PDF Neural Network ---
+
+    # --- Base ---
     p_net = PNet(scale=get_p_normalize()).to(device)
-    # p_net = PNet_XL(scale=get_p_normalize()).to(device)
+    # --- Normal ---
+    # p_net = TimeToNormal1D().to(device)
+    # --- PINN-GMM ---
+    # p_net = TimeToGMM1D().to(device)
 
     configuration = {
         "iterations": 10000,
@@ -522,18 +535,26 @@ def main(TRAIN_FLAG=False, RUN_BASELINE=False, LOAD_PRIOR=False):
         "p_ic": p_init,
         "res_func": res_func,
         "res_weight": 1.0,
-        "save_path": "data/p_net.pth"
+        "save_path": "data/p_net.pth",
+        # "save_path": "data/p_net(normal).pth"
+        # "save_path": "data/p_net(pinn-gmm).pth"
     }
     if(TRAIN_FLAG):
+        print("traing pnet: ", configuration["save_path"])
         # train_pnet_model(p_net)
-        train_pnet_v0(p_net, configuration)
+        # train_pnet_v0(p_net, configuration)
     p_net = load_train_model(p_net, PATH=configuration["save_path"])
 
     if(LOAD_PRIOR):
         p_net = load_train_model(p_net, PATH="data/p_net(prior).pth")
 
+    # --- Error Neural Network ---
     e1_net = E1Net(scale=get_e1_normalize(p_net),
-                   normalize=get_e1_normalize(p_net)).to(device)
+                   normalize=get_e1_normalize(p_net),
+                #    neurons=128
+                   ).to(device)
+    print("[debug] e1_net scale: ", e1_net.scale)
+        
     configuration_e1 = {
         "iterations": 20000,
         "sample_ic": train_helper_sample_ic,
@@ -541,8 +562,12 @@ def main(TRAIN_FLAG=False, RUN_BASELINE=False, LOAD_PRIOR=False):
         "p_ic": p_init,
         "res_func": res_func,
         "res_weight": 1.0,
-        "save_path": "data/e1_net.pth"
+        "RAR_eps": 0.05,
+        "save_path": "data/e1_net.pth",
+        # "save_path": "data/e1_net(normal).pth"
+        # "save_path": "data/e1_net(pinn-gmm).pth"
     }
+
     if(TRAIN_FLAG):
         train_e1net_v0((p_net, e1_net), configuration_e1)
     e1_net = load_train_model(e1_net, PATH=configuration_e1["save_path"])
@@ -551,7 +576,7 @@ def main(TRAIN_FLAG=False, RUN_BASELINE=False, LOAD_PRIOR=False):
         e1_net = E1Net_Prior(scale=get_e1_normalize(p_net)).to(device)
         e1_net = load_train_model(e1_net, PATH="data/e1_net(prior).pth")
 
-    # 
+    # --- Evaluation ---
     p_net.eval(); e1_net.eval()
 
     # --- Visual ---
@@ -604,17 +629,19 @@ def main(TRAIN_FLAG=False, RUN_BASELINE=False, LOAD_PRIOR=False):
     for t in t_span:
         x_mc_samples = np.load("data/xsamples_t{:.1f}.npy".format(t)).astype(np.float32)
         pdf_mc = np.load("data/psim_t{:.1f}.npy".format(t)).astype(np.float32).reshape(-1,)
+        if(t == 0):
+            pdf_mc = p_init(x).reshape(-1,)
         _t = np.ones(x.shape[0], dtype=x.dtype)*t
         t_tensor = torch.from_numpy(_t.reshape(-1,1)).to(device)
 
         # --- GMM ---
         _, _w_gmm, _mu_gmm, _cov_gmm = data_gmm.get(t, label="GMM")
-        print("[debug] gmm means: ", _mu_gmm)
-        print("[debug] gmm weights sum: ", np.sum(_w_gmm))
+        # print("[debug] gmm means: ", _mu_gmm)
+        # print("[debug] gmm weights sum: ", np.sum(_w_gmm))
         # print(_cov_gmm)
         pdf_func_gmm = make_gmm_pdf(_w_gmm, _mu_gmm, np.sqrt(_cov_gmm))
-        pdf_fmm = pdf_func_gmm(x).reshape(-1,).astype(x.dtype)
-        norm_error_gmm, tv_gmm, g_kl_gmm = compute_metrics(t, x_mc_samples, pdf_mc, pdf_fmm, pdf_func=pdf_func_gmm)
+        pdf_gmm = pdf_func_gmm(x).reshape(-1,).astype(x.dtype)
+        norm_error_gmm, tv_gmm, g_kl_gmm = compute_metrics(t, x_mc_samples, pdf_mc, pdf_gmm, pdf_func=pdf_func_gmm)
 
         # --- LP ---
         _, _mu_lp, _cov_lp = data_lp.get(t)
@@ -671,9 +698,7 @@ def main(TRAIN_FLAG=False, RUN_BASELINE=False, LOAD_PRIOR=False):
                 t, g_kl_pinn, g_kl_lp, g_kl_ut
             ))
         if(B1 is not None):
-            print("time {:.2f}, norm. error PINN: {:.5f} %, norm. B1: {:.5f} %, alpha1 {:.2f}".format(
-                t, norm_error_pinn, normalize_B1, alpha1
-            ))
+            print("[debug]", np.max(np.abs(e1_true)).item(), np.max(np.abs(e1_pinn)).item())
 
         metrics["norm_error_pinn"].append(norm_error_pinn)
         metrics["norm_error_lp"].append(norm_error_lp)
@@ -717,7 +742,7 @@ def main(TRAIN_FLAG=False, RUN_BASELINE=False, LOAD_PRIOR=False):
                 color=colors[1], linestyle="-")
         ax.plot(np.full_like(x, t), x, pdf_ut,
                 color=colors[2], linestyle="-")
-        ax.plot(np.full_like(x, t), x, pdf_fmm,
+        ax.plot(np.full_like(x, t), x, pdf_gmm,
                 color=colors[3], linestyle="--")
 
     legend_elements = [
@@ -782,10 +807,14 @@ def main(TRAIN_FLAG=False, RUN_BASELINE=False, LOAD_PRIOR=False):
     metrics_path = "data/metrics.npz"
     if(LOAD_PRIOR):
         metrics_path = "data/metrics(prior).npz"
+    if(configuration["save_path"] == "data/p_net(normal).pth"):
+        metrics_path = "data/metrics(normal).npz"
+    if(configuration["save_path"] == "data/p_net(pinn-gmm).pth"):
+        metrics_path = "data/metrics(pinn-gmm).npz"
     helper_save_metrics_npz(metrics, metrics_path)
 
 
 if __name__ == "__main__":
-    main(TRAIN_FLAG=False, 
+    main(TRAIN_FLAG=True, 
          RUN_BASELINE=False,
          LOAD_PRIOR=False)

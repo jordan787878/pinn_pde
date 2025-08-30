@@ -230,7 +230,7 @@ class E1Net(nn.Module):
     """
     use Pytorch default initialization strategy
     """
-    def __init__(self, scale=1.0, normalize=1.0, neurons=50): 
+    def __init__(self, scale=1.0, normalize=1.0, neurons=64): 
         super().__init__()
         self.scale = scale
         self.normalize = normalize
@@ -248,4 +248,4 @@ class E1Net(nn.Module):
         output = self.output_layer(layer3_out)
         output = self.scale * output
         return output
-
+    

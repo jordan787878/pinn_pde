@@ -215,6 +215,7 @@ def train_e1net_v0(networks, configuration):
     res_func = configuration["res_func"]
     res_weight = configuration["res_weight"]
     save_path = configuration["save_path"]
+    RAR_eps = configuration["RAR_eps"]
 
     mse_cost_function = torch.nn.MSELoss()
     optimizer = torch.optim.Adam(e1_net.parameters(), lr=1e-3)
@@ -224,9 +225,9 @@ def train_e1net_v0(networks, configuration):
     normalize = e1_net.normalize
     iterations_per_decay = 1000
     
-    N0_samples_initial = 1000
-    Nr_samples_initial = 1000
-    N_RAR = 30000
+    N0_samples_initial = 2000
+    Nr_samples_initial = 2000
+    N_RAR = 50000
     x_bc_rar = torch.empty(0, 1, device=device)
     t_bc_rar = torch.empty(0, 1, device=device)
     x_res_rar = torch.empty(0, 1, device=device)
@@ -337,6 +338,8 @@ def train_e1net_v0(networks, configuration):
                     x_bc_rar = torch.cat((x_bc_rar, xb_chk[idx, :]), dim=0)
                     t_bc_rar = torch.cat((t_bc_rar, tb_chk[idx]), dim=0)
                     print(f"... RAR IC, added {len(idx)} points. Max IC error: {max_error_ic:.4f}")
+                    print(torch.max(torch.abs(e_i)).item(),
+                          torch.max(torch.abs(ehat_i)).item())
             
             # Residual RAR
             xr_chk, tr_chk = train_helper_sample_res(N_RAR)
