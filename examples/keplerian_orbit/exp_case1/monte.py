@@ -1,5 +1,6 @@
 import numpy as np
 import torch
+import os
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 import time
@@ -227,23 +228,32 @@ def test_monte_accuracy(constants, mc_folder):
 
 def generate_data(data_folder, N_samples):
     t_span = constants.T_PRIME_SPAN
-    mc_time = []
-    for t_prime in t_span:
-        start_time = time.time()
-        
-        x1s, x2s, x3s, x4s, x5s, x6s, pdf, X = p_sol_monte(t=t_prime, linespace_num=31, stat_sample=N_samples)   
-        mc_time.append(time.time() - start_time)
-        np.save(data_folder+"pdf_t{:.3f}.npy".format(t_prime), pdf)
-        np.save(data_folder+"xsamples_t{:.3f}.npy".format(t_prime), X)
-        if t_prime == 0.0:
-            np.save(GRID_FOLDER+"x1s.npy", x1s)
-            np.save(GRID_FOLDER+"x2s.npy", x2s)
-            np.save(GRID_FOLDER+"x3s.npy", x3s)
-            np.save(GRID_FOLDER+"x4s.npy", x4s)
-            np.save(GRID_FOLDER+"x5s.npy", x5s)
-            np.save(GRID_FOLDER+"x6s.npy", x6s)
+    for j in range(1, 1000+1):
+        mc_time = []
+        for t_prime in t_span:
+            start_time = time.time()
+            
+            x1s, x2s, x3s, x4s, x5s, x6s, pdf, X = p_sol_monte(t=t_prime, linespace_num=31, stat_sample=N_samples)   
+            
+            if j == 1:
+                mc_time.append(time.time() - start_time)
 
-    np.save(data_folder+"mc_time.npy", np.array(mc_time))
+            # saving main data
+            d = os.path.join(data_folder, f"run{j}")
+            os.makedirs(d, exist_ok=True)
+            np.save(d+"/pdf_t{:.3f}.npy".format(t_prime), pdf)
+            np.save(d+"/xsamples_t{:.3f}.npy".format(t_prime), X)
+            
+            if t_prime == 0.0 and j == 1:
+                np.save(GRID_FOLDER+"x1s.npy", x1s)
+                np.save(GRID_FOLDER+"x2s.npy", x2s)
+                np.save(GRID_FOLDER+"x3s.npy", x3s)
+                np.save(GRID_FOLDER+"x4s.npy", x4s)
+                np.save(GRID_FOLDER+"x5s.npy", x5s)
+                np.save(GRID_FOLDER+"x6s.npy", x6s)
+
+        if j == 1:
+            np.save(data_folder+"/mc_time.npy", np.array(mc_time))
 
 
 def print_mc_time(mc_folder):
@@ -255,11 +265,15 @@ def main():
     global constants
 
     # --- Generate data ---
-    data_folder = "data/1e+6/"
-    generate_data(data_folder, 1000000)
+    # data_folder = "data/1e+6/"
+    # generate_data(data_folder, 1000000)
 
     # --- Test MC results ---
-    print_mc_time(data_folder)
+    # print_mc_time(data_folder)
+
+    # --- Generate dataset: each consists of 10e+6 samples ---
+    data_folder = "dataset"
+    generate_data(data_folder, 1000000)
 
     # --- Pre-computation for plotting data ---
     # 1) save p(t0) max
