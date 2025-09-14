@@ -135,6 +135,7 @@ def train_pinn_sol_v0(p_net, configuration):
     res_weight = configuration["res_weight"]
     save_path = configuration["save_path"]
     beta_incre = configuration["beta_incre"]
+    normalize = configuration["loss_normalize"]
     
     mse_cost_function = torch.nn.MSELoss()
     optimizer = torch.optim.Adam(p_net.parameters(), lr=1e-3)
@@ -143,7 +144,6 @@ def train_pinn_sol_v0(p_net, configuration):
     min_loss = np.inf
     iterations_per_decay = 1000
     loss_history = []
-    normalize = p_net.scale
     
     N0_samples_initial = 2000
     Nr_samples_initial = 2000
@@ -171,9 +171,6 @@ def train_pinn_sol_v0(p_net, configuration):
         t_bc = torch.cat((t_bc_new.to(device), t_bc_rar), dim=0)
         x_res = torch.cat((x_res_new.to(device), x_res_rar), dim=0)
         t_res = torch.cat((t_res_new.to(device), t_res_rar), dim=0)
-
-        # FIX: Set requires_grad=True for x_res before using it in diff_opt_scaled
-        x_res.requires_grad_(True)
         
         # --- Loss based on initial conditions ---
         p_i = p_init(constants, x_bc.detach().cpu().numpy())
@@ -182,7 +179,6 @@ def train_pinn_sol_v0(p_net, configuration):
         mse_u = mse_cost_function(phat_i / normalize, p_i / normalize)
 
         # --- Loss based on PDE ---
-        # The create_graph=True is necessary for the nested gradients.
         res_p = res_func(x_res, t_res, p_net, beta=beta)
         all_zeros = torch.zeros_like(res_p)
         mse_res = mse_cost_function(res_p / normalize, all_zeros)
@@ -190,16 +186,8 @@ def train_pinn_sol_v0(p_net, configuration):
         # --- Total Loss ---
         loss = mse_u + res_weight * mse_res
         loss_history.append(loss.item())
-        
-        # --- Backpropagation ---
-        # `retain_graph=True` is needed for the nested gradient calls inside diff_opt_scaled
-        # This will be handled implicitly if create_graph=True is used in the inner grad calls
-        # and not explicitly set for loss.backward().
         loss.backward(retain_graph=True)
-        
-        # Gradient Clipping
-        torch.nn.utils.clip_grad_norm_(p_net.parameters(), max_norm=1.0)
-        
+        torch.nn.utils.clip_grad_norm_(p_net.parameters(), max_norm=1.0) # Gradient Clipping
         optimizer.step()
         
         # --- Learning rate decay ---
@@ -224,7 +212,6 @@ def train_pinn_sol_v0(p_net, configuration):
         # --- RAR ---
         if epoch % 100 == 0 and FLAG:
             FLAG = False
-
             # Add IC points
             with torch.no_grad():
                 x_bc_check, t_bc_check = train_helper_sample_ic(N_RAR)
@@ -232,29 +219,22 @@ def train_pinn_sol_v0(p_net, configuration):
                 p_i = torch.tensor(p_i, dtype=torch.float32, device=device)
                 phat_i = p_net(x_bc_check, t_bc_check)
                 ic_errors = torch.abs(p_i - phat_i) / normalize
-                
                 max_error_ic = ic_errors.max().item()
                 if max_error_ic > RAR_eps:
                     max_indices = torch.topk(ic_errors.squeeze(), 10).indices
                     x_bc_rar = torch.cat((x_bc_rar, x_bc_check[max_indices, :]), dim=0)
                     t_bc_rar = torch.cat((t_bc_rar, t_bc_check[max_indices]), dim=0)
-                    print(f"... RAR IC, added {len(max_indices)} points. Max IC error: {max_error_ic:.4f}")
-
+                    print(f"... RAR IC , Max IC error: {max_error_ic:.4f}")
             # Add Residual points
             x_res_check, t_res_check = train_helper_sample_res(N_RAR)
             res_p = res_func(x_res_check, t_res_check, p_net, beta=beta)
             res_errors = torch.abs(res_p) / normalize
-            
             max_error_res = res_errors.max().item()
             if max_error_res > RAR_eps:
                 max_indices = torch.topk(res_errors.squeeze(), 10).indices
                 x_res_rar = torch.cat((x_res_rar, x_res_check[max_indices, :]), dim=0)
                 t_res_rar = torch.cat((t_res_rar, t_res_check[max_indices]), dim=0)
-                print(f"... RAR Res, added {len(max_indices)} points. Max Res error: {max_error_res:.4f}")
-        
-
-    end_time = time.time()
-    print(f"Total training time: {(end_time - start_time):.2f} seconds.")
+                print(f"... RAR Res, Max Res error: {max_error_res:.4f}")
 
 
 def train_pinn_sol_v0_scaled_improved(constants, p_net, configurations, 

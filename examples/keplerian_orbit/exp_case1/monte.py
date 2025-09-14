@@ -8,7 +8,6 @@ from typing import Sequence, Tuple, List
 from scipy.stats import norm
 from scipy.interpolate import griddata
 from exp_utilities.constants import Case1_6D_Constants
-from exp_utilities.plot_util import compute_marginals_over_time, plot_time_curves_3d, precompute_pdf_init_streaming
 import sys
 sys.path.insert(0, '../utilities/')
 from _General.astrodynamics import *
@@ -18,6 +17,60 @@ SAMPLES_FOLDER = "data/samples/"
 
 constants = Case1_6D_Constants()
 np.random.seed(0)
+
+
+def p_init(constants, x):
+    """
+    Evaluate the multivariate Gaussian PDF using NumPy or PyTorch depending on input type.
+
+    Parameters
+    ----------
+    constants : object
+        Must contain:
+        - N_MEAN_I: (D,) mean vector
+        - N_COV_I: (D,D) covariance matrix
+    x : ndarray or torch.Tensor
+        Input samples of shape (N, D).
+
+    Returns
+    -------
+    pdf_eval : ndarray or torch.Tensor
+        PDF values of shape (N, 1), matching the type of `x`.
+    """
+    # Check if input is torch tensor
+    use_torch = torch.is_tensor(x)
+
+    if use_torch:
+        # Torch computation
+        mu = torch.as_tensor(constants.N_MEAN_I, dtype=torch.float32, device=x.device)
+        cov = torch.as_tensor(constants.N_COV_I, dtype=torch.float32, device=x.device)
+
+        D = mu.shape[0]
+        cov_inv = torch.linalg.inv(cov)
+        cov_det = torch.linalg.det(cov)
+        norm_const = 1.0 / torch.sqrt((2 * torch.pi) ** D * cov_det)
+
+        diff = x.to(torch.float32) - mu
+        mahal = torch.einsum("ni,ij,nj->n", diff, cov_inv, diff)
+        pdf_eval = norm_const * torch.exp(-0.5 * mahal)
+
+        return pdf_eval.view(-1, 1)
+    else:
+        # NumPy computation
+        mu = np.asarray(constants.N_MEAN_I, dtype=np.float32)
+        cov = np.asarray(constants.N_COV_I, dtype=np.float32)
+        x = np.asarray(x, dtype=np.float32)
+
+        D = mu.shape[0]
+        cov_inv = np.linalg.inv(cov)
+        cov_det = np.linalg.det(cov)
+        norm_const = 1.0 / np.sqrt((2 * np.pi) ** D * cov_det)
+
+        diff = x - mu
+        mahal = np.einsum("ni,ij,nj->n", diff, cov_inv, diff)
+        pdf_eval = norm_const * np.exp(-0.5 * mahal)
+
+        return pdf_eval.reshape(-1, 1).astype(np.float32)
 
 
 def p_sol_monte(t=0.0, linespace_num=31, stat_sample=1000000):
@@ -100,61 +153,6 @@ def p_sol_monte(t=0.0, linespace_num=31, stat_sample=1000000):
     return midpoints_x1, midpoints_x2, midpoints_x3, midpoints_x4, midpoints_x5, midpoints_x6, frequency, X
 
 
-def p_init(constants, x):
-    """
-    Evaluate the multivariate Gaussian PDF using NumPy or PyTorch depending on input type.
-
-    Parameters
-    ----------
-    constants : object
-        Must contain:
-        - N_MEAN_I: (D,) mean vector
-        - N_COV_I: (D,D) covariance matrix
-    x : ndarray or torch.Tensor
-        Input samples of shape (N, D).
-
-    Returns
-    -------
-    pdf_eval : ndarray or torch.Tensor
-        PDF values of shape (N, 1), matching the type of `x`.
-    """
-    # Check if input is torch tensor
-    use_torch = torch.is_tensor(x)
-
-    if use_torch:
-        # Torch computation
-        mu = torch.as_tensor(constants.N_MEAN_I, dtype=torch.float32, device=x.device)
-        cov = torch.as_tensor(constants.N_COV_I, dtype=torch.float32, device=x.device)
-
-        D = mu.shape[0]
-        cov_inv = torch.linalg.inv(cov)
-        cov_det = torch.linalg.det(cov)
-        norm_const = 1.0 / torch.sqrt((2 * torch.pi) ** D * cov_det)
-
-        diff = x.to(torch.float32) - mu
-        mahal = torch.einsum("ni,ij,nj->n", diff, cov_inv, diff)
-        pdf_eval = norm_const * torch.exp(-0.5 * mahal)
-
-        return pdf_eval.view(-1, 1)
-
-    else:
-        # NumPy computation
-        mu = np.asarray(constants.N_MEAN_I, dtype=np.float32)
-        cov = np.asarray(constants.N_COV_I, dtype=np.float32)
-        x = np.asarray(x, dtype=np.float32)
-
-        D = mu.shape[0]
-        cov_inv = np.linalg.inv(cov)
-        cov_det = np.linalg.det(cov)
-        norm_const = 1.0 / np.sqrt((2 * np.pi) ** D * cov_det)
-
-        diff = x - mu
-        mahal = np.einsum("ni,ij,nj->n", diff, cov_inv, diff)
-        pdf_eval = norm_const * np.exp(-0.5 * mahal)
-
-        return pdf_eval.reshape(-1, 1).astype(np.float32)
-
-
 def test_monte_accuracy(constants, mc_folder):
     """
     marginalize the joint pdf to a single coordinate, and compare it to the true analytical pdf at init time
@@ -228,7 +226,7 @@ def test_monte_accuracy(constants, mc_folder):
 
 def generate_data(data_folder, N_samples):
     t_span = constants.T_PRIME_SPAN
-    for j in range(1, 1000+1):
+    for j in range(1, 1+1):
         mc_time = []
         for t_prime in t_span:
             start_time = time.time()
@@ -241,7 +239,7 @@ def generate_data(data_folder, N_samples):
             # saving main data
             d = os.path.join(data_folder, f"run{j}")
             os.makedirs(d, exist_ok=True)
-            np.save(d+"/pdf_t{:.3f}.npy".format(t_prime), pdf)
+            # np.save(d+"/pdf_t{:.3f}.npy".format(t_prime), pdf)
             np.save(d+"/xsamples_t{:.3f}.npy".format(t_prime), X)
             
             if t_prime == 0.0 and j == 1:
@@ -274,30 +272,6 @@ def main():
     # --- Generate dataset: each consists of 10e+6 samples ---
     data_folder = "dataset"
     generate_data(data_folder, 1000000)
-
-    # --- Pre-computation for plotting data ---
-    # 1) save p(t0) max
-    # p_max = p_init(constants, constants.N_MEAN_I) # compute maximum PDF at t0 (directly evaluated at the mean of initial Gaussian)
-    # np.savez(data_folder+"pre_compute/p_init_max.npz", value=np.float32(p_max.item()), label="mean at Gaussian")
-    # 2) save marginal pdf over time
-    # for i in range(1,7): # compute marginalized PDF (to each dimension) over discrete time
-    #     x, t_kept, M = compute_marginals_over_time(
-    #         times=constants.T_PRIME_SPAN,   # time array you mentioned
-    #         data_dir="data/1e+6",
-    #         grid_dir="data/grids",
-    #         keep_axis=(i-1),                # first dimension
-    #         filename_fmt="pdf_t{:.3f}.npy",
-    #     )
-    #     np.savez(data_folder+"pre_compute/marginal_p_x"+str(i)+"_t_M.npz", x=x, times=t_kept, M=M)
-    # precompute_pdf_init_streaming(constants, p_init, "data/1e+6")
-    # --- Plots ---
-    # for i in range(1, 7):
-    #     _data = np.load(data_folder+"pre_compute/marginal_p_x"+str(i)+"_t_M.npz")
-    #     plot_time_curves_3d(_data, title="Marginal p(x"+str(i)+"|t): curves (no interpolation)")
-    # test_monte_accuracy()
-    # check_pdf_Nrphi(constants, mc_folder=data_folder)
-    # check_pdf_cartesian_wrt_samples(constants, mc_folder=data_folder)
-    # test_monte_cartesian_pdf_xy(constants, data_folder)
     
 
 if __name__ == "__main__":

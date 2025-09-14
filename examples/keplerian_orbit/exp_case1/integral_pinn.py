@@ -1,14 +1,13 @@
 import numpy as np
 import torch
-import matplotlib.pyplot as plt
-import os
 from tqdm import tqdm
-from monte import p_init
-from train_p import MC_FOLDER
 from exp_utilities.constants import Case1_6D_Constants
+# import utilities
+import sys
+sys.path.insert(0, '../utilities/')
 from _General.neuralnetworks import PNet, PNet_XL_Sphere, load_trained_model
 
-# --- Initial setup (as in your original script) ---
+
 constants = Case1_6D_Constants()
 device = "cpu"
 
@@ -198,21 +197,12 @@ def marginal_pinn_1d(
 
 # --- Example Usage ---
 if __name__ == '__main__':
-    # OUTPUT_PATH = "output/base"
-    # p_net = PNet(constants, input_feature=7)
-    # scale = np.load(MC_FOLDER+"pre_compute/p_init_max.npz")["value"]
-    # scale_torch = torch.tensor(scale, dtype=torch.float32)
-    # p_net.scale = scale_torch
-    # print("p net scale: ", p_net.scale)
-    # p_net = load_trained_model(p_net, path=OUTPUT_PATH+"/p_net.pth"); p_net.eval()
-
     OUTPUT_PATH = "output/v0"
-    scale = np.load(MC_FOLDER+"pre_compute/p_init_max.npz")["value"]
-    scale_torch = torch.tensor(scale, dtype=torch.float32)
-    p_net = PNet_XL_Sphere(constants, scale=scale_torch)
+    p_net = PNet_XL_Sphere(constants)
     p_net = load_trained_model(p_net, path=OUTPUT_PATH+"/p_net.pth"); p_net.eval()
+    print("[check] p_net scale: ", p_net.scale)
 
-    for t in [constants.T_PRIME_SPAN[0]]:
+    for t in constants.T_PRIME_SPAN[1:]:
         # Marginalize 2D
         for i in range(1, 5+1):
             for j in range(i+1, 6+1):
@@ -225,7 +215,7 @@ if __name__ == '__main__':
                     plot_axes,
                     save_path=save_path,
                     num_linespace=64,
-                    num_samples_mc=50000, # increase this for more accuracy
+                    num_samples_mc=30000, # increase this for more accuracy
                     batch_size=2
                 )
 
@@ -236,6 +226,6 @@ if __name__ == '__main__':
             save_path = f"{OUTPUT_PATH}/pre_compute/marginal_pdfpinn_x{x_coord}_t{t:.3f}.npz"
             marginal_pinn_1d(p_net, t, constants, plot_axs, save_path=save_path,
                              num_linespace=64,
-                             num_samples_mc=500000, # increase this for more accuracy
+                             num_samples_mc=30000, # increase this for more accuracy
                              batch_size=2
                             )

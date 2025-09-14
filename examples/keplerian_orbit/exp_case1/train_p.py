@@ -6,7 +6,7 @@ x = [r, th, phi, vr, vth, vphi]
 import numpy as np
 import torch
 import argparse
-from monte import p_init, print_mc_time
+from monte import p_init
 from exp_utilities.constants import Case1_6D_Constants
 # import utilities
 import sys
@@ -15,11 +15,11 @@ from _General.neuralnetworks import PNet, PNet_XL_Sphere, load_trained_model
 import _General.train_pinn as PINN
 
 
-MC_FOLDER = "data/1e+6/"
 TRAIN_FLAG = False
 constants = Case1_6D_Constants()
 
 
+# --- differential operator ---
 def dyn_f1(x):
     r = x[:, 0]; th = x[:, 1]; ph = x[:, 2]
     vr = x[:, 3]; vth = x[:, 4]; vph = x[:, 5]
@@ -50,7 +50,6 @@ def dyn_f5(x):
     return -2. *vth *vr/r \
            + constants.T**2 * torch.sin(2.*constants.THETA *th) *(constants.W +constants.PHI * vph/constants.T)**2 /(2. *constants.THETA)
 
-# helper for cot()
 def torch_cot(x: torch.Tensor) -> torch.Tensor:
     return 1.0 / torch.tan(x)
 
@@ -94,6 +93,24 @@ def diff_opt(x, t, p_net, beta=1.0, verbose=False):
     return residual
                 
 
+# --- training configuration ---
+def config_training_PNet_XL_Sphere(constants, scale_torch):
+    configuration = {
+        "constants": constants,
+        "iterations": 10000,
+        "sample_ic": constants.sample_init_points,
+        "sample_res": constants.sample_res_points,
+        "p_ic": p_init,
+        "res_func": diff_opt,
+        "res_weight": 1.0,
+        "save_path": "output/v0",
+        "beta_incre": 0.02,
+        "loss_normalize": scale_torch,
+    }
+    return configuration
+
+
+# --- post-training checking ---
 def check_pnet_against_pinit(p_net):
     # --- checking joint PDF against p_init ---
     N_samples = 1000000
@@ -118,46 +135,22 @@ def check_pnet_against_pinit(p_net):
     pdf_pinn = p_net(_x_tensor, _t_tensor).detach().cpu().numpy().reshape(-1,)
 
     rel_error = np.max(np.abs(pdf_sol-pdf_pinn)) / np.max(pdf_sol) # NOTE this metric needs sufficient large samples.
-    print(100. *rel_error.item())
+    print("[check]: rel error at t0: {:.4f} %".format(100. *rel_error.item()))
 
 
+# --- main ---
 def main():
     global constants
-    # Set a fixed seed for reproducibility
-    torch.manual_seed(0); np.random.seed(0)
+    torch.manual_seed(0); np.random.seed(0)  # Set a fixed seed for reproducibility
 
-    # Load p_net scale
-    scale = np.load(MC_FOLDER+"pre_compute/p_init_max.npz")["value"]
-    scale_torch = torch.tensor(scale, dtype=torch.float32)
-
-    # p_net = PNet(constants, input_feature=7)
-    # p_net.apply(init_weights_He)
-    # --- base --- the most basic PINN training attempted to compare with standard MC
-    # PNET_PATH = "output/base"
+    # determine the scale of p_net
+    scale = p_init(constants, [constants.N_MEAN_I]).item()
+    scale_torch = torch.tensor(scale, dtype=torch.float32); print(scale_torch)
 
     p_net = PNet_XL_Sphere(constants, scale=scale_torch)
-
-    configuration = {
-        "constants": constants,
-        "iterations": 10000,
-        "sample_ic": constants.sample_init_points,
-        "sample_res": constants.sample_res_points,
-        "p_ic": p_init,
-        "res_func": diff_opt,
-        "res_weight": 1.0,
-        "save_path": "output/v0",
-        "beta_incre": 0.02,
-    }
+    configuration = config_training_PNet_XL_Sphere(constants, scale_torch)
 
     if(TRAIN_FLAG):
-        # configuration = {
-        #     "ic_fcn": p_init,
-        #     "diff_opt_fcn": diff_opt,
-        #     "pnet_path": PNET_PATH+"/p_net.pth",
-        #     "pnet_path_inter": PNET_PATH+"/p_net_"
-        # }
-        # --- base ---
-        # PINN.train_pinn_sol_base(constants, p_net, configuration, iterations=1000, save_model=True)
         PINN.train_pinn_sol_v0(p_net, configuration)
     
     # --- Load the best network after training ---   
@@ -166,6 +159,9 @@ def main():
     # --- Check PNet against p_init
     check_pnet_against_pinit(p_net)
 
+
+def obsolete_fcn():
+    pass
     # --- Pre-computation for plotting data ---
     # precompute_pdf_streaming(constants, p_net, PNET_PATH) # pre-compute pdf on grid
     # for i in range(1,7): # pre-compute marginal pdf over time

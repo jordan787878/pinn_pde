@@ -84,7 +84,7 @@ def plot_full_corner(constants, t,
         pad = pad_frac_arr * np.maximum(span, eps)
         ranges = [(float(lo[i] - pad[i]), float(hi[i] + pad[i])) for i in range(D)]
     else:
-        ranges = ranges
+        raise("range for full corner plot not implemented.")
 
     sns_colors = sns.color_palette("husl", 3)
     fig, axes = plt.subplots(D, D, figsize=(figsize_per_dim*D, figsize_per_dim*D))
@@ -97,13 +97,6 @@ def plot_full_corner(constants, t,
             pdf_values = data_marginal_pinn['pdf']
             X_grid = data_marginal_pinn["X_grid"]
             ax.plot(X_grid, pdf_values, color=sns_colors[0])
-        # pdf_max = np.max(pdf_values[pdf_values > 0])
-        # Define levels as percentages of the maximum value
-        # For example, levels at 5%, 25%, 50%, 75%, and 95% of the max
-        # relative_levels = np.array([0.001, 0.01, 0.05, 0.25, 0.50, 0.75, 0.95])
-        # levels = relative_levels * pdf_max
-        # Draw the contour lines with the custom levels
-        # ax.contour(X_grid, Y_grid, pdf_values, levels=levels, colors=[sns_colors[0]], linewidths=0.5)
 
     # Diagonals: 1D histograms (counts)
     for d in range(D):
@@ -185,6 +178,7 @@ def plot_full_corner(constants, t,
                 pinn_levels = _plot_pinn_contour(x_coords)
 
             if(data_lp is not None):
+                x_coords = (j+1, i+1)
                 _, mu_6d, cov_6d = data_lp.get(t)
                 plot_axes = (x_coords[0]-1, x_coords[1]-1)
                 marginal_mu = mu_6d[list(plot_axes)]
@@ -212,6 +206,7 @@ def plot_full_corner(constants, t,
 
 
 ### helper
+
 
 def p_normal(x, mean, cov):
     """
@@ -249,6 +244,7 @@ def set_axis_limits_with_buffer(ax, xlim, ylim, buffer_frac=0.05):
 
     ax.set_xlim(xlo - xbuf, xhi + xbuf)
     ax.set_ylim(ylo - ybuf, yhi + ybuf)
+
 
 ##### Obsolete Below #####
 

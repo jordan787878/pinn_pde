@@ -2,7 +2,6 @@ import os
 import numpy as np
 import torch
 from tqdm import tqdm
-from train_p import MC_FOLDER
 from scipy.stats import multivariate_normal
 from exp_utilities.constants import Case1_6D_Constants
 from exp_utilities.plot_util import plt, plot_full_corner
@@ -17,7 +16,7 @@ from _General.util import compute_volume, save_metrics_npz, load_metrics_npz
 constants = Case1_6D_Constants()
 
 
-def p_normal(x, mean, cov):
+def _p_gaussian(x, mean, cov):
     """
     x is numpy array of shape (N x X_dim), N is the sample size
     """
@@ -29,7 +28,7 @@ def p_normal(x, mean, cov):
     return pdf_eval.reshape(-1,)
 
 
-def p_normalize_constant(constants, p1):
+def _helper_p_normalize_const(constants, p1):
     """
     """
     bounds = np.array([
@@ -45,7 +44,7 @@ def p_normalize_constant(constants, p1):
     return np.mean(p1) * vol_est
 
 
-def get_uniform_Xsamples_numpy(N_samples=None):
+def _get_uniform_Xsamples_numpy(N_samples=None):
     global constants
     X = np.column_stack([
         np.random.uniform(constants.X1_RANGE[0], constants.X1_RANGE[1], N_samples),
@@ -66,27 +65,22 @@ def compute_generalKL(t, X, p_data_normal=None, p_net=None, key=None):
         _t = np.ones((len(_x_tensor), 1)) * t
         _t_tensor = torch.tensor(_t, dtype=torch.float32, requires_grad=False).view(-1,1)
         pdf_eval = p_net(_x_tensor, _t_tensor).detach().cpu().numpy().reshape(-1,)
-
-        N_samples = 10000000
-        X_samples = get_uniform_Xsamples_numpy(N_samples=N_samples)
-        _x_tensor = torch.tensor(X_samples, dtype=torch.float32, requires_grad=False)
-        _t = np.ones((len(_x_tensor), 1)) * t
-        _t_tensor = torch.tensor(_t, dtype=torch.float32, requires_grad=False).view(-1,1)
-        pdf_pinn = p_net(_x_tensor, _t_tensor).detach().cpu().numpy().reshape(-1,)
-        Z_p = p_normalize_constant(constants, pdf_pinn)
-        print(Z_p)
+        # [temp]
+        Z_p = 1.
+        # N_samples = 10000000
+        # X_samples = _get_uniform_Xsamples_numpy(N_samples=N_samples)
+        # _x_tensor = torch.tensor(X_samples, dtype=torch.float32, requires_grad=False)
+        # _t = np.ones((len(_x_tensor), 1)) * t
+        # _t_tensor = torch.tensor(_t, dtype=torch.float32, requires_grad=False).view(-1,1)
+        # pdf_pinn = p_net(_x_tensor, _t_tensor).detach().cpu().numpy().reshape(-1,)
+        # Z_p = _helper_p_normalize_const(constants, pdf_pinn)
+        # print(Z_p)
 
     if(p_data_normal is not None):
         _, _mu, _cov = p_data_normal.get(t)
         _mu = np.float32(_mu)
         _cov = np.float32(_cov)
-        pdf_eval = p_normal(X, _mu, _cov).reshape(-1,)
-        
-        # N_samples = 10000000
-        # X_samples = get_uniform_Xsamples_numpy(N_samples=N_samples)
-        # pdf_vals = p_normal(X_samples, _mu, _cov).reshape(-1,)
-        # Z_p = p_normalize_constant(constants, pdf_vals)
-        # print(Z_p)
+        pdf_eval = _p_gaussian(X, _mu, _cov).reshape(-1,)
         Z_p = 1.
 
     mask = pdf_eval >= eps
@@ -133,7 +127,7 @@ def compute_pdf_variations(data_mc=None, p_net=None, data_lp=None, data_ut=None,
         e1_pinn_max = 0.0
         Z_pinn = 0.0
         for j in tqdm(range(1, N_batch+1), desc="Propagating batches"):
-            # X = get_uniform_Xsamples_numpy(N_samples=N_samples) # samples from random uniform
+            # X = _get_uniform_Xsamples_numpy(N_samples=N_samples) # samples from random uniform
             # X_scaled = constants.scaled_x(X)
             # _x_tensor = torch.tensor(X_scaled, dtype=torch.float32, requires_grad=False)
 
@@ -157,7 +151,7 @@ def compute_pdf_variations(data_mc=None, p_net=None, data_lp=None, data_ut=None,
             # tv_pinn += _tv/N_batch
             _gkl = compute_generalKL(t, X_mc, p_net=p_net)
             gkl_pinn += _gkl/N_batch
-            # _Z_pinn = p_normalize_constant(constants, pdf_pinn)
+            # _Z_pinn = _helper_p_normalize_const(constants, pdf_pinn)
             # Z_pinn += _Z_pinn/N_batch
             # del pdf_pinn
 
@@ -177,17 +171,10 @@ def compare_corner_plots(data_mc=None, data_lp=None, data_ut=None, save_path=Non
                          OUTPUT_PATH=None):
     global constants
     t_show = constants.T_PRIME_SPAN
-
-    # N_samples = 1000000
-    # X = get_uniform_Xsamples_numpy(N_samples=N_samples) # samples from random uniform
-    # X_scaled = constants.scaled_x(X)
-    # _x_tensor = torch.tensor(X_scaled, dtype=torch.float32, requires_grad=False)
-
     for idx, t in enumerate(t_show):
         print("\ntime {:.4f}".format(t))
         if(data_mc is None):
             continue
-
         print("[info] ref")
         # load samples from MC
         filename_mc = data_mc+"xsamples_t{:.3f}.npy".format(t)
@@ -195,12 +182,11 @@ def compare_corner_plots(data_mc=None, data_lp=None, data_ut=None, save_path=Non
             X_ref = np.load(filename_mc)
         else:
             continue
-
         # Full corner plot
         plot_full_corner(constants, t, X_ref, 
                          OUTPUT_PATH=OUTPUT_PATH, data_lp=data_lp, 
+                         ranges="auto"
                          )
-
         plt.show()
 
 
@@ -210,7 +196,7 @@ def compare_corner_plots_XYZ(data_mc=None, data_lp=None, data_ut=None, save_path
     t_show = constants.T_PRIME_SPAN
 
     # N_samples = 1000000
-    # X = get_uniform_Xsamples_numpy(N_samples=N_samples) # samples from random uniform
+    # X = _get_uniform_Xsamples_numpy(N_samples=N_samples) # samples from random uniform
     # X_scaled = constants.scaled_x(X)
     # _x_tensor = torch.tensor(X_scaled, dtype=torch.float32, requires_grad=False)
 
@@ -274,21 +260,23 @@ def compare_corner_plots_XYZ(data_mc=None, data_lp=None, data_ut=None, save_path
 
 
 def main():
+    data_mc = "dataset/run1/"
     global constants
+
     OUTPUT_PATH = "output/v0"
-    scale = np.load(MC_FOLDER+"pre_compute/p_init_max.npz")["value"]
-    scale_torch = torch.tensor(scale, dtype=torch.float32)
-    p_net = PNet_XL_Sphere(constants, scale=scale_torch)
+    p_net = PNet_XL_Sphere(constants)
     p_net = load_trained_model(p_net, path=OUTPUT_PATH+"/p_net.pth"); p_net.eval()
+    print("[check] p_net scale: ", p_net.scale)
 
     data_lp = PropagationData(SAVE_PATH_LINEAR_PROPAGATE)
 
-    compute_pdf_variations(data_mc="data/1e+7/", p_net=p_net, 
-                           data_lp=data_lp) # Compute general KL only: PINN performs slightly worse than LP ...
+    compute_pdf_variations(data_mc=data_mc, 
+                           p_net=p_net, 
+                           data_lp=data_lp,
+                           )
     
     # --- Plots ---
-    # compare_corner_plots(MC_FOLDER, OUTPUT_PATH=OUTPUT_PATH, data_lp=data_lp)
-
+    compare_corner_plots(data_mc, OUTPUT_PATH=OUTPUT_PATH, data_lp=data_lp)
     # compare_corner_plots_XYZ(MC_FOLDER)
 
 
