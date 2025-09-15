@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 from typing import Sequence, Tuple
 import torch
 import seaborn as sns
-from scipy.stats import norm, multivariate_normal
+from scipy.stats import multivariate_normal
 from matplotlib.lines import Line2D
 from matplotlib.colors import LogNorm
 from matplotlib.ticker import MaxNLocator
@@ -44,6 +44,8 @@ def plot_full_corner(constants, t,
     pad_frac=0.02,
     log_counts=True,           # log color scale for heatmap
     OUTPUT_PATH=None,
+    p_net_gmm_N1=None,
+    p_net_gmm=None,
     data_lp=None,
 ):
     set_publication_plot_style(font_size=14)
@@ -123,6 +125,18 @@ def plot_full_corner(constants, t,
             ax.set_ylabel(labels[d])
         if(OUTPUT_PATH is not None):
             _plot_pinn_1d_marginal(d+1)
+        if(p_net_gmm is not None):
+            x_vals = np.linspace(lo, hi, num=128)
+            ws, mus, covs = p_net_gmm.weights_means_covs_at(t)
+            ws = ws.detach().cpu().numpy()
+            mus = mus.detach().cpu().numpy()
+            covs = covs.detach().cpu().numpy()
+            pdf_values = np.copy(x_vals) * 0.0
+            for k in range(ws.shape[0]):
+                pdf_func = multivariate_normal(mean=mus[k,d], cov=covs[k,d,d])
+                p_k = pdf_func.pdf(x_vals).reshape(x_vals.shape)
+                pdf_values += ws[k] * p_k
+            ax.plot(x_vals, pdf_values, color=sns_colors[0])
 
     # Off-diagonals: scatter or heatmap (counts)
     for i in range(1, D):
@@ -176,6 +190,49 @@ def plot_full_corner(constants, t,
             if(OUTPUT_PATH is not None):
                 x_coords = (j+1, i+1)
                 pinn_levels = _plot_pinn_contour(x_coords)
+
+            def _plot_pinn_gmm_contour(x_coords, p_net_gmm, color):
+                ws, mus, covs = p_net_gmm.weights_means_covs_at(t)
+                ws = ws.detach().cpu().numpy()
+                mus = mus.detach().cpu().numpy()
+                covs = covs.detach().cpu().numpy()
+                # print(ws.shape, mus.shape, covs.shape)
+                plot_axes = (x_coords[0]-1, x_coords[1]-1)
+                xs = np.linspace(xlo, xhi, num=64, endpoint=True)
+                ys = np.linspace(ylo, yhi, num=64, endpoint=True)
+                X_grid, Y_grid = np.meshgrid(xs, ys, indexing="ij")
+                grid_pts = np.vstack([X_grid.ravel(), Y_grid.ravel()]).T
+
+                pdf_values = np.copy(X_grid) * 0.0
+                for k in range(ws.shape[0]):
+                    ws_k = ws[k]
+                    mus_k = mus[k, :]
+                    covs_k = covs[k, :, :]
+                    marginal_mu = mus_k[list(plot_axes)]
+                    marginal_cov = covs_k[np.ix_(list(plot_axes), list(plot_axes))]
+                    pdf_func = multivariate_normal(mean=marginal_mu, cov=marginal_cov)
+                    p_k = pdf_func.pdf(grid_pts).reshape(X_grid.shape)
+                    # p_k = p_normal(grid_pts, marginal_mu, marginal_cov).reshape(X_grid.shape)
+                    pdf_values = pdf_values + ws_k * p_k
+                    if(ws.shape[0] > 1):
+                        _pdf_max = np.max(p_k).item()
+                        _levels = np.array([0.01, 0.95]) * _pdf_max
+                        ax.contour(X_grid, Y_grid, p_k, levels=_levels, colors=[color], 
+                                linewidths=0.3, alpha=0.4)
+
+                relative_levels = np.array([0.01, 0.05, 0.25, 0.50, 0.75, 0.95])
+                pdf_max = np.max(pdf_values).item()
+                levels = relative_levels * pdf_max
+                ax.contour(X_grid, Y_grid, pdf_values, levels=levels, colors=[color], 
+                           linewidths=1.5)
+
+            if(p_net_gmm_N1 is not None):
+                x_coords = (j+1, i+1)
+                _plot_pinn_gmm_contour(x_coords, p_net_gmm_N1, sns_colors[2])
+                            
+            if(p_net_gmm is not None):
+                x_coords = (j+1, i+1)
+                _plot_pinn_gmm_contour(x_coords, p_net_gmm, sns_colors[0])
 
             if(data_lp is not None):
                 x_coords = (j+1, i+1)

@@ -12,6 +12,7 @@ from exp_utilities.constants import Case1_6D_Constants
 import sys
 sys.path.insert(0, '../utilities/')
 from _General.neuralnetworks import PNet, PNet_XL_Sphere, load_trained_model
+from _General.neuralnetworks import TimeToGMM6D
 import _General.train_pinn as PINN
 
 
@@ -106,6 +107,26 @@ def config_training_PNet_XL_Sphere(constants, scale_torch):
         "save_path": "output/v0",
         "beta_incre": 0.02,
         "loss_normalize": scale_torch,
+        "reg_tv": 0.0,
+    }
+    return configuration
+
+
+def config_training_TimeToGMM6D(constants, scale_torch):
+    configuration = {
+        "constants": constants,
+        "iterations": 16000,
+        "sample_ic": constants.sample_init_points,
+        "sample_res": constants.sample_res_points,
+        "p_ic": p_init,
+        "res_func": diff_opt,
+        "res_weight": 1.0,
+        # "save_path": "output/pinn-gmm",
+        "save_path": "output/pinn-gmm-N11",
+        "beta_incre": 0.02,
+        "loss_normalize": scale_torch,
+        "reg_tv": 0.0,
+        # "increased_icsamples_factor": 11,
     }
     return configuration
 
@@ -147,8 +168,16 @@ def main():
     scale = p_init(constants, [constants.N_MEAN_I]).item()
     scale_torch = torch.tensor(scale, dtype=torch.float32); print(scale_torch)
 
-    p_net = PNet_XL_Sphere(constants, scale=scale_torch)
-    configuration = config_training_PNet_XL_Sphere(constants, scale_torch)
+    # mlp
+    # p_net = PNet_XL_Sphere(constants, scale=scale_torch)
+    # configuration = config_training_PNet_XL_Sphere(constants, scale_torch)
+
+    # gmm
+    # p_net = TimeToGMM6D(constants) # 1-component GMM
+    # configuration = config_training_TimeToGMM6D(constants, scale_torch)
+    p_net = TimeToGMM6D(constants, K=11) # 11-components GMM
+    configuration = config_training_TimeToGMM6D(constants, scale_torch)
+
 
     if(TRAIN_FLAG):
         PINN.train_pinn_sol_v0(p_net, configuration)

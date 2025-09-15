@@ -10,6 +10,7 @@ import sys
 sys.path.insert(0, '../utilities/')
 from _General.astrodynamics import *
 from _General.neuralnetworks import PNet, PNet_XL_Sphere, load_trained_model
+from _General.neuralnetworks import TimeToGMM6D
 from _General.util import compute_volume, save_metrics_npz, load_metrics_npz
 
 
@@ -168,24 +169,37 @@ def compute_pdf_variations(data_mc=None, p_net=None, data_lp=None, data_ut=None,
 
 
 def compare_corner_plots(data_mc=None, data_lp=None, data_ut=None, save_path=None, 
-                         OUTPUT_PATH=None):
+                         OUTPUT_PATH=None, p_net_gmm_N1=None, p_net_gmm=None):
+    
+    def _print_min_max_per_dim(X: np.ndarray):
+        X = np.asarray(X)
+        assert X.ndim == 2 and X.shape[1] == 6, f"Expected (N,6), got {X.shape}"
+        mins = X.min(axis=0)
+        maxs = X.max(axis=0)
+        for i, (mn, mx) in enumerate(zip(mins, maxs), start=1):
+            print(f"x{i}: min={mn:.6g}  max={mx:.6g}")
+
     global constants
     t_show = constants.T_PRIME_SPAN
     for idx, t in enumerate(t_show):
         print("\ntime {:.4f}".format(t))
         if(data_mc is None):
             continue
-        print("[info] ref")
+        # print("[info] ref")
         # load samples from MC
         filename_mc = data_mc+"xsamples_t{:.3f}.npy".format(t)
         if(os.path.exists(filename_mc)):
             X_ref = np.load(filename_mc)
+            _print_min_max_per_dim(X_ref)
         else:
             continue
         # Full corner plot
         plot_full_corner(constants, t, X_ref, 
-                         OUTPUT_PATH=OUTPUT_PATH, data_lp=data_lp, 
-                         ranges="auto"
+                         OUTPUT_PATH=OUTPUT_PATH,
+                         p_net_gmm_N1=p_net_gmm_N1,
+                         p_net_gmm=p_net_gmm,
+                         data_lp=data_lp, 
+                         ranges="fixed"
                          )
         plt.show()
 
@@ -263,20 +277,32 @@ def main():
     data_mc = "dataset/run1/"
     global constants
 
-    OUTPUT_PATH = "output/v0"
-    p_net = PNet_XL_Sphere(constants)
-    p_net = load_trained_model(p_net, path=OUTPUT_PATH+"/p_net.pth"); p_net.eval()
-    print("[check] p_net scale: ", p_net.scale)
+    # mlp
+    # OUTPUT_PATH = "output/v0"
+    # p_net = PNet_XL_Sphere(constants)
+
+    # pinn-gmm
+    OUTPUT_PATH = "output/pinn-gmm" # 1-component GMM as baseline
+    p_net_gmm_N1 = TimeToGMM6D(constants)
+    p_net_gmm_N1 = load_trained_model(p_net_gmm_N1, path=OUTPUT_PATH+"/p_net.pth"); p_net_gmm_N1.eval()
+
+    OUTPUT_PATH = "output/pinn-gmm-N11" # 11-components GMM
+    p_net_gmm = TimeToGMM6D(constants, K=11)
+    p_net_gmm = load_trained_model(p_net_gmm, path=OUTPUT_PATH+"/p_net.pth"); p_net_gmm.eval()
 
     data_lp = PropagationData(SAVE_PATH_LINEAR_PROPAGATE)
 
     compute_pdf_variations(data_mc=data_mc, 
-                           p_net=p_net, 
+                           p_net=p_net_gmm, 
                            data_lp=data_lp,
                            )
     
     # --- Plots ---
-    compare_corner_plots(data_mc, OUTPUT_PATH=OUTPUT_PATH, data_lp=data_lp)
+    compare_corner_plots(data_mc, 
+                         OUTPUT_PATH=None, 
+                         p_net_gmm_N1=p_net_gmm_N1,
+                         p_net_gmm=p_net_gmm,
+                         data_lp=None)
     # compare_corner_plots_XYZ(MC_FOLDER)
 
 

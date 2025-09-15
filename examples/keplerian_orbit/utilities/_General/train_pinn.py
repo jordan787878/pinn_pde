@@ -136,6 +136,8 @@ def train_pinn_sol_v0(p_net, configuration):
     save_path = configuration["save_path"]
     beta_incre = configuration["beta_incre"]
     normalize = configuration["loss_normalize"]
+    reg_tv = configuration["reg_tv"]
+    increased_icsamples_factor = int(configuration.get("increased_icsamples_factor", 1))
     
     mse_cost_function = torch.nn.MSELoss()
     optimizer = torch.optim.Adam(p_net.parameters(), lr=1e-3)
@@ -145,8 +147,9 @@ def train_pinn_sol_v0(p_net, configuration):
     iterations_per_decay = 1000
     loss_history = []
     
-    N0_samples_initial = 2000
+    N0_samples_initial = 2000 * increased_icsamples_factor
     Nr_samples_initial = 2000
+    print("[check] number of IC samples: ", N0_samples_initial )
     
     N_RAR = 30000
     x_bc_rar = torch.empty(0, 6, device=device)
@@ -185,6 +188,10 @@ def train_pinn_sol_v0(p_net, configuration):
 
         # --- Total Loss ---
         loss = mse_u + res_weight * mse_res
+        if(reg_tv is not None):
+            tv_t = torch.autograd.grad(res_p, t_res, grad_outputs=torch.ones_like(res_p), create_graph=True)[0]
+            mse_tv = mse_cost_function(tv_t/normalize, all_zeros)
+            loss += reg_tv * mse_tv
         loss_history.append(loss.item())
         loss.backward(retain_graph=True)
         torch.nn.utils.clip_grad_norm_(p_net.parameters(), max_norm=1.0) # Gradient Clipping
@@ -198,7 +205,10 @@ def train_pinn_sol_v0(p_net, configuration):
         # --- Save min loss model and update beta ---
         if loss.data < 0.95 * min_loss:
             train_time = time.time() - start_time
-            print(f"--- Save Epoch: {epoch+1}, Loss: {loss.item():.4f}, IC: {mse_u.item():.4f}, Res: {mse_res.item():.4f}, Beta: {beta:.2f} ---")
+            if(reg_tv is not None):
+                print(f"--- Save Epoch: {epoch+1}, Loss: {loss.item():.4f}, IC: {mse_u.item():.4f}, Res: {mse_res.item():.4f} & {mse_tv.item():.4f}, Beta: {beta:.2f} ---")
+            else:
+                print(f"--- Save Epoch: {epoch+1}, Loss: {loss.item():.4f}, IC: {mse_u.item():.4f}, Res: {mse_res.item():.4f}, Beta: {beta:.2f} ---")
             if save_path is not None:
                 torch.save({
                     'epoch': epoch, 'model_state_dict': p_net.state_dict(),

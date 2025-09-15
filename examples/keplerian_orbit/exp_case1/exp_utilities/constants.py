@@ -37,12 +37,12 @@ class Case1_6D_Constants:
     _J2_VR = 2.0*(3*_T**2 * _J2 * _MU_EARTH * _R_EARTH**2)/(2*_R**5)
 
     # Domain of TF = 0.1*T
-    _X1_RANGE = np.float32(np.array([20.1, 22.1]))
-    _X2_RANGE = np.float32(np.array([103.5, 105.9]))
+    _X1_RANGE = np.float32(np.array([19.0, 23.0]))
+    _X2_RANGE = np.float32(np.array([103.0, 106.0]))
     _X3_RANGE = np.float32(np.array([-2.2, 2.2]))
-    _X4_RANGE = np.float32(np.array([-10., 10.]))
-    _X5_RANGE = np.float32(np.array([-6., 6.]))
-    _X6_RANGE = np.float32(np.array([-8., 8.]))
+    _X4_RANGE = np.float32(np.array([-16., 16.]))
+    _X5_RANGE = np.float32(np.array([-10., 10.]))
+    _X6_RANGE = np.float32(np.array([-12., 14.]))
     
     # _MAX_PX1  = np.float32(3.0)
     # _MAX_PX2  = np.float32(1.8)
