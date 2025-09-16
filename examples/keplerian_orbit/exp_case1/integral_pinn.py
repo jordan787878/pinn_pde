@@ -202,7 +202,7 @@ if __name__ == '__main__':
     p_net = load_trained_model(p_net, path=OUTPUT_PATH+"/p_net.pth"); p_net.eval()
     print("[check] p_net scale: ", p_net.scale)
 
-    for t in constants.T_PRIME_SPAN[1:]:
+    for t in constants.T_PRIME_SPAN:
         # Marginalize 2D
         for i in range(1, 5+1):
             for j in range(i+1, 6+1):

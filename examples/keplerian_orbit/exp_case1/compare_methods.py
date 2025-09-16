@@ -278,7 +278,7 @@ def main():
     global constants
 
     # mlp
-    # OUTPUT_PATH = "output/v0"
+    PNet_XL_PATH = "output/v0"
     # p_net = PNet_XL_Sphere(constants)
 
     # pinn-gmm
@@ -299,7 +299,7 @@ def main():
     
     # --- Plots ---
     compare_corner_plots(data_mc, 
-                         OUTPUT_PATH=None, 
+                         OUTPUT_PATH=PNet_XL_PATH, 
                          p_net_gmm_N1=p_net_gmm_N1,
                          p_net_gmm=p_net_gmm,
                          data_lp=None)

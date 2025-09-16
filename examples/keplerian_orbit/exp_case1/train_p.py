@@ -169,14 +169,14 @@ def main():
     scale_torch = torch.tensor(scale, dtype=torch.float32); print(scale_torch)
 
     # mlp
-    # p_net = PNet_XL_Sphere(constants, scale=scale_torch)
-    # configuration = config_training_PNet_XL_Sphere(constants, scale_torch)
+    p_net = PNet_XL_Sphere(constants, scale=scale_torch)
+    configuration = config_training_PNet_XL_Sphere(constants, scale_torch)
 
     # gmm
     # p_net = TimeToGMM6D(constants) # 1-component GMM
     # configuration = config_training_TimeToGMM6D(constants, scale_torch)
-    p_net = TimeToGMM6D(constants, K=11) # 11-components GMM
-    configuration = config_training_TimeToGMM6D(constants, scale_torch)
+    # p_net = TimeToGMM6D(constants, K=11) # 11-components GMM
+    # configuration = config_training_TimeToGMM6D(constants, scale_torch)
 
 
     if(TRAIN_FLAG):

@@ -88,7 +88,7 @@ def plot_full_corner(constants, t,
     else:
         raise("range for full corner plot not implemented.")
 
-    sns_colors = sns.color_palette("husl", 3)
+    sns_colors = sns.color_palette("husl", 6)
     fig, axes = plt.subplots(D, D, figsize=(figsize_per_dim*D, figsize_per_dim*D))
     plt.subplots_adjust(wspace=0.08, hspace=0.08)
 
@@ -136,7 +136,7 @@ def plot_full_corner(constants, t,
                 pdf_func = multivariate_normal(mean=mus[k,d], cov=covs[k,d,d])
                 p_k = pdf_func.pdf(x_vals).reshape(x_vals.shape)
                 pdf_values += ws[k] * p_k
-            ax.plot(x_vals, pdf_values, color=sns_colors[0])
+            ax.plot(x_vals, pdf_values, color=sns_colors[2])
 
     # Off-diagonals: scatter or heatmap (counts)
     for i in range(1, D):
@@ -181,10 +181,10 @@ def plot_full_corner(constants, t,
                     pdf_max = np.max(pdf_values[pdf_values > 0])
                     # Define levels as percentages of the maximum value
                     # For example, levels at 5%, 25%, 50%, 75%, and 95% of the max
-                    relative_levels = np.array([0.01, 0.05, 0.25, 0.50, 0.75, 0.95])
+                    relative_levels = np.array([0.01, 0.05, 0.50, 0.95])
                     levels = relative_levels * pdf_max
                     # Draw the contour lines with the custom levels
-                    ax.contour(X_grid, Y_grid, pdf_values, levels=levels, colors=[sns_colors[0]], linewidths=1.5)
+                    ax.contour(X_grid, Y_grid, pdf_values, levels=levels, colors=[sns_colors[0]], linewidths=1.)
                     return levels
 
             if(OUTPUT_PATH is not None):
@@ -220,19 +220,19 @@ def plot_full_corner(constants, t,
                         ax.contour(X_grid, Y_grid, p_k, levels=_levels, colors=[color], 
                                 linewidths=0.3, alpha=0.4)
 
-                relative_levels = np.array([0.01, 0.05, 0.25, 0.50, 0.75, 0.95])
+                relative_levels = np.array([0.01, 0.05, 0.50, 0.95])
                 pdf_max = np.max(pdf_values).item()
                 levels = relative_levels * pdf_max
                 ax.contour(X_grid, Y_grid, pdf_values, levels=levels, colors=[color], 
-                           linewidths=1.5)
+                           linewidths=1.)
 
             if(p_net_gmm_N1 is not None):
                 x_coords = (j+1, i+1)
-                _plot_pinn_gmm_contour(x_coords, p_net_gmm_N1, sns_colors[2])
+                _plot_pinn_gmm_contour(x_coords, p_net_gmm_N1, sns_colors[1])
                             
             if(p_net_gmm is not None):
                 x_coords = (j+1, i+1)
-                _plot_pinn_gmm_contour(x_coords, p_net_gmm, sns_colors[0])
+                _plot_pinn_gmm_contour(x_coords, p_net_gmm, sns_colors[2])
 
             if(data_lp is not None):
                 x_coords = (j+1, i+1)
@@ -245,11 +245,11 @@ def plot_full_corner(constants, t,
                 X_grid, Y_grid = np.meshgrid(xs, ys, indexing="ij")
                 grid_pts = np.vstack([X_grid.ravel(), Y_grid.ravel()]).T
                 pdf_values = p_normal(grid_pts, marginal_mu, marginal_cov).reshape(X_grid.shape)
-                relative_levels = np.array([0.01, 0.05, 0.25, 0.50, 0.75, 0.95])
+                relative_levels = np.array([0.01, 0.05, 0.50, 0.95])
                 pdf_max = np.max(pdf_values).item()
                 levels = relative_levels * pdf_max
                 # Draw the contour lines with the custom levels
-                ax.contour(X_grid, Y_grid, pdf_values, levels=levels, colors=[sns_colors[1]], 
+                ax.contour(X_grid, Y_grid, pdf_values, levels=levels, colors=[sns_colors[3]], 
                            linewidths=1.5)
 
             # set_axis_limits_with_buffer(ax, (xlo, xhi), (ylo, yhi))
