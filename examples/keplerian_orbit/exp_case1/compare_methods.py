@@ -282,9 +282,9 @@ def main():
     # p_net = PNet_XL_Sphere(constants)
 
     # pinn-gmm
-    OUTPUT_PATH = "output/pinn-gmm" # 1-component GMM as baseline
-    p_net_gmm_N1 = TimeToGMM6D(constants)
-    p_net_gmm_N1 = load_trained_model(p_net_gmm_N1, path=OUTPUT_PATH+"/p_net.pth"); p_net_gmm_N1.eval()
+    # OUTPUT_PATH = "output/pinn-gmm" # 1-component GMM as baseline
+    # p_net_gmm_N1 = TimeToGMM6D(constants)
+    # p_net_gmm_N1 = load_trained_model(p_net_gmm_N1, path=OUTPUT_PATH+"/p_net.pth"); p_net_gmm_N1.eval()
 
     OUTPUT_PATH = "output/pinn-gmm-N11" # 11-components GMM
     p_net_gmm = TimeToGMM6D(constants, K=11)
@@ -299,9 +299,9 @@ def main():
     
     # --- Plots ---
     compare_corner_plots(data_mc, 
-                         OUTPUT_PATH=PNet_XL_PATH, 
-                         p_net_gmm_N1=p_net_gmm_N1,
-                         p_net_gmm=p_net_gmm,
+                         OUTPUT_PATH=None,#PNet_XL_PATH, 
+                         p_net_gmm_N1=None, #p_net_gmm_N1,
+                         p_net_gmm=p_net_gmm,#p_net_gmm,
                          data_lp=None)
     # compare_corner_plots_XYZ(MC_FOLDER)
 

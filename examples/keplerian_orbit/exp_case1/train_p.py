@@ -115,7 +115,7 @@ def config_training_PNet_XL_Sphere(constants, scale_torch):
 def config_training_TimeToGMM6D(constants, scale_torch):
     configuration = {
         "constants": constants,
-        "iterations": 16000,
+        "iterations": 40000,
         "sample_ic": constants.sample_init_points,
         "sample_res": constants.sample_res_points,
         "p_ic": p_init,
@@ -169,15 +169,16 @@ def main():
     scale_torch = torch.tensor(scale, dtype=torch.float32); print(scale_torch)
 
     # mlp
-    p_net = PNet_XL_Sphere(constants, scale=scale_torch)
-    configuration = config_training_PNet_XL_Sphere(constants, scale_torch)
+    # p_net = PNet_XL_Sphere(constants, scale=scale_torch)
+    # configuration = config_training_PNet_XL_Sphere(constants, scale_torch)
 
     # gmm
     # p_net = TimeToGMM6D(constants) # 1-component GMM
     # configuration = config_training_TimeToGMM6D(constants, scale_torch)
-    # p_net = TimeToGMM6D(constants, K=11) # 11-components GMM
-    # configuration = config_training_TimeToGMM6D(constants, scale_torch)
-
+    p_net = TimeToGMM6D(constants, K=11) # 11-components GMM
+    configuration = config_training_TimeToGMM6D(constants, scale_torch)
+    # NOTE: [can try] train p_net from existing pinn-gmm-N11_T01
+    # p_net = load_trained_model(p_net, path="output/pinn-gmm-N11_T01/p_net.pth"); p_net.train()
 
     if(TRAIN_FLAG):
         PINN.train_pinn_sol_v0(p_net, configuration)

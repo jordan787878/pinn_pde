@@ -19,7 +19,8 @@ class Case1_6D_Constants:
     _THETA    = np.float32(0.015)
     _PHI      = np.float32(0.0387)
     _TI       = np.float32(0.0)
-    _TF       = np.float32(0.1*_T)
+    # _TF       = np.float32(0.1*_T)
+    _TF       = np.float32(0.2*_T)
     _MEAN_I   = np.float32([_A, 0.5*_PI, 0.0, 0.0, 0.0, _W])
     _N_MEAN_I = np.float32([_MEAN_I[0]/_R,
                             _MEAN_I[1]/_THETA, 
@@ -36,19 +37,28 @@ class Case1_6D_Constants:
     _J2 = np.float32(1.0826e-3)
     _J2_VR = 2.0*(3*_T**2 * _J2 * _MU_EARTH * _R_EARTH**2)/(2*_R**5)
 
-    # Domain of TF = 0.1*T
-    _X1_RANGE = np.float32(np.array([19.0, 23.0]))
-    _X2_RANGE = np.float32(np.array([103.0, 106.0]))
-    _X3_RANGE = np.float32(np.array([-2.2, 2.2]))
-    _X4_RANGE = np.float32(np.array([-16., 16.]))
+    # # Domain of TF = 0.1*T
+    # _X1_RANGE = np.float32(np.array([19.0, 23.0]))
+    # _X2_RANGE = np.float32(np.array([103.0, 106.0]))
+    # _X3_RANGE = np.float32(np.array([-2.2, 2.2]))
+    # _X4_RANGE = np.float32(np.array([-16., 16.]))
+    # _X5_RANGE = np.float32(np.array([-10., 10.]))
+    # _X6_RANGE = np.float32(np.array([-12., 14.]))
+
+    # Domain of TF = 0.2*T
+    _X1_RANGE = np.float32(np.array([17.0, 25.0]))
+    _X2_RANGE = np.float32(np.array([102.0, 107.0]))
+    _X3_RANGE = np.float32(np.array([-4., 4.]))
+    _X4_RANGE = np.float32(np.array([-25., 25.]))
     _X5_RANGE = np.float32(np.array([-10., 10.]))
-    _X6_RANGE = np.float32(np.array([-12., 14.]))
+    _X6_RANGE = np.float32(np.array([-30., 45.]))
     
     # _MAX_PX1  = np.float32(3.0)
     # _MAX_PX2  = np.float32(1.8)
     # _MAX_PX3  = np.float32(0.35)
     # _MAX_PX4  = np.float32(0.2)
-    _T_PRIME_SPAN   = np.float32(np.array([0.0, 0.02, 0.04, 0.06, 0.08, 0.1]))
+    # _T_PRIME_SPAN   = np.float32(np.array([0.0, 0.02, 0.04, 0.06, 0.08, 0.1]))
+    _T_PRIME_SPAN   = np.float32(2. * np.array([0.0, 0.02, 0.04, 0.06, 0.08, 0.1]))
 
     @property
     def MU_EARTH(self):

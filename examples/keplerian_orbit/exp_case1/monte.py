@@ -12,9 +12,8 @@ import sys
 sys.path.insert(0, '../utilities/')
 from _General.astrodynamics import *
 
-GRID_FOLDER = "data/grids/"
-SAMPLES_FOLDER = "data/samples/"
 
+GRID_FOLDER = "data/grids/"
 constants = Case1_6D_Constants()
 np.random.seed(0)
 
@@ -88,6 +87,15 @@ def p_sol_monte(t=0.0, linespace_num=31, stat_sample=1000000):
         x_t = sphere_to_rnsphere(cartesian_to_sphere(x_cart_t.reshape(1,-1)), t, constants)
         # update state
         X[i,:] = x_t
+
+    def _print_min_max_per_dim(X: np.ndarray):
+        X = np.asarray(X)
+        assert X.ndim == 2 and X.shape[1] == 6, f"Expected (N,6), got {X.shape}"
+        mins = X.min(axis=0)
+        maxs = X.max(axis=0)
+        for i, (mn, mx) in enumerate(zip(mins, maxs), start=1):
+            print(f"x{i}: min={mn:.6g}  max={mx:.6g}")
+    _print_min_max_per_dim(X)
     
     # Define bins for each dimension
     bins_x1 = np.linspace(constants.X1_RANGE[0], constants.X1_RANGE[1], num=linespace_num, endpoint=True).astype(np.float32)
@@ -242,13 +250,13 @@ def generate_data(data_folder, N_samples):
             # np.save(d+"/pdf_t{:.3f}.npy".format(t_prime), pdf)
             np.save(d+"/xsamples_t{:.3f}.npy".format(t_prime), X)
             
-            if t_prime == 0.0 and j == 1:
-                np.save(GRID_FOLDER+"x1s.npy", x1s)
-                np.save(GRID_FOLDER+"x2s.npy", x2s)
-                np.save(GRID_FOLDER+"x3s.npy", x3s)
-                np.save(GRID_FOLDER+"x4s.npy", x4s)
-                np.save(GRID_FOLDER+"x5s.npy", x5s)
-                np.save(GRID_FOLDER+"x6s.npy", x6s)
+            # if t_prime == 0.0 and j == 1:
+            #     np.save(GRID_FOLDER+"x1s.npy", x1s)
+            #     np.save(GRID_FOLDER+"x2s.npy", x2s)
+            #     np.save(GRID_FOLDER+"x3s.npy", x3s)
+            #     np.save(GRID_FOLDER+"x4s.npy", x4s)
+            #     np.save(GRID_FOLDER+"x5s.npy", x5s)
+            #     np.save(GRID_FOLDER+"x6s.npy", x6s)
 
         if j == 1:
             np.save(data_folder+"/mc_time.npy", np.array(mc_time))
