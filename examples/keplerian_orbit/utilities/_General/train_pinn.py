@@ -1,9 +1,137 @@
 import numpy as np
 import torch
 import time
-
-
+from torch.distributions import Categorical, MultivariateNormal
 device = "cpu"
+
+
+def _enable_grad(x: torch.Tensor, t: torch.Tensor):
+    """Return fresh tensors with requires_grad=True (no graph history kept)."""
+    xg = x.detach().clone().requires_grad_(True)
+    tg = t.detach().clone().requires_grad_(True)
+    return xg, tg
+
+
+@torch.no_grad()
+def sample_from_model_gmm_xspace(p_net, constants, N_samples, device, t_sampler="uniform", t_values=None):
+    """
+    Draw N_samples from the current model p_theta(x,t) in **x-space**.
+    Requires the model to provide either:
+      - vectorized params(tau) -> (means_z, Ls_z, logw), then z->x mapping, or
+      - a batched version of weights_means_covs_at; if not available, we roll our own.
+
+    Returns:
+      x_gmm: (N_samples, D)
+      t_gmm: (N_samples, 1)
+    """
+    D = int(len(constants.N_MEAN_I))
+    T_end = float(constants.T_PRIME_SPAN[-1])
+    N = int(N_samples)
+
+    # ---- sample times ----
+    if t_sampler == "uniform" or t_values is None:
+        t = torch.rand(N, 1, device=device, dtype=torch.float32) * T_end
+    else:
+        # t_values provided as (N,1)
+        t = t_values.to(device=device, dtype=torch.float32)
+        if t.ndim == 1: t = t.view(-1, 1)
+        if t.shape[0] != N:
+            # simple fallback if sizes mismatch
+            t = torch.rand(N, 1, device=device, dtype=torch.float32) * T_end
+
+    # ---- get mixture parameters in x-space for each t ----
+    # If your class has a vectorized "params" method, use it directly for speed.
+    # Otherwise, do a small batch loop over unique time minibatches.
+    # Here we try to use a vectorized path first; if missing, fall back to loop.
+    x_list = []
+
+    try:
+        tau = t / p_net.T_end
+        means_z, Ls_z, logw = p_net.params(tau)                     # (N,K,D), (N,K,D,D), (N,K)
+        means_x, Ls_x = p_net._zparams_to_xparams(means_z, Ls_z)    # x-space
+        weights = logw.exp()                                         # (N,K)
+        K = weights.shape[1]
+        # sample component per row
+        comp = Categorical(weights).sample()                         # (N,)
+        # fancy gather means_x, Ls_x by comp
+        inds = comp.view(-1, 1, 1).expand(-1, 1, D)
+        mu_sel = means_x.gather(1, inds).squeeze(1)                  # (N,D)
+
+        indsL = comp.view(-1, 1, 1, 1).expand(-1, 1, D, D)
+        L_sel = Ls_x.gather(1, indsL).squeeze(1)                     # (N,D,D)
+
+        # sample from selected Gaussians
+        eps = torch.randn(N, D, device=device, dtype=mu_sel.dtype)   # (N,D)
+        x = mu_sel + torch.matmul(L_sel, eps.unsqueeze(-1)).squeeze(-1)
+        x_list.append(x)
+    except Exception:
+        # Fallback: per-sample (slower but robust)
+        x = torch.empty(N, D, device=device, dtype=torch.float32)
+        for i in range(N):
+            wi, mui, covi = p_net.weights_means_covs_at(float(t[i,0].item()))
+            wi = wi.to(device=device); mui = mui.to(device=device); covi = covi.to(device=device)
+            comp = torch.multinomial(wi, 1).item()
+            mvn = MultivariateNormal(mui[comp], covariance_matrix=covi[comp])
+            x[i] = mvn.sample()
+        x_list.append(x)
+
+    x_gmm = torch.cat(x_list, dim=0)
+    return x_gmm, t
+
+
+@torch.no_grad()
+def rar_candidate_pool_mixed(p_net,
+                             constants,
+                             N_cand,
+                             alpha_model=0.5,
+                             sample_uniform_fn=None,   # function that returns (x_u, t_u) uniform
+                             device="cpu"):
+    """
+    Build a candidate pool for RAR by mixing:
+      - (1-alpha) fraction from uniform sampler over domain/time
+      - alpha fraction from the current model GMM in x-space
+
+    Returns:
+      x_cand: (N_cand, D)
+      t_cand: (N_cand, 1)
+    """
+    N_model = int(round(alpha_model * N_cand))
+    N_uni   = max(0, N_cand - N_model)
+
+    xs, ts = [], []
+
+    if N_uni > 0:
+        assert sample_uniform_fn is not None, "Provide sample_uniform_fn to draw uniform residual points."
+        x_u, t_u = sample_uniform_fn(N_uni)            # expect tensors on CPU/GPU already
+        xs.append(x_u.to(device))
+        ts.append(t_u.to(device))
+
+    if N_model > 0:
+        x_m, t_m = sample_from_model_gmm_xspace(p_net, constants, N_model, device=device)
+        xs.append(x_m)
+        ts.append(t_m)
+
+    x_cand = torch.cat(xs, dim=0)
+    t_cand = torch.cat(ts, dim=0)
+
+    # Random shuffle to avoid ordering bias
+    perm = torch.randperm(x_cand.shape[0], device=device)
+    return x_cand[perm], t_cand[perm]
+
+
+def rar_append_with_cap(x_buf, t_buf, x_new, t_new, cap: int):
+    """
+    Append new rows to buffers; drop oldest if exceeding 'cap'.
+    Buffers store VALUES ONLY (no grad history).
+    """
+    with torch.no_grad():
+        x_cat = torch.cat([x_buf, x_new.detach()], dim=0)
+        t_cat = torch.cat([t_buf, t_new.detach()], dim=0)
+        excess = x_cat.shape[0] - int(cap)
+        if excess > 0:
+            x_cat = x_cat[excess:, :]
+            t_cat = t_cat[excess:, :]
+    return x_cat, t_cat
 
 
 def train_pinn_sol_base(constants, p_net, configurations, iterations=50000, save_model=False, beta_incre=0.02):
@@ -203,12 +331,12 @@ def train_pinn_sol_v0(p_net, configuration):
             print(f"[info] Training epoch: {epoch+1}, LR: {optimizer.param_groups[0]['lr']:.2e}")
 
         # --- Save min loss model and update beta ---
-        if loss.data < 0.95 * min_loss:
+        if loss.data < min_loss:
             train_time = time.time() - start_time
             if(reg_tv is not None):
-                print(f"--- Save Epoch: {epoch+1}, Loss: {loss.item():.4f}, IC: {mse_u.item():.4f}, Res: {mse_res.item():.4f} & {mse_tv.item():.4f}, Beta: {beta:.2f} ---")
+                print(f"--- Save Epoch: {epoch+1}, Loss: {loss.item():.4f}, IC: {mse_u.item():.4e}, Res: {mse_res.item():.4e} & {mse_tv.item():.4e}, Beta: {beta:.2f} ---")
             else:
-                print(f"--- Save Epoch: {epoch+1}, Loss: {loss.item():.4f}, IC: {mse_u.item():.4f}, Res: {mse_res.item():.4f}, Beta: {beta:.2f} ---")
+                print(f"--- Save Epoch: {epoch+1}, Loss: {loss.item():.4f}, IC: {mse_u.item():.4e}, Res: {mse_res.item():.4e}, Beta: {beta:.2f} ---")
             if save_path is not None:
                 torch.save({
                     'epoch': epoch, 'model_state_dict': p_net.state_dict(),
@@ -224,7 +352,7 @@ def train_pinn_sol_v0(p_net, configuration):
             FLAG = False
             # Add IC points
             with torch.no_grad():
-                x_bc_check, t_bc_check = train_helper_sample_ic(N_RAR)
+                x_bc_check, t_bc_check = train_helper_sample_ic(N_RAR, Fac_uniform=10, Fac_std=3)
                 p_i = p_init(constants, x_bc_check.detach().cpu().numpy())
                 p_i = torch.tensor(p_i, dtype=torch.float32, device=device)
                 phat_i = p_net(x_bc_check, t_bc_check)
@@ -236,15 +364,37 @@ def train_pinn_sol_v0(p_net, configuration):
                     t_bc_rar = torch.cat((t_bc_rar, t_bc_check[max_indices]), dim=0)
                     print(f"... RAR IC , Max IC error: {max_error_ic:.4f}")
             # Add Residual points
-            x_res_check, t_res_check = train_helper_sample_res(N_RAR)
-            res_p = res_func(x_res_check, t_res_check, p_net, beta=beta)
-            res_errors = torch.abs(res_p) / normalize
-            max_error_res = res_errors.max().item()
-            if max_error_res > RAR_eps:
-                max_indices = torch.topk(res_errors.squeeze(), 10).indices
-                x_res_rar = torch.cat((x_res_rar, x_res_check[max_indices, :]), dim=0)
-                t_res_rar = torch.cat((t_res_rar, t_res_check[max_indices]), dim=0)
-                print(f"... RAR Res, Max Res error: {max_error_res:.4f}")
+            alpha_model = 0.50  # tune 0.2–0.8
+            sample_uniform_fn = lambda n: train_helper_sample_res(n)  # must return (x, t) WITHOUT grad
+            x_cand_raw, t_cand_raw = rar_candidate_pool_mixed(
+                p_net, constants, N_cand=N_RAR, alpha_model=alpha_model,
+                sample_uniform_fn=sample_uniform_fn, device=device
+            )
+            # 2) enable grad ONLY for the residual scoring step
+            x_cand, t_cand = _enable_grad(x_cand_raw, t_cand_raw)
+            # 3) score with FP residual (no torch.no_grad here!)
+            res_vals = res_func(x_cand, t_cand, p_net, beta=beta)  # (N_RAR,1)
+            res_err  = torch.abs(res_vals) / normalize
+            max_err  = res_err.max().item()
+            if max_err > RAR_eps:
+                k_res = 32  # how many to add
+                topk  = torch.topk(res_err.squeeze(), k=k_res)
+                idx   = topk.indices
+                x_res_rar_new = x_cand.detach()[idx, :]  # store VALUES ONLY
+                t_res_rar_new = t_cand.detach()[idx, :]
+                # 4) append with FIFO cap
+                x_res_rar, t_res_rar = rar_append_with_cap(x_res_rar, t_res_rar, x_res_rar_new, t_res_rar_new, cap=4000)
+                print(f"... RAR RES, Max residual error: {max_err:.4f}, t:", t_res_rar_new[0:3].data)
+            # (old sampling method)
+            # x_res_check, t_res_check = train_helper_sample_res(N_RAR, Fac_uniform=10, Fac_std=3)
+            # res_p = res_func(x_res_check, t_res_check, p_net, beta=beta)
+            # res_errors = torch.abs(res_p) / normalize
+            # max_error_res = res_errors.max().item()
+            # if max_error_res > RAR_eps:
+            #     max_indices = torch.topk(res_errors.squeeze(), 10).indices
+            #     x_res_rar = torch.cat((x_res_rar, x_res_check[max_indices, :]), dim=0)
+            #     t_res_rar = torch.cat((t_res_rar, t_res_check[max_indices]), dim=0)
+            #     print(f"... RAR Res, Max Res error: {max_error_res:.4f}")
 
 
 def train_pinn_sol_v0_scaled_improved(constants, p_net, configurations, 

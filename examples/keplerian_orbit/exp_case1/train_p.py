@@ -12,7 +12,7 @@ from exp_utilities.constants import Case1_6D_Constants
 import sys
 sys.path.insert(0, '../utilities/')
 from _General.neuralnetworks import PNet, PNet_XL_Sphere, load_trained_model
-from _General.neuralnetworks import TimeToGMM6D
+from _General.neuralnetworks import TimeToGMM6D, TimeToGMM6D_Test
 import _General.train_pinn as PINN
 
 
@@ -125,8 +125,51 @@ def config_training_TimeToGMM6D(constants, scale_torch):
         "save_path": "output/pinn-gmm-N11",
         "beta_incre": 0.02,
         "loss_normalize": scale_torch,
-        "reg_tv": 0.0,
-        # "increased_icsamples_factor": 11,
+        "reg_tv": None,
+        # "increased_icsamples_factor": 4, # increase the number of IC sample size
+        # "beta_0": 1.0, # initialized to 1.0 if pre-trained pinn-gmm model is used
+    }
+    return configuration
+
+
+def config_training_TimeToGMM6D_Test(constants, scale_torch):
+    configuration = {
+        "constants": constants,
+        "iterations": 40000,
+        "sample_ic": constants.sample_init_points,
+        "sample_res": constants.sample_res_points,
+        "sample_ic_uniform": constants.sample_init_points_uniform,
+        "sample_res_uniform": constants.sample_res_points_uniform,
+        "p_ic": p_init,
+        "res_func": diff_opt,
+        "res_weight": 1.0,
+        "save_path": "output/pinn-gmm(Test)",
+        "beta_incre": 0.02,
+        "loss_normalize": scale_torch,
+        "reg_tv": None,
+    }
+    return configuration
+
+
+def config_training_TimeToGMM6D_Test1(constants, scale_torch):
+    configuration = {
+        "constants": constants,
+        # "iterations": 40000,
+        "iterations": 100000,
+        "sample_ic": constants.sample_init_points,
+        "sample_res": constants.sample_res_points,
+        "sample_ic_uniform": constants.sample_init_points_uniform,
+        "sample_res_uniform": constants.sample_res_points_uniform,
+        "p_ic": p_init,
+        "res_func": diff_opt,
+        "res_weight": 1.0,
+        "save_path": "output/pinn-gmm(Test1)",
+        "beta_incre": 0.02,
+        "loss_normalize": scale_torch,
+        "reg_tv": None,
+        # "increased_icsamples_factor": 7, # increase the number of IC sample size
+        # "increased_ressamples_factor": 7,
+        # "beta_0": 1.0, # initialized to 1.0 if pre-trained pinn-gmm model is used
     }
     return configuration
 
@@ -175,17 +218,19 @@ def main():
     # gmm
     # p_net = TimeToGMM6D(constants) # 1-component GMM
     # configuration = config_training_TimeToGMM6D(constants, scale_torch)
-    p_net = TimeToGMM6D(constants, K=11) # 11-components GMM
-    configuration = config_training_TimeToGMM6D(constants, scale_torch)
+    
+    # p_net = TimeToGMM6D(constants, K=11) # real GMM
+    # configuration = config_training_TimeToGMM6D(constants, scale_torch)
     # NOTE: [can try] train p_net from existing pinn-gmm-N11_T01
-    # p_net = load_trained_model(p_net, path="output/pinn-gmm-N11_T01/p_net.pth"); p_net.train()
+    # p_net = load_trained_model(p_net, path="output/pinn-gmm-N11_T02/p_net.pth"); p_net.train()
+    p_net = TimeToGMM6D_Test(constants, K=11)
+    # configuration = config_training_TimeToGMM6D_Test(constants, scale_torch)
+    configuration = config_training_TimeToGMM6D_Test1(constants, scale_torch)
 
     if(TRAIN_FLAG):
         PINN.train_pinn_sol_v0(p_net, configuration)
-    
     # --- Load the best network after training ---   
     p_net = load_trained_model(p_net, path=configuration["save_path"]+"/p_net.pth"); p_net.eval()
-
     # --- Check PNet against p_init
     check_pnet_against_pinit(p_net)
 

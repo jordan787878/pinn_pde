@@ -89,8 +89,15 @@ def plot_full_corner(constants, t,
         raise("range for full corner plot not implemented.")
 
     sns_colors = sns.color_palette("husl", 6)
-    fig, axes = plt.subplots(D, D, figsize=(figsize_per_dim*D, figsize_per_dim*D))
-    plt.subplots_adjust(wspace=0.08, hspace=0.08)
+    fig, axes = plt.subplots(
+        D, D,
+        figsize=(figsize_per_dim*D, figsize_per_dim*D),
+        constrained_layout=True,
+        gridspec_kw={'wspace': 0.02, 'hspace': 0.02}   # small gaps
+    )
+
+    # Optional: trim outer margins further (constrained_layout respects these)
+    fig.set_constrained_layout_pads(w_pad=0.02, h_pad=0.02, wspace=0.02, hspace=0.02)
 
     def _plot_pinn_1d_marginal(x_coords):
         filename = f"{OUTPUT_PATH}/pre_compute/marginal_pdfpinn_x{x_coords}_t{t:.3f}.npz"
@@ -129,6 +136,8 @@ def plot_full_corner(constants, t,
             x_vals = np.linspace(lo, hi, num=128)
             ws, mus, covs = p_net_gmm.weights_means_covs_at(t)
             ws = ws.detach().cpu().numpy()
+            # if(d == 0):
+            #     print(ws)
             mus = mus.detach().cpu().numpy()
             covs = covs.detach().cpu().numpy()
             pdf_values = np.copy(x_vals) * 0.0
@@ -136,7 +145,14 @@ def plot_full_corner(constants, t,
                 pdf_func = multivariate_normal(mean=mus[k,d], cov=covs[k,d,d])
                 p_k = pdf_func.pdf(x_vals).reshape(x_vals.shape)
                 pdf_values += ws[k] * p_k
-            ax.plot(x_vals, pdf_values, color=sns_colors[2])
+            ax.plot(x_vals, pdf_values, color=sns_colors[0])
+        if(data_lp is not None):
+            x_vals = np.linspace(lo, hi, num=128)
+            _, mu_6d, cov_6d = data_lp.get(t)
+            pdf_values = np.copy(x_vals) * 0.0
+            pdf_func = multivariate_normal(mean=mu_6d[d], cov=cov_6d[d,d])
+            pdf_values = pdf_func.pdf(x_vals).reshape(x_vals.shape)
+            ax.plot(x_vals, pdf_values, color=sns_colors[3])
 
     # Off-diagonals: scatter or heatmap (counts)
     for i in range(1, D):
@@ -216,7 +232,7 @@ def plot_full_corner(constants, t,
                     pdf_values = pdf_values + ws_k * p_k
                     if(ws.shape[0] > 1):
                         _pdf_max = np.max(p_k).item()
-                        _levels = np.array([0.01, 0.95]) * _pdf_max
+                        _levels = np.array([0.01]) * _pdf_max
                         ax.contour(X_grid, Y_grid, p_k, levels=_levels, colors=[color], 
                                 linewidths=0.3, alpha=0.4)
 
@@ -232,7 +248,7 @@ def plot_full_corner(constants, t,
                             
             if(p_net_gmm is not None):
                 x_coords = (j+1, i+1)
-                _plot_pinn_gmm_contour(x_coords, p_net_gmm, sns_colors[2])
+                _plot_pinn_gmm_contour(x_coords, p_net_gmm, sns_colors[0])
 
             if(data_lp is not None):
                 x_coords = (j+1, i+1)
@@ -250,7 +266,7 @@ def plot_full_corner(constants, t,
                 levels = relative_levels * pdf_max
                 # Draw the contour lines with the custom levels
                 ax.contour(X_grid, Y_grid, pdf_values, levels=levels, colors=[sns_colors[3]], 
-                           linewidths=1.5)
+                           linewidths=1.)
 
             # set_axis_limits_with_buffer(ax, (xlo, xhi), (ylo, yhi))
             # ax.set_xlim(xlo, xhi); ax.set_ylim(ylo, yhi)
@@ -260,6 +276,24 @@ def plot_full_corner(constants, t,
             else: ax.set_yticklabels([])
     plt.tick_params(axis='both', which='major', labelsize=8)
     fig.tight_layout()
+
+
+def plot_pdf_metrics(metrics):
+    colors = sns.color_palette("husl", 5)
+
+    # metric 3: negative log liklihood (general KL)
+    plt.figure()
+    print(metrics["t"])
+    print(metrics["g_kl_pinn"])
+    plt.plot(metrics["t"], metrics["g_kl_pinn"], color=colors[0], label=r"$\hat{p}$ PINN-GMM")
+    plt.plot(metrics["t"], metrics["g_kl_lp"], color=colors[3],   label=r"$p$ LP")
+    # plt.plot(metrics["t"], metrics["g_kl_ut"], color=colors[2],   label=r"$p$ Unscent Trans.")
+    # plt.plot(metrics["t"], metrics["rel_kl_ut_alpha_0_1"], color=colors[2], marker="o", label=r"$p$ Unscent Trans. $(\alpha=0.1)$")
+    plt.legend()
+    plt.xlabel("t")
+    plt.ylabel("General KL")
+
+    plt.show()
 
 
 ### helper

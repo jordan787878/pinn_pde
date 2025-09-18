@@ -4,13 +4,13 @@ import torch
 from tqdm import tqdm
 from scipy.stats import multivariate_normal
 from exp_utilities.constants import Case1_6D_Constants
-from exp_utilities.plot_util import plt, plot_full_corner
+from exp_utilities.plot_util import plt, plot_full_corner, plot_pdf_metrics
 from baseline_methods import SAVE_PATH_LINEAR_PROPAGATE, PropagationData
 import sys
 sys.path.insert(0, '../utilities/')
 from _General.astrodynamics import *
 from _General.neuralnetworks import PNet, PNet_XL_Sphere, load_trained_model
-from _General.neuralnetworks import TimeToGMM6D
+from _General.neuralnetworks import TimeToGMM6D, TimeToGMM6D_Test
 from _General.util import compute_volume, save_metrics_npz, load_metrics_npz
 
 
@@ -152,6 +152,7 @@ def compute_pdf_variations(data_mc=None, p_net=None, data_lp=None, data_ut=None,
             # tv_pinn += _tv/N_batch
             _gkl = compute_generalKL(t, X_mc, p_net=p_net)
             gkl_pinn += _gkl/N_batch
+            metrics["g_kl_pinn"].append(gkl_pinn)
             # _Z_pinn = _helper_p_normalize_const(constants, pdf_pinn)
             # Z_pinn += _Z_pinn/N_batch
             # del pdf_pinn
@@ -159,6 +160,7 @@ def compute_pdf_variations(data_mc=None, p_net=None, data_lp=None, data_ut=None,
             # print("[info] pdf LP")
             _gkl = compute_generalKL(t, X_mc, p_data_normal=data_lp)
             gkl_lp += _gkl/N_batch
+            metrics["g_kl_lp"].append(gkl_lp)
 
             # if(e1_net is not None):
             #     e1_pinn = constants.SCALING_PDF * e1_net(_x_tensor, _t_tensor).detach().cpu().numpy().reshape(-1,)
@@ -166,6 +168,9 @@ def compute_pdf_variations(data_mc=None, p_net=None, data_lp=None, data_ut=None,
             #     del e1_pinn
             # del _t, _t_tensor, X_scaled, _x_tensor
         print(gkl_pinn, gkl_lp)
+
+    # --- plots ---
+    plot_pdf_metrics(metrics)
 
 
 def compare_corner_plots(data_mc=None, data_lp=None, data_ut=None, save_path=None, 
@@ -190,7 +195,7 @@ def compare_corner_plots(data_mc=None, data_lp=None, data_ut=None, save_path=Non
         filename_mc = data_mc+"xsamples_t{:.3f}.npy".format(t)
         if(os.path.exists(filename_mc)):
             X_ref = np.load(filename_mc)
-            _print_min_max_per_dim(X_ref)
+            # _print_min_max_per_dim(X_ref)
         else:
             continue
         # Full corner plot
@@ -286,22 +291,27 @@ def main():
     # p_net_gmm_N1 = TimeToGMM6D(constants)
     # p_net_gmm_N1 = load_trained_model(p_net_gmm_N1, path=OUTPUT_PATH+"/p_net.pth"); p_net_gmm_N1.eval()
 
-    OUTPUT_PATH = "output/pinn-gmm-N11" # 11-components GMM
-    p_net_gmm = TimeToGMM6D(constants, K=11)
+    # OUTPUT_PATH = "output/pinn-gmm-N11" # real GMM
+    # p_net_gmm = TimeToGMM6D(constants, K=11)
+    # p_net_gmm = load_trained_model(p_net_gmm, path=OUTPUT_PATH+"/p_net.pth"); p_net_gmm.eval()
+
+    # --- test for T=0.3 ---
+    # OUTPUT_PATH = "output/pinn-gmm(Test)"
+    OUTPUT_PATH = "output/pinn-gmm(Test1)"
+    p_net_gmm = TimeToGMM6D_Test(constants, K=11)
     p_net_gmm = load_trained_model(p_net_gmm, path=OUTPUT_PATH+"/p_net.pth"); p_net_gmm.eval()
 
     data_lp = PropagationData(SAVE_PATH_LINEAR_PROPAGATE)
 
     compute_pdf_variations(data_mc=data_mc, 
                            p_net=p_net_gmm, 
-                           data_lp=data_lp,
-                           )
+                           data_lp=data_lp)
     
     # --- Plots ---
     compare_corner_plots(data_mc, 
-                         OUTPUT_PATH=None,#PNet_XL_PATH, 
+                         OUTPUT_PATH=None, #PNet_XL_PATH, 
                          p_net_gmm_N1=None, #p_net_gmm_N1,
-                         p_net_gmm=p_net_gmm,#p_net_gmm,
+                         p_net_gmm=p_net_gmm, #p_net_gmm,
                          data_lp=None)
     # compare_corner_plots_XYZ(MC_FOLDER)
 

@@ -20,7 +20,8 @@ class Case1_6D_Constants:
     _PHI      = np.float32(0.0387)
     _TI       = np.float32(0.0)
     # _TF       = np.float32(0.1*_T)
-    _TF       = np.float32(0.2*_T)
+    # _TF       = np.float32(0.2*_T)
+    _TF       = np.float32(0.3*_T)
     _MEAN_I   = np.float32([_A, 0.5*_PI, 0.0, 0.0, 0.0, _W])
     _N_MEAN_I = np.float32([_MEAN_I[0]/_R,
                             _MEAN_I[1]/_THETA, 
@@ -45,20 +46,29 @@ class Case1_6D_Constants:
     # _X5_RANGE = np.float32(np.array([-10., 10.]))
     # _X6_RANGE = np.float32(np.array([-12., 14.]))
 
-    # Domain of TF = 0.2*T
-    _X1_RANGE = np.float32(np.array([17.0, 25.0]))
+    # # Domain of TF = 0.2*T
+    # _X1_RANGE = np.float32(np.array([17.0, 25.0]))
+    # _X2_RANGE = np.float32(np.array([102.0, 107.0]))
+    # _X3_RANGE = np.float32(np.array([-4., 4.]))
+    # _X4_RANGE = np.float32(np.array([-25., 25.]))
+    # _X5_RANGE = np.float32(np.array([-10., 10.]))
+    # _X6_RANGE = np.float32(np.array([-30., 45.]))
+
+    # Domain of TF = 0.3*T
+    _X1_RANGE = np.float32(np.array([15.0, 27.0]))
     _X2_RANGE = np.float32(np.array([102.0, 107.0]))
-    _X3_RANGE = np.float32(np.array([-4., 4.]))
+    _X3_RANGE = np.float32(np.array([-9., 12.]))
     _X4_RANGE = np.float32(np.array([-25., 25.]))
     _X5_RANGE = np.float32(np.array([-10., 10.]))
-    _X6_RANGE = np.float32(np.array([-30., 45.]))
+    _X6_RANGE = np.float32(np.array([-50., 100.]))
     
     # _MAX_PX1  = np.float32(3.0)
     # _MAX_PX2  = np.float32(1.8)
     # _MAX_PX3  = np.float32(0.35)
     # _MAX_PX4  = np.float32(0.2)
     # _T_PRIME_SPAN   = np.float32(np.array([0.0, 0.02, 0.04, 0.06, 0.08, 0.1]))
-    _T_PRIME_SPAN   = np.float32(2. * np.array([0.0, 0.02, 0.04, 0.06, 0.08, 0.1]))
+    # _T_PRIME_SPAN   = np.float32(2. * np.array([0.0, 0.02, 0.04, 0.06, 0.08, 0.1]))
+    _T_PRIME_SPAN   = np.float32(3. * np.array([0.0, 0.02, 0.04, 0.06, 0.08, 0.1]))
 
     @property
     def MU_EARTH(self):
@@ -172,9 +182,43 @@ class Case1_6D_Constants:
         print("X3_RANGE: ", self.X3_RANGE)
         print("X4_RANGE: ", self.X4_RANGE)
 
-    def sample_init_points(self, N_samples):
-        _x_bc_normal = np.random.multivariate_normal(self.N_MEAN_I, self.N_COV_I, size=N_samples).astype(np.float32)
+    def sample_init_points(self, N_samples, Fac_uniform=1, Fac_std=1.):
+        _x_bc_normal = np.random.multivariate_normal(self.N_MEAN_I, Fac_std**2*self.N_COV_I, size=N_samples).astype(np.float32)
         _x_bc_normal = torch.tensor(_x_bc_normal, dtype=torch.float32, requires_grad=False)
+        N_uniform = Fac_uniform * N_samples
+        _x_bc = np.column_stack([
+            np.random.uniform(self.X1_RANGE[0], self.X1_RANGE[1], N_uniform),
+            np.random.uniform(self.X2_RANGE[0], self.X2_RANGE[1], N_uniform),
+            np.random.uniform(self.X3_RANGE[0], self.X3_RANGE[1], N_uniform),
+            np.random.uniform(self.X4_RANGE[0], self.X4_RANGE[1], N_uniform),
+            np.random.uniform(self.X5_RANGE[0], self.X5_RANGE[1], N_uniform),
+            np.random.uniform(self.X6_RANGE[0], self.X6_RANGE[1], N_uniform),
+        ])
+        _x_bc = torch.tensor(_x_bc, dtype=torch.float32, requires_grad=False)
+        x_bc = torch.cat((_x_bc_normal, _x_bc), dim=0)
+        t_bc = (torch.ones(len(x_bc), 1, dtype=torch.float32) * self.TI)
+        return x_bc, t_bc
+    
+    def sample_res_points(self, N_samples, Fac_uniform=1, Fac_std=1.):
+        _x_normal = np.random.multivariate_normal(self.N_MEAN_I, Fac_std**2*self.N_COV_I, size=N_samples).astype(np.float32)
+        _x_normal = torch.tensor(_x_normal, dtype=torch.float32, requires_grad=True)
+        N_uniform = Fac_uniform * N_samples
+        _x = np.column_stack([
+            np.random.uniform(self.X1_RANGE[0], self.X1_RANGE[1], N_uniform),
+            np.random.uniform(self.X2_RANGE[0], self.X2_RANGE[1], N_uniform),
+            np.random.uniform(self.X3_RANGE[0], self.X3_RANGE[1], N_uniform),
+            np.random.uniform(self.X4_RANGE[0], self.X4_RANGE[1], N_uniform),
+            np.random.uniform(self.X5_RANGE[0], self.X5_RANGE[1], N_uniform),
+            np.random.uniform(self.X6_RANGE[0], self.X6_RANGE[1], N_uniform),
+        ])
+        _x = torch.tensor(_x, dtype=torch.float32, requires_grad=True)
+        x = torch.cat((_x_normal, _x), dim=0)
+        t = np.random.uniform(self._T_PRIME_SPAN[0], self._T_PRIME_SPAN[-1], len(x))
+        t = torch.tensor(t, dtype=torch.float32, requires_grad=True).view(-1,1)
+        return x, t
+    
+    def sample_init_points_uniform(self, N_samples, multiplyer=1):
+        N_samples = multiplyer*N_samples
         _x_bc = np.column_stack([
             np.random.uniform(self.X1_RANGE[0], self.X1_RANGE[1], N_samples),
             np.random.uniform(self.X2_RANGE[0], self.X2_RANGE[1], N_samples),
@@ -183,14 +227,12 @@ class Case1_6D_Constants:
             np.random.uniform(self.X5_RANGE[0], self.X5_RANGE[1], N_samples),
             np.random.uniform(self.X6_RANGE[0], self.X6_RANGE[1], N_samples),
         ])
-        _x_bc = torch.tensor(_x_bc, dtype=torch.float32, requires_grad=False)
-        x_bc = torch.cat((_x_bc_normal, _x_bc), dim=0)
+        x_bc = torch.tensor(_x_bc, dtype=torch.float32, requires_grad=False)
         t_bc = (torch.ones(len(x_bc), 1, dtype=torch.float32) * self.TI)
         return x_bc, t_bc
     
-    def sample_res_points(self, N_samples):
-        _x_normal = np.random.multivariate_normal(self.N_MEAN_I, self.N_COV_I, size=N_samples).astype(np.float32)
-        _x_normal = torch.tensor(_x_normal, dtype=torch.float32, requires_grad=True)
+    def sample_res_points_uniform(self, N_samples, multiplyer=1):
+        N_samples = multiplyer*N_samples
         _x = np.column_stack([
             np.random.uniform(self.X1_RANGE[0], self.X1_RANGE[1], N_samples),
             np.random.uniform(self.X2_RANGE[0], self.X2_RANGE[1], N_samples),
@@ -199,8 +241,7 @@ class Case1_6D_Constants:
             np.random.uniform(self.X5_RANGE[0], self.X5_RANGE[1], N_samples),
             np.random.uniform(self.X6_RANGE[0], self.X6_RANGE[1], N_samples),
         ])
-        _x = torch.tensor(_x, dtype=torch.float32, requires_grad=True)
-        x = torch.cat((_x_normal, _x), dim=0)
+        x = torch.tensor(_x, dtype=torch.float32, requires_grad=True)
         t = np.random.uniform(self._T_PRIME_SPAN[0], self._T_PRIME_SPAN[-1], len(x))
         t = torch.tensor(t, dtype=torch.float32, requires_grad=True).view(-1,1)
         return x, t
