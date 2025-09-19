@@ -5,6 +5,8 @@ from torch.distributions import Categorical, MultivariateNormal
 device = "cpu"
 
 
+# --- helper functions ---
+
 def _enable_grad(x: torch.Tensor, t: torch.Tensor):
     """Return fresh tensors with requires_grad=True (no graph history kept)."""
     xg = x.detach().clone().requires_grad_(True)
@@ -133,6 +135,7 @@ def rar_append_with_cap(x_buf, t_buf, x_new, t_new, cap: int):
             t_cat = t_cat[excess:, :]
     return x_cat, t_cat
 
+# --- end of helper functions ---
 
 def train_pinn_sol_base(constants, p_net, configurations, iterations=50000, save_model=False, beta_incre=0.02):
     mse_cost_function = torch.nn.MSELoss()
@@ -250,6 +253,10 @@ def train_pinn_sol_base(constants, p_net, configurations, iterations=50000, save
 def train_pinn_sol_v0(p_net, configuration):
     """
     Improved training loop for the physics-informed neural network.
+    NOTE: [make sampling method consistent test]
+        (1) change all res points to use the new (uniform + gmm) sampling, 
+        (2) CAP the maximum IC rar points
+        (3) same IC sampling for random and RAR.
     """
     p_net.train()
     p_net.to(device)
@@ -257,7 +264,8 @@ def train_pinn_sol_v0(p_net, configuration):
     constants = configuration["constants"]
     iterations = configuration["iterations"]
     train_helper_sample_ic = configuration["sample_ic"]
-    train_helper_sample_res = configuration["sample_res"]
+    # train_helper_sample_res = configuration["sample_res"] # NOTE: change this
+    train_helper_sample_res_uniform = configuration["sample_res_uniform"]
     p_init = configuration["p_ic"]
     res_func = configuration["res_func"]
     res_weight = configuration["res_weight"]
@@ -270,6 +278,7 @@ def train_pinn_sol_v0(p_net, configuration):
     mse_cost_function = torch.nn.MSELoss()
     optimizer = torch.optim.Adam(p_net.parameters(), lr=1e-3)
     scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.95)
+    sample_uniform_fn = lambda n: train_helper_sample_res_uniform(n)  # must return (x, t) WITHOUT grad
 
     min_loss = np.inf
     iterations_per_decay = 1000
@@ -278,8 +287,8 @@ def train_pinn_sol_v0(p_net, configuration):
     N0_samples_initial = 2000 * increased_icsamples_factor
     Nr_samples_initial = 2000
     print("[check] number of IC samples: ", N0_samples_initial )
-    
     N_RAR = 30000
+    alpha_model = 0.50  # tune 0.2–0.8
     x_bc_rar = torch.empty(0, 6, device=device)
     t_bc_rar = torch.empty(0, 1, device=device)
     x_res_rar = torch.empty(0, 6, device=device)
@@ -295,7 +304,13 @@ def train_pinn_sol_v0(p_net, configuration):
         
         # Sample new points at each epoch for better generalization
         x_bc_new, t_bc_new = train_helper_sample_ic(N0_samples_initial)
-        x_res_new, t_res_new = train_helper_sample_res(Nr_samples_initial)
+        # x_res_new, t_res_new = train_helper_sample_res(Nr_samples_initial) # NOTE: change this
+        _x_res_new, _t_res_new = rar_candidate_pool_mixed(
+                p_net, constants, N_cand=Nr_samples_initial, 
+                alpha_model=alpha_model,
+                sample_uniform_fn=sample_uniform_fn, 
+                device=device)
+        x_res_new, t_res_new = _enable_grad(_x_res_new, _t_res_new)
         
         # Combine with RAR points and ensure they are on the correct device
         x_bc = torch.cat((x_bc_new.to(device), x_bc_rar), dim=0)
@@ -349,27 +364,33 @@ def train_pinn_sol_v0(p_net, configuration):
 
         # --- RAR ---
         if epoch % 100 == 0 and FLAG:
-            FLAG = False
+            FLAG = False # reset flag
+            k_res = 32  # how many to add
+            
             # Add IC points
             with torch.no_grad():
-                x_bc_check, t_bc_check = train_helper_sample_ic(N_RAR, Fac_uniform=10, Fac_std=3)
+                # x_bc_check, t_bc_check = train_helper_sample_ic(N_RAR, Fac_uniform=10, Fac_std=3) # NOTE: change this
+                x_bc_check, t_bc_check = train_helper_sample_ic(N_RAR)
                 p_i = p_init(constants, x_bc_check.detach().cpu().numpy())
                 p_i = torch.tensor(p_i, dtype=torch.float32, device=device)
                 phat_i = p_net(x_bc_check, t_bc_check)
                 ic_errors = torch.abs(p_i - phat_i) / normalize
                 max_error_ic = ic_errors.max().item()
                 if max_error_ic > RAR_eps:
-                    max_indices = torch.topk(ic_errors.squeeze(), 10).indices
-                    x_bc_rar = torch.cat((x_bc_rar, x_bc_check[max_indices, :]), dim=0)
-                    t_bc_rar = torch.cat((t_bc_rar, t_bc_check[max_indices]), dim=0)
+                    # max_indices = torch.topk(ic_errors.squeeze(), 10).indices # NOTE: change this
+                    # x_bc_rar = torch.cat((x_bc_rar, x_bc_check[max_indices, :]), dim=0)
+                    # t_bc_rar = torch.cat((t_bc_rar, t_bc_check[max_indices]), dim=0)
+                    topk  = torch.topk(ic_errors.squeeze(), k=k_res)
+                    idx   = topk.indices
+                    x_bc_rar_new = x_bc_check.detach()[idx, :]  # store VALUES ONLY
+                    t_bc_rar_new = t_bc_check.detach()[idx, :]
+                    x_bc_rar, t_bc_rar = rar_append_with_cap(x_bc_rar, t_bc_rar, x_bc_rar_new, t_bc_rar_new, cap=4000)
                     print(f"... RAR IC , Max IC error: {max_error_ic:.4f}")
+
             # Add Residual points
-            alpha_model = 0.50  # tune 0.2–0.8
-            sample_uniform_fn = lambda n: train_helper_sample_res(n)  # must return (x, t) WITHOUT grad
             x_cand_raw, t_cand_raw = rar_candidate_pool_mixed(
                 p_net, constants, N_cand=N_RAR, alpha_model=alpha_model,
-                sample_uniform_fn=sample_uniform_fn, device=device
-            )
+                sample_uniform_fn=sample_uniform_fn, device=device)
             # 2) enable grad ONLY for the residual scoring step
             x_cand, t_cand = _enable_grad(x_cand_raw, t_cand_raw)
             # 3) score with FP residual (no torch.no_grad here!)
@@ -377,7 +398,6 @@ def train_pinn_sol_v0(p_net, configuration):
             res_err  = torch.abs(res_vals) / normalize
             max_err  = res_err.max().item()
             if max_err > RAR_eps:
-                k_res = 32  # how many to add
                 topk  = torch.topk(res_err.squeeze(), k=k_res)
                 idx   = topk.indices
                 x_res_rar_new = x_cand.detach()[idx, :]  # store VALUES ONLY
@@ -385,16 +405,6 @@ def train_pinn_sol_v0(p_net, configuration):
                 # 4) append with FIFO cap
                 x_res_rar, t_res_rar = rar_append_with_cap(x_res_rar, t_res_rar, x_res_rar_new, t_res_rar_new, cap=4000)
                 print(f"... RAR RES, Max residual error: {max_err:.4f}, t:", t_res_rar_new[0:3].data)
-            # (old sampling method)
-            # x_res_check, t_res_check = train_helper_sample_res(N_RAR, Fac_uniform=10, Fac_std=3)
-            # res_p = res_func(x_res_check, t_res_check, p_net, beta=beta)
-            # res_errors = torch.abs(res_p) / normalize
-            # max_error_res = res_errors.max().item()
-            # if max_error_res > RAR_eps:
-            #     max_indices = torch.topk(res_errors.squeeze(), 10).indices
-            #     x_res_rar = torch.cat((x_res_rar, x_res_check[max_indices, :]), dim=0)
-            #     t_res_rar = torch.cat((t_res_rar, t_res_check[max_indices]), dim=0)
-            #     print(f"... RAR Res, Max Res error: {max_error_res:.4f}")
 
 
 def train_pinn_sol_v0_scaled_improved(constants, p_net, configurations, 

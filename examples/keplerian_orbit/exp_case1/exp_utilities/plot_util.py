@@ -275,7 +275,6 @@ def plot_full_corner(constants, t,
             if j == 0: ax.set_ylabel(labels[i])
             else: ax.set_yticklabels([])
     plt.tick_params(axis='both', which='major', labelsize=8)
-    fig.tight_layout()
 
 
 def plot_pdf_metrics(metrics):

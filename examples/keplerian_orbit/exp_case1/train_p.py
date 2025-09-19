@@ -155,7 +155,7 @@ def config_training_TimeToGMM6D_Test1(constants, scale_torch):
     configuration = {
         "constants": constants,
         # "iterations": 40000,
-        "iterations": 100000,
+        "iterations": 50000,
         "sample_ic": constants.sample_init_points,
         "sample_res": constants.sample_res_points,
         "sample_ic_uniform": constants.sample_init_points_uniform,
