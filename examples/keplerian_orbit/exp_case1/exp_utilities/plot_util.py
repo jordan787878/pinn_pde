@@ -43,10 +43,11 @@ def plot_full_corner(constants, t,
     ranges="fixed",               # list of (lo,hi) per dim; if None -> data-driven
     pad_frac=0.02,
     log_counts=True,           # log color scale for heatmap
-    OUTPUT_PATH=None,
+    PNet_XL_PATH=None,
     p_net_gmm_N1=None,
     p_net_gmm=None,
     data_lp=None,
+    data_gmm=None,
 ):
     set_publication_plot_style(font_size=14)
 
@@ -100,12 +101,12 @@ def plot_full_corner(constants, t,
     fig.set_constrained_layout_pads(w_pad=0.02, h_pad=0.02, wspace=0.02, hspace=0.02)
 
     def _plot_pinn_1d_marginal(x_coords):
-        filename = f"{OUTPUT_PATH}/pre_compute/marginal_pdfpinn_x{x_coords}_t{t:.3f}.npz"
+        filename = f"{PNet_XL_PATH}/pre_compute/marginal_pdfpinn_x{x_coords}_t{t:.3f}.npz"
         if(os.path.exists(filename)):
             data_marginal_pinn = np.load(filename)
             pdf_values = data_marginal_pinn['pdf']
             X_grid = data_marginal_pinn["X_grid"]
-            ax.plot(X_grid, pdf_values, color=sns_colors[0])
+            ax.plot(X_grid, pdf_values, color=sns_colors[-1])
 
     # Diagonals: 1D histograms (counts)
     for d in range(D):
@@ -130,7 +131,7 @@ def plot_full_corner(constants, t,
             axes[d, k].axis("off")
         if d == 0:
             ax.set_ylabel(labels[d])
-        if(OUTPUT_PATH is not None):
+        if(PNet_XL_PATH is not None):
             _plot_pinn_1d_marginal(d+1)
         if(p_net_gmm is not None):
             x_vals = np.linspace(lo, hi, num=128)
@@ -189,7 +190,7 @@ def plot_full_corner(constants, t,
                 )
 
             def _plot_pinn_contour(x_coords):
-                filename = f"{OUTPUT_PATH}/pre_compute/marginal_pdfpinn_x{x_coords[0]}_x{x_coords[1]}_t{t:.3f}.npz"
+                filename = f"{PNet_XL_PATH}/pre_compute/marginal_pdfpinn_x{x_coords[0]}_x{x_coords[1]}_t{t:.3f}.npz"
                 if(os.path.isfile(filename)):
                     data_marginal_pinn = np.load(filename)
                     pdf_values = data_marginal_pinn['pdf']
@@ -200,18 +201,14 @@ def plot_full_corner(constants, t,
                     relative_levels = np.array([0.01, 0.05, 0.50, 0.95])
                     levels = relative_levels * pdf_max
                     # Draw the contour lines with the custom levels
-                    ax.contour(X_grid, Y_grid, pdf_values, levels=levels, colors=[sns_colors[0]], linewidths=1.)
+                    ax.contour(X_grid, Y_grid, pdf_values, levels=levels, colors=[sns_colors[-1]], linewidths=1.)
                     return levels
 
-            if(OUTPUT_PATH is not None):
+            if(PNet_XL_PATH is not None):
                 x_coords = (j+1, i+1)
                 pinn_levels = _plot_pinn_contour(x_coords)
 
-            def _plot_pinn_gmm_contour(x_coords, p_net_gmm, color):
-                ws, mus, covs = p_net_gmm.weights_means_covs_at(t)
-                ws = ws.detach().cpu().numpy()
-                mus = mus.detach().cpu().numpy()
-                covs = covs.detach().cpu().numpy()
+            def _plot_pinn_gmm_contour(ws, mus, covs, x_coords, color):
                 # print(ws.shape, mus.shape, covs.shape)
                 plot_axes = (x_coords[0]-1, x_coords[1]-1)
                 xs = np.linspace(xlo, xhi, num=64, endpoint=True)
@@ -244,11 +241,19 @@ def plot_full_corner(constants, t,
 
             if(p_net_gmm_N1 is not None):
                 x_coords = (j+1, i+1)
-                _plot_pinn_gmm_contour(x_coords, p_net_gmm_N1, sns_colors[1])
+                ws, mus, covs = p_net_gmm_N1.weights_means_covs_at(t)
+                ws = ws.detach().cpu().numpy()
+                mus = mus.detach().cpu().numpy()
+                covs = covs.detach().cpu().numpy()
+                _plot_pinn_gmm_contour(ws, mus, covs, x_coords, sns_colors[0])
                             
             if(p_net_gmm is not None):
                 x_coords = (j+1, i+1)
-                _plot_pinn_gmm_contour(x_coords, p_net_gmm, sns_colors[0])
+                ws, mus, covs = p_net_gmm.weights_means_covs_at(t)
+                ws = ws.detach().cpu().numpy()
+                mus = mus.detach().cpu().numpy()
+                covs = covs.detach().cpu().numpy()
+                _plot_pinn_gmm_contour(ws, mus, covs, x_coords, sns_colors[0])
 
             if(data_lp is not None):
                 x_coords = (j+1, i+1)
@@ -265,8 +270,13 @@ def plot_full_corner(constants, t,
                 pdf_max = np.max(pdf_values).item()
                 levels = relative_levels * pdf_max
                 # Draw the contour lines with the custom levels
-                ax.contour(X_grid, Y_grid, pdf_values, levels=levels, colors=[sns_colors[3]], 
+                ax.contour(X_grid, Y_grid, pdf_values, levels=levels, colors=[sns_colors[2]], 
                            linewidths=1.)
+
+            if(data_gmm is not None):
+                x_coords = (j+1, i+1)
+                _, ws, mus, covs = data_gmm.get(t)
+                _plot_pinn_gmm_contour(ws, mus, covs, x_coords, sns_colors[4])
 
             # set_axis_limits_with_buffer(ax, (xlo, xhi), (ylo, yhi))
             # ax.set_xlim(xlo, xhi); ax.set_ylim(ylo, yhi)
@@ -278,17 +288,21 @@ def plot_full_corner(constants, t,
 
 
 def plot_pdf_metrics(metrics):
+    set_publication_plot_style()
+    
     colors = sns.color_palette("husl", 5)
 
     # metric 3: negative log liklihood (general KL)
     plt.figure()
     print(metrics["t"])
     print(metrics["g_kl_pinn"])
-    plt.plot(metrics["t"], metrics["g_kl_pinn"], color=colors[0], label=r"$\hat{p}$ PINN-GMM")
-    plt.plot(metrics["t"], metrics["g_kl_lp"], color=colors[3],   label=r"$p$ LP")
-    # plt.plot(metrics["t"], metrics["g_kl_ut"], color=colors[2],   label=r"$p$ Unscent Trans.")
-    # plt.plot(metrics["t"], metrics["rel_kl_ut_alpha_0_1"], color=colors[2], marker="o", label=r"$p$ Unscent Trans. $(\alpha=0.1)$")
+    # plt.plot(metrics["t"], metrics["g_kl_pinn"], color=colors[0], label="PINN")
+    plt.plot(metrics["t"], metrics["g_kl_pinngmm"], color=colors[0], label="PINN-GMM")
+    plt.plot(metrics["t"], metrics["g_kl_lp"], color=colors[2],   label="LP")
+    plt.plot(metrics["t"], metrics["g_kl_ut"], color=colors[3],   label="UT")
+    plt.plot(metrics["t"], metrics["g_kl_gmm"], color=colors[4],   label="GMM")
     plt.legend()
+    plt.grid(True)
     plt.xlabel("t")
     plt.ylabel("General KL")
 

@@ -68,7 +68,7 @@ class Case1_6D_Constants:
     # _MAX_PX4  = np.float32(0.2)
     # _T_PRIME_SPAN   = np.float32(np.array([0.0, 0.02, 0.04, 0.06, 0.08, 0.1]))
     # _T_PRIME_SPAN   = np.float32(2. * np.array([0.0, 0.02, 0.04, 0.06, 0.08, 0.1]))
-    _T_PRIME_SPAN   = np.float32(3. * np.array([0.0, 0.02, 0.04, 0.06, 0.08, 0.1]))
+    _T_PRIME_SPAN   = np.float32(3. * np.array([0.0, 0.02, 0.04, 0.06, 0.07, 0.08, 0.09, 0.1]))
 
     @property
     def MU_EARTH(self):

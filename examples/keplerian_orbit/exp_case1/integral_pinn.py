@@ -202,7 +202,7 @@ if __name__ == '__main__':
     p_net = load_trained_model(p_net, path=OUTPUT_PATH+"/p_net.pth"); p_net.eval()
     print("[check] p_net scale: ", p_net.scale)
 
-    for t in constants.T_PRIME_SPAN:
+    for t in [constants.T_PRIME_SPAN[-1]]:
         # Marginalize 2D
         for i in range(1, 5+1):
             for j in range(i+1, 6+1):
@@ -215,17 +215,17 @@ if __name__ == '__main__':
                     plot_axes,
                     save_path=save_path,
                     num_linespace=64,
-                    num_samples_mc=30000, # increase this for more accuracy
-                    batch_size=2
+                    num_samples_mc=100000, # increase this for more accuracy
+                    batch_size=1
                 )
 
-        # Marginalize 1D
-        for k in range(1, 6+1):
-            x_coord = k
-            plot_axs = x_coord-1
-            save_path = f"{OUTPUT_PATH}/pre_compute/marginal_pdfpinn_x{x_coord}_t{t:.3f}.npz"
-            marginal_pinn_1d(p_net, t, constants, plot_axs, save_path=save_path,
-                             num_linespace=64,
-                             num_samples_mc=30000, # increase this for more accuracy
-                             batch_size=2
-                            )
+        # # Marginalize 1D
+        # for k in range(1, 6+1):
+        #     x_coord = k
+        #     plot_axs = x_coord-1
+        #     save_path = f"{OUTPUT_PATH}/pre_compute/marginal_pdfpinn_x{x_coord}_t{t:.3f}.npz"
+        #     marginal_pinn_1d(p_net, t, constants, plot_axs, save_path=save_path,
+        #                      num_linespace=64,
+        #                      num_samples_mc=10000000, # increase this for more accuracy
+        #                      batch_size=2
+        #                     )
