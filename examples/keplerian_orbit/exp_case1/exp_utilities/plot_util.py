@@ -296,8 +296,10 @@ def plot_pdf_metrics(metrics):
     plt.figure()
     print(metrics["t"])
     print(metrics["g_kl_pinn"])
-    # plt.plot(metrics["t"], metrics["g_kl_pinn"], color=colors[0], label="PINN")
     plt.plot(metrics["t"], metrics["g_kl_pinngmm"], color=colors[0], label="PINN-GMM")
+    plt.plot(metrics["t"], metrics["g_kl_pinngmm(uniform)"], color=colors[0], linestyle=":", label="PINN-GMM (uniform)")
+    plt.plot(metrics["t"], metrics["g_kl_pinngmm(no-imp)"], color=colors[0], linestyle="--", label="PINN-GMM (uniform + p0)")
+    plt.plot(metrics["t"], metrics["g_kl_pinn"], color=colors[1], label="PINN")
     plt.plot(metrics["t"], metrics["g_kl_lp"], color=colors[2],   label="LP")
     plt.plot(metrics["t"], metrics["g_kl_ut"], color=colors[3],   label="UT")
     plt.plot(metrics["t"], metrics["g_kl_gmm"], color=colors[4],   label="GMM")
@@ -305,6 +307,8 @@ def plot_pdf_metrics(metrics):
     plt.grid(True)
     plt.xlabel("t")
     plt.ylabel("General KL")
+    ymin, ymax = plt.ylim()
+    plt.ylim(ymin, 2* np.array(metrics["g_kl_pinngmm"]).max())
 
     plt.show()
 

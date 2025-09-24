@@ -103,6 +103,7 @@ def compute_generalKL(t, X, p_data_normal=None, p_net=None, key=None):
 
 
 def compute_pdf_variations(data_mc=None, p_net=None, p_net_gmm=None,
+                           p_net_gmm_noimp=None, p_net_gmm_uniform=None,
                            data_lp=None, data_ut=None, data_gmm=None,
                            e1_net=None, save_path=None):
     global constants
@@ -118,6 +119,8 @@ def compute_pdf_variations(data_mc=None, p_net=None, p_net_gmm=None,
         "g_kl_gmm": [],
         "g_kl_pinn": [],
         "g_kl_pinngmm": [],
+        "g_kl_pinngmm(no-imp)": [],
+        "g_kl_pinngmm(uniform)": [],
         "B1_pinn": [],
         "t": constants.T_PRIME_SPAN,
         # "t": np.round(np.arange(0.0, 0.3+0.05, 0.05, dtype=np.float32),2)
@@ -132,6 +135,8 @@ def compute_pdf_variations(data_mc=None, p_net=None, p_net_gmm=None,
         tv_pinn = 0.0
         g_kl_pinn = 0.0
         g_kl_pinngmm = 0.0
+        g_kl_pinngmm_noimp = 0.0
+        g_kl_pinngmm_uniform = 0.0
         delta_p_lp_max = 0.0
         tv_lp = 0.0
         g_kl_lp = 0.0
@@ -166,6 +171,16 @@ def compute_pdf_variations(data_mc=None, p_net=None, p_net_gmm=None,
                 g_kl_pinngmm += _gkl/N_batch
                 metrics["g_kl_pinngmm"].append(g_kl_pinngmm)
 
+            if(p_net_gmm_noimp is not None):
+                _gkl = compute_generalKL(t, X_mc, p_net=p_net_gmm_noimp)
+                g_kl_pinngmm_noimp += _gkl/N_batch
+                metrics["g_kl_pinngmm(no-imp)"].append(g_kl_pinngmm_noimp)
+
+            if(p_net_gmm_uniform is not None):
+                _gkl = compute_generalKL(t, X_mc, p_net=p_net_gmm_uniform)
+                g_kl_pinngmm_uniform += _gkl/N_batch
+                metrics["g_kl_pinngmm(uniform)"].append(g_kl_pinngmm_uniform)
+
             if(data_lp is not None):
                 _gkl = compute_generalKL(t, X_mc, p_data_normal=data_lp)
                 g_kl_lp += _gkl/N_batch
@@ -186,6 +201,7 @@ def compute_pdf_variations(data_mc=None, p_net=None, p_net_gmm=None,
             #     e1_pinn_max = max(e1_pinn_max, np.max(np.abs(e1_pinn)).item())
             #     del e1_pinn
             # del _t, _t_tensor, X_scaled, _x_tensor
+            
         print(g_kl_pinn, g_kl_pinngmm, g_kl_lp, g_kl_ut, g_kl_gmm)
 
     # --- plots ---
@@ -204,7 +220,7 @@ def compare_corner_plots(data_mc=None, data_lp=None, data_ut=None, data_gmm=None
             print(f"x{i}: min={mn:.6g}  max={mx:.6g}")
 
     global constants
-    t_show = [constants.T_PRIME_SPAN[-1]]
+    t_show = [constants.T_PRIME_SPAN[0], constants.T_PRIME_SPAN[-1]]
     for idx, t in enumerate(t_show):
         print("\ntime {:.4f}".format(t))
         if(data_mc is None):
@@ -312,6 +328,14 @@ def main():
     p_net_gmm = TimeToGMM6D(constants, K=11)
     p_net_gmm = load_trained_model(p_net_gmm, path=PNet_GMM_PATH+"/p_net.pth"); p_net_gmm.eval()
 
+    PNet_GMM_PATH = "output/pinn-gmm(no-imp)"
+    p_net_gmm_noimp = TimeToGMM6D(constants, K=11)
+    p_net_gmm_noimp = load_trained_model(p_net_gmm_noimp, path=PNet_GMM_PATH+"/p_net.pth"); p_net_gmm_noimp.eval()
+
+    PNet_GMM_PATH = "output/pinn-gmm(uniform)"
+    p_net_gmm_uniform = TimeToGMM6D(constants, K=11)
+    p_net_gmm_uniform = load_trained_model(p_net_gmm_uniform, path=PNet_GMM_PATH+"/p_net.pth"); p_net_gmm_uniform.eval()
+
     # baseline methods
     data_lp = PropagationData(SAVE_PATH_LINEAR_PROPAGATE)
     data_ut = PropagationData(SAVE_PATH_UNSCENT_PROPAGATE)
@@ -320,12 +344,13 @@ def main():
     # --- metrics ---
     compute_pdf_variations(data_mc=data_mc, 
                            p_net=p_net, p_net_gmm=p_net_gmm, 
+                           p_net_gmm_noimp=p_net_gmm_noimp, p_net_gmm_uniform=p_net_gmm_uniform,
                            data_lp=data_lp, data_ut=data_ut, data_gmm=data_gmm)
     
     # --- plots ---
     compare_corner_plots(data_mc, 
                          data_lp=None, data_ut=None, data_gmm=None,
-                         PNet_XL_PATH=PNet_XL_PATH,
+                         PNet_XL_PATH=None,
                          p_net_gmm_N1=None,
                          p_net_gmm=p_net_gmm,
                          )

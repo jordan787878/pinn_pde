@@ -112,7 +112,7 @@ def config_training_PNet_XL_Sphere(constants, scale_torch):
     return configuration
 
 
-def config_training_TimeToGMM6D(constants, scale_torch):
+def config_training_TimeToGMM6D(constants, scale_torch, option=""):
     configuration = {
         "constants": constants,
         "iterations": 50000,
@@ -127,10 +127,20 @@ def config_training_TimeToGMM6D(constants, scale_torch):
         "beta_incre": 0.02,
         "loss_normalize": scale_torch,
         "reg_tv": None,
+        "training_fcn": PINN.train_pinngmm_sol_v0
         # "increased_icsamples_factor": 7, # increase the number of IC sample size
         # "increased_ressamples_factor": 7,
         # "beta_0": 1.0, # initialized to 1.0 if pre-trained pinn-gmm model is used
     }
+
+    if(option == "no-importance-sampling"):
+        configuration["save_path"] = "output/pinn-gmm(no-imp)"
+        configuration["training_fcn"] = PINN.train_pinn_sol_v0
+
+    if(option == "uniform-sampling"):
+        configuration["save_path"] = "output/pinn-gmm(uniform)"
+        configuration["training_fcn"] = PINN.train_pinngmm_sol_uniform
+
     return configuration
 
 
@@ -175,18 +185,24 @@ def main():
     # p_net = PNet_XL_Sphere(constants, scale=scale_torch)
     # configuration = config_training_PNet_XL_Sphere(constants, scale_torch)
 
-    # gmm
+    # pinn-gmm
     p_net = TimeToGMM6D(constants, K=11)
-    configuration = config_training_TimeToGMM6D(constants, scale_torch)
+    # configuration = config_training_TimeToGMM6D(constants, scale_torch)
+    # configuration = config_training_TimeToGMM6D(constants, scale_torch, option="no-importance-sampling")
+    configuration = config_training_TimeToGMM6D(constants, scale_torch, option="uniform-sampling")
 
     if(TRAIN_FLAG):
-        # PINN.train_pinn_sol_v0(p_net, configuration) # pinn-mlp training
-        PINN.train_pinngmm_sol_v0(p_net, configuration) # pinn-gmm training
+        # mlp training
+        # PINN.train_pinn_sol_v0(p_net, configuration)
+        
+        # pinn-gmm training
+        configuration["training_fcn"](p_net, configuration)
 
     # --- Load the best network after training ---   
     p_net = load_trained_model(p_net, path=configuration["save_path"]+"/p_net.pth"); p_net.eval()
-    # --- Check PNet against p_init
-    check_pnet_against_pinit(p_net)
+    
+    # # --- Check PNet against p_init
+    # check_pnet_against_pinit(p_net)
 
 
 def obsolete_fcn():
