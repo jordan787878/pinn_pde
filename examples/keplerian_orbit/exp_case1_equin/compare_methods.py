@@ -13,6 +13,7 @@ import sys
 sys.path.insert(0, '../utilities/')
 from _General.neuralnetworks import PNet, PNet_Scaled, PNet_XL, E1Net_Scaled, E1Net_XL, load_trained_model
 from _General.util import compute_volume, save_metrics_npz, load_metrics_npz
+from _General.neuralnetworks import TimeToGMM6D, TimeToGMM6D_V0
 from functools import partial
 constants = Case1_6D_Constants_Equin()
 
@@ -114,7 +115,7 @@ def p_total_variation(constants, p1, p2, verbose=False, eps=np.finfo(np.float32)
     p1 = p1.reshape(-1,)
     p2 = p2.reshape(-1,)
     diff = np.abs(p1-p2)
-    diff[diff < eps] = 0.0 # Set values below threshold to zero
+    # diff[diff < eps] = 0.0 # Set values below threshold to zero
     tv = 0.5 * np.mean(diff) * vol_est
     return 100. *tv.item()
 
@@ -181,31 +182,36 @@ def compute_generalKL(t, X, p_data_normal=None, p_net=None, key=None):
     return KL
 
 
-def compute_pdf_variations(p_net=None, data_lp=None, data_ut=None, e1_net=None, save_path=None):
+def compute_pdf_variations(N_batch = 10, p_net=None, p_net_gmm=None, data_lp=None, data_ut=None, e1_net=None, save_path=None):
     global constants
     metrics = {
         "rel_error_lp": [],
         "rel_error_ut": [],
         "rel_error_pinn": [],
+        "rel_error_pinngmm": [],
         "tv_lp": [],
         "tv_ut": [],
         "tv_pinn": [],
+        "tv_pinngmm": [],
         "g_kl_lp": [],
         "g_kl_ut": [],
         "g_kl_pinn": [],
+        "g_kl_pinngmm": [],
         "B1_pinn": [],
         # "t": constants.T_PRIME_SPAN,
         "t": np.round(np.arange(0.0, 0.3+0.05, 0.05, dtype=np.float32),2)
     } 
     print("evaluate metrics over times: ", metrics["t"])
-    N_samples = 100000
-    N_batch = 1000
+    N_samples = int(1e+5)
     for idx, t in enumerate(metrics["t"]):
         print("\ntime {:.4f}".format(t))
         pdf_ref_max = 0.0
         delta_p_pinn_max = 0.0
         tv_pinn = 0.0
         gkl_pinn = 0.0
+        delta_p_pinngmm_max = 0.0
+        tv_pinngmm = 0.0
+        gkl_pinngmm = 0.0
         delta_p_lp_max = 0.0
         tv_lp = 0.0
         gkl_lp = 0.0
@@ -217,6 +223,7 @@ def compute_pdf_variations(p_net=None, data_lp=None, data_ut=None, e1_net=None, 
         Z_pinn = 0.0
         for j in tqdm(range(1, N_batch+1), desc="Propagating batches"):
             X = get_uniform_Xsamples_numpy(N_samples=N_samples) # samples from random uniform
+            # print(X[0:3, :])
             X_scaled = constants.scaled_x(X)
             _x_tensor = torch.tensor(X_scaled, dtype=torch.float32, requires_grad=False)
 
@@ -225,7 +232,7 @@ def compute_pdf_variations(p_net=None, data_lp=None, data_ut=None, e1_net=None, 
             pdf_ref_max = max(pdf_ref_max, np.max(pdf_ref).item())
             X_mc = sample_joint_pdf(constants, t_prime=t, n_samples=N_samples, seed=j)
 
-            # print("[info] pdf PINN")
+            # pinn-mlp
             _t = np.ones((len(_x_tensor), 1)) * t
             _t_tensor = torch.tensor(_t, dtype=torch.float32, requires_grad=False).view(-1,1)
             pdf_pinn = constants.SCALING_PDF * p_net(_x_tensor, _t_tensor).detach().cpu().numpy().reshape(-1,)
@@ -238,11 +245,20 @@ def compute_pdf_variations(p_net=None, data_lp=None, data_ut=None, e1_net=None, 
             _Z_pinn = p_normalize_constant(constants, pdf_pinn)
             Z_pinn += _Z_pinn/N_batch
             del pdf_pinn
-
             if(e1_net is not None):
                 e1_pinn = constants.SCALING_PDF * e1_net(_x_tensor, _t_tensor).detach().cpu().numpy().reshape(-1,)
                 e1_pinn_max = max(e1_pinn_max, np.max(np.abs(e1_pinn)).item())
                 del e1_pinn
+
+            # pinn-gmm
+            pdf_pinn = constants.SCALING_PDF * p_net_gmm(_x_tensor, _t_tensor).detach().cpu().numpy().reshape(-1,)
+            _delta_p = np.max(np.abs(pdf_pinn - pdf_ref)).item()
+            delta_p_pinngmm_max = max(delta_p_pinngmm_max, _delta_p)
+            _tv = p_total_variation(constants, pdf_pinn, pdf_ref)
+            tv_pinngmm += _tv/N_batch
+            _gkl = compute_generalKL(t, X_mc, p_net=p_net_gmm)
+            gkl_pinngmm += _gkl/N_batch
+            del pdf_pinn
             del _t, _t_tensor, X_scaled, _x_tensor
 
             # print("[info] pdf LP")
@@ -273,11 +289,15 @@ def compute_pdf_variations(p_net=None, data_lp=None, data_ut=None, e1_net=None, 
         
         # After all batch
         gkl_pinn += Z_pinn
+        gkl_pinngmm += 1
         gkl_lp += 1
         gkl_ut += 1
         metrics["rel_error_pinn"].append(100.*delta_p_pinn_max/pdf_ref_max)
         metrics["tv_pinn"].append(tv_pinn)
         metrics["g_kl_pinn"].append(gkl_pinn)
+        metrics["rel_error_pinngmm"].append(100.*delta_p_pinngmm_max/pdf_ref_max)
+        metrics["tv_pinngmm"].append(tv_pinngmm)
+        metrics["g_kl_pinngmm"].append(gkl_pinngmm)
         metrics["rel_error_lp"].append(100.*delta_p_lp_max/pdf_ref_max)
         metrics["tv_lp"].append(tv_lp)
         metrics["g_kl_lp"].append(gkl_lp)
@@ -285,9 +305,16 @@ def compute_pdf_variations(p_net=None, data_lp=None, data_ut=None, e1_net=None, 
         metrics["tv_ut"].append(tv_ut)
         metrics["g_kl_ut"].append(gkl_ut)
         metrics["B1_pinn"].append(100. * 2. * e1_pinn_max/pdf_ref_max)
+        
         print("[check]: max e1: {:.4f}, max e1 pinn: {:.4f}".format(
             delta_p_pinn_max, e1_pinn_max))
         print("[check] Z_pinn: {:.4f}".format(Z_pinn))
+        print(metrics["rel_error_pinn"])
+        print(metrics["rel_error_pinngmm"])
+        print(metrics["tv_pinn"])
+        print(metrics["tv_pinngmm"])
+        print(metrics["g_kl_pinn"])
+        print(metrics["g_kl_pinngmm"])
 
     # print(metrics["rel_error_pinn"])
     # print(metrics["tv_pinn"])
@@ -301,7 +328,7 @@ def compute_pdf_variations(p_net=None, data_lp=None, data_ut=None, e1_net=None, 
 
 
 def compare_corner_plots(p_net=None, data_lp=None, data_ut=None, save_path=None, 
-                         OUTPUT_PATH=None):
+                         OUTPUT_PATH=None, p_net_gmm=None):
     global constants
     t_show = [constants.T_PRIME_SPAN[-1]]
     # t_show = np.array([0.4])
@@ -335,16 +362,17 @@ def compare_corner_plots(p_net=None, data_lp=None, data_ut=None, save_path=None,
         _cov_ut = np.float32(_cov_ut)
         gaussian_ut = (_mu_ut, _cov_ut)
 
-        # # Singler corner plot as coordinate: x_coords
-        # ax = plot_single_corner(
-        #     constants, x_coord1=x_coords[0], x_coord2=x_coords[1], X_samples=X_ref,
-        #     data_marginal_pinn=data_marginal_pinn,
-        #     gaussian_lp=gaussian_lp,
-        #     gaussian_ut=gaussian_ut
-        # )
+        # Singler corner plot as coordinate: x_coords
+        ax = plot_single_corner(
+            t, constants, x_coord1=x_coords[0], x_coord2=x_coords[1], X_samples=X_ref,
+            data_marginal_pinn=data_marginal_pinn,
+            gaussian_lp=gaussian_lp,
+            gaussian_ut=None,#gaussian_ut,
+            p_net_gmm=p_net_gmm,
+        )
 
         # Full corner plot
-        plot_full_corner(constants, t, X_ref, OUTPUT_PATH=OUTPUT_PATH)
+        # plot_full_corner(constants, t, X_ref, OUTPUT_PATH=OUTPUT_PATH)
 
         plt.show()
 
@@ -382,16 +410,22 @@ def compare_methods():
     # e1_net.set_p_net(p_net)
     
     e1_net = load_trained_model(e1_net, path=OUTPUT_PATH+"/e1_net.pth"); e1_net.eval()
+
+    # --- pinn-gmm ---
+    p_net_gmm = TimeToGMM6D_V0(constants, K=11)
+    p_net_gmm = load_trained_model(p_net_gmm, path="output/pinn-gmm(V0)/p_net.pth"); p_net_gmm.eval()
+
     data_lp = PropagationData(SAVE_PATH_LINEAR_PROPAGATE)
     data_ut = PropagationData(SAVE_PATH_UNSCENT_PROPAGATE)
-    metrics_path = "output/baseline_methods/metrics.npz"
 
-    # compute_pdf_variations(p_net=p_net, data_lp=data_lp, data_ut=data_ut, e1_net=e1_net, save_path=metrics_path)
-    
-    # metrics = load_metrics_npz(metrics_path); plot_pdf_metrics(metrics)
+    metrics_path = "output/baseline_methods/metrics.npz"
+    # compute_pdf_variations(N_batch=1000, p_net=p_net, p_net_gmm=p_net_gmm, 
+    #                        data_lp=data_lp, data_ut=data_ut, e1_net=e1_net, save_path=metrics_path)
+    metrics = load_metrics_npz(metrics_path); plot_pdf_metrics(metrics)
 
     # Visualize marginal PDF
-    compare_corner_plots(p_net=p_net, data_lp=data_lp, data_ut=data_ut, OUTPUT_PATH=OUTPUT_PATH)
+    compare_corner_plots(p_net=p_net, data_lp=data_lp, data_ut=data_ut, OUTPUT_PATH=OUTPUT_PATH,
+                         p_net_gmm=p_net_gmm)
         
 
 def main():

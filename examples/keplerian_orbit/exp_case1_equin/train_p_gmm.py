@@ -14,7 +14,7 @@ from baseline_methods import SAVE_PATH_LINEAR_PROPAGATE, SAVE_PATH_UNSCENT_PROPA
 # import utilities
 import sys
 sys.path.insert(0, '../utilities/')
-from _General.neuralnetworks import PNet, PNet_Scaled, PNet_XL, load_trained_model, init_weights_He
+from _General.neuralnetworks import TimeToGMM6D, TimeToGMM6D_V0, load_trained_model
 import _General.train_pinn as PINN
 
 
@@ -115,48 +115,37 @@ def diff_opt_scaled(x, t, p_net, beta=1.0, verbose=False):
         print(residual.dtype, residual.shape, residual[0:3, :])
     return residual
   
-def main():
-    global constants
-    # constants.test_printout()
 
-    # Set a fixed seed for reproducibility
-    torch.manual_seed(0); np.random.seed(0)
+def config_training_TimeToGMM6D(constants, scale_torch, option=""):
+    configuration = {
+        "constants": constants,
+        "iterations": 60000,
+        "sample_ic": constants.sample_init_points_scaled,
+        "sample_res": constants.sample_res_points_scaled,
+        "sample_res_uniform": constants.sample_res_points_scaled_uniform,
+        "p_ic": p_init_scaled,
+        "res_func": diff_opt_scaled,
+        "res_weight": 1.0,
+        "save_path": "output/pinn-gmm",
+        "beta_incre": 0.02,
+        "loss_normalize": scale_torch,
+        "reg_tv": None,
+        "training_fcn": PINN.train_pinngmm_sol_v0
+    }
+
+    if(option == "V0"):
+        configuration["save_path"] = "output/pinn-gmm(V0)"
+
+    if(option == "V1"):
+        configuration["save_path"] = "output/pinn-gmm(V1)"
     
-    # p_net = PNet_Scaled(constants, input_feature=7)
-    # p_net.apply(init_weights_He)
+    print(configuration["save_path"])
 
-    p_net = PNet_XL(constants, input_feature=7)
+    return configuration
 
-    _x_at_mean = constants.N_MEAN_I.copy()
-    p_max = p_init_scaled(constants, _x_at_mean.reshape(-1, 6)).item()
-    scale = p_max
-    scale_torch = torch.tensor(scale, dtype=torch.float32)
-    p_net.scale = scale_torch
-    print("p net scale: ", p_net.scale)
 
-    # --- v0 --- with regularization and curriculum training to enable subsequent training of e1_net
-    OUTPUT_PATH = "output/v0_scaled_T0.3"
-    
-    # --- base --- the most basic PINN training attempted to compare with standard MC
-    # OUTPUT_PATH = "output/base"
-
-    if(TRAIN_FLAG):
-        configurations = {
-            "ic_fcn": p_init_scaled,
-            "diff_opt_fcn": diff_opt_scaled,
-            "pnet_path": OUTPUT_PATH+"/p_net.pth",
-            "pnet_path_inter": OUTPUT_PATH+"/p_net_"
-        }
-        # --- v0 ---
-        # PINN.train_pinn_sol_v0(constants, p_net, configurations, iterations=10000, save_model=True)
-        PINN.train_pinn_sol_v0_scaled_improved(constants, p_net, configurations, iterations=100000, save_model=True)
-    
-    # --- Load the best network after training ---   
-    p_net = load_trained_model(p_net, path=OUTPUT_PATH+"/p_net.pth"); p_net.eval()
-
+def check(constants, p_net, N_samples = int(1e+6)):
     # --- checking joint PDF against p_sol ---
-    N_samples = 1000000
-
     # x points
     _x = np.column_stack([
         np.random.uniform(constants.X1_RANGE[0], constants.X1_RANGE[1], N_samples),
@@ -168,18 +157,6 @@ def main():
     ])
     # scaled x points
     _x_scaled = constants.scaled_x(_x)
-
-    # # checking in scaled x
-    # for t in constants.T_PRIME_SPAN:
-    #     pdf_sol_scaled = p_sol_scaled(constants, _x_scaled, t).reshape(-1,)
-
-    #     _x_tensor = torch.tensor(_x_scaled, dtype=torch.float32, requires_grad=True)
-    #     _t = np.ones((len(_x_tensor), 1)) * t
-    #     _t_tensor = torch.tensor(_t, dtype=torch.float32, requires_grad=True).view(-1,1)
-    #     pdf_pinn = p_net(_x_tensor, _t_tensor).detach().cpu().numpy().reshape(-1,)
-    #     rel_error = np.max(np.abs(pdf_sol_scaled-pdf_pinn)) / np.max(pdf_sol_scaled) # NOTE this metric needs sufficient large samples.
-    #     print(100. *rel_error.item())
-    
     # checking in x
     for t in constants.T_PRIME_SPAN:
         pdf_sol = p_sol(constants, _x, t).reshape(-1,)
@@ -193,49 +170,38 @@ def main():
         rel_error = np.max(np.abs(pdf_sol-pdf_pinn)) / np.max(pdf_sol) # NOTE this metric needs sufficient large samples.
         print(100. *rel_error.item())
 
-    # --- Pre-computation for plotting data ---
-    # precompute_pdf_streaming(constants, p_net, OUTPUT_PATH) # pre-compute pdf on grid
 
-    # for i in range(1,7): # pre-compute marginal pdf over time
-    #     x, t_kept, M = compute_marginals_over_time(
-    #         times=constants.T_PRIME_SPAN,   # time array you mentioned
-    #         data_dir=OUTPUT_PATH,
-    #         grid_dir="data/grids",
-    #         keep_axis=(i-1),                # first dimension
-    #         filename_fmt="pdf_t{:.3f}.npy",
-    #     )
-    #     np.savez(OUTPUT_PATH+"/pre_compute/marginal_p_x"+str(i)+"_t_M.npz", x=x, times=t_kept, M=M)
+def main():
+    global constants
+    # constants.test_printout()
 
-    # --- Plots and Print-out ---
-    # print_mc_time(MC_FOLDER) 
+    # Set a fixed seed for reproducibility
+    torch.manual_seed(0); np.random.seed(0)
+    
+    _x_at_mean = constants.N_MEAN_I.copy()
+    p_max = p_init_scaled(constants, _x_at_mean.reshape(-1, 6)).item()
+    scale = p_max
+    scale_torch = torch.tensor(scale, dtype=torch.float32)
+    print(scale_torch)
+    
+    p_net = TimeToGMM6D_V0(constants, K=11)
+    configuration = config_training_TimeToGMM6D(constants, scale_torch, option="V0")
 
-    # # This print-out justifies why it is difficult to validate the error bound that defines on joint PDF
-    # # NOTE this illustrates the bottlneck of validating PINN method if an accurate joint PDF is not available (also mentioned in Sun and Kumar Pg. 19)
-    # # This is also validated in terms of e1(t0) using p(t0) analy v.s. e1(t0) using p(t0) MC ins train_e1.py code
-    # p_init_analy = np.load(MC_FOLDER+"pdf_analy_t0.000.npy")
-    # p_init_mc = np.load(MC_FOLDER+"pdf_t0.000.npy")
-    # rel_acc = np.max(np.abs(p_init_mc - p_init_analy))/np.max(np.abs(p_init_analy))
-    # del p_init_mc
-    # print("[check] rel. accuracy of MC   --> the deviation between p(t0) MC   and p(t0): {:.2f} %".format(
-    #     100.0 * rel_acc.item()))
-    # p_init_pinn = np.load(OUTPUT_PATH+"/pdf_t0.000.npy")
-    # rel_acc_pinn = np.max(np.abs(p_init_pinn - p_init_analy))/np.max(np.abs(p_init_analy))
-    # print("[check] rel. accuracy of PINN --> the deviation between p(t0) PINN and p(t0): {:.2f} %".format(
-    #     100.0 * rel_acc_pinn.item()))
-    # del p_init_pinn; del p_init_analy
+    if(TRAIN_FLAG):
+        configuration["training_fcn"](p_net, configuration)
 
-    # This print-out justifies why we visualize the marginal PDF of MC vs PINN even if the joint PDF of MC is very inaccurate
-    # NOTE: the fact that two joint PDFs can be very different but have similar marginal PDF is illustrated by: 
-    # exp_utilities/test_joint_vs_marginal.py
-    # NOTE: this is consistent with how RMS error is computed (on 2D marginal) in Sun and Kumar
-    # data_lp = PropagationData(SAVE_PATH_LINEAR_PROPAGATE)
-    # data_us = PropagationData(SAVE_PATH_UNSCENT_PROPAGATE)
-    # for i in range(1, 7):
-    #     data_mc = np.load(MC_FOLDER+"pre_compute/marginal_p_x"+str(i)+"_t_M.npz")
-    #     data_sol = np.load("data/pre_compute/marginal_pdfsol_x"+str(i)+"_t_M.npz")
-    #     data_pinn = np.load(OUTPUT_PATH+"/pre_compute/marginal_p_x"+str(i)+"_t_M.npz")
-    #     plot_time_curves_3d(i, constants, data_pinn, data_sol, 
-    #                         data_lp=data_us, p_init=p_init, leg_txt=["p PINN", "p sol."], title="Marginal p(x"+str(i)+",t)")
+    # --- Load the best network after training ---   
+    p_net = load_trained_model(p_net, path=configuration["save_path"]+"/p_net.pth"); p_net.eval()
+
+    # --- checking joint PDF against p_sol ---
+    check(constants, p_net)
+    # MLP reference
+    # 0.630857249274896
+    # 0.6326825743760085
+    # 1.3699860472606127
+    # 2.034667585779303
+    # 1.534541648543753
+    # 1.6028273334576757
 
 
 if __name__ == "__main__":

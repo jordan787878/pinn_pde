@@ -599,8 +599,9 @@ def load_trained_model(net, path, method="new"):
     net.load_state_dict(checkpoint['model_state_dict'])
     epoch = checkpoint['epoch']
     if(method == "new"):
-        loss_history = np.array(checkpoint['loss_history'])
-        print("best epoch: ", epoch, ", min loss:", np.min(loss_history), ", train time:", checkpoint['train_time'])
+        # loss_history = np.array(checkpoint['loss_history'])
+        # print("best epoch: ", epoch, ", min loss:", np.min(loss_history), ", train time:", checkpoint['train_time'])
+        print("best epoch: ", epoch, ", train time:", checkpoint['train_time'])
     else:
         print("best epoch: ", epoch, ", min loss:", checkpoint['loss'], ", train time:", checkpoint['train_time'])
     # keys = p_net.state_dict().keys()
@@ -822,6 +823,283 @@ class TimeToGMM6D(nn.Module):
 
         # reuse the existing z->x transform (batched)
         means_x_b, Ls_x_b = self._zparams_to_xparams(means_b, Ls_b)  # (1,K,D), (1,K,D,D)
+
+        # drop batch and build covariances from Cholesky
+        means_x = means_x_b[0]                               # (K,D)
+        Ls_x    = Ls_x_b[0]                                  # (K,D,D)
+        covs_x  = Ls_x @ Ls_x.transpose(-1, -2)              # (K,D,D)
+
+        # weights
+        weights = logw_b[0].exp()                            # (K,)
+
+        return weights, means_x, covs_x
+
+
+class TimeToGMM6D_V0(nn.Module):
+    """
+    Time-conditioned 6D Gaussian Mixture with K components.
+    Covariance parameterization: Σ_k(t) = L_k(t) L_k(t)^T, L lower-triangular with positive diag.
+
+    inputs
+        x: (N, D)
+        t: (N, 1)
+    outputs
+        pdf(x|t): (N, 1)
+
+    Also provides:
+        - log_prob(x,t): (N,1)
+        - params(t): means (N,K,D), L (N,K,D,D), log_weights (N,K)
+        - mean_and_covariance(t): mixture mean (N,D), covariance (N,D,D)
+    """
+    def __init__(self, constants, K=1, hidden=64, depth=2, min_diag=1e-4,
+                 dtype=torch.float32, device="cpu"):
+        super().__init__()
+        self.D = 6
+        self.Kc = int(K)
+        self.K_tril = self.D * (self.D + 1) // 2
+        self.min_diag = float(min_diag)
+        self.depth = depth
+        self.softplus_beta = 1.
+
+        # ---------- normalization buffers ----------
+        # x normalization from initial state stats
+        x_mean0 = torch.as_tensor(np.copy(constants.N_MEAN_I), dtype=dtype)
+        x_var0  = torch.as_tensor(np.copy(np.diag(constants.N_COV_I)), dtype=dtype)
+        self.register_buffer("x_mean0",    x_mean0)          # (6,)
+        self.register_buffer("x_var0",     x_var0)           # (6,)
+        # time normalization
+        T_end = float(constants.T_PRIME_SPAN[-1])
+        self.register_buffer("T_end", torch.as_tensor(T_end, dtype=dtype))  # scalar
+
+        # backbone
+        # self.backbone = nn.Sequential(
+        #     nn.Linear(1, hidden),
+        #     nn.Softplus(beta=self.softplus_beta),
+        #     nn.Linear(hidden, hidden),
+        #     nn.Softplus(beta=self.softplus_beta),
+        #     nn.Linear(hidden, hidden),
+        #     nn.Softplus(beta=self.softplus_beta),
+        # )
+        # parameter heads
+        # self.mean_head   = nn.Linear(hidden, self.Kc * self.D)          # (N, K*D)
+        self.mean_head = nn.Sequential(
+            nn.Linear(1, hidden),
+            nn.Softplus(beta=self.softplus_beta),
+            nn.Linear(hidden, hidden),
+            nn.Softplus(beta=self.softplus_beta),
+            nn.Linear(hidden,self.Kc * self.D),
+        )
+
+        # self.tri_head    = nn.Linear(hidden, self.Kc * self.K_tril)     # (N, K*K_tril)
+        self.tri_head = nn.Sequential(
+            nn.Linear(1, hidden),
+            nn.Softplus(beta=self.softplus_beta),
+            nn.Linear(hidden, hidden),
+            nn.Softplus(beta=self.softplus_beta),
+            nn.Linear(hidden, self.Kc * self.K_tril),
+        )
+
+        # self.weight_head = nn.Linear(hidden, self.Kc)                   # (N, K) logits
+        self.weight_head = nn.Sequential(
+            nn.Linear(1, hidden),
+            nn.Softplus(beta=self.softplus_beta),
+            nn.Linear(hidden, hidden),
+            nn.Softplus(beta=self.softplus_beta),
+            nn.Linear(hidden,self.Kc),
+        )
+
+        # indices/masks for LOWER triangle
+        i, j = torch.tril_indices(self.D, self.D, 0)
+        self.register_buffer("_i_tril", i, persistent=False)
+        self.register_buffer("_j_tril", j, persistent=False)
+        self.register_buffer("_diag_mask", (i == j), persistent=False)  # (K_tril,)
+        self.register_buffer("LOG_2PI", torch.log(torch.full((), math.tau, dtype=dtype)))
+
+        self._init_weights()
+        self.to(device=device, dtype=dtype)
+
+    def _init_weights(self):
+        for m in self.modules():
+            if isinstance(m, nn.Linear):
+                nn.init.kaiming_uniform_(m.weight, a=math.sqrt(5))
+                if m.bias is not None:
+                    fan_in, _ = nn.init._calculate_fan_in_and_fan_out(m.weight)
+                    bound = 1 / math.sqrt(fan_in)
+                    nn.init.uniform_(m.bias, -bound, bound)
+
+    def _zparams_to_xparams(self, tau, means_z, Ls_z):
+        """
+        means_z: (N,K,D), Ls_z: (N,K,D,D) [lower-tri in z]
+        returns means_x: (N,K,D), Ls_x: (N,K,D,D) [lower-tri in x]
+        """
+        x_std0 = torch.sqrt(self.x_var0)                     # (D,)
+        x_std0_b = x_std0.view(1, 1, self.D)                 # (1,1,D) for broadcast
+        # tau_m    = tau.to(means_z.dtype).to(means_z.device).view(-1, 1, 1)    # (N,1,1)
+        means_x = self.x_mean0.view(1, 1, self.D) + means_z * x_std0_b
+        # means_x = means_z * x_std0_b
+        # L0    = torch.diag_embed(x_std0).to(Ls_z.dtype).to(Ls_z.device)      # (D,D)
+        # L0    = L0.view(1,1,self.D,self.D).expand_as(Ls_z)                    # (N,K,D,D)
+        Ls_x  = Ls_z * x_std0_b.unsqueeze(-1)              # row-scale each L by std
+        return means_x, Ls_x
+    
+    # def _zparams_to_xparams(self, means_z, Ls_z, tau):
+        # """
+        # means_z: (N,K,D), Ls_z: (N,K,D,D)  [lower-tri with positive diag in z]
+        # tau    : (N,1) normalized time in [0,1]
+        # returns:
+        # means_x: (N,K,D)
+        # Ls_x   : (N,K,D,D)
+        # """
+        # # --- broadcasts/helpers ---
+        # x_std0   = torch.sqrt(self.x_var0)                  # (D,)
+        # x_std0_b = x_std0.view(1, 1, self.D)                # (1,1,D)
+        # tau_m    = tau.to(means_z.dtype).to(means_z.device).view(-1, 1, 1)    # (N,1,1)
+        # tau_L    = tau_m.view(-1, 1, 1, 1)                                          # (N,1,1,1)
+        # # --- means: linear interpolation between μ0 and dynamic μ ---
+        # mu0      = self.x_mean0.view(1, 1, self.D)                                  # (1,1,D)
+        # mu_dyn   = means_z * x_std0_b                                               # (N,K,D)
+        # means_x  = mu0 + tau_m * mu_dyn                                             # (N,K,D)
+        # L0    = torch.diag_embed(x_std0).to(Ls_z.dtype).to(Ls_z.device)      # (D,D)
+        # L0    = L0.view(1,1,self.D,self.D).expand_as(Ls_z)                    # (N,K,D,D)
+        # # dynamic L scaled to x-space
+        # L_dyn = Ls_z * x_std0_b.unsqueeze(-1)                                 # (N,K,D,D)
+        # # convex mix in L-space -> positive diagonal preserved
+        # Ls_x  = (1.0 - tau_L)*L0 + tau_L * L_dyn
+        # return means_x, Ls_x
+
+    # ---------------- parameters ----------------
+    def params(self, tau: torch.Tensor):
+        """
+        Inputs:
+          normalized time: tau
+        Returns:
+          means: (N, K, D)
+          Ls   : (N, K, D, D) lower-tri with positive diag (covariance Cholesky)
+          logw : (N, K)       mixture log-weights (log-softmax)
+        """
+        p = next(self.parameters())
+
+        # backbone
+        # h = self.backbone(tau)
+        h = tau
+
+        # means
+        means = self.mean_head(h).view(-1, self.Kc, self.D)     # (N,K,D)
+
+        # lower-tri raw -> L (covariance factor)
+        raw = self.tri_head(h).view(-1, self.Kc, self.K_tril)   # (N,K,K_tril)
+        raw = raw.reshape(-1, self.K_tril)                      # (N*K, K_tril)
+        raw_adj = raw.clone()
+        diag_raw = raw[:, self._diag_mask]                      # (N*K, D)
+        diag_pos = F.softplus(diag_raw, beta=self.softplus_beta) + self.min_diag
+        raw_adj[:, self._diag_mask] = diag_pos
+
+        NK = raw.shape[0]
+        L = torch.zeros(NK, self.D, self.D, dtype=p.dtype, device=p.device)
+        L[:, self._i_tril, self._j_tril] = raw_adj              # (N*K,D,D)
+        Ls = L.view(-1, self.Kc, self.D, self.D)                # (N,K,D,D)
+
+        # log-weights
+        # (default)
+        # logw = F.log_softmax(self.weight_head(tau), dim=-1)       # (N,K)
+        
+        # (try numerical stable parameterization of GMM log(weights)
+        # turns out it is the v that turns NaN...
+        if torch.isnan(h).any():
+            print("h Nan")
+        v = self.weight_head(h)                                   # (N, K)
+        if torch.isnan(v).any():
+            print("v Nan")
+        logw = F.log_softmax(v, dim=-1)       # (N,K)
+        if torch.isnan(logw).any():
+            print("logw Nan")
+
+        # # tau is (N,1)
+        # if torch.isnan(tau).any():
+        #     print("tau Nan")
+        # v = self.weight_head(tau)                     # (N, Kc) logits
+        # if torch.isnan(v).any():
+        #     print("v Nan")
+        # # log-softmax logits -> logw_raw
+        # logw = F.log_softmax(v, dim=-1)               # (N, Kc)
+        # if torch.isnan(logw).any():
+        #     print("logw Nan (pre-floor)")
+        # # --- smooth floor: mix with uniform so each prob >= alpha/Kc ---
+        # alpha = 0.50
+        # Kc = v.size(-1)
+        # w = logw.exp()                                # (N, Kc) probs
+        # w = (1.0 - alpha) * w + (alpha / Kc)          # still sums to 1; min >= 0.1/Kc
+        # # back to log-space, with tiny clamp for numerical safety
+        # eps = torch.finfo(w.dtype).tiny
+        # logw = torch.log(w.clamp_min(eps))            # (N, Kc) floored log-probs
+        # # optional sanity checks
+        # if (w < (alpha / Kc) - 1e-12).any():
+        #     print("Warning: weight floor violated (numerics).")
+        # if torch.isnan(logw).any():
+        #     print("logw Nan (post-floor)")
+
+        return means, Ls, logw
+
+    # ---------------- densities ----------------
+    def log_prob(self, x: torch.Tensor, t: torch.Tensor) -> torch.Tensor:
+        """
+        Evaluate mixture log-pdf directly in x-space:
+        1) normalize time only (tau = t/T_end)
+        2) get z-space params
+        3) map to x-space
+        4) compute log N(x | mu_x, Σ_x) and log-sum-exp over K
+        Returns (N,1).
+        """
+        if x.ndim == 1: x = x.unsqueeze(0)
+        tau = t / self.T_end                                  # (N,1)
+
+        means_z, Ls_z, logw = self.params(tau)                # (N,K,D), (N,K,D,D), (N,K)
+        means_x, Ls_x = self._zparams_to_xparams(tau, means_z, Ls_z)
+
+        x = x.to(dtype=means_x.dtype, device=means_x.device)   # (N,D)
+
+        # center and solve with the x-space Cholesky
+        xm = x.unsqueeze(1) - means_x                          # (N,K,D)
+        N, K, D = xm.shape
+        y = torch.linalg.solve_triangular(
+            Ls_x.reshape(N*K, D, D), xm.reshape(N*K, D, 1),
+            upper=False
+        ).reshape(N, K, D, 1)
+
+        quad = (y.squeeze(-1) ** 2).sum(-1)                    # (N,K)
+        sum_log_diag = torch.log(torch.diagonal(
+            Ls_x, dim1=-2, dim2=-1
+        )).sum(-1)                                             # (N,K)
+
+        log_comp = -0.5 * quad - sum_log_diag - 0.5 * D * self.LOG_2PI  # (N,K)
+        logp = torch.logsumexp(logw + log_comp, dim=-1, keepdim=True)   # (N,1)
+        return logp
+
+    def pdf(self, x: torch.Tensor, t: torch.Tensor) -> torch.Tensor:
+        return torch.exp(self.log_prob(x, t))
+
+    def forward(self, x: torch.Tensor, t: torch.Tensor) -> torch.Tensor:
+        return self.pdf(x, t)
+
+    # ---------------- mixture stats ----------------
+    @torch.no_grad()
+    def weights_means_covs_at(self, t: float):
+        """
+        Return x-space mixture parameters at time t (no batch dim):
+        weights: (K,)
+        means  : (K, D)
+        covs   : (K, D, D)
+        """
+        p = next(self.parameters())
+        # (1,1) tensor, normalize time
+        t_tensor   = torch.as_tensor([[t]], dtype=p.dtype, device=p.device)
+        tau_tensor = t_tensor / self.T_end
+
+        # z-space params (batched)
+        means_b, Ls_b, logw_b = self.params(tau_tensor)     # (1,K,D), (1,K,D,D), (1,K)
+
+        # reuse the existing z->x transform (batched)
+        means_x_b, Ls_x_b = self._zparams_to_xparams(tau_tensor, means_b, Ls_b)  # (1,K,D), (1,K,D,D)
 
         # drop batch and build covariances from Cholesky
         means_x = means_x_b[0]                               # (K,D)

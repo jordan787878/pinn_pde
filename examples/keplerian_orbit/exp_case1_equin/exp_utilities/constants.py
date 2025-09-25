@@ -74,7 +74,22 @@ class Case1_6D_Constants_Equin:
     # _T_PRIME_SPAN   = np.float32(4. *np.array([0.0, 0.02, 0.04, 0.06, 0.08, 0.1]))
     # _T_PRIME_SPAN   = np.float32(6. *np.array([0.0, 0.02, 0.04, 0.06, 0.08, 0.1]))
 
+    _NX_RANGE_NP = np.array([
+        _N_X1_RANGE,
+        _N_X2_RANGE,
+        _N_X3_RANGE,
+        _N_X4_RANGE,
+        _N_X5_RANGE,
+        _N_X6_RANGE,
+    ])
+
+    _NX_RANGE = torch.from_numpy(_NX_RANGE_NP)
+
     _T_PRIME_END_FIX = (0.3*_T)/_T
+
+    @property
+    def NX_RANGE(self):
+        return self._NX_RANGE
 
     @property
     def NAME(self):
@@ -298,6 +313,21 @@ class Case1_6D_Constants_Equin:
         ])
         _x = torch.tensor(_x, dtype=torch.float32, requires_grad=True)
         x = torch.cat((_x_normal, _x), dim=0)
+        t = np.random.uniform(self._T_PRIME_SPAN[0], self._T_PRIME_SPAN[-1], len(x))
+        t = torch.tensor(t, dtype=torch.float32, requires_grad=True).view(-1,1)
+        return x, t
+    
+    def sample_res_points_scaled_uniform(self, N_samples, multiplyer=1):
+        N_samples = multiplyer*N_samples
+        _x = np.column_stack([
+            np.random.uniform(self.N_X1_RANGE[0], self.N_X1_RANGE[1], N_samples),
+            np.random.uniform(self.N_X2_RANGE[0], self.N_X2_RANGE[1], N_samples),
+            np.random.uniform(self.N_X3_RANGE[0], self.N_X3_RANGE[1], N_samples),
+            np.random.uniform(self.N_X4_RANGE[0], self.N_X4_RANGE[1], N_samples),
+            np.random.uniform(self.N_X5_RANGE[0], self.N_X5_RANGE[1], N_samples),
+            np.random.uniform(self.N_X6_RANGE[0], self.N_X6_RANGE[1], N_samples),
+        ])
+        x = torch.tensor(_x, dtype=torch.float32, requires_grad=True)
         t = np.random.uniform(self._T_PRIME_SPAN[0], self._T_PRIME_SPAN[-1], len(x))
         t = torch.tensor(t, dtype=torch.float32, requires_grad=True).view(-1,1)
         return x, t

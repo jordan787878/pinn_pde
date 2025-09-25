@@ -8,8 +8,9 @@ from scipy.stats import norm, multivariate_normal
 from matplotlib.lines import Line2D
 from mpl_toolkits.mplot3d import Axes3D  # noqa: F401  (needed for 3D projection)
 import pandas as pd
-from matplotlib.colors import LogNorm
+from matplotlib.colors import LogNorm, Normalize
 from matplotlib.ticker import MaxNLocator, ScalarFormatter
+
 
 
 def set_publication_plot_style(font_family='Times New Roman', font_size=18):
@@ -174,11 +175,11 @@ def _indices_in_dense(time_dense, time_sparse, tol=None):
 
 
 def plot_pdf_metrics(metrics):
-    colors = sns.color_palette("husl", 3)
+    colors = sns.color_palette("husl", 4)
 
     plt.figure()
     print(metrics["t"])
-    plt.plot(metrics["t"], metrics["rel_error_pinn"], color=colors[0], label=r"$\hat{p}$ PINN")
+    plt.plot(metrics["t"], metrics["rel_error_pinn"], color=colors[0], label="PINN-MLP")
     all_zeros = not np.any(metrics["B1_pinn"])
     if(all_zeros is False):
         plt.fill_between(
@@ -189,25 +190,28 @@ def plot_pdf_metrics(metrics):
             alpha=0.2,
             label="PINN Error Bound"
         )
-    plt.plot(metrics["t"], metrics["rel_error_lp"], color=colors[1],   label=r"$p$ Linear Prop.")
-    plt.plot(metrics["t"], metrics["rel_error_ut"], color=colors[2],   label=r"$p$ Unscent Trans.")
+    plt.plot(metrics["t"], metrics["rel_error_pinngmm"], color=colors[-1], label="PINN-GMM")
+    plt.plot(metrics["t"], metrics["rel_error_lp"], color=colors[1],   label="LP")
+    plt.plot(metrics["t"], metrics["rel_error_ut"], color=colors[2],   label="UT")
     plt.legend()
     plt.xlabel("t")
     plt.ylabel("worst rel. error %")
 
     plt.figure()
-    plt.plot(metrics["t"], metrics["tv_pinn"], color=colors[0], label=r"$\hat{p}$ PINN")
-    plt.plot(metrics["t"], metrics["tv_lp"], color=colors[1],   label=r"$p$ Linear Prop.")
-    plt.plot(metrics["t"], metrics["tv_ut"], color=colors[2],   label=r"$p$ Unscent Trans.")
+    plt.plot(metrics["t"], metrics["tv_pinn"], color=colors[0], label="PINN-MLP")
+    plt.plot(metrics["t"], metrics["tv_pinngmm"], color=colors[-1], label="PINN-GMM")
+    plt.plot(metrics["t"], metrics["tv_lp"], color=colors[1],   label="LP")
+    plt.plot(metrics["t"], metrics["tv_ut"], color=colors[2],   label="UT")
     plt.legend()
     plt.xlabel("t")
     plt.ylabel("total variation %")
 
     # metric 3: negative log liklihood (relative KL)
     plt.figure()
-    plt.plot(metrics["t"], metrics["g_kl_pinn"], color=colors[0], label=r"$\hat{p}$ PINN")
-    plt.plot(metrics["t"], metrics["g_kl_lp"], color=colors[1],   label=r"$p$ Linear Prop.")
-    plt.plot(metrics["t"], metrics["g_kl_ut"], color=colors[2],   label=r"$p$ Unscent Trans.")
+    plt.plot(metrics["t"], metrics["g_kl_pinn"], color=colors[0], label="PINN-MLP")
+    plt.plot(metrics["t"], metrics["g_kl_pinngmm"], color=colors[-1], label="PINN-GMM")
+    plt.plot(metrics["t"], metrics["g_kl_lp"], color=colors[1],   label="LP")
+    plt.plot(metrics["t"], metrics["g_kl_ut"], color=colors[2],   label="UT")
     # plt.plot(metrics["t"], metrics["rel_kl_ut_alpha_0_1"], color=colors[2], marker="o", label=r"$p$ Unscent Trans. $(\alpha=0.1)$")
     plt.legend()
     plt.xlabel("t")
@@ -546,14 +550,15 @@ def densify_between(v, n_between=1):
     return np.concatenate(pieces + [v[-1:]])
 
 
-def plot_single_corner(constants, 
+def plot_single_corner(t, constants, 
     x_coord1=1, x_coord2=1,
     X_samples=None,
     data_marginal_pinn=None,
     gaussian_lp=None,
     gaussian_ut=None,
-    bins=200,
-    cmap="cividis",
+    p_net_gmm=None,
+    bins=300,
+    cmap="copper", #"Greys", "magma", "cividis", "rocket_r"
     ranges=None,               # list of (lo,hi) per dim; if None -> data-driven
     quantile_range=(0.001, 0.999),  # set to None to use full min/max
     log_counts=True,           # log color scale for heatmap
@@ -567,7 +572,7 @@ def plot_single_corner(constants,
     labels=["x"+str(x_coord1), "x"+str(x_coord2)]
 
     fig, ax = plt.subplots(figsize=(10, 8))
-    colors = sns.color_palette("husl", 3)
+    colors = sns.color_palette("husl", 4)
 
     # heatmap plot from samples drawn from the true distribution
     xlo = X_samples[:, x_coord1-1].min()# x_first_unscaled.min()
@@ -585,16 +590,19 @@ def plot_single_corner(constants,
         vmax = float(pos.max()) if pos.size else 1.0
         vmin = float(pos.min()) if pos.size else 1.0  # >=1 to avoid zeros in LogNorm
         norm = LogNorm(vmin=vmin, vmax=vmax)
+        # norm = Normalize(vmin=vmin, vmax=vmax)
     else:
         norm = None
+    H_ma = np.ma.masked_invalid(H)           # handle NaNs/Infs
+    alpha = np.clip(norm(H_ma).filled(0), 0, 1)  # normalize to [0,1]
     ax.imshow(
         H, origin="lower",
         extent=(xlo, xhi, ylo, yhi),
         aspect="auto", cmap=cmap, norm=norm, interpolation="nearest",
-        alpha=0.6
+        alpha=alpha
     )
 
-    relative_levels = np.array([0.001, 0.01, 0.1, 0.25, 0.50, 0.75, 0.95, 0.99])
+    relative_levels = np.array([1e-3, 0.01, 0.1, 0.25, 0.50, 0.75, 0.95])
     # contour plot from data_marginal_pinn
     if(data_marginal_pinn is not None):
         X_grid = data_marginal_pinn['X_grid']
@@ -602,7 +610,7 @@ def plot_single_corner(constants,
         pdf_values = data_marginal_pinn['pdf']
         pdf_max = np.max(pdf_values[pdf_values > 0])
         levels = relative_levels * pdf_max
-        print(levels)
+        # print(levels)
         # Draw the contour lines with the custom levels
         ax.contour(X_grid, Y_grid, pdf_values, levels=levels, colors=[colors[0]], 
                    linewidths=2)
@@ -625,7 +633,7 @@ def plot_single_corner(constants,
         levels = relative_levels * pdf_max; print(levels)
         # Draw the contour lines with the custom levels
         ax.contour(X_grid, Y_grid, pdf_values, levels=levels, colors=[colors[1]], 
-                linewidths=2)
+                linewidths=3.)
 
     # contour of UT
     if(gaussian_ut is not None):
@@ -645,7 +653,53 @@ def plot_single_corner(constants,
         levels = relative_levels * pdf_max; print(levels)
         # Draw the contour lines with the custom levels
         ax.contour(X_grid, Y_grid, pdf_values, levels=levels, colors=[colors[2]], 
-                linewidths=2)
+                linewidths=1.)
+        
+    def _plot_pinn_gmm_contour(ws, mus, covs, x_coords, color):
+        # print(ws.shape, mus.shape, covs.shape)
+        plot_axes = (x_coords[0]-1, x_coords[1]-1)
+        # print(plot_axes)
+        xs = np.linspace(xrange[0], xrange[1], num=256, endpoint=True)
+        ys = np.linspace(yrange[0], yrange[1], num=256, endpoint=True)
+        X_grid, Y_grid = np.meshgrid(xs, ys, indexing="ij")
+        xs_scaled = (xs - constants.MEAN_I[plot_axes[0]])/ constants.COV_I[plot_axes[0],plot_axes[0]]**0.5
+        ys_scaled = (ys - constants.MEAN_I[plot_axes[1]])/ constants.COV_I[plot_axes[1],plot_axes[1]]**0.5
+        X_grid_scaled, Y_grid_scaled = np.meshgrid(xs_scaled, ys_scaled, indexing="ij")
+        grid_pts = np.vstack([X_grid_scaled.ravel(), Y_grid_scaled.ravel()]).T
+        # print(xs_scaled.min(), xs_scaled.max())
+        # print(ys_scaled.min(), ys_scaled.max())
+        pdf_scaling = 1 / (constants.COV_I[plot_axes[0],plot_axes[0]] * constants.COV_I[plot_axes[1],plot_axes[1]])**0.5
+
+        pdf_values = np.copy(X_grid) * 0.0
+        for k in range(ws.shape[0]):
+            ws_k = ws[k]
+            mus_k = mus[k, :]
+            covs_k = covs[k, :, :]
+            marginal_mu = mus_k[list(plot_axes)]
+            marginal_cov = covs_k[np.ix_(list(plot_axes), list(plot_axes))]
+            # print(marginal_mu)
+            pdf_func = multivariate_normal(mean=marginal_mu, cov=marginal_cov)
+            p_k = pdf_func.pdf(grid_pts).reshape(X_grid.shape) * pdf_scaling
+            pdf_values = pdf_values + ws_k * p_k
+            if(ws.shape[0] > 1):
+                _pdf_max = np.max(p_k).item()
+                _levels = np.array([0.01]) * _pdf_max
+                ax.contour(X_grid, Y_grid, p_k, levels=_levels, colors=[color], 
+                        linewidths=0.5, alpha=0.4)
+        # print(pdf_values.shape, X_grid.shape, Y_grid.shape)
+        # print(pdf_values)
+        pdf_max = np.max(pdf_values).item()
+        levels = relative_levels * pdf_max # ; print(pdf_max, levels)
+        ax.contour(X_grid, Y_grid, pdf_values, levels=levels, colors=[color], linewidths=2.)
+
+    if(p_net_gmm is not None):
+        x_coords = (x_coord1, x_coord2)
+        ws, mus, covs = p_net_gmm.weights_means_covs_at(t)
+        ws = ws.detach().cpu().numpy()
+        print("GMM weights: ", ws, np.sum(ws))
+        mus = mus.detach().cpu().numpy()
+        covs = covs.detach().cpu().numpy()
+        _plot_pinn_gmm_contour(ws, mus, covs, x_coords, colors[-1])
         
     # Create the legend handles
     handles = []
@@ -655,11 +709,15 @@ def plot_single_corner(constants,
         handles.append(plt.Line2D([], [], color=colors[1], label="LP", linewidth=2))
     if gaussian_ut is not None:
         handles.append(plt.Line2D([], [], color=colors[2], label="UT", linewidth=2))
+    if p_net_gmm is not None:
+        handles.append(plt.Line2D([], [], color=colors[-1], label="PINN-GMM", linewidth=2))
     ax.legend(handles=handles, loc='best')
 
     b=0.05
-    ax.set_xlim(*np.ptp((x:=X_samples[:,x_coord1-1]))*np.array([-b,1+b])+x.min())
-    ax.set_ylim(*np.ptp((y:=X_samples[:,x_coord2-1]))*np.array([-b,1+b])+y.min())
+    # ax.set_xlim(*np.ptp((x:=X_samples[:,x_coord1-1]))*np.array([-b,1+b])+x.min())
+    # ax.set_ylim(*np.ptp((y:=X_samples[:,x_coord2-1]))*np.array([-b,1+b])+y.min())
+    ax.set_xlim(xrange[0], xrange[1])
+    ax.set_ylim(yrange[0], yrange[1])
     ax.set_xlabel(labels[0])
     ax.set_ylabel(labels[1])
     ax.set_title(f'2D Marginal PDF for {labels[0]} and {labels[1]}')

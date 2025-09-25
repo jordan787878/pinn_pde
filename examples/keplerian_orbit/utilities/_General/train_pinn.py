@@ -47,47 +47,98 @@ def sample_from_model_gmm_xspace(p_net, constants, N_samples, device, t_sampler=
     # Here we try to use a vectorized path first; if missing, fall back to loop.
     x_list = []
 
-    try:
-        tau = t / p_net.T_end
-        means_z, Ls_z, logw = p_net.params(tau)                     # (N,K,D), (N,K,D,D), (N,K)
-        means_x, Ls_x = p_net._zparams_to_xparams(means_z, Ls_z)    # x-space
-        weights = logw.exp()                                         # (N,K)
-        K = weights.shape[1]
-        # sample component per row
-        comp = Categorical(weights).sample()                         # (N,)
-        # fancy gather means_x, Ls_x by comp
-        inds = comp.view(-1, 1, 1).expand(-1, 1, D)
-        mu_sel = means_x.gather(1, inds).squeeze(1)                  # (N,D)
+    tau = t / p_net.T_end
+    means_z, Ls_z, logw = p_net.params(tau)                     # (N,K,D), (N,K,D,D), (N,K)
+    means_x, Ls_x = p_net._zparams_to_xparams(tau, means_z, Ls_z)    # x-space
+    # print(logw)
+    weights = logw.exp()                                         # (N,K)
+    # print(weights)
+    K = weights.shape[1]
+    # sample component per row
+    comp = Categorical(weights).sample()                         # (N,)
+    # fancy gather means_x, Ls_x by comp
+    inds = comp.view(-1, 1, 1).expand(-1, 1, D)
+    mu_sel = means_x.gather(1, inds).squeeze(1)                  # (N,D)
 
-        indsL = comp.view(-1, 1, 1, 1).expand(-1, 1, D, D)
-        L_sel = Ls_x.gather(1, indsL).squeeze(1)                     # (N,D,D)
+    indsL = comp.view(-1, 1, 1, 1).expand(-1, 1, D, D)
+    L_sel = Ls_x.gather(1, indsL).squeeze(1)                     # (N,D,D)
 
-        # sample from selected Gaussians
-        eps = torch.randn(N, D, device=device, dtype=mu_sel.dtype)   # (N,D)
-        x = mu_sel + torch.matmul(L_sel, eps.unsqueeze(-1)).squeeze(-1)
-        x_list.append(x)
-    except Exception:
-        # Fallback: per-sample (slower but robust)
-        x = torch.empty(N, D, device=device, dtype=torch.float32)
-        for i in range(N):
-            wi, mui, covi = p_net.weights_means_covs_at(float(t[i,0].item()))
-            wi = wi.to(device=device); mui = mui.to(device=device); covi = covi.to(device=device)
-            comp = torch.multinomial(wi, 1).item()
-            mvn = MultivariateNormal(mui[comp], covariance_matrix=covi[comp])
-            x[i] = mvn.sample()
-        x_list.append(x)
+    # sample from selected Gaussians
+    eps = torch.randn(N, D, device=device, dtype=mu_sel.dtype)   # (N,D)
+    x = mu_sel + torch.matmul(L_sel, eps.unsqueeze(-1)).squeeze(-1)
+    x_list.append(x)
+    # except Exception:
+    #     # Fallback: per-sample (slower but robust)
+    #     x = torch.empty(N, D, device=device, dtype=torch.float32)
+    #     for i in range(N):
+    #         wi, mui, covi = p_net.weights_means_covs_at(float(t[i,0].item()))
+    #         wi = wi.to(device=device); mui = mui.to(device=device); covi = covi.to(device=device)
+    #         comp = torch.multinomial(wi, 1).item()
+    #         mvn = MultivariateNormal(mui[comp], covariance_matrix=covi[comp])
+    #         x[i] = mvn.sample()
+    #     x_list.append(x)
 
     x_gmm = torch.cat(x_list, dim=0)
     return x_gmm, t
 
 
 @torch.no_grad()
+def sample_gmm_per_time_multi(p_net, constants, N_times, S_per_time, device, return_reshaped=False):
+    """
+    For each time t_i ~ Uniform[0, T_end), draw S_per_time samples from the *mixture* p(x | t_i).
+    Vectorized: runs the model once on the N_times unique t_i, then repeats parameters S times.
+
+    Returns:
+      x: (N_times*S_per_time, D)  [or (N_times, S_per_time, D) if return_reshaped]
+      t: (N_times*S_per_time, 1)  [or (N_times, S_per_time, 1)]
+    """
+    N = int(N_times)
+    S = int(S_per_time)
+    D = int(len(constants.N_MEAN_I))
+    T_end = float(getattr(p_net, "T_end", float(constants.T_PRIME_SPAN[-1])))
+
+    # 1) Sample unique times and normalize
+    t   = torch.rand(N, 1, device=device, dtype=torch.float32) * T_end
+    tau = t / T_end
+
+    # 2) Get GMM params for the N unique times (vectorized)
+    #    means_x: (N,K,D), Ls_x: (N,K,D,D), logw: (N,K)
+    means_z, Ls_z, logw = p_net.params(tau)
+    means_x, Ls_x       = p_net._zparams_to_xparams(tau, means_z, Ls_z)
+
+    # 3) Repeat each row S times so we can draw S samples per time without re-running the net
+    means_x_rep = means_x.repeat_interleave(S, dim=0)   # (N*S, K, D)
+    Ls_x_rep    = Ls_x.repeat_interleave(S, dim=0)      # (N*S, K, D, D)
+    logw_rep    = logw.repeat_interleave(S, dim=0)      # (N*S, K)
+    t_rep       = t.repeat_interleave(S, dim=0)         # (N*S, 1)
+
+    # 4) Sample a component per (time,sample) using logits (stable)
+    comp = Categorical(logits=logw_rep).sample()        # (N*S,)
+    idx  = torch.arange(N*S, device=device)
+
+    # 5) Pick μ_k and L_k for each chosen component, then sample x = μ + L ε
+    mu = means_x_rep[idx, comp, :]                      # (N*S, D)
+    L  = Ls_x_rep[idx, comp, :, :]                      # (N*S, D, D)
+
+    eps = torch.randn(N*S, D, device=device, dtype=mu.dtype)
+    x   = mu + (L @ eps.unsqueeze(-1)).squeeze(-1)      # (N*S, D)
+
+    if return_reshaped:
+        x = x.view(N, S, D)
+        t_rep = t_rep.view(N, S, 1)
+
+    return x, t_rep
+
+
+@torch.no_grad()
 def rar_candidate_pool_mixed(p_net,
                              constants,
                              N_cand,
+                             x_range,
                              alpha_model=0.5,
                              sample_uniform_fn=None,   # function that returns (x_u, t_u) uniform
-                             device="cpu"):
+                             device="cpu",
+                             only_t0=False):
     """
     Build a candidate pool for RAR by mixing:
       - (1-alpha) fraction from uniform sampler over domain/time
@@ -109,12 +160,31 @@ def rar_candidate_pool_mixed(p_net,
         ts.append(t_u.to(device))
 
     if N_model > 0:
-        x_m, t_m = sample_from_model_gmm_xspace(p_net, constants, N_model, device=device)
-        xs.append(x_m)
+        # x_m, t_m = sample_from_model_gmm_xspace(p_net, constants, N_model, device=device)
+        S_per_time = 100
+        N_model_time = int(N_model / S_per_time)
+        x_m, t_m = sample_gmm_per_time_multi(p_net, constants, N_model_time, S_per_time, device=device)
+        
+        lo = x_range[:, 0].view(1, 6)            # (1,6) for broadcasting
+        hi = x_range[:, 1].view(1, 6)            # (1,6)
+        viol = (x_m < lo) | (x_m > hi)                 # (N,6) True where out of range
+        pct  = 100.0 * viol.float().mean().item()  # % of elements out of range
+        # if(pct > 0.):
+        #     print(f"[range] {pct:.2f}% out of bounds")
+        
+        x_sat = torch.maximum(torch.minimum(x_m, hi), lo)
+        viol = (x_sat < lo) | (x_sat > hi)                 # (N,6) True where out of range
+        pct  = 100.0 * viol.float().mean().item()  # % of elements out of range
+        if(pct > 0.):
+            print(f"[range] {pct:.2f}% out of bounds")
+
+        xs.append(x_sat)
         ts.append(t_m)
 
     x_cand = torch.cat(xs, dim=0)
     t_cand = torch.cat(ts, dim=0)
+    if(only_t0):
+        t_cand = t_cand * 0.0
 
     # Random shuffle to avoid ordering bias
     perm = torch.randperm(x_cand.shape[0], device=device)
@@ -401,7 +471,20 @@ def train_pinngmm_sol_v0(p_net, configuration):
     increased_icsamples_factor = int(configuration.get("increased_icsamples_factor", 1))
     
     mse_cost_function = torch.nn.MSELoss()
-    optimizer = torch.optim.Adam(p_net.parameters(), lr=1e-3)
+    # optimizer = torch.optim.Adam(p_net.parameters(), lr=1e-3)
+    # --- build param groups (no duplicates) ---
+    # backbone_params   = list(p_net.backbone.parameters())
+    mean_head_params  = list(p_net.mean_head.parameters())
+    tri_head_params   = list(p_net.tri_head.parameters())
+    weight_head_params= list(p_net.weight_head.parameters())
+    optimizer = torch.optim.Adam(
+        [
+            # {"params": backbone_params,    "lr": 1e-3},
+            {"params": mean_head_params,   "lr": 1e-3},
+            {"params": tri_head_params,    "lr": 1e-4},
+            {"params": weight_head_params, "lr": 1e-4},  # start frozen if you want
+        ]
+    )
     scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.95)
     sample_uniform_fn = lambda n: train_helper_sample_res_uniform(n)  # must return (x, t) WITHOUT grad
 
@@ -421,17 +504,26 @@ def train_pinngmm_sol_v0(p_net, configuration):
     FLAG = False
 
     beta = np.float32(0.0)
-    RAR_eps = 0.05
+    RAR_eps = 0.01
     
     start_time = time.time()
     for epoch in range(iterations):
         optimizer.zero_grad()
         
         # Sample new points at each epoch for better generalization
-        x_bc_new, t_bc_new = train_helper_sample_ic(N0_samples_initial)
+        # x_bc_new, t_bc_new = train_helper_sample_ic(N0_samples_initial)
+        x_bc_new, t_bc_new = rar_candidate_pool_mixed(
+                p_net, constants, N_cand=N0_samples_initial, 
+                x_range = constants.NX_RANGE,
+                alpha_model=alpha_model,
+                sample_uniform_fn=sample_uniform_fn, 
+                device=device,
+                only_t0=True)
+
         # x_res_new, t_res_new = train_helper_sample_res(Nr_samples_initial) # NOTE: change this
         _x_res_new, _t_res_new = rar_candidate_pool_mixed(
                 p_net, constants, N_cand=Nr_samples_initial, 
+                x_range = constants.NX_RANGE,
                 alpha_model=alpha_model,
                 sample_uniform_fn=sample_uniform_fn, 
                 device=device)
@@ -447,7 +539,14 @@ def train_pinngmm_sol_v0(p_net, configuration):
         p_i = p_init(constants, x_bc.detach().cpu().numpy())
         p_i = torch.tensor(p_i, dtype=torch.float32, device=device)
         phat_i = p_net(x_bc, t_bc)
-        mse_u = mse_cost_function(phat_i / normalize, p_i / normalize)
+
+        eps = torch.finfo(phat_i.dtype).tiny
+        ph = phat_i.clamp_min(eps)
+        p  = p_i.clamp_min(eps)
+        # Standard Hellinger^2 often has a 1/2 factor; optional for training
+        hellinger_u = 0.5 * (torch.sqrt(ph)/ normalize - torch.sqrt(p)/ normalize).pow(2).mean()
+        mse_u = hellinger_u
+        # mse_u = mse_cost_function(phat_i / normalize, p_i / normalize)
 
         # --- Loss based on PDE ---
         res_p = res_func(x_res, t_res, p_net, beta=beta)
@@ -460,10 +559,29 @@ def train_pinngmm_sol_v0(p_net, configuration):
             tv_t = torch.autograd.grad(res_p, t_res, grad_outputs=torch.ones_like(res_p), create_graph=True)[0]
             mse_tv = mse_cost_function(tv_t/normalize, all_zeros)
             loss += reg_tv * mse_tv
-        loss_history.append(loss.item())
+
+        # --- Optimize ---
+        if not torch.isfinite(loss):
+            print("[NaN] loss blew up; skipping update")
+            optimizer.zero_grad(set_to_none=True)
+            continue
         loss.backward(retain_graph=True)
-        torch.nn.utils.clip_grad_norm_(p_net.parameters(), max_norm=1.0) # Gradient Clipping
+        loss_history.append(loss.item())
+        # guard bad grads
+        bad_grad = False
+        for p in p_net.parameters():
+            if p.grad is not None and not torch.isfinite(p.grad).all():
+                bad_grad = True; break
+        if bad_grad:
+            print("[NaN] gradient non-finite; skipping update")
+            optimizer.zero_grad(set_to_none=True)
+            continue
+        torch.nn.utils.clip_grad_norm_(p_net.parameters(), max_norm=1.0)
         optimizer.step()
+        optimizer.zero_grad(set_to_none=True)    
+        # loss.backward(retain_graph=True)
+        # torch.nn.utils.clip_grad_norm_(p_net.parameters(), max_norm=1.0) # Gradient Clipping
+        # optimizer.step()
         
         # --- Learning rate decay ---
         if (epoch + 1) % iterations_per_decay == 0:
@@ -494,8 +612,14 @@ def train_pinngmm_sol_v0(p_net, configuration):
             
             # Add IC points
             with torch.no_grad():
-                # x_bc_check, t_bc_check = train_helper_sample_ic(N_RAR, Fac_uniform=10, Fac_std=3) # NOTE: change this
-                x_bc_check, t_bc_check = train_helper_sample_ic(N_RAR)
+                # x_bc_check, t_bc_check = train_helper_sample_ic(N_RAR)
+                x_bc_check, t_bc_check = rar_candidate_pool_mixed(
+                    p_net, constants, N_cand=N_RAR, 
+                    x_range = constants.NX_RANGE,
+                    alpha_model=alpha_model,
+                    sample_uniform_fn=sample_uniform_fn, device=device,
+                    only_t0=True)
+                
                 p_i = p_init(constants, x_bc_check.detach().cpu().numpy())
                 p_i = torch.tensor(p_i, dtype=torch.float32, device=device)
                 phat_i = p_net(x_bc_check, t_bc_check)
@@ -510,11 +634,13 @@ def train_pinngmm_sol_v0(p_net, configuration):
                     x_bc_rar_new = x_bc_check.detach()[idx, :]  # store VALUES ONLY
                     t_bc_rar_new = t_bc_check.detach()[idx, :]
                     x_bc_rar, t_bc_rar = rar_append_with_cap(x_bc_rar, t_bc_rar, x_bc_rar_new, t_bc_rar_new, cap=4000)
-                    print(f"... RAR IC , Max IC error: {max_error_ic:.4f}")
+                    print(f"... RAR IC , Max IC error: {max_error_ic:.4f}, t:", torch.max(t_bc_rar_new))
 
             # Add Residual points
             x_cand_raw, t_cand_raw = rar_candidate_pool_mixed(
-                p_net, constants, N_cand=N_RAR, alpha_model=alpha_model,
+                p_net, constants, N_cand=N_RAR, 
+                x_range = constants.NX_RANGE,
+                alpha_model=alpha_model,
                 sample_uniform_fn=sample_uniform_fn, device=device)
             # 2) enable grad ONLY for the residual scoring step
             x_cand, t_cand = _enable_grad(x_cand_raw, t_cand_raw)
