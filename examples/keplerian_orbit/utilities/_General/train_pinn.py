@@ -1381,6 +1381,235 @@ def train_pinn_e1_v0_scaled_improved(
     print(f"Total training time: {end_time - start_time:.2f}s")
 
 
+def train_pinn_e1gmm_v0_scaled_improved(
+    constants,
+    networks,                          # (p_net, e1_net)
+    configurations,
+    iterations=50000,
+    save_model=False,
+    beta_incre=0.02
+):
+    """
+    Improved training loop for the error network e1_net.
+    Uses same structure as train_pinn_sol_v0_scaled_improved.
+    """
+    import time
+    
+    # --- Unpack ---
+    p_net, e1_net = networks
+    e1_net.train().to(device)
+    p_net.eval().to(device)   # frozen reference
+    # Freeze p_net parameters
+    for p in p_net.parameters():
+        p.requires_grad_(False)
+
+    # -------- SAFETY CHECK 1: all p_net params frozen --------
+    assert all(p.requires_grad is False for p in p_net.parameters()), "p_net has trainable params!"
+
+    # --- Config ---
+    p_init   = configurations["ic_fcn"]
+    diff_opt = configurations["diff_opt_fcn"]
+    e1_path  = configurations["save_path"]
+    # e1_path_inter = configurations.get("save_path_inter", None)
+    
+    # --- Optimizer ---
+    mse = torch.nn.MSELoss()
+    optimizer = torch.optim.Adam(e1_net.parameters(), lr=1e-3)
+    scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.95)
+
+    # train_helper_sample_res = configuration["sample_res"] # NOTE: change this
+    train_helper_sample_res_uniform = constants.sample_res_points_scaled_uniform
+    sample_uniform_fn = lambda n: train_helper_sample_res_uniform(n)  # must return (x, t) WITHOUT grad
+    alpha_model = 0.5
+
+    # -------- SAFETY CHECK 2: optimizer only sees e1_net params --------
+    e1_param_ids = {id(p) for p in e1_net.parameters()}
+    opt_param_ids = {id(p) for g in optimizer.param_groups for p in g["params"]}
+    assert opt_param_ids <= e1_param_ids, "Optimizer includes non-e1_net parameters!"
+    
+    # --- Settings ---
+    min_loss = float("inf")
+    iterations_per_decay = 1000
+    loss_history = []
+    normalize = e1_net.normalize
+    
+    N0_samples_initial = 2000
+    Nr_samples_initial = 2000
+    N_RAR = 30000
+    RAR_eps = 1e-1
+    FLAG = False
+    # inter_count = 0
+    beta = np.float32(0.0)
+    
+    # Buffers for RAR points
+    x_bc_rar = torch.empty(0, 6, device=device)
+    t_bc_rar = torch.empty(0, 1, device=device)
+    x_res_rar = torch.empty(0, 6, device=device)
+    t_res_rar = torch.empty(0, 1, device=device)
+    
+    # Best model dict
+    best_model_dict = {
+        "epoch": -1,
+        "model_state_dict": None,
+        "optimizer_state_dict": None,
+        "loss_history": None,
+        "train_time": None,
+    }
+
+    # # -------- SAFETY CHECK 3: snapshot p_net weights --------
+    # with torch.no_grad():
+    #     pnet_ref = {k: v.detach().cpu().clone() for k, v in p_net.state_dict().items()}
+    # def _assert_pnet_unchanged(when: str, atol=0.0, rtol=0.0):
+    #     """Verifies p_net.state_dict matches the frozen snapshot exactly (float-exact)."""
+    #     cur = p_net.state_dict()
+    #     for k, v0 in pnet_ref.items():
+    #         v = cur[k].detach().cpu()
+    #         if v.dtype.is_floating_point:
+    #             if not torch.allclose(v, v0, atol=atol, rtol=rtol):
+    #                 raise RuntimeError(f"p_net changed at {when}: param {k} drift detected.")
+    #         else:
+    #             if not torch.equal(v, v0):
+    #                 raise RuntimeError(f"p_net changed at {when}: param {k} drift detected.")
+    # # First check before training
+    # _assert_pnet_unchanged("start")
+    
+    start_time = time.time()
+    for epoch in range(iterations):
+        optimizer.zero_grad()
+        
+        # --- New samples ---
+        x_bc_new, t_bc_new = rar_candidate_pool_mixed(
+                p_net, constants, N_cand=N0_samples_initial, 
+                x_range = constants.NX_RANGE,
+                alpha_model=alpha_model,
+                sample_uniform_fn=sample_uniform_fn, 
+                device=device,
+                only_t0=True)
+        _x_res_new, _t_res_new = rar_candidate_pool_mixed(
+                p_net, constants, N_cand=Nr_samples_initial, 
+                x_range = constants.NX_RANGE,
+                alpha_model=alpha_model,
+                sample_uniform_fn=sample_uniform_fn, 
+                device=device)
+        x_res_new, t_res_new = _enable_grad(_x_res_new, _t_res_new)
+        
+        x_bc = torch.cat((x_bc_new.to(device), x_bc_rar), dim=0)
+        t_bc = torch.cat((t_bc_new.to(device), t_bc_rar), dim=0)
+        x_res = torch.cat((x_res_new.to(device), x_res_rar), dim=0)
+        t_res = torch.cat((t_res_new.to(device), t_res_rar), dim=0)
+        x_res.requires_grad_(True)
+        
+        # --- IC loss: ehat ~ (p_init - p_net) ---
+        with torch.no_grad():
+            p_i_np = p_init(constants, x_bc.detach().cpu().numpy())
+            p_i = torch.tensor(p_i_np, dtype=torch.float32, device=device)
+            phat_i = p_net(x_bc, t_bc)
+            e_i = p_i - phat_i
+        ehat_i = e1_net(x_bc, t_bc)
+        mse_ic = mse(ehat_i / normalize, e_i / normalize)
+        
+        # --- PDE loss: diff_opt[e1] ~ -diff_opt[p] ---
+        res_p = diff_opt(x_res, t_res, p_net, beta=beta).detach()
+        res_e = diff_opt(x_res, t_res, e1_net, beta=beta)
+        mse_res = mse(res_e / normalize, (-res_p) / normalize)
+        
+        # --- Total loss ---
+        loss = mse_ic + mse_res
+        loss_history.append(loss.item())
+        
+        # --- Backward ---
+        loss.backward(retain_graph=True)
+        torch.nn.utils.clip_grad_norm_(e1_net.parameters(), max_norm=1.0)
+        optimizer.step()
+
+        # # -------- SAFETY CHECK 5: verify p_net weights unchanged after step --------
+        # _assert_pnet_unchanged(f"epoch {epoch+1}/post-step")
+        
+        # --- LR decay ---
+        if (epoch + 1) % iterations_per_decay == 0:
+            scheduler.step()
+            print(f"[info] epoch {epoch+1}, lr={optimizer.param_groups[0]['lr']:.2e}")
+        
+        # --- Save best ---
+        if loss.item() < 0.95 * min_loss:
+            train_time = time.time() - start_time
+            print(f"--- Save Epoch {epoch+1}, Loss={loss.item():.4f}, "
+                  f"IC={mse_ic.item():.4f}, Res={mse_res.item():.4f}, Beta={beta:.2f} ---")
+            # Res={mse_res.item():.4f}
+            
+            best_model_dict.update({
+                "epoch": epoch,
+                "model_state_dict": e1_net.state_dict(),
+                "optimizer_state_dict": optimizer.state_dict(),
+                "loss_history": loss_history,
+                "train_time": train_time,
+            })
+            
+            if save_model:
+                torch.save(best_model_dict, e1_path)
+            
+            min_loss = loss.item()
+            beta = min(1.0, beta + beta_incre)
+            FLAG = True
+
+        # --- RAR ---
+        if epoch % 100 == 0 and FLAG:
+            FLAG = False
+            k_res = 32
+
+            # IC RAR
+            with torch.no_grad():
+                xb_chk, tb_chk = rar_candidate_pool_mixed(
+                    p_net, constants, N_cand=N_RAR, 
+                    x_range = constants.NX_RANGE,
+                    alpha_model=alpha_model,
+                    sample_uniform_fn=sample_uniform_fn, device=device,
+                    only_t0=True)
+                p_i_np = p_init(constants, xb_chk.detach().cpu().numpy())
+                p_i = torch.tensor(p_i_np, dtype=torch.float32, device=device)
+                phat_i = p_net(xb_chk, tb_chk)
+                e_i = p_i - phat_i
+                ehat_i = e1_net(xb_chk, tb_chk)
+                ic_err = torch.abs(e_i - ehat_i) / normalize
+                max_error_ic = ic_err.max().item()
+                if max_error_ic > RAR_eps:
+                    topk  = torch.topk(ic_err.squeeze(), k=k_res)
+                    idx   = topk.indices
+                    x_bc_rar_new = xb_chk.detach()[idx, :]  # store VALUES ONLY
+                    t_bc_rar_new = tb_chk.detach()[idx, :]
+                    x_bc_rar, t_bc_rar = rar_append_with_cap(x_bc_rar, t_bc_rar, x_bc_rar_new, t_bc_rar_new, cap=4000)
+                    print(f"... RAR IC , Max IC error: {max_error_ic:.4f}, t:", torch.max(t_bc_rar_new))
+                    # idx = torch.topk(ic_err.squeeze(), 10).indices
+                    # x_bc_rar = torch.cat((x_bc_rar, xb_chk[idx, :]), dim=0)
+                    # t_bc_rar = torch.cat((t_bc_rar, tb_chk[idx]), dim=0)
+                    # print(f"... RAR IC, added {len(idx)} points. Max IC error: {max_error_ic:.4f}")
+            
+            # Residual RAR
+            x_cand_raw, t_cand_raw = rar_candidate_pool_mixed(
+                p_net, constants, N_cand=N_RAR, 
+                x_range = constants.NX_RANGE,
+                alpha_model=alpha_model,
+                sample_uniform_fn=sample_uniform_fn, device=device)
+            # 2) enable grad ONLY for the residual scoring step
+            xr_chk, tr_chk = _enable_grad(x_cand_raw, t_cand_raw)
+            res_p = diff_opt(xr_chk, tr_chk, p_net, beta=beta)
+            res_e = diff_opt(xr_chk, tr_chk, e1_net, beta=beta)
+            res_err = torch.abs(res_e + res_p) / normalize
+            max_error_res = res_err.max().item()
+            if max_error_res > RAR_eps:
+                topk  = torch.topk(res_err.squeeze(), k=k_res)
+                idx   = topk.indices
+                x_res_rar_new = xr_chk.detach()[idx, :]  # store VALUES ONLY
+                t_res_rar_new = tr_chk.detach()[idx, :]
+                # 4) append with FIFO cap
+                x_res_rar, t_res_rar = rar_append_with_cap(x_res_rar, t_res_rar, x_res_rar_new, t_res_rar_new, cap=4000)
+                print(f"... RAR RES, Max residual error: {max_error_res:.4f}, t:", t_res_rar_new[0:3].data)
+                # idx = torch.topk(res_err.squeeze(), 10).indices
+                # x_res_rar = torch.cat((x_res_rar, xr_chk[idx, :]), dim=0)
+                # t_res_rar = torch.cat((t_res_rar, tr_chk[idx]), dim=0)
+                # print(f"... RAR Res, added {len(idx)} points. Max Res error: {max_error_res:.4f}")
+
+
 def train_pinn_e1seq1_base(constants, networks, configurations, iterations=50000, save_model=False):
     """
     base: no TV loss

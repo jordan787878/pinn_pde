@@ -191,6 +191,16 @@ def plot_pdf_metrics(metrics):
             label="PINN Error Bound"
         )
     plt.plot(metrics["t"], metrics["rel_error_pinngmm"], color=colors[-1], label="PINN-GMM")
+    all_zeros = not np.any(metrics["B1_pinngmm"])
+    if(all_zeros is False):
+        plt.fill_between(
+            metrics["t"],
+            metrics["rel_error_pinngmm"],
+            metrics["B1_pinngmm"],
+            color=colors[-1],
+            alpha=0.2,
+            label="PINN-GMM Error Bound"
+        )
     plt.plot(metrics["t"], metrics["rel_error_lp"], color=colors[1],   label="LP")
     plt.plot(metrics["t"], metrics["rel_error_ut"], color=colors[2],   label="UT")
     plt.legend()
@@ -602,7 +612,7 @@ def plot_single_corner(t, constants,
         alpha=alpha
     )
 
-    relative_levels = np.array([1e-3, 0.01, 0.1, 0.25, 0.50, 0.75, 0.95])
+    relative_levels = np.array([0.01, 0.1, 0.25, 0.50, 0.75, 0.95])
     # contour plot from data_marginal_pinn
     if(data_marginal_pinn is not None):
         X_grid = data_marginal_pinn['X_grid']
