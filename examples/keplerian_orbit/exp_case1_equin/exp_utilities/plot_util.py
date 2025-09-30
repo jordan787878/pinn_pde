@@ -897,11 +897,20 @@ def plot_full_corner(constants, t,
                     norm = LogNorm(vmin=vmin, vmax=vmax)
                 else:
                     norm = None
+                H_ma = np.ma.masked_invalid(H)           # handle NaNs/Infs
+                alpha = np.clip(norm(H_ma).filled(0), 0, 1)  # normalize to [0,1]
                 ax.imshow(
                     H, origin="lower",
                     extent=(xlo, xhi, ylo, yhi),
-                    aspect="auto", cmap=cmap, norm=norm, interpolation="nearest"
-                )
+                    aspect="auto", cmap=cmap, norm=norm, interpolation="nearest",
+                    alpha=alpha
+                    # alpha=0.5,
+                )                
+                # ax.imshow(
+                #     H, origin="lower",
+                #     extent=(xlo, xhi, ylo, yhi),
+                #     aspect="auto", cmap=cmap, norm=norm, interpolation="nearest"
+                # )
 
             relative_levels = np.array([0.01, 0.05, 0.25, 0.50, 0.75, 0.95])
 

@@ -367,16 +367,16 @@ def compare_corner_plots(p_net=None, data_lp=None, data_ut=None, save_path=None,
         gaussian_ut = (_mu_ut, _cov_ut)
 
         # Singler corner plot as coordinate: x_coords
-        ax = plot_single_corner(
-            t, constants, x_coord1=x_coords[0], x_coord2=x_coords[1], X_samples=X_ref,
-            data_marginal_pinn=data_marginal_pinn,
-            gaussian_lp=gaussian_lp,
-            gaussian_ut=gaussian_ut,
-            p_net_gmm=p_net_gmm,
-        )
+        # ax = plot_single_corner(
+        #     t, constants, x_coord1=x_coords[0], x_coord2=x_coords[1], X_samples=X_ref,
+        #     data_marginal_pinn=data_marginal_pinn,
+        #     gaussian_lp=gaussian_lp,
+        #     gaussian_ut=gaussian_ut,
+        #     p_net_gmm=p_net_gmm,
+        # )
 
         # Full corner plot
-        # plot_full_corner(constants, t, X_ref, OUTPUT_PATH=OUTPUT_PATH, p_net_gmm=p_net_gmm)
+        plot_full_corner(constants, t, X_ref, OUTPUT_PATH=OUTPUT_PATH, p_net_gmm=p_net_gmm)
 
         plt.show()
 
@@ -431,8 +431,8 @@ def compare_methods():
     metrics = load_metrics_npz(metrics_path); plot_pdf_metrics(metrics)
 
     # Visualize marginal PDF
-    # compare_corner_plots(p_net=p_net, data_lp=data_lp, data_ut=data_ut, OUTPUT_PATH=OUTPUT_PATH,
-    #                      p_net_gmm=p_net_gmm)
+    compare_corner_plots(p_net=p_net, data_lp=data_lp, data_ut=data_ut, OUTPUT_PATH=None,#OUTPUT_PATH,
+                         p_net_gmm=p_net_gmm)
         
 
 def main():

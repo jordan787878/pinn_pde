@@ -32,7 +32,7 @@ def set_publication_plot_style(font_family='Times New Roman', font_size=18):
 
 def plot_full_corner(constants, t,
     X_samples,
-    bins=200,
+    bins=256,
     labels=None,
     figsize_per_dim=1.5,
     max_points=500_000,
@@ -183,10 +183,14 @@ def plot_full_corner(constants, t,
                     norm = LogNorm(vmin=vmin, vmax=vmax)
                 else:
                     norm = None
+                H_ma = np.ma.masked_invalid(H)           # handle NaNs/Infs
+                alpha = np.clip(norm(H_ma).filled(0), 0, 1)  # normalize to [0,1]
                 ax.imshow(
                     H, origin="lower",
                     extent=(xlo, xhi, ylo, yhi),
-                    aspect="auto", cmap=cmap, norm=norm, interpolation="nearest"
+                    aspect="auto", cmap=cmap, norm=norm, interpolation="nearest",
+                    alpha=alpha
+                    # alpha=0.5,
                 )
 
             relative_levels = np.array([0.01, 0.05, 0.50, 0.95])
@@ -212,8 +216,8 @@ def plot_full_corner(constants, t,
             def _plot_pinn_gmm_contour(ws, mus, covs, x_coords, color):
                 # print(ws.shape, mus.shape, covs.shape)
                 plot_axes = (x_coords[0]-1, x_coords[1]-1)
-                xs = np.linspace(xlo, xhi, num=64, endpoint=True)
-                ys = np.linspace(ylo, yhi, num=64, endpoint=True)
+                xs = np.linspace(xlo, xhi, num=256, endpoint=True)
+                ys = np.linspace(ylo, yhi, num=256, endpoint=True)
                 X_grid, Y_grid = np.meshgrid(xs, ys, indexing="ij")
                 grid_pts = np.vstack([X_grid.ravel(), Y_grid.ravel()]).T
 
@@ -261,8 +265,8 @@ def plot_full_corner(constants, t,
                 plot_axes = (x_coords[0]-1, x_coords[1]-1)
                 marginal_mu = mu_6d[list(plot_axes)]
                 marginal_cov = cov_6d[np.ix_(list(plot_axes), list(plot_axes))]
-                xs = np.linspace(xlo, xhi, num=64, endpoint=True)
-                ys = np.linspace(ylo, yhi, num=64, endpoint=True)
+                xs = np.linspace(xlo, xhi, num=256, endpoint=True)
+                ys = np.linspace(ylo, yhi, num=256, endpoint=True)
                 X_grid, Y_grid = np.meshgrid(xs, ys, indexing="ij")
                 grid_pts = np.vstack([X_grid.ravel(), Y_grid.ravel()]).T
                 pdf_values = p_normal(grid_pts, marginal_mu, marginal_cov).reshape(X_grid.shape)

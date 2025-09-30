@@ -351,15 +351,15 @@ def main():
     #                        p_net_gmm_noimp=p_net_gmm_noimp, p_net_gmm_uniform=p_net_gmm_uniform,
     #                        data_lp=data_lp, data_ut=data_ut, data_gmm=data_gmm,
     #                        save_path=metrics_path)
-    metrics = load_metrics_npz(metrics_path); plot_pdf_metrics(metrics)
+    # metrics = load_metrics_npz(metrics_path); plot_pdf_metrics(metrics)
     
     # --- plots ---
-    # compare_corner_plots(data_mc, 
-    #                      data_lp=None, data_ut=None, data_gmm=None,
-    #                      PNet_XL_PATH=None,
-    #                      p_net_gmm_N1=None,
-    #                      p_net_gmm=p_net_gmm_v0,#p_net_gmm,
-    #                      )
+    compare_corner_plots(data_mc, 
+                         data_lp=None, data_ut=None, data_gmm=None,
+                         PNet_XL_PATH=None,
+                         p_net_gmm_N1=None,
+                         p_net_gmm=p_net_gmm_v0,#p_net_gmm,
+                         )
     # compare_corner_plots_XYZ(MC_FOLDER)
 
 
