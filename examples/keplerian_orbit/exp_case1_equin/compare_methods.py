@@ -13,7 +13,7 @@ import sys
 sys.path.insert(0, '../utilities/')
 from _General.neuralnetworks import PNet, PNet_Scaled, PNet_XL, E1Net_Scaled, E1Net_XL, load_trained_model
 from _General.util import compute_volume, save_metrics_npz, load_metrics_npz
-from _General.neuralnetworks import TimeToGMM6D, TimeToGMM6D_V0, TimeToGMM6D_V1
+from _General.neuralnetworks import TimeToGMM6D, TimeToGMM6D_V0
 from functools import partial
 constants = Case1_6D_Constants_Equin()
 
@@ -332,7 +332,7 @@ def compute_pdf_variations(N_batch = 10, p_net=None, p_net_gmm=None, data_lp=Non
 def compare_corner_plots(p_net=None, data_lp=None, data_ut=None, save_path=None, 
                          OUTPUT_PATH=None, p_net_gmm=None):
     global constants
-    t_show = [constants.T_PRIME_SPAN[0]]
+    t_show = [constants.T_PRIME_SPAN[-1]]
     # t_show = np.array([0.4])
 
     N_samples = 1000000
@@ -349,8 +349,10 @@ def compare_corner_plots(p_net=None, data_lp=None, data_ut=None, save_path=None,
         X_ref = sample_joint_pdf(constants, t, N_samples)
 
         print("[info] pinn")
-        data_marginal_pinn = np.load(
-            f"{OUTPUT_PATH}/pre_compute/marginal_pdfpinn_x{x_coords[0]}_x{x_coords[1]}_t{t:.3f}.npz")
+        data_marginal_pinn = None
+        if(OUTPUT_PATH is not None):
+            data_marginal_pinn = np.load(
+                f"{OUTPUT_PATH}/pre_compute/marginal_pdfpinn_x{x_coords[0]}_x{x_coords[1]}_t{t:.3f}.npz")
 
         print("[info] pdf LP")
         _, _mu_lp, _cov_lp = data_lp.get(t)
@@ -369,12 +371,12 @@ def compare_corner_plots(p_net=None, data_lp=None, data_ut=None, save_path=None,
             t, constants, x_coord1=x_coords[0], x_coord2=x_coords[1], X_samples=X_ref,
             data_marginal_pinn=data_marginal_pinn,
             gaussian_lp=gaussian_lp,
-            gaussian_ut=None,#gaussian_ut,
+            gaussian_ut=gaussian_ut,
             p_net_gmm=p_net_gmm,
         )
 
         # Full corner plot
-        # plot_full_corner(constants, t, X_ref, OUTPUT_PATH=OUTPUT_PATH)
+        # plot_full_corner(constants, t, X_ref, OUTPUT_PATH=OUTPUT_PATH, p_net_gmm=p_net_gmm)
 
         plt.show()
 
@@ -429,8 +431,8 @@ def compare_methods():
     metrics = load_metrics_npz(metrics_path); plot_pdf_metrics(metrics)
 
     # Visualize marginal PDF
-    compare_corner_plots(p_net=p_net, data_lp=data_lp, data_ut=data_ut, OUTPUT_PATH=OUTPUT_PATH,
-                         p_net_gmm=p_net_gmm)
+    # compare_corner_plots(p_net=p_net, data_lp=data_lp, data_ut=data_ut, OUTPUT_PATH=OUTPUT_PATH,
+    #                      p_net_gmm=p_net_gmm)
         
 
 def main():

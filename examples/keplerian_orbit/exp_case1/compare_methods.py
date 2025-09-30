@@ -108,12 +108,12 @@ def compute_pdf_variations(data_mc=None, p_net=None, p_net_gmm=None,
                            e1_net=None, save_path=None):
     global constants
     metrics = {
-        "rel_error_lp": [],
-        "rel_error_ut": [],
-        "rel_error_pinn": [],
-        "tv_lp": [],
-        "tv_ut": [],
-        "tv_pinn": [],
+        # "rel_error_lp": [],
+        # "rel_error_ut": [],
+        # "rel_error_pinn": [],
+        # "tv_lp": [],
+        # "tv_ut": [],
+        # "tv_pinn": [],
         "g_kl_lp": [],
         "g_kl_ut": [],
         "g_kl_gmm": [],
@@ -121,12 +121,11 @@ def compute_pdf_variations(data_mc=None, p_net=None, p_net_gmm=None,
         "g_kl_pinngmm": [],
         "g_kl_pinngmm(no-imp)": [],
         "g_kl_pinngmm(uniform)": [],
-        "B1_pinn": [],
+        # "B1_pinn": [],
         "t": constants.T_PRIME_SPAN,
         # "t": np.round(np.arange(0.0, 0.3+0.05, 0.05, dtype=np.float32),2)
     } 
     print("evaluate metrics over times: ", metrics["t"])
-    N_samples = 100000
     N_batch = 1
     for idx, t in enumerate(metrics["t"]):
         print("\ntime {:.4f}".format(t))
@@ -204,8 +203,8 @@ def compute_pdf_variations(data_mc=None, p_net=None, p_net_gmm=None,
             
         print(g_kl_pinn, g_kl_pinngmm, g_kl_lp, g_kl_ut, g_kl_gmm)
 
-    # --- plots ---
-    plot_pdf_metrics(metrics)
+    # save metrics
+    save_metrics_npz(metrics, save_path)
 
 
 def compare_corner_plots(data_mc=None, data_lp=None, data_ut=None, data_gmm=None,
@@ -342,18 +341,21 @@ def main():
     data_gmm = PropagationData(SAVE_PATH_GMM_PROPAGATE)
 
     # --- metrics ---
-    compute_pdf_variations(data_mc=data_mc, 
-                           p_net=p_net, p_net_gmm=p_net_gmm, 
-                           p_net_gmm_noimp=p_net_gmm_noimp, p_net_gmm_uniform=p_net_gmm_uniform,
-                           data_lp=data_lp, data_ut=data_ut, data_gmm=data_gmm)
+    metrics_path = "output/baseline_methods/metrics.npz"
+    # compute_pdf_variations(data_mc=data_mc, 
+    #                        p_net=p_net, p_net_gmm=p_net_gmm, 
+    #                        p_net_gmm_noimp=p_net_gmm_noimp, p_net_gmm_uniform=p_net_gmm_uniform,
+    #                        data_lp=data_lp, data_ut=data_ut, data_gmm=data_gmm,
+    #                        save_path=metrics_path)
+    metrics = load_metrics_npz(metrics_path); plot_pdf_metrics(metrics)
     
     # --- plots ---
-    compare_corner_plots(data_mc, 
-                         data_lp=None, data_ut=None, data_gmm=None,
-                         PNet_XL_PATH=None,
-                         p_net_gmm_N1=None,
-                         p_net_gmm=p_net_gmm,
-                         )
+    # compare_corner_plots(data_mc, 
+    #                      data_lp=None, data_ut=None, data_gmm=None,
+    #                      PNet_XL_PATH=None,
+    #                      p_net_gmm_N1=None,
+    #                      p_net_gmm=p_net_gmm,
+    #                      )
     # compare_corner_plots_XYZ(MC_FOLDER)
 
 

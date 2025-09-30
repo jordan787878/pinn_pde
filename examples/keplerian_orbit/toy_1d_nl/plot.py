@@ -13,6 +13,10 @@ def plot_metrics():
 
     # metric 1: worst relative error %
     plt.figure()
+    plt.plot(metrics["t"], metrics["norm_error_lp"], color=colors[3],   label=r"$p$ LP")
+    plt.plot(metrics["t"], metrics["norm_error_ut"], color=colors[4],   label=r"$p$ UT")
+    plt.plot(metrics["t"], metrics["norm_error_ut_alpha_0_1"], color=colors[4], marker="o", label=r"$p$ UT $(\alpha=0.1)$")
+    plt.plot(metrics["t"], metrics["norm_error_gmm"], color=colors[5],   label=r"$p$ LP GMM")
     plt.plot(metrics["t"], metrics["norm_error_pinn"], color=colors[0], 
              label=r"$\hat{p}$ PINN-MLP")
     plt.plot(metrics_pri["t"], metrics_pri["norm_error_pinn"], color=colors[1], 
@@ -21,10 +25,6 @@ def plot_metrics():
     plt.plot(metrics_pinngmm["t"], metrics_pinngmm["norm_error_pinn"], color=colors[2], 
              linestyle="-",
              label=r"$\hat{p}$ PINN-GMM")
-    plt.plot(metrics["t"], metrics["norm_error_lp"], color=colors[3],   label=r"$p$ LP")
-    plt.plot(metrics["t"], metrics["norm_error_ut"], color=colors[4],   label=r"$p$ UT")
-    plt.plot(metrics["t"], metrics["norm_error_ut_alpha_0_1"], color=colors[4], marker="o", label=r"$p$ UT $(\alpha=0.1)$")
-    plt.plot(metrics["t"], metrics["norm_error_gmm"], color=colors[5],   label=r"$p$ LP GMM")
     plt.fill_between(
         metrics["t"],
         metrics["norm_error_pinn"],
