@@ -12,7 +12,7 @@ from exp_utilities.constants import Case1_6D_Constants
 import sys
 sys.path.insert(0, '../utilities/')
 from _General.neuralnetworks import PNet, PNet_XL_Sphere, load_trained_model
-from _General.neuralnetworks import TimeToGMM6D
+from _General.neuralnetworks import TimeToGMM6D, TimeToGMM6D_V0
 import _General.train_pinn as PINN
 
 
@@ -141,6 +141,9 @@ def config_training_TimeToGMM6D(constants, scale_torch, option=""):
         configuration["save_path"] = "output/pinn-gmm(uniform)"
         configuration["training_fcn"] = PINN.train_pinngmm_sol_uniform
 
+    if(option == "V0"):
+        configuration["save_path"] = "output/pinn-gmm(V0)"
+
     return configuration
 
 
@@ -186,10 +189,14 @@ def main():
     # configuration = config_training_PNet_XL_Sphere(constants, scale_torch)
 
     # pinn-gmm
-    p_net = TimeToGMM6D(constants, K=11)
-    # configuration = config_training_TimeToGMM6D(constants, scale_torch)
-    # configuration = config_training_TimeToGMM6D(constants, scale_torch, option="no-importance-sampling")
-    configuration = config_training_TimeToGMM6D(constants, scale_torch, option="uniform-sampling")
+    # p_net = TimeToGMM6D(constants, K=11)
+    # # configuration = config_training_TimeToGMM6D(constants, scale_torch)
+    # # configuration = config_training_TimeToGMM6D(constants, scale_torch, option="no-importance-sampling")
+    # configuration = config_training_TimeToGMM6D(constants, scale_torch, option="uniform-sampling")
+
+    # pinn-gmm(V0)
+    p_net = TimeToGMM6D_V0(constants, K=11)
+    configuration = config_training_TimeToGMM6D(constants, scale_torch, option="V0")
 
     if(TRAIN_FLAG):
         # mlp training

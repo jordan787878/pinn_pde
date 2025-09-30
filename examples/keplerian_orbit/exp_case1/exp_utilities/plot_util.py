@@ -189,6 +189,7 @@ def plot_full_corner(constants, t,
                     aspect="auto", cmap=cmap, norm=norm, interpolation="nearest"
                 )
 
+            relative_levels = np.array([0.01, 0.05, 0.50, 0.95])
             def _plot_pinn_contour(x_coords):
                 filename = f"{PNet_XL_PATH}/pre_compute/marginal_pdfpinn_x{x_coords[0]}_x{x_coords[1]}_t{t:.3f}.npz"
                 if(os.path.isfile(filename)):
@@ -198,7 +199,7 @@ def plot_full_corner(constants, t,
                     pdf_max = np.max(pdf_values[pdf_values > 0])
                     # Define levels as percentages of the maximum value
                     # For example, levels at 5%, 25%, 50%, 75%, and 95% of the max
-                    relative_levels = np.array([0.01, 0.05, 0.50, 0.95])
+                    # relative_levels = np.array([0.01, 0.05, 0.50, 0.95])
                     levels = relative_levels * pdf_max
                     # Draw the contour lines with the custom levels
                     ax.contour(X_grid, Y_grid, pdf_values, levels=levels, colors=[sns_colors[-1]], linewidths=1.)
@@ -232,8 +233,7 @@ def plot_full_corner(constants, t,
                         _levels = np.array([0.01]) * _pdf_max
                         ax.contour(X_grid, Y_grid, p_k, levels=_levels, colors=[color], 
                                 linewidths=0.3, alpha=0.4)
-
-                relative_levels = np.array([0.01, 0.05, 0.50, 0.95])
+                # relative_levels = np.array([0.01, 0.05, 0.50, 0.95])
                 pdf_max = np.max(pdf_values).item()
                 levels = relative_levels * pdf_max
                 ax.contour(X_grid, Y_grid, pdf_values, levels=levels, colors=[color], 
@@ -266,7 +266,7 @@ def plot_full_corner(constants, t,
                 X_grid, Y_grid = np.meshgrid(xs, ys, indexing="ij")
                 grid_pts = np.vstack([X_grid.ravel(), Y_grid.ravel()]).T
                 pdf_values = p_normal(grid_pts, marginal_mu, marginal_cov).reshape(X_grid.shape)
-                relative_levels = np.array([0.01, 0.05, 0.50, 0.95])
+                # relative_levels = np.array([0.01, 0.05, 0.50, 0.95])
                 pdf_max = np.max(pdf_values).item()
                 levels = relative_levels * pdf_max
                 # Draw the contour lines with the custom levels
@@ -299,7 +299,7 @@ def plot_pdf_metrics(metrics):
     plt.plot(metrics["t"], metrics["g_kl_lp"], color=colors[1],   label="LP")
     plt.plot(metrics["t"], metrics["g_kl_ut"], color=colors[2],   label="UT")
     plt.plot(metrics["t"], metrics["g_kl_gmm"], color=colors[3],   label="GMM")
-    plt.plot(metrics["t"], metrics["g_kl_pinn"], color=colors[-1], label="PINN-MLP")
+    # plt.plot(metrics["t"], metrics["g_kl_pinn"], color=colors[-1], label="PINN-MLP")
     plt.plot(metrics["t"], metrics["g_kl_pinngmm"], color=colors[0], label="PINN-GMM")
     # plt.plot(metrics["t"], metrics["g_kl_pinngmm(uniform)"], color=colors[0], linestyle=":", label="PINN-GMM (uniform)")
     # plt.plot(metrics["t"], metrics["g_kl_pinngmm(no-imp)"], color=colors[0], linestyle="--", label="PINN-GMM (uniform + p0)")

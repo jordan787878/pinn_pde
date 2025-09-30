@@ -10,7 +10,7 @@ import sys
 sys.path.insert(0, '../utilities/')
 from _General.astrodynamics import *
 from _General.neuralnetworks import PNet, PNet_XL_Sphere, load_trained_model
-from _General.neuralnetworks import TimeToGMM6D
+from _General.neuralnetworks import TimeToGMM6D, TimeToGMM6D_V0
 from _General.util import compute_volume, save_metrics_npz, load_metrics_npz
 
 
@@ -335,6 +335,10 @@ def main():
     p_net_gmm_uniform = TimeToGMM6D(constants, K=11)
     p_net_gmm_uniform = load_trained_model(p_net_gmm_uniform, path=PNet_GMM_PATH+"/p_net.pth"); p_net_gmm_uniform.eval()
 
+    PNet_GMM_PATH = "output/pinn-gmm(V0)"
+    p_net_gmm_v0 = TimeToGMM6D_V0(constants, K=11)
+    p_net_gmm_v0 = load_trained_model(p_net_gmm_v0, path=PNet_GMM_PATH+"/p_net.pth"); p_net_gmm_v0.eval()
+
     # baseline methods
     data_lp = PropagationData(SAVE_PATH_LINEAR_PROPAGATE)
     data_ut = PropagationData(SAVE_PATH_UNSCENT_PROPAGATE)
@@ -343,7 +347,7 @@ def main():
     # --- metrics ---
     metrics_path = "output/baseline_methods/metrics.npz"
     # compute_pdf_variations(data_mc=data_mc, 
-    #                        p_net=p_net, p_net_gmm=p_net_gmm, 
+    #                        p_net=p_net, p_net_gmm=p_net_gmm_v0,#p_net_gmm, 
     #                        p_net_gmm_noimp=p_net_gmm_noimp, p_net_gmm_uniform=p_net_gmm_uniform,
     #                        data_lp=data_lp, data_ut=data_ut, data_gmm=data_gmm,
     #                        save_path=metrics_path)
@@ -354,7 +358,7 @@ def main():
     #                      data_lp=None, data_ut=None, data_gmm=None,
     #                      PNet_XL_PATH=None,
     #                      p_net_gmm_N1=None,
-    #                      p_net_gmm=p_net_gmm,
+    #                      p_net_gmm=p_net_gmm_v0,#p_net_gmm,
     #                      )
     # compare_corner_plots_XYZ(MC_FOLDER)
 

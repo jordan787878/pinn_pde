@@ -61,6 +61,17 @@ class Case1_6D_Constants:
     _X4_RANGE = np.float32(np.array([-25., 25.]))
     _X5_RANGE = np.float32(np.array([-10., 10.]))
     _X6_RANGE = np.float32(np.array([-50., 100.]))
+
+    _NX_RANGE_NP = np.array([
+        _X1_RANGE,
+        _X2_RANGE,
+        _X3_RANGE,
+        _X4_RANGE,
+        _X5_RANGE,
+        _X6_RANGE,
+    ])
+
+    _NX_RANGE = torch.from_numpy(_NX_RANGE_NP)
     
     # _MAX_PX1  = np.float32(3.0)
     # _MAX_PX2  = np.float32(1.8)
@@ -69,6 +80,10 @@ class Case1_6D_Constants:
     # _T_PRIME_SPAN   = np.float32(np.array([0.0, 0.02, 0.04, 0.06, 0.08, 0.1]))
     # _T_PRIME_SPAN   = np.float32(2. * np.array([0.0, 0.02, 0.04, 0.06, 0.08, 0.1]))
     _T_PRIME_SPAN   = np.float32(3. * np.array([0.0, 0.02, 0.04, 0.06, 0.07, 0.08, 0.09, 0.1]))
+
+    @property
+    def NX_RANGE(self):
+        return self._NX_RANGE
 
     @property
     def MU_EARTH(self):

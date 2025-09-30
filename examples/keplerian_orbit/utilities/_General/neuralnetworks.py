@@ -599,9 +599,9 @@ def load_trained_model(net, path, method="new"):
     net.load_state_dict(checkpoint['model_state_dict'])
     epoch = checkpoint['epoch']
     if(method == "new"):
-        # loss_history = np.array(checkpoint['loss_history'])
-        # print("best epoch: ", epoch, ", min loss:", np.min(loss_history), ", train time:", checkpoint['train_time'])
-        print("best epoch: ", epoch, ", train time:", checkpoint['train_time'])
+        loss_history = np.array(checkpoint['loss_history'])
+        print("best epoch: ", epoch, ", min loss:", np.min(loss_history), ", train time:", checkpoint['train_time'])
+        # print("best epoch: ", epoch, ", train time:", checkpoint['train_time'])
     else:
         print("best epoch: ", epoch, ", min loss:", checkpoint['loss'], ", train time:", checkpoint['train_time'])
     # keys = p_net.state_dict().keys()
