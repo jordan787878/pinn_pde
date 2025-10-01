@@ -7,7 +7,7 @@ from monte import p_init, p_init_scaled, p_sol, print_mc_time
 from exp_utilities.constants import Case1_6D_Constants_Equin
 from exp_utilities.plot_util import (plot_time_curves_3d, plot_pdf_metrics, 
                                      plot_single_corner, plot_full_corner, plt)
-from baseline_methods import SAVE_PATH_LINEAR_PROPAGATE, SAVE_PATH_UNSCENT_PROPAGATE, PropagationData
+from baseline_methods import SAVE_PATH_LINEAR_PROPAGATE, SAVE_PATH_UNSCENT_PROPAGATE, SAVE_PATH_GMM_PROPAGATE, PropagationData
 # import utilities
 import sys
 sys.path.insert(0, '../utilities/')
@@ -53,7 +53,7 @@ def sample_joint_pdf_baseline(data_lp, t_prime, n_samples=50_000, seed=0, dtype=
     """
     rng = np.random.default_rng(seed)
 
-    _, means, cov = data_lp.get(t_prime)            # means: (6,), cov: (6,6)
+    _, _, means, cov = data_lp.get(t_prime)            # means: (6,), cov: (6,6)
     means = np.asarray(means, dtype=dtype)
     cov   = np.asarray(cov,   dtype=dtype)
     X = rng.multivariate_normal(mean=means.astype(np.float64),
@@ -169,7 +169,7 @@ def compute_generalKL(t, X, p_data_normal=None, p_net=None, key=None):
         _t_tensor = torch.tensor(_t, dtype=torch.float32, requires_grad=False).view(-1,1)
         pdf_eval = constants.SCALING_PDF * p_net(_x_tensor, _t_tensor).detach().cpu().numpy().reshape(-1,)
     if(p_data_normal is not None):
-        _, _mu, _cov = p_data_normal.get(t)
+        _, _, _mu, _cov = p_data_normal.get(t)
         _mu = np.float32(_mu)
         _cov = np.float32(_cov)
         pdf_eval = p_normal(X, _mu, _cov).reshape(-1,)
@@ -182,20 +182,23 @@ def compute_generalKL(t, X, p_data_normal=None, p_net=None, key=None):
     return KL
 
 
-def compute_pdf_variations(N_batch = 10, p_net=None, p_net_gmm=None, data_lp=None, data_ut=None, 
+def compute_pdf_variations(N_batch = 10, p_net=None, p_net_gmm=None, data_lp=None, data_ut=None, data_gmm=None,
                            e1_net=None,  e1_net_gmm=None, save_path=None):
     global constants
     metrics = {
         "rel_error_lp": [],
         "rel_error_ut": [],
+        # "rel_error_gmm": [],
         "rel_error_pinn": [],
         "rel_error_pinngmm": [],
         "tv_lp": [],
         "tv_ut": [],
+        # "tv_gmm": [],
         "tv_pinn": [],
         "tv_pinngmm": [],
         "g_kl_lp": [],
         "g_kl_ut": [],
+        # "g_kl_gmm": [],
         "g_kl_pinn": [],
         "g_kl_pinngmm": [],
         "B1_pinn": [],
@@ -220,6 +223,9 @@ def compute_pdf_variations(N_batch = 10, p_net=None, p_net_gmm=None, data_lp=Non
         delta_p_ut_max = 0.0
         tv_ut = 0.0
         gkl_ut = 0.0
+        delta_p_gmm_max = 0.0
+        tv_gmm = 0.0
+        gkl_gmm = 0.0
         # additional data for pinn
         e1_pinn_max = 0.0
         Z_pinn = 0.0
@@ -269,7 +275,7 @@ def compute_pdf_variations(N_batch = 10, p_net=None, p_net_gmm=None, data_lp=Non
             del _t, _t_tensor, X_scaled, _x_tensor
 
             # print("[info] pdf LP")
-            _, _mu_lp, _cov_lp = data_lp.get(t)
+            _, _, _mu_lp, _cov_lp = data_lp.get(t)
             _mu_lp = np.float32(_mu_lp)
             _cov_lp = np.float32(_cov_lp)
             pdf_lp = p_normal(X, _mu_lp, _cov_lp).reshape(-1,)
@@ -282,7 +288,7 @@ def compute_pdf_variations(N_batch = 10, p_net=None, p_net_gmm=None, data_lp=Non
             del pdf_lp
 
             # print("[info] pdf UT")
-            _, _mu_ut, _cov_ut = data_ut.get(t)
+            _, _, _mu_ut, _cov_ut = data_ut.get(t)
             _mu_ut = np.float32(_mu_ut)
             _cov_ut = np.float32(_cov_ut)
             pdf_ut = p_normal(X, _mu_ut, _cov_ut).reshape(-1,)
@@ -293,12 +299,29 @@ def compute_pdf_variations(N_batch = 10, p_net=None, p_net_gmm=None, data_lp=Non
             _gkl = compute_generalKL(t, X_mc, p_data_normal=data_ut)
             gkl_ut += _gkl/N_batch
             del pdf_ut
+
+            # # gmm
+            # _, _w, _mu, _cov = data_gmm.get(t)
+            # pdf_gmm = np.zeros(X.shape[0])
+            # for j in range(_w.shape[0]):
+            #     # pdf_func = multivariate_normal(mean=_mu[j,:], cov=_cov[j,:,:])
+            #     # p_k = pdf_func.pdf(X).reshape(-1,)
+            #     p_k = p_normal(X, _mu[j,:], _cov[j,:,:]).reshape(-1,)
+            #     pdf_gmm += _w[j] * p_k
+            # _delta_p = np.max(np.abs(pdf_gmm - pdf_ref)).item()
+            # delta_p_gmm_max = max(delta_p_gmm_max, _delta_p)
+            # _tv = p_total_variation(constants, pdf_gmm, pdf_ref)
+            # tv_gmm += _tv/N_batch
+            # _gkl = 0.
+            # gkl_gmm += _gkl/N_batch
+            # del pdf_gmm
         
         # After all batch
         gkl_pinn += Z_pinn
         gkl_pinngmm += 1
         gkl_lp += 1
         gkl_ut += 1
+        gkl_gmm += 1
         metrics["rel_error_pinn"].append(100.*delta_p_pinn_max/pdf_ref_max)
         metrics["tv_pinn"].append(tv_pinn)
         metrics["g_kl_pinn"].append(gkl_pinn)
@@ -311,6 +334,9 @@ def compute_pdf_variations(N_batch = 10, p_net=None, p_net_gmm=None, data_lp=Non
         metrics["rel_error_ut"].append(100.*delta_p_ut_max/pdf_ref_max)
         metrics["tv_ut"].append(tv_ut)
         metrics["g_kl_ut"].append(gkl_ut)
+        # metrics["rel_error_gmm"].append(100.*delta_p_gmm_max/pdf_ref_max)
+        # metrics["tv_gmm"].append(tv_gmm)
+        # metrics["g_kl_gmm"].append(gkl_gmm)
         metrics["B1_pinn"].append(100. * 2. * e1_pinn_max/pdf_ref_max)
         metrics["B1_pinngmm"].append(100. * 2. * e1_pinngmm_max/pdf_ref_max)
         
@@ -319,8 +345,10 @@ def compute_pdf_variations(N_batch = 10, p_net=None, p_net_gmm=None, data_lp=Non
         print("[check] Z_pinn: {:.4f}".format(Z_pinn))
         print("[check]: max e1 gmm: {:.4f}, max e1 pinngmm: {:.4f}".format(
             delta_p_pinngmm_max, e1_pinngmm_max))
+        # print(metrics["rel_error_gmm"])
         print(metrics["rel_error_pinn"])
         print(metrics["rel_error_pinngmm"])
+        # print(metrics["tv_gmm"])
         print(metrics["tv_pinn"])
         print(metrics["tv_pinngmm"])
         print(metrics["g_kl_pinn"])
@@ -355,13 +383,13 @@ def compare_corner_plots(p_net=None, data_lp=None, data_ut=None, save_path=None,
                 f"{OUTPUT_PATH}/pre_compute/marginal_pdfpinn_x{x_coords[0]}_x{x_coords[1]}_t{t:.3f}.npz")
 
         print("[info] pdf LP")
-        _, _mu_lp, _cov_lp = data_lp.get(t)
+        _, _, _mu_lp, _cov_lp = data_lp.get(t)
         _mu_lp = np.float32(_mu_lp)
         _cov_lp = np.float32(_cov_lp)
         gaussian_lp = (_mu_lp, _cov_lp)
 
         print("[info] pdf UT")
-        _, _mu_ut, _cov_ut = data_ut.get(t)
+        _, _, _mu_ut, _cov_ut = data_ut.get(t)
         _mu_ut = np.float32(_mu_ut)
         _cov_ut = np.float32(_cov_ut)
         gaussian_ut = (_mu_ut, _cov_ut)
@@ -423,16 +451,17 @@ def compare_methods():
 
     data_lp = PropagationData(SAVE_PATH_LINEAR_PROPAGATE)
     data_ut = PropagationData(SAVE_PATH_UNSCENT_PROPAGATE)
+    data_gmm = PropagationData(SAVE_PATH_GMM_PROPAGATE)
 
     metrics_path = "output/baseline_methods/metrics.npz"
-    # compute_pdf_variations(N_batch=10, p_net=p_net, p_net_gmm=p_net_gmm, 
-    #                        data_lp=data_lp, data_ut=data_ut, 
+    # compute_pdf_variations(N_batch=1000, p_net=p_net, p_net_gmm=p_net_gmm, 
+    #                        data_lp=data_lp, data_ut=data_ut, data_gmm=data_gmm,
     #                        e1_net=e1_net, e1_net_gmm=e1_net_gmm, save_path=metrics_path)
     metrics = load_metrics_npz(metrics_path); plot_pdf_metrics(metrics)
 
     # Visualize marginal PDF
-    compare_corner_plots(p_net=p_net, data_lp=data_lp, data_ut=data_ut, OUTPUT_PATH=None,#OUTPUT_PATH,
-                         p_net_gmm=p_net_gmm)
+    # compare_corner_plots(p_net=p_net, data_lp=data_lp, data_ut=data_ut, OUTPUT_PATH=None,#OUTPUT_PATH,
+    #                      p_net_gmm=p_net_gmm)
         
 
 def main():

@@ -507,12 +507,13 @@ def densify_between(v, n_between=1):
 def plot_pdf_metrics(metrics):
     set_publication_plot_style()
 
-    colors = sns.color_palette("husl", 4)
+    colors = sns.color_palette("husl", 5)
 
     plt.figure()
     print(metrics["t"])
     plt.plot(metrics["t"], metrics["rel_error_lp"], color=colors[1],   label="LP")
     plt.plot(metrics["t"], metrics["rel_error_ut"], color=colors[2],   label="UT")
+    # plt.plot(metrics["t"], metrics["rel_error_gmm"], color=colors[3],   label="GMM")
     plt.plot(metrics["t"], metrics["rel_error_pinn"], color=colors[-1], label="PINN-MLP")
     all_zeros = not np.any(metrics["B1_pinn"])
     if(all_zeros is False):
@@ -543,6 +544,7 @@ def plot_pdf_metrics(metrics):
     plt.figure()
     plt.plot(metrics["t"], metrics["tv_lp"], color=colors[1],   label="LP")
     plt.plot(metrics["t"], metrics["tv_ut"], color=colors[2],   label="UT")
+    # plt.plot(metrics["t"], metrics["tv_gmm"], color=colors[3],   label="GMM")
     plt.plot(metrics["t"], metrics["tv_pinn"], color=colors[-1], label="PINN-MLP")
     plt.plot(metrics["t"], metrics["tv_pinngmm"], color=colors[0], label="PINN-GMM")
     plt.legend()
@@ -554,6 +556,7 @@ def plot_pdf_metrics(metrics):
     plt.figure()
     plt.plot(metrics["t"], metrics["g_kl_lp"], color=colors[1],   label="LP")
     plt.plot(metrics["t"], metrics["g_kl_ut"], color=colors[2],   label="UT")
+    # plt.plot(metrics["t"], metrics["g_kl_gmm"], color=colors[3],   label="GMM")
     # plt.plot(metrics["t"], metrics["rel_kl_ut_alpha_0_1"], color=colors[2], marker="o", label=r"$p$ Unscent Trans. $(\alpha=0.1)$")
     plt.plot(metrics["t"], metrics["g_kl_pinn"], color=colors[-1], label="PINN-MLP")
     plt.plot(metrics["t"], metrics["g_kl_pinngmm"], color=colors[0], label="PINN-GMM")
@@ -563,7 +566,6 @@ def plot_pdf_metrics(metrics):
     plt.grid(True)
 
     plt.show()
-
 
 
 def plot_single_corner(t, constants, 
