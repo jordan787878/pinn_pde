@@ -5,6 +5,7 @@ import numpy as np
 import seaborn as sns
 import torch
 from scipy.interpolate import griddata
+from scipy.stats import multivariate_normal
 from matplotlib import cm
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes, mark_inset
 from matplotlib.patches import Rectangle
@@ -40,7 +41,6 @@ def check_pdf_Nrphi(constants, mc_folder=None, p_net=None):
         x2s = np.load("data/grids/x2s.npy")
         x3s = np.load("data/grids/x3s.npy")
         x4s = np.load("data/grids/x4s.npy")
-        # pdf_monte = np.load(DATA_FOLDER+"pdf_t{:.3f}.npy".format(t_prime))
         # print("[check] x1s, pdf(monte) data type: ", x1s.dtype, pdf_monte.dtype)
         x1_grid, x2_grid, x3_grid, x4_grid = np.meshgrid(x1s, x2s, x3s, x4s, indexing="ij") # the indexing is very important
         grid_points = np.vstack([x1_grid.ravel(), x2_grid.ravel(), x3_grid.ravel(), x4_grid.ravel()]).T
@@ -67,8 +67,10 @@ def check_pdf_Nrphi(constants, mc_folder=None, p_net=None):
         cp = plt.contourf(x1_grid, x2_grid, pdf_nn_Nrphi, levels=30, cmap="viridis", alpha=0.8)
         # Adding color bar
         plt.colorbar(cp)
+
         # scatter samples of (r, phi) on to the plot
-        # plt.scatter(r_samples, phi_samples, s=30, c='white', linewidths=0.5, edgecolor='black', alpha=1.0, label='Samples')
+        plt.scatter(r_samples, phi_samples, s=30, c='white', linewidths=0.5, edgecolor='black', alpha=1.0, label='Samples')
+        
         ax.text(
             0.01, 0.99,                   # near top-left
             f"t = {t_prime:.3f}\np estimated by 1e+5 samples",
@@ -83,8 +85,82 @@ def check_pdf_Nrphi(constants, mc_folder=None, p_net=None):
         # plt.title(r"$p(r',\phi')$"+ "from NN and 200 Samples at t="+str(np.round(t_prime,2))+"T")
         # plt.legend(loc='upper right')
         plt.tight_layout(pad=0.2)
-        fig.savefig("figs/pdf_monte_10x5_t{:.3f}.pdf".format(t_prime), format='pdf'); plt.close()
-        # plt.show()
+        # fig.savefig("figs/pdf_monte_10x5_t{:.3f}.pdf".format(t_prime), format='pdf'); plt.close()
+        plt.show()
+
+
+def check_pinngmm_Nrphi(constants, p_net_gmm=None):
+    """
+    marginalize the pdf of normalize spherical to [r,phi]
+    """
+    set_publication_plot_style()
+
+    for t_prime in constants.T_PRIME_SPAN:
+        print("[test] pdf(NN) marginalized to rphi at t=", t_prime)
+
+        # x1s = np.load("data/grids/x1s.npy")
+        # x2s = np.load("data/grids/x2s.npy")
+        # x3s = np.load("data/grids/x3s.npy")
+        # x4s = np.load("data/grids/x4s.npy")
+        # # print("[check] x1s, pdf(monte) data type: ", x1s.dtype, pdf_monte.dtype)
+        # x1_grid, x2_grid, x3_grid, x4_grid = np.meshgrid(x1s, x2s, x3s, x4s, indexing="ij") # the indexing is very important
+        # grid_points = np.vstack([x1_grid.ravel(), x2_grid.ravel(), x3_grid.ravel(), x4_grid.ravel()]).T
+        # grid_points_tensor = torch.tensor(grid_points, dtype=torch.float32, requires_grad=False)
+        # t_tensor = (torch.ones(len(grid_points_tensor), 1, dtype=torch.float32) * t_prime)
+        plot_axes = (0, 1)
+        xrange = constants.X1_RANGE
+        yrange = constants.X2_RANGE
+        xs = np.linspace(xrange[0], xrange[1], num=256, endpoint=True)
+        ys = np.linspace(yrange[0], yrange[1], num=256, endpoint=True)
+        X_grid, Y_grid = np.meshgrid(xs, ys, indexing="ij")
+        grid_pts = np.vstack([X_grid.ravel(), Y_grid.ravel()]).T
+
+        # --- marginal pinn-gmm ---
+        ws, mus, covs = p_net_gmm.weights_means_covs_at(t_prime)
+        ws = ws.detach().cpu().numpy()
+        print("GMM weights: ", ws, np.sum(ws))
+        mus = mus.detach().cpu().numpy()
+        covs = covs.detach().cpu().numpy()
+
+        pdf_values = np.copy(X_grid) * 0.0
+        for k in range(ws.shape[0]):
+            ws_k = ws[k]
+            mus_k = mus[k, :]
+            covs_k = covs[k, :, :]
+            marginal_mu = mus_k[list(plot_axes)]
+            marginal_cov = covs_k[np.ix_(list(plot_axes), list(plot_axes))]
+            pdf_func = multivariate_normal(mean=marginal_mu, cov=marginal_cov)
+            p_k = pdf_func.pdf(grid_pts).reshape(X_grid.shape)
+            pdf_values = pdf_values + ws_k * p_k
+
+        samples = np.load("data/samples/samples_t{:.3f}.npy".format(t_prime))
+        r_samples = samples[:,0]
+        phi_samples = samples[:,2]
+
+        # --- Plotting the contour plot ----
+        fig, ax = plt.subplots(figsize=(8, 6))
+        cp = plt.contourf(X_grid, Y_grid, pdf_values, levels=30, cmap="viridis", alpha=0.8)
+        plt.colorbar(cp)
+
+        # scatter samples of (r, phi) on to the plot
+        plt.scatter(r_samples, phi_samples, s=30, c='white', linewidths=0.5, edgecolor='black', alpha=1.0, label='Samples')
+        
+        ax.text(
+            0.01, 0.99,                   # near top-left
+            f"t = {t_prime:.3f}\np estimated by 1e+5 samples",
+            transform=ax.transAxes,       # use axes coords
+            fontsize=32,                  # big text
+            color='white',
+            va='top', ha='left'           # align text box
+        )
+        # Adding labels and title
+        plt.xlabel(r"$r'$")
+        plt.ylabel(r"$\phi'$")
+        # plt.title(r"$p(r',\phi')$"+ "from NN and 200 Samples at t="+str(np.round(t_prime,2))+"T")
+        # plt.legend(loc='upper right')
+        plt.tight_layout(pad=0.2)
+        # fig.savefig("figs/pdf_monte_10x5_t{:.3f}.pdf".format(t_prime), format='pdf'); plt.close()
+        plt.show()
 
 
 def check_pdf_cartesian_wrt_samples(constants, mc_folder=None, p_net=None):
@@ -259,7 +335,7 @@ def check_pdfnn_cartesian_wrt_monte(constants, p_net, mc_folder):
     ax.tick_params(axis='z', colors='white')
 
     for t_prime in constants.T_PRIME_SPAN:
-        if(t_prime < constants.T_PRIME_SPAN[3] or t_prime > constants.T_PRIME_SPAN[3]):
+        if(t_prime < constants.T_PRIME_SPAN[-1] or t_prime > constants.T_PRIME_SPAN[-1]):
             continue
 
         print("[test] pdf(nn) marginalized to xy at t'=", t_prime)
@@ -378,6 +454,115 @@ def check_pdfnn_cartesian_wrt_monte(constants, p_net, mc_folder):
         #     linewidth=0.5,
         #     linestyle='solid'
         # )
+
+        ax.view_init(25, -40)
+        ax.legend()
+        ax.set_xlabel('\n X, m', color='white')
+        ax.set_ylabel('\n Y, m', color='white')
+        ax.set_zlabel('\n PDF Value', color='white')
+        plt.tight_layout(pad=0.1)
+        # fig.savefig("figs/case2_pinn_vs_monte_t{:.3f}.pdf".format(t_prime), format='pdf'); plt.close()
+        plt.show()
+
+
+def check_pinngmm_cartesian_wrt_monte(constants, p_net_gmm, mc_folder):
+    """
+    convert the normalize spherical pdf_nn to pdf_nn(x,y)
+    and compare it with respect to pdf_monte(x,y)
+    the surface plot is not exact, since we use interpolation to create x,y grid and pdf_nn(x,y) on this grid
+    """
+    set_publication_plot_style()
+
+    # Create a figure
+    fig = plt.figure(figsize=(8, 6), facecolor='black')
+    ax = fig.add_subplot(111, projection='3d', facecolor='black')
+    ax.xaxis.pane.set_facecolor('black')
+    ax.yaxis.pane.set_facecolor('black')
+    ax.zaxis.pane.set_facecolor('black')
+    ax.xaxis.line.set_color('white')
+    ax.yaxis.line.set_color('white')
+    ax.zaxis.line.set_color('white')
+    ax.tick_params(axis='x', colors='white')
+    ax.tick_params(axis='y', colors='white')
+    ax.tick_params(axis='z', colors='white')
+
+    for t_prime in constants.T_PRIME_SPAN:
+        if(t_prime < constants.T_PRIME_SPAN[-1] or t_prime > constants.T_PRIME_SPAN[-1]):
+            continue
+        print("[test] pdf(nn) marginalized to xy at t'=", t_prime)
+        x1s = np.load("data/grids/x1s.npy")
+        x2s = np.load("data/grids/x2s.npy")
+        x3s = np.load("data/grids/x3s.npy")
+        x4s = np.load("data/grids/x4s.npy")
+
+        # --- pinn-gmm ---
+        def marginal_pinn_gmm(x1s, x2s, p_net_gmm):
+            plot_axes = (0, 1)
+            X_grid, Y_grid = np.meshgrid(x1s, x2s, indexing="ij")
+            grid_pts = np.vstack([X_grid.ravel(), Y_grid.ravel()]).T
+            # --- marginal pinn-gmm ---
+            ws, mus, covs = p_net_gmm.weights_means_covs_at(t_prime)
+            ws = ws.detach().cpu().numpy()
+            print("GMM weights: ", ws, np.sum(ws))
+            mus = mus.detach().cpu().numpy()
+            covs = covs.detach().cpu().numpy()
+            pdf_values = np.copy(X_grid) * 0.0
+            for k in range(ws.shape[0]):
+                ws_k = ws[k]
+                mus_k = mus[k, :]
+                covs_k = covs[k, :, :]
+                marginal_mu = mus_k[list(plot_axes)]
+                marginal_cov = covs_k[np.ix_(list(plot_axes), list(plot_axes))]
+                pdf_func = multivariate_normal(mean=marginal_mu, cov=marginal_cov)
+                p_k = pdf_func.pdf(grid_pts).reshape(X_grid.shape)
+                pdf_values = pdf_values + ws_k * p_k
+            return pdf_values
+
+        pdf_values = marginal_pinn_gmm(x1s, x2s, p_net_gmm)
+
+        # load pdf_monte on the domain
+        pdf_monte = np.load(mc_folder+"pdf_t{:.3f}.npy".format(t_prime))
+        dx3 = x3s[1] - x3s[0]
+        dx4 = x4s[1] - x4s[0]
+        # marginalize to spherical position (r, phi)
+        pdf_mo_Nrphi =  np.sum(pdf_monte, axis=(2,3)) * dx3 * dx4
+        pdf_mo_rphi_data = np.empty((0,4))
+        pdf_pinn_rphi_data = np.empty((0,4))
+        x1_grid, x2_grid =  np.meshgrid(x1s, x2s, indexing="ij") # the indexing is very important
+
+        # convert pdf(r,phi) to pdf(x,y)
+        x = []
+        y = []
+        for i in range(len(x1_grid)):
+            for j in range(len(x2_grid)):
+                # extract [t, r', phi', p(r',phi')]
+                Nr = x1_grid[i,j]
+                Nphi = x2_grid[i,j]
+                r = Nr*constants.R
+                phi = Nphi*constants.PHI + constants.W*constants.T*t_prime
+                t = constants.T*t_prime
+                pdf_mo_rphi_data = np.vstack((pdf_mo_rphi_data, np.array([t, r, phi, pdf_mo_Nrphi[i,j]/(constants.R*constants.PHI)])))
+                pdf_pinn_rphi_data = np.vstack((pdf_pinn_rphi_data, np.array([t, r, phi, pdf_values[i,j]/(constants.R*constants.PHI)])))
+                x.append(r * np.cos(phi))
+                y.append(r * np.sin(phi))
+        x = np.array(x)
+        y = np.array(y)
+        z_mo = pdf_mo_rphi_data[:, -1]/(r)     # For 4D system, see derivation of the factor (1/r) in Labnotes_2024Fall Nov 8 notes
+        z_pinn = pdf_pinn_rphi_data[:, -1]/(r) # For 4D system, see derivation of the factor (1/r) in Labnotes_2024Fall Nov 8 notes
+
+        # visualize p(x,y) using interpolation
+        _grid_resolution = 70
+        grid_x, grid_y = np.meshgrid(np.linspace(x.min(), x.max(), _grid_resolution), np.linspace(y.min(), y.max(), _grid_resolution), indexing="ij")
+        grid_z_mo = griddata((x, y), z_mo, (grid_x, grid_y), method='cubic')
+        grid_z_pinn = griddata((x, y), z_pinn, (grid_x, grid_y), method='cubic')
+        surf1 = ax.plot_surface(grid_x, grid_y, grid_z_mo, color="none", rstride=3, cstride=3, 
+                                edgecolor='white',  
+                                linewidth=0.5, linestyle="-", 
+                                label=r"MC $p(x,y)$"+", t={:.3f}T".format(t_prime))
+        
+
+        surf2 = ax.plot_surface(grid_x, grid_y, grid_z_pinn, cmap=cm.viridis, rstride=3, cstride=3, edgecolor=None, 
+                                label=r"PINN $\hat{p}(x,y)$" + ", t={:.3f}T".format(t_prime))
 
         ax.view_init(25, -40)
         ax.legend()

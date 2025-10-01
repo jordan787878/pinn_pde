@@ -165,15 +165,15 @@ def rar_candidate_pool_mixed(p_net,
         N_model_time = int(N_model / S_per_time)
         x_m, t_m = sample_gmm_per_time_multi(p_net, constants, N_model_time, S_per_time, device=device)
         
-        lo = x_range[:, 0].view(1, 6)            # (1,6) for broadcasting
-        hi = x_range[:, 1].view(1, 6)            # (1,6)
-        viol = (x_m < lo) | (x_m > hi)                 # (N,6) True where out of range
+        lo = x_range[:, 0].view(1, -1)            # (1, D) for broadcasting
+        hi = x_range[:, 1].view(1, -1)            # (1, D)
+        viol = (x_m < lo) | (x_m > hi)                 # (N, D) True where out of range
         pct  = 100.0 * viol.float().mean().item()  # % of elements out of range
         # if(pct > 0.):
         #     print(f"[range] {pct:.2f}% out of bounds")
         
         x_sat = torch.maximum(torch.minimum(x_m, hi), lo)
-        viol = (x_sat < lo) | (x_sat > hi)                 # (N,6) True where out of range
+        viol = (x_sat < lo) | (x_sat > hi)                 # (N, D) True where out of range
         pct  = 100.0 * viol.float().mean().item()  # % of elements out of range
         if(pct > 0.):
             print(f"[range] {pct:.2f}% out of bounds")
@@ -455,6 +455,7 @@ def train_pinngmm_sol_v0(p_net, configuration):
     """
     p_net.train()
     p_net.to(device)
+    x_dim = p_net.D
 
     constants = configuration["constants"]
     iterations = configuration["iterations"]
@@ -497,9 +498,9 @@ def train_pinngmm_sol_v0(p_net, configuration):
     print("[check] number of IC samples: ", N0_samples_initial )
     N_RAR = 30000
     alpha_model = 0.50  # tune 0.2–0.8
-    x_bc_rar = torch.empty(0, 6, device=device)
+    x_bc_rar = torch.empty(0, x_dim, device=device)
     t_bc_rar = torch.empty(0, 1, device=device)
-    x_res_rar = torch.empty(0, 6, device=device)
+    x_res_rar = torch.empty(0, x_dim, device=device)
     t_res_rar = torch.empty(0, 1, device=device)
     FLAG = False
 

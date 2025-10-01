@@ -851,10 +851,10 @@ class TimeToGMM6D_V0(nn.Module):
         - params(t): means (N,K,D), L (N,K,D,D), log_weights (N,K)
         - mean_and_covariance(t): mixture mean (N,D), covariance (N,D,D)
     """
-    def __init__(self, constants, K=1, hidden=64, depth=2, min_diag=1e-4,
+    def __init__(self, constants, K=1, D=6, hidden=64, depth=2, min_diag=1e-4,
                  dtype=torch.float32, device="cpu"):
         super().__init__()
-        self.D = 6
+        self.D = D
         self.Kc = int(K)
         self.K_tril = self.D * (self.D + 1) // 2
         self.min_diag = float(min_diag)

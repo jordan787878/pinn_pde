@@ -138,6 +138,19 @@ class Case2_4D_Constants:
     def N_Q_NOISE(self):
         return self._N_Q_NOISE
     
+    _NX_RANGE_NP = np.array([
+        _X1_RANGE,
+        _X2_RANGE,
+        _X3_RANGE,
+        _X4_RANGE,
+    ])
+
+    _NX_RANGE = torch.from_numpy(_NX_RANGE_NP)
+
+    @property
+    def NX_RANGE(self):
+        return self._NX_RANGE
+    
     def test_printout(self):
         print("MU_EARTH: ", self.MU_EARTH)
         print("W: ", self.W)
@@ -179,6 +192,19 @@ class Case2_4D_Constants:
         ])
         _x = torch.tensor(_x, dtype=torch.float32, requires_grad=True)
         x = torch.cat((_x_normal, _x), dim=0)
+        t = np.random.uniform(self.TI, self.TF/self.T, len(x))
+        t = torch.tensor(t, dtype=torch.float32, requires_grad=True).view(-1,1)
+        return x, t
+    
+    def sample_res_points_uniform(self, N_samples, multiplyer=1):
+        N_samples = multiplyer*N_samples
+        _x = np.column_stack([
+            np.random.uniform(self.X1_RANGE[0], self.X1_RANGE[1], N_samples),
+            np.random.uniform(self.X2_RANGE[0], self.X2_RANGE[1], N_samples),
+            np.random.uniform(self.X3_RANGE[0], self.X3_RANGE[1], N_samples),
+            np.random.uniform(self.X4_RANGE[0], self.X4_RANGE[1], N_samples),
+        ])
+        x = torch.tensor(_x, dtype=torch.float32, requires_grad=True)
         t = np.random.uniform(self.TI, self.TF/self.T, len(x))
         t = torch.tensor(t, dtype=torch.float32, requires_grad=True).view(-1,1)
         return x, t
