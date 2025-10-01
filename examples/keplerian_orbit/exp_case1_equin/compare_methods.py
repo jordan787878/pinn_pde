@@ -460,8 +460,8 @@ def compare_methods():
     metrics = load_metrics_npz(metrics_path); plot_pdf_metrics(metrics)
 
     # Visualize marginal PDF
-    # compare_corner_plots(p_net=p_net, data_lp=data_lp, data_ut=data_ut, OUTPUT_PATH=None,#OUTPUT_PATH,
-    #                      p_net_gmm=p_net_gmm)
+    compare_corner_plots(p_net=p_net, data_lp=data_lp, data_ut=data_ut, OUTPUT_PATH=None,#OUTPUT_PATH,
+                         p_net_gmm=p_net_gmm)
         
 
 def main():
