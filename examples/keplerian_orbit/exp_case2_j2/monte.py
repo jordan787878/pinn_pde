@@ -103,6 +103,75 @@ def p_sol_monte(t=0.0, linespace_num=51, stat_sample=10000):
     return midpoints_x1, midpoints_x2, midpoints_x3, midpoints_x4, frequency_4d
 
 
+def x_samples_monte(t=0.0, stat_sample=10000):
+    """
+    """
+    global constants
+
+    # Time-stepping parameters for propagation.
+    dtt = 1e-4
+    kf = int(t / dtt)
+    X_samples = np.zeros((stat_sample, 4))
+
+    # Process each sample individually.
+    for i in tqdm(range(stat_sample), desc="Processing samples"):
+        # Generate one sample from the 4D Gaussian distribution.
+        sample_4d = np.random.multivariate_normal(constants.N_MEAN_I, constants.N_COV_I).astype(np.float32)
+        
+        # Build the 6D state from the 4D sample.
+        # X[0] = sample_4d[0], X[1] = constant, X[2] = sample_4d[1], X[3] = sample_4d[2], X[5] = sample_4d[3]
+        x = np.zeros(6, dtype=np.float32)
+        x[0] = sample_4d[0]
+        x[1] = 0.5 * np.float32(np.pi) / constants.THETA
+        x[2] = sample_4d[1]
+        x[3] = sample_4d[2]
+        x[5] = sample_4d[3]
+        
+        # Propagate the sample using the dynamics (e.g., RK4 with J2 dynamics).
+        for k in range(kf):
+            dW = np.sqrt(constants.N_Q_NOISE) * np.sqrt(dtt) * np.random.randn(3)
+            dW = np.concatenate([np.zeros(3), dW]) # because g = diag([0,0,0,1,1,1])
+            x = x + fourdorbit_dyn_normsph(x, constants, use_j2=True) * dtt + dW  # dyn_normsph(x) is assumed to be defined elsewhere.
+        
+        # Extract the 4D state (columns 0, 2, 3, 5).
+        x_final = np.array([x[0], x[2], x[3], x[5]], dtype=np.float32)
+        X_samples[i, :] = x_final.copy()
+
+    return X_samples
+
+
+def x_samples_monte_new(t_list, data_folder, stat_sample=10000):
+    global constants
+
+    # Time-stepping parameters for propagation.
+    dtt = 1e-4
+    steps = {int(round(t / dtt)): t for t in t_list} # ; print(steps)
+    
+    X_samples = np.random.multivariate_normal(constants.N_MEAN_I, constants.N_COV_I, stat_sample).astype(np.float32)
+    
+    # time loop
+    for k in range(0, max(steps) + 1):
+        if k in steps:
+            print(f"hit t ≈ {k*dtt:.8f} (requested {steps[k]:.8f})")
+            # print(X_samples)
+            np.save(data_folder+"X_t{:.2f}.npy".format(k*dtt), X_samples)
+
+        # process each sample
+        for i in range(stat_sample):
+            x = np.zeros(6, dtype=np.float32)
+            x[0] = X_samples[i, 0]
+            x[1] = 0.5 * np.float32(np.pi) / constants.THETA
+            x[2] = X_samples[i, 1]
+            x[3] = X_samples[i, 2]
+            x[5] = X_samples[i, 3]
+            dW = np.sqrt(constants.N_Q_NOISE) * np.sqrt(dtt) * np.random.randn(3)
+            dW = np.concatenate([np.zeros(3), dW]) # because g = diag([0,0,0,1,1,1])
+            x = x + fourdorbit_dyn_normsph(x, constants, use_j2=True) * dtt + dW
+            x_final = np.array([x[0], x[2], x[3], x[5]], dtype=np.float32)
+            # update each sample
+            X_samples[i, :] = x_final.copy()
+
+
 def p_init(constants, x):
     """
     x is numpy array of shape (N x 4), N is the sample size
@@ -193,35 +262,33 @@ def fourdorbit_dyn_normsph(x, constants, use_j2):
     th = x[1]
     phi = x[2]
     vr = x[3]
-    vth = x[4]
+    vth = 0.0
     vphi = x[5]
+
     f1 = vr
-    f2 = 0.0 # (constants)
+    f2 = vth
     f3 = vphi
     aux = constants.W + constants.PHI/constants.T * vphi
     f4 = constants.T**2 * r * aux**2 - \
          constants.T**2 * constants.MU_EARTH /(constants.R**3 * r**2) + \
          2.0*(3*constants.T**2 * J2 * constants.MU_EARTH * constants.R_EARTH**2)/(2*constants.R**5 * r**4)
     f5 = 0.0 # (constants)
-    f6 = -2*constants.T/(r * constants.PHI) * vr * aux
+    f6 = -2.0*constants.T * vr * aux /(r * constants.PHI)
     return np.array([f1, f2, f3, f4, f5, f6])
 
 
 def generate_data(constants, data_folder, N_samples):
     mc_time = []
-    # dt = 0.01
-    # t_span = np.arange(0.00, 0.20+dt, dt)
-    # for t_prime in t_span:
-    for t_prime in constants.T_PRIME_SPAN:
-        start_time = time.time()
-        x1s, x2s, x3s, x4s, pdf = p_sol_monte(t=t_prime, linespace_num=51, stat_sample=N_samples)   
-        mc_time.append(time.time() - start_time)
-        np.save(data_folder+"pdf_t{:.3f}.npy".format(t_prime), pdf)
-        if t_prime == 0.0:
-            np.save(GRID_FOLDER+"x1s.npy", x1s)
-            np.save(GRID_FOLDER+"x2s.npy", x2s)
-            np.save(GRID_FOLDER+"x3s.npy", x3s)
-            np.save(GRID_FOLDER+"x4s.npy", x4s)
+
+    T_monte = np.round(constants.T_PRIME_SPAN, 2)
+        
+    start_time = time.time()
+        
+    # new method (more efficient)
+    x_samples_monte_new(T_monte, data_folder, stat_sample=N_samples)
+
+    mc_time.append(time.time() - start_time)
+
     np.save(data_folder+"mc_time.npy", np.array(mc_time))
 
 
@@ -269,15 +336,19 @@ def test_J2effect_exp_case2():
 
 
 def main():
+    global constants#; constants.test_printout()
+
     # --- Generate data ---
-    data_folder = "data/1e+5/"
-    # generate_data(constants, data_folder, 100000)
+    data_folder = "data/Xsamples_1e+6/"
+    generate_data(constants, data_folder, 1000000)
+    print_mc_time(data_folder)
+
     # fourdorbit_generate_samples(constants)
 
     # --- Test MC results ---
     # test_monte_accuracy()
     # test_J2effect_exp_case2()
-    check_pdf_Nrphi(constants, mc_folder=data_folder)
+    # check_pdf_Nrphi(constants, mc_folder=data_folder)
     # check_pdf_cartesian_wrt_samples(constants, mc_folder=data_folder)
     # test_monte_cartesian_pdf_xy(constants, data_folder)
     

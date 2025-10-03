@@ -139,6 +139,11 @@ def check_pinngmm_Nrphi(constants, p_net_gmm=None):
 
         # --- Plotting the contour plot ----
         fig, ax = plt.subplots(figsize=(8, 6))
+
+        # relative_levels = np.array([1e-3, 0.01, 0.05, 0.50, 0.95])
+        # pdf_max = np.max(pdf_values[pdf_values > 0])
+        # levels = relative_levels * pdf_max
+        # cp = plt.contourf(X_grid, Y_grid, pdf_values, levels=levels, cmap="viridis", alpha=0.8)
         cp = plt.contourf(X_grid, Y_grid, pdf_values, levels=30, cmap="viridis", alpha=0.8)
         plt.colorbar(cp)
 
@@ -147,7 +152,8 @@ def check_pinngmm_Nrphi(constants, p_net_gmm=None):
         
         ax.text(
             0.01, 0.99,                   # near top-left
-            f"t = {t_prime:.3f}\np estimated by 1e+5 samples",
+            # f"t = {t_prime:.3f}\np estimated by 1e+5 samples",
+            f"t = {t_prime:.2f} T\n",
             transform=ax.transAxes,       # use axes coords
             fontsize=32,                  # big text
             color='white',
@@ -239,6 +245,8 @@ def check_pdf_cartesian_wrt_samples(constants, mc_folder=None, p_net=None):
 
 def check_error_flatten(constants, p_init_func, e1_net, p_net, t, data_folder):
     """
+    NOTE: by checking p0 (analy vs MC), the error wrt analy: 0.0187 vs the error wrt MC: 0.0873 ...
+    It might suggest that MC is not accurate enough for validating PINN, i.e., MC has larger error than PINN ...
     """    
     set_publication_plot_style(font_size=16)
     # load p(monte)
@@ -246,37 +254,28 @@ def check_error_flatten(constants, p_init_func, e1_net, p_net, t, data_folder):
     x2s = np.load("data/grids/x2s.npy")
     x3s = np.load("data/grids/x3s.npy")
     x4s = np.load("data/grids/x4s.npy")
-    pdf_true = np.load(data_folder+"pdf_t{:.3f}.npy".format(t))
-    # print("[check] monte joint pdf shape, type: ", pdf_monte.shape, pdf_monte.dtype)
+    pdf_true = np.load(data_folder+"pdf_t{:.3f}.npy".format(t)).reshape(-1,)
+    print("[check] monte joint pdf shape, type: ", pdf_true.shape, pdf_true.dtype, np.max(pdf_true))
+
     x1_grid, x2_grid, x3_grid, x4_grid = np.meshgrid(x1s, x2s, x3s, x4s, indexing="ij") # the indexing is very important
     grid_points = np.vstack([x1_grid.ravel(), x2_grid.ravel(), x3_grid.ravel(), x4_grid.ravel()]).T
-    # print("[check] grid points shape type: ", grid_points.shape, grid_points.dtype)
+    print("[check] grid points shape type: ", grid_points.shape, grid_points.dtype)
     
     if(t == 0.0):
-        pdf_true = p_init_func(constants, grid_points).reshape(x1_grid.shape) # obtain analytical p(true)
-        print("[check] x1 ranges, true joint pdf shape, type: ", x1s.dtype, pdf_true.shape, pdf_true.dtype)
-
-    # Grid spacings (assumed uniform)
-    dx1 = x1s[1] - x1s[0]
-    dx2 = x2s[1] - x2s[0]
-    dx3 = x3s[1] - x3s[0]
-    dx4 = x4s[1] - x4s[0]
-    dV = dx1 * dx2 * dx3 * dx4
-    E_x1 = np.sum(x1_grid * pdf_true) * dV
-    E_x2 = np.sum(x2_grid * pdf_true) * dV
-    E_x3 = np.sum(x3_grid * pdf_true) * dV
-    E_x4 = np.sum(x4_grid * pdf_true) * dV
+        pdf_true = p_init_func(constants, grid_points).reshape(-1,) # obtain analytical p(true)
+        pdf_true_analy = p_init_func(constants, grid_points).reshape(-1,) # obtain analytical p(true)
+        # print("[check] x1 ranges, true joint pdf shape, type: ", x1s.dtype, pdf_true.shape, pdf_true.dtype)
 
     # obtain pdf(nn)
     grid_points_tensor = torch.tensor(grid_points, dtype=torch.float32, requires_grad=False)
     t_tensor = (torch.ones(len(grid_points_tensor), 1, dtype=torch.float32) * t)
     # print("[check] grid points tensor shape type: ", grid_points_tensor.shape, grid_points_tensor.dtype)
-    pdf_nn = p_net(grid_points_tensor, t_tensor).detach().numpy().reshape(x1_grid.shape)
+    pdf_nn = p_net(grid_points_tensor, t_tensor).detach().numpy().reshape(-1,)
     # if(t == 0): # [test]
     #     pdf_nn = p_init_perturb(grid_points).reshape(x1_grid.shape)
     # print("[check] nn joint pdf shape, type: ", pdf_nn.shape, pdf_nn.dtype)
     if(e1_net is not None):
-        e1_nn  = e1_net(grid_points_tensor, t_tensor).detach().numpy().reshape(x1_grid.shape)
+        e1_nn  = e1_net(grid_points_tensor, t_tensor).detach().numpy().reshape(-1,)
     e1 = pdf_true - pdf_nn
     
     e1_vec = e1.reshape(-1)
@@ -286,10 +285,11 @@ def check_error_flatten(constants, p_init_func, e1_net, p_net, t, data_folder):
         print("a1 (t=", np.round(t,2),"): ", np.round(a1,3))
     # print(E_x1, E_x2, E_x3, E_x4)
     max_e1 = np.max(np.abs(e1_vec))
-    print("[test] max(p_mc - p_nn) at t={:.3f}: {:.4f}".format(t, max_e1))
+    max_pdf = np.max(pdf_true).item()
+    print("[test] max(p_mc - p_nn) / max(p_mc) at t={:.3f}: {:.4f}".format(t, max_e1/max_pdf))
     if(e1_net is not None):
         max_e1_nn = np.max(np.abs(e1_nn_vec))
-        print("[test] max(p_mc - p_nn), max(e1_nn) at t={:.3f}: {:.4f} vs {:.4f}".format(t, max_e1, max_e1_nn))
+        print("[test] normalized max(p_mc - p_nn), max(e1_nn) at t={:.3f}: {:.4f} vs {:.4f}".format(t, max_e1/max_pdf, max_e1_nn/max_pdf))
         B1 = 2.0 * max_e1_nn 
         idx_plot = np.arange(1, 1+len(e1_vec))
         fig, ax = plt.subplots(figsize=(8, 4))
@@ -311,6 +311,205 @@ def check_error_flatten(constants, p_init_func, e1_net, p_net, t, data_folder):
         ax.set_xlabel("4D state idx")
         plt.tight_layout(pad=0.2)
         plt.show()
+
+
+def check_error_flatten_new(constants, p_init_func, p_net, t, data_folder, gmm):
+    """
+    Instead of using binned MC PDF, we use fitted GMM PDF as the 'true'
+    At t=0, analy: 0.0187, gmm: 0.0209
+    NOTE: now let's test t=0.2T
+    """    
+    set_publication_plot_style(font_size=16)
+    # load p(monte)
+    x1s = np.load("data/grids/x1s.npy")
+    x2s = np.load("data/grids/x2s.npy")
+    x3s = np.load("data/grids/x3s.npy")
+    x4s = np.load("data/grids/x4s.npy")
+    # pdf_true = np.load(data_folder+"pdf_t{:.3f}.npy".format(t)).reshape(-1,)
+    # print("[check] monte joint pdf shape, type: ", pdf_true.shape, pdf_true.dtype, np.max(pdf_true))
+
+    x1_grid, x2_grid, x3_grid, x4_grid = np.meshgrid(x1s, x2s, x3s, x4s, indexing="ij") # the indexing is very important
+    grid_points = np.vstack([x1_grid.ravel(), x2_grid.ravel(), x3_grid.ravel(), x4_grid.ravel()]).T
+    print("[check] grid points shape type: ", grid_points.shape, grid_points.dtype)
+    
+    # --- analytical ---
+    # if(t == 0.0):
+        # pdf_true = p_init_func(constants, grid_points).reshape(-1,) # obtain analytical p(true)
+
+    # --- gmm fit ---
+    pdf_true = gmm.pdf(grid_points).reshape(-1,)
+
+    # obtain pdf(nn)
+    grid_points_tensor = torch.tensor(grid_points, dtype=torch.float32, requires_grad=False)
+    t_tensor = (torch.ones(len(grid_points_tensor), 1, dtype=torch.float32) * t)
+    # print("[check] grid points tensor shape type: ", grid_points_tensor.shape, grid_points_tensor.dtype)
+    pdf_nn = p_net(grid_points_tensor, t_tensor).detach().numpy().reshape(-1,)
+    
+    e1 = pdf_true - pdf_nn
+    e1_vec = e1.reshape(-1)
+    max_e1 = np.max(np.abs(e1_vec))
+    max_pdf = np.max(pdf_true).item()
+    print("[test] max(p_mc - p_nn) / max(p_mc) at t={:.3f}: {:.4f}".format(t, max_e1/max_pdf))
+
+
+# ------------------------ helpers ------------------------
+
+def _device_of(module):
+    try:
+        return next(module.parameters()).device
+    except StopIteration:
+        return torch.device("cpu")
+
+def _iter_tiles(n1, n2, n3, n4, max_points):
+    """
+    Yield slices (s1,s2,s3,s4) with tile size <= max_points.
+    Packs dims 4->3->2->1 for cache locality.
+    """
+    c4 = min(n4, max_points)
+    c3 = max(1, min(n3, max_points // c4))
+    c2 = max(1, min(n2, max_points // (c3 * c4)))
+    c1 = max(1, min(n1, max_points // (c2 * c3 * c4)))
+    for i1 in range(0, n1, c1):
+        s1 = slice(i1, min(i1 + c1, n1))
+        for i2 in range(0, n2, c2):
+            s2 = slice(i2, min(i2 + c2, n2))
+            for i3 in range(0, n3, c3):
+                s3 = slice(i3, min(i3 + c3, n3))
+                for i4 in range(0, n4, c4):
+                    s4 = slice(i4, min(i4 + c4, n4))
+                    yield s1, s2, s3, s4
+
+def _points_from_tile(x1s, x2s, x3s, x4s, s1, s2, s3, s4):
+    # Mesh with 'ij' indexing to match your code
+    X1, X2, X3, X4 = np.meshgrid(x1s[s1], x2s[s2], x3s[s3], x4s[s4], indexing="ij")
+    G = np.stack([X1, X2, X3, X4], axis=-1).reshape(-1, 4).astype(np.float32, copy=False)
+    return G
+
+# ------------------ batched normalized sup error ------------------
+
+@torch.no_grad()
+def check_error_batched_normsup(
+    constants,
+    p_init_func,              # callable: p_true(x) at t=0, returns (M,) ndarray
+    e1_net,                   # can be None; callable: e1_net(x,t) -> (M,) tensor/ndarray
+    p_net,                    # callable: p_net(x,t) -> (M,) tensor/ndarray (PDF approx)
+    t,                        # float time
+    data_folder,              # where pdf_t{t:.3f}.npy is stored for t>0
+    max_points_tile=250_000,  # max points per tile (x per tile)
+    batch_size_torch=64_000   # torch forward size inside a tile
+):
+    """
+    Streams the 4D grid to compute:
+      - norm_sup_true_vs_pnet = max |p_true - p_net| / max p_true
+      - (optional) norm_sup_e1net = max |e1_net| / max p_true
+      - (optional) a1 = max |(p_true - p_net) - e1_net| / max |e1_net|
+    Returns a dict. No plotting.
+
+    NOTE: MC is not accurate enough ...
+    ### p(t0) MC ###
+    [load model] from: output/pinn-gmm(V0)/p_net.pth
+    best epoch:  47983 , min loss: 0.0025010849349200726 , train time: 6629.588865995407
+    [check] e1_net scale: 0.00380, normalize: 0.00380
+    [load model] from: output/pinn-gmm(V0)/e1_net.pth
+    best epoch:  31113 , min loss: 0.008889940567314625 , train time: 19386.46988081932
+    {'t': 0.0, 'normalized_sup_error': 0.08733421628568377, 'normalized_sup_e1_net': 0.019121048143815673, 'a1': 4.835303781382576, 'max_abs_e1': 0.015903353691101074, 'max_p_true': 0.1820976287126541}
+    
+    ### p(t0) analytical ###
+    [load model] from: output/pinn-gmm(V0)/p_net.pth
+    best epoch:  47983 , min loss: 0.0025010849349200726 , train time: 6629.588865995407
+    [check] e1_net scale: 0.00380, normalize: 0.00380
+    [load model] from: output/pinn-gmm(V0)/e1_net.pth
+    best epoch:  31113 , min loss: 0.008889940567314625 , train time: 19386.46988081932
+    {'t': 0.0, 'normalized_sup_error': 0.018737064297610486, 'normalized_sup_e1_net': 0.018334286208157923, 'a1': 0.11084659633307023, 'max_abs_e1': 0.0035583898425102234, 'max_p_true': 0.18991181254386902}
+    """
+
+    # 1) Load grid axes (small) with memmap for safety
+    x1s = np.load("data/grids/x1s.npy", mmap_mode="r")
+    x2s = np.load("data/grids/x2s.npy", mmap_mode="r")
+    x3s = np.load("data/grids/x3s.npy", mmap_mode="r")
+    x4s = np.load("data/grids/x4s.npy", mmap_mode="r")
+    n1, n2, n3, n4 = len(x1s), len(x2s), len(x3s), len(x4s)
+
+    # 2) True PDF source
+    is_t0 = (float(t) == 0.0)
+    pdf_true_mem = np.load(
+        data_folder + f"pdf_t{t:.3f}.npy", mmap_mode="r"
+    ).reshape(n1, n2, n3, n4)
+
+    # 3) Accumulators (we stream maxima)
+    max_abs_e1   = 0.0   # max |p_true - p_net|
+    max_p_true   = 0.0   # max p_true
+    max_abs_e1nn = 0.0   # max |e1_net|       (if provided)
+    max_abs_gap  = 0.0   # max |(p_true - p_net) - e1_net| for a1 (if provided)
+
+    # 4) Torch settings
+    device = _device_of(p_net)
+    dtype  = torch.float32
+    p_net.eval()
+    if e1_net is not None:
+        e1_net.eval()
+
+    # 5) Stream tiles
+    for s1, s2, s3, s4 in _iter_tiles(n1, n2, n3, n4, max_points=max_points_tile):
+        # grid points for this tile, shape (M,4)
+        G_np = _points_from_tile(x1s, x2s, x3s, x4s, s1, s2, s3, s4)
+        M = G_np.shape[0]
+
+        # p_true on the tile
+        if is_t0:
+            # analytical
+            p_true_tile = p_init_func(constants, G_np).astype(np.float32, copy=False).reshape(-1)
+            
+            # MC binned
+            # p_true_tile = pdf_true_mem[s1, s2, s3, s4].astype(np.float32, copy=False).reshape(-1)
+        else:
+            p_true_tile = pdf_true_mem[s1, s2, s3, s4].astype(np.float32, copy=False).reshape(-1)
+
+        # p_net on the tile (mini-batches)
+        p_net_tile = np.empty(M, dtype=np.float32)
+        e1_net_tile = None if e1_net is None else np.empty(M, dtype=np.float32)
+
+        for i in range(0, M, batch_size_torch):
+            j = min(i + batch_size_torch, M)
+            x_batch = torch.from_numpy(G_np[i:j]).to(device=device, dtype=dtype)
+            t_batch = torch.full((j - i, 1), float(t), dtype=dtype, device=device)
+
+            out_p = p_net(x_batch, t_batch).detach().float().cpu().reshape(-1).numpy()
+            p_net_tile[i:j] = out_p
+
+            if e1_net is not None:
+                out_e1 = e1_net(x_batch, t_batch).detach().float().cpu().reshape(-1).numpy()
+                e1_net_tile[i:j] = out_e1
+
+        # errors for this tile
+        e1_tile = p_true_tile - p_net_tile  # true error
+
+        # update maxima
+        max_abs_e1 = max(max_abs_e1, float(np.max(np.abs(e1_tile))))
+        max_p_true = max(max_p_true, float(np.max(p_true_tile)))
+
+        if e1_net is not None:
+            max_abs_e1nn = max(max_abs_e1nn, float(np.max(np.abs(e1_net_tile))))
+            max_abs_gap  = max(max_abs_gap,  float(np.max(np.abs(e1_tile - e1_net_tile))))
+
+    # 6) Final metrics
+    if max_p_true == 0.0:
+        norm_sup_true_vs_pnet = 0.0
+        norm_sup_e1net = 0.0 if e1_net is not None else None
+        a1 = 0.0 if e1_net is not None else None
+    else:
+        norm_sup_true_vs_pnet = max_abs_e1 / max_p_true
+        norm_sup_e1net = (max_abs_e1nn / max_p_true) if e1_net is not None else None
+        a1 = (max_abs_gap / max_abs_e1nn) if (e1_net is not None and max_abs_e1nn > 0.0) else (None if e1_net is None else 0.0)
+
+    return {
+        "t": float(t),
+        "normalized_sup_error": norm_sup_true_vs_pnet,     # max |p_true - p_net| / max p_true
+        "normalized_sup_e1_net": norm_sup_e1net,           # max |e1_net| / max p_true (if provided)
+        "a1": a1,                                          # max |e1 - e1_net| / max |e1_net| (if provided)
+        "max_abs_e1": max_abs_e1,
+        "max_p_true": max_p_true,
+    }
 
 
 def check_pdfnn_cartesian_wrt_monte(constants, p_net, mc_folder):

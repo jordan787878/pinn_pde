@@ -12,7 +12,9 @@ import torch
 import argparse
 from monte import p_init, get_p_init_max, print_mc_time
 from exp_utilities.plot_utilites import check_pinngmm_Nrphi, check_pinngmm_cartesian_wrt_monte, check_pdf_cartesian_wrt_samples, check_error_flatten
+from exp_utilities.plot_utilites import check_error_flatten_new
 from exp_utilities.constants import Case2_4D_Constants
+from exp_utilities.classic_gmm import GMMWhitenedModel
 # import utilities
 import sys
 sys.path.insert(0, '../utilities/')
@@ -130,11 +132,20 @@ def main():
 
     # --- Post-process ---
     # print_mc_time(MC_FOLDER)
+
     # check_pinngmm_Nrphi(constants, p_net_gmm=p_net)
-    check_pinngmm_cartesian_wrt_monte(constants, p_net, MC_FOLDER)
-    # for t_prime in constants.T_PRIME_SPAN:
-    #     check_error_flatten(constants, p_init, None, p_net, t_prime, MC_FOLDER)
+
+    # check_pinngmm_cartesian_wrt_monte(constants, p_net, MC_FOLDER)
     
+    # for t_prime in t_check:
+    #     check_error_flatten(constants, p_init, None, p_net, t_prime, MC_FOLDER)
+
+    # NOTE: use a fitted GMM PDF as 'true'
+    t_check = [constants.T_PRIME_SPAN[-2]]
+    for t_prime in t_check:
+        gmm = GMMWhitenedModel.load("data/classic_gmm/gmm_whitened_t{:.2f}.npz".format(t_prime))
+        check_error_flatten_new(constants, p_init, p_net, t_prime, MC_FOLDER, gmm)
+
     # check_pdf_cartesian_wrt_samples(constants, p_net=p_net)
     # --- (obsolete) ---
     # # check_pdfnn_marginalize(p_net, t=t_prime)

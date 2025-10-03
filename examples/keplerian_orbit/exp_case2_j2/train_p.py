@@ -120,9 +120,9 @@ def main():
     # --- Post-process ---
     # print_mc_time(MC_FOLDER)
     # check_pdf_Nrphi(constants, p_net=p_net)
-    check_pdfnn_cartesian_wrt_monte(constants, p_net, MC_FOLDER)
-    # for t_prime in constants.T_PRIME_SPAN:
-    #     check_error_flatten(constants, p_init, None, p_net, t_prime, MC_FOLDER)
+    # check_pdfnn_cartesian_wrt_monte(constants, p_net, MC_FOLDER)
+    for t_prime in constants.T_PRIME_SPAN:
+        check_error_flatten(constants, p_init, None, p_net, t_prime, MC_FOLDER)
     # check_pdf_cartesian_wrt_samples(constants, p_net=p_net)
     # --- (obsolete) ---
     # # check_pdfnn_marginalize(p_net, t=t_prime)
