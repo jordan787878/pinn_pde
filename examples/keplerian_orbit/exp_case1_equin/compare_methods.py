@@ -188,12 +188,12 @@ def compute_pdf_variations(N_batch = 10, p_net=None, p_net_gmm=None, data_lp=Non
     metrics = {
         "rel_error_lp": [],
         "rel_error_ut": [],
-        # "rel_error_gmm": [],
+        "rel_error_gmm": [],
         "rel_error_pinn": [],
         "rel_error_pinngmm": [],
         "tv_lp": [],
         "tv_ut": [],
-        # "tv_gmm": [],
+        "tv_gmm": [],
         "tv_pinn": [],
         "tv_pinngmm": [],
         "g_kl_lp": [],
@@ -225,7 +225,7 @@ def compute_pdf_variations(N_batch = 10, p_net=None, p_net_gmm=None, data_lp=Non
         gkl_ut = 0.0
         delta_p_gmm_max = 0.0
         tv_gmm = 0.0
-        gkl_gmm = 0.0
+        # gkl_gmm = 0.0
         # additional data for pinn
         e1_pinn_max = 0.0
         Z_pinn = 0.0
@@ -300,28 +300,28 @@ def compute_pdf_variations(N_batch = 10, p_net=None, p_net_gmm=None, data_lp=Non
             gkl_ut += _gkl/N_batch
             del pdf_ut
 
-            # # gmm
-            # _, _w, _mu, _cov = data_gmm.get(t)
-            # pdf_gmm = np.zeros(X.shape[0])
-            # for j in range(_w.shape[0]):
-            #     # pdf_func = multivariate_normal(mean=_mu[j,:], cov=_cov[j,:,:])
-            #     # p_k = pdf_func.pdf(X).reshape(-1,)
-            #     p_k = p_normal(X, _mu[j,:], _cov[j,:,:]).reshape(-1,)
-            #     pdf_gmm += _w[j] * p_k
-            # _delta_p = np.max(np.abs(pdf_gmm - pdf_ref)).item()
-            # delta_p_gmm_max = max(delta_p_gmm_max, _delta_p)
-            # _tv = p_total_variation(constants, pdf_gmm, pdf_ref)
-            # tv_gmm += _tv/N_batch
+            # gmm
+            _, _w, _mu, _cov = data_gmm.get(t)
+            pdf_gmm = np.zeros(X.shape[0])
+            for j in range(_w.shape[0]):
+                # pdf_func = multivariate_normal(mean=_mu[j,:], cov=_cov[j,:,:])
+                # p_k = pdf_func.pdf(X).reshape(-1,)
+                p_k = p_normal(X, _mu[j,:], _cov[j,:,:]).reshape(-1,)
+                pdf_gmm += _w[j] * p_k
+            _delta_p = np.max(np.abs(pdf_gmm - pdf_ref)).item()
+            delta_p_gmm_max = max(delta_p_gmm_max, _delta_p)
+            _tv = p_total_variation(constants, pdf_gmm, pdf_ref)
+            tv_gmm += _tv/N_batch
             # _gkl = 0.
             # gkl_gmm += _gkl/N_batch
-            # del pdf_gmm
+            del pdf_gmm
         
         # After all batch
         gkl_pinn += Z_pinn
         gkl_pinngmm += 1
         gkl_lp += 1
         gkl_ut += 1
-        gkl_gmm += 1
+        # gkl_gmm += 1
         metrics["rel_error_pinn"].append(100.*delta_p_pinn_max/pdf_ref_max)
         metrics["tv_pinn"].append(tv_pinn)
         metrics["g_kl_pinn"].append(gkl_pinn)
@@ -334,8 +334,8 @@ def compute_pdf_variations(N_batch = 10, p_net=None, p_net_gmm=None, data_lp=Non
         metrics["rel_error_ut"].append(100.*delta_p_ut_max/pdf_ref_max)
         metrics["tv_ut"].append(tv_ut)
         metrics["g_kl_ut"].append(gkl_ut)
-        # metrics["rel_error_gmm"].append(100.*delta_p_gmm_max/pdf_ref_max)
-        # metrics["tv_gmm"].append(tv_gmm)
+        metrics["rel_error_gmm"].append(100.*delta_p_gmm_max/pdf_ref_max)
+        metrics["tv_gmm"].append(tv_gmm)
         # metrics["g_kl_gmm"].append(gkl_gmm)
         metrics["B1_pinn"].append(100. * 2. * e1_pinn_max/pdf_ref_max)
         metrics["B1_pinngmm"].append(100. * 2. * e1_pinngmm_max/pdf_ref_max)
@@ -345,10 +345,10 @@ def compute_pdf_variations(N_batch = 10, p_net=None, p_net_gmm=None, data_lp=Non
         print("[check] Z_pinn: {:.4f}".format(Z_pinn))
         print("[check]: max e1 gmm: {:.4f}, max e1 pinngmm: {:.4f}".format(
             delta_p_pinngmm_max, e1_pinngmm_max))
-        # print(metrics["rel_error_gmm"])
+        print(metrics["rel_error_gmm"])
         print(metrics["rel_error_pinn"])
         print(metrics["rel_error_pinngmm"])
-        # print(metrics["tv_gmm"])
+        print(metrics["tv_gmm"])
         print(metrics["tv_pinn"])
         print(metrics["tv_pinngmm"])
         print(metrics["g_kl_pinn"])
@@ -460,8 +460,8 @@ def compare_methods():
     metrics = load_metrics_npz(metrics_path); plot_pdf_metrics(metrics)
 
     # Visualize marginal PDF
-    compare_corner_plots(p_net=p_net, data_lp=data_lp, data_ut=data_ut, OUTPUT_PATH=None,#OUTPUT_PATH,
-                         p_net_gmm=p_net_gmm)
+    # compare_corner_plots(p_net=p_net, data_lp=data_lp, data_ut=data_ut, OUTPUT_PATH=None,#OUTPUT_PATH,
+    #                      p_net_gmm=p_net_gmm)
         
 
 def main():

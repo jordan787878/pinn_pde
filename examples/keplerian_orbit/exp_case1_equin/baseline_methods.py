@@ -379,16 +379,22 @@ def gmm_propagation(constants, dt_precision=6, dt_save=1e-2, Kc=11, save_path=No
     #     constants.MEAN_I.copy(), constants.COV_I.copy(), K=Kc
     # )
 
-    fit_result = fit_gmm_to_gaussian_new(constants.MEAN_I, constants.COV_I, K=Kc)
-    weights = fit_result["weights"]
-    means = fit_result["means"]
-    covs = fit_result["covs"]
-    print(constants.MEAN_I)
-    print(means)
-    print("\n")
-    print(constants.COV_I)
-    print(covs)
-    print("[check] gmm fitting kl_est: ", fit_result["kl_est"])
+    gmm_data = np.load("data/pre_compute/gmm_x_params.npz")
+    weights = gmm_data["weights"]
+    means = gmm_data["means_x"]
+    covs = gmm_data["covs_x"]
+
+    # fit_result = fit_gmm_to_gaussian_new(constants.MEAN_I, constants.COV_I, K=Kc)
+    # weights = fit_result["weights"]
+    # means = fit_result["means"]
+    # covs = fit_result["covs"]
+    # print(constants.MEAN_I)
+    # print(means)
+    # print("\n")
+    # print(constants.COV_I)
+    # print(covs)
+    # print("[check] gmm fitting kl_est: ", fit_result["kl_est"])
+
     print("[check] gmm fitting sum of weights: ", np.sum(weights), weights)
 
     xs = means.copy()
@@ -450,11 +456,12 @@ def main():
     _get_Jacobian_expression()
     
     global constants
+    constants.test_printout()
 
     # --- Do linear propagation and save result to SAVE_PATH_LINEAR_PROPAGATE ---
     # linear_propagation(constants, dt_precision=6, dt_save=1e-2, save_path=SAVE_PATH_LINEAR_PROPAGATE)
     # # Example usage
-    data_lp = PropagationData(SAVE_PATH_LINEAR_PROPAGATE)
+    # data_lp = PropagationData(SAVE_PATH_LINEAR_PROPAGATE)
     # print(data_lp.data["times"])
     # t, w, mu, cov = data_lp.get(constants.T_PRIME_SPAN[-1])
     # print(t, w, mu, cov)
@@ -462,20 +469,20 @@ def main():
     # --- Do unscented propagation and save result to SAVE_PATH_UNSCENT_PROPAGATE ---
     # unscent_propagation(constants, dt_precision=6, dt_save=1e-2, save_path=SAVE_PATH_UNSCENT_PROPAGATE)
     # # Example usage
-    data_us = PropagationData(SAVE_PATH_UNSCENT_PROPAGATE)
+    # data_us = PropagationData(SAVE_PATH_UNSCENT_PROPAGATE)
     # print(data_us.data["times"])
     # t, w, mu, cov = data_us.get(constants.T_PRIME_SPAN[-1])
     # print(t, w, mu, cov)
 
     gmm_propagation(constants, dt_precision=6, dt_save=1e-2, save_path=SAVE_PATH_GMM_PROPAGATE)
-    # data_gmm = PropagationData(SAVE_PATH_GMM_PROPAGATE)
+    data_gmm = PropagationData(SAVE_PATH_GMM_PROPAGATE)
     # Example usage
-    # print(data_gmm.data["times"])
-    # t, ws, mus, covs = data_gmm.get(constants.T_PRIME_SPAN[-1])
-    # print("gmm data at time: ", t)
-    # print("gmm weights: ", ws.shape)
-    # print(mus.shape)
-    # print(covs.shape)
+    print(data_gmm.data["times"])
+    t, ws, mus, covs = data_gmm.get(constants.T_PRIME_SPAN[-1])
+    print("gmm data at time: ", t)
+    print("gmm weights: ", ws.shape)
+    print(mus.shape)
+    print(covs.shape)
 
 
 if __name__ == "__main__":

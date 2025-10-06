@@ -524,10 +524,11 @@ def main():
     #          max_vec=max_vec)    
 
     # --- Generate data ---
-    global constants
+    global constants; constants.test_printout()
     data_folder = "data/1e+6"
-
     # generate_data(data_folder+"/", 100000)
+
+
 
     # --- Test MC results ---
     # print_mc_time(data_folder)
@@ -575,11 +576,11 @@ def main():
 
     # --- Plots ---
     # This plot validates the "analytical" joint PDF by p_sol() --> can used to validate error.
-    for i in range(6, 7):
-        data_MC = np.load(data_folder+"/pre_compute/marginal_p_x"+str(i)+"_t_M.npz")
-        data_sol = np.load("data/pre_compute/marginal_pdfsol_x"+str(i)+"_t_M.npz")
-        plot_time_curves_3d(i, constants, data_MC, data_sol,
-                            leg_txt = ["p MC", "p sol."], title="Marginal p(x"+str(i)+",t)")
+    # for i in range(6, 7):
+    #     data_MC = np.load(data_folder+"/pre_compute/marginal_p_x"+str(i)+"_t_M.npz")
+    #     data_sol = np.load("data/pre_compute/marginal_pdfsol_x"+str(i)+"_t_M.npz")
+    #     plot_time_curves_3d(i, constants, data_MC, data_sol,
+    #                         leg_txt = ["p MC", "p sol."], title="Marginal p(x"+str(i)+",t)")
     
 
 if __name__ == "__main__":

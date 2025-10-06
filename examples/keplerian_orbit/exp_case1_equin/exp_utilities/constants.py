@@ -228,6 +228,8 @@ class Case1_6D_Constants_Equin:
         print("PHI: ", self.PHI)
         print("TI: ", self.TI)
         print("TF: ", self.TF)
+        print("MEAN_I: ", self.MEAN_I)
+        print("COV_I: ", self.COV_I)
         print("N_MEAN_I: ", self.N_MEAN_I)
         print("N_COV_I: ", self.N_COV_I)
         print("X1_RANGE: ", self.X1_RANGE)

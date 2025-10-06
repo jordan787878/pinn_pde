@@ -94,7 +94,8 @@ def main():
         "ic_fcn": p_init_scaled,
         "diff_opt_fcn": diff_opt_scaled,
         "save_path": OUTPUT_PATH+"/e1_net.pth",
-        "save_path_inter": None #OUTPUT_PATH+"/e1_net_",
+        "save_path_inter": None, #OUTPUT_PATH+"/e1_net_",
+        "sample_res_uniform_fcn": constants.sample_res_points_scaled_uniform
     }
 
     # --- Train e1 pinn over first time seq ---
