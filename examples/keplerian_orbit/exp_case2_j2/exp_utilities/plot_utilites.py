@@ -330,7 +330,7 @@ def check_error_flatten_new(constants, p_init_func, p_net, t, data_folder, gmm):
 
     x1_grid, x2_grid, x3_grid, x4_grid = np.meshgrid(x1s, x2s, x3s, x4s, indexing="ij") # the indexing is very important
     grid_points = np.vstack([x1_grid.ravel(), x2_grid.ravel(), x3_grid.ravel(), x4_grid.ravel()]).T
-    print("[check] grid points shape type: ", grid_points.shape, grid_points.dtype)
+    # print("[check] grid points shape type: ", grid_points.shape, grid_points.dtype)
     
     # --- analytical ---
     # if(t == 0.0):
@@ -349,7 +349,7 @@ def check_error_flatten_new(constants, p_init_func, p_net, t, data_folder, gmm):
     e1_vec = e1.reshape(-1)
     max_e1 = np.max(np.abs(e1_vec))
     max_pdf = np.max(pdf_true).item()
-    print("[test] max(p_mc - p_nn) / max(p_mc) at t={:.3f}: {:.4f}".format(t, max_e1/max_pdf))
+    print("[test] max(p_mc - p_nn) / max(p_mc) at t = {:.3f}: {:.4f}".format(t, max_e1/max_pdf))
 
 
 # ------------------------ helpers ------------------------
@@ -396,7 +396,8 @@ def check_error_batched_normsup(
     t,                        # float time
     data_folder,              # where pdf_t{t:.3f}.npy is stored for t>0
     max_points_tile=250_000,  # max points per tile (x per tile)
-    batch_size_torch=64_000   # torch forward size inside a tile
+    batch_size_torch=64_000,   # torch forward size inside a tile
+    gmm=None
 ):
     """
     Streams the 4D grid to compute:
@@ -422,19 +423,26 @@ def check_error_batched_normsup(
     best epoch:  31113 , min loss: 0.008889940567314625 , train time: 19386.46988081932
     {'t': 0.0, 'normalized_sup_error': 0.018737064297610486, 'normalized_sup_e1_net': 0.018334286208157923, 'a1': 0.11084659633307023, 'max_abs_e1': 0.0035583898425102234, 'max_p_true': 0.18991181254386902}
     """
-
+    print(t)
+    
     # 1) Load grid axes (small) with memmap for safety
     x1s = np.load("data/grids/x1s.npy", mmap_mode="r")
     x2s = np.load("data/grids/x2s.npy", mmap_mode="r")
     x3s = np.load("data/grids/x3s.npy", mmap_mode="r")
     x4s = np.load("data/grids/x4s.npy", mmap_mode="r")
     n1, n2, n3, n4 = len(x1s), len(x2s), len(x3s), len(x4s)
-
-    # 2) True PDF source
     is_t0 = (float(t) == 0.0)
-    pdf_true_mem = np.load(
-        data_folder + f"pdf_t{t:.3f}.npy", mmap_mode="r"
-    ).reshape(n1, n2, n3, n4)
+
+    # True PDF source (MC historgram)
+    # pdf_true_mem = np.load(
+    #     data_folder + f"pdf_t{t:.3f}.npy", mmap_mode="r"
+    # ).reshape(n1, n2, n3, n4)
+
+     # True PDF source (MC fitted by GMM)
+    x1_grid, x2_grid, x3_grid, x4_grid = np.meshgrid(x1s, x2s, x3s, x4s, indexing="ij") # the indexing is very important
+    grid_points = np.vstack([x1_grid.ravel(), x2_grid.ravel(), x3_grid.ravel(), x4_grid.ravel()]).T
+    pdf_true_mem = gmm.pdf(grid_points).reshape(n1, n2, n3, n4)
+    del x1_grid, x2_grid, x3_grid, x4_grid, grid_points
 
     # 3) Accumulators (we stream maxima)
     max_abs_e1   = 0.0   # max |p_true - p_net|
@@ -460,7 +468,7 @@ def check_error_batched_normsup(
             # analytical
             p_true_tile = p_init_func(constants, G_np).astype(np.float32, copy=False).reshape(-1)
             
-            # MC binned
+            # MC
             # p_true_tile = pdf_true_mem[s1, s2, s3, s4].astype(np.float32, copy=False).reshape(-1)
         else:
             p_true_tile = pdf_true_mem[s1, s2, s3, s4].astype(np.float32, copy=False).reshape(-1)
@@ -503,12 +511,12 @@ def check_error_batched_normsup(
         a1 = (max_abs_gap / max_abs_e1nn) if (e1_net is not None and max_abs_e1nn > 0.0) else (None if e1_net is None else 0.0)
 
     return {
-        "t": float(t),
+        "t": t,
         "normalized_sup_error": norm_sup_true_vs_pnet,     # max |p_true - p_net| / max p_true
         "normalized_sup_e1_net": norm_sup_e1net,           # max |e1_net| / max p_true (if provided)
         "a1": a1,                                          # max |e1 - e1_net| / max |e1_net| (if provided)
-        "max_abs_e1": max_abs_e1,
-        "max_p_true": max_p_true,
+        # "max_abs_e1": max_abs_e1,
+        # "max_p_true": max_p_true,
     }
 
 
@@ -1635,4 +1643,67 @@ def plot_pdf_gmm_wrt_pinn(constants, p_net, p_gmm, target_r, target_phi, t, save
         plt.show()
     else:
         fig.savefig(save_plot_path+".pdf", format='pdf'); plt.close()
-   
+
+
+def plot_pdf_metrics(metrics):
+    set_publication_plot_style()
+
+    colors = sns.color_palette("husl", 5)
+
+    plt.figure()
+    print(metrics["t"])
+    plt.plot(metrics["t"], metrics["rel_error_lp"], color=colors[1],   label="LP")
+    plt.plot(metrics["t"], metrics["rel_error_ut"], color=colors[2],   label="UT")
+    plt.plot(metrics["t"], metrics["rel_error_gmm"], color=colors[3],   label="GMM")
+    # plt.plot(metrics["t"], metrics["rel_error_pinn"], color=colors[-1], label="PINN-MLP")
+    # all_zeros = not np.any(metrics["B1_pinn"])
+    # if(all_zeros is False):
+    #     plt.fill_between(
+    #         metrics["t"],
+    #         metrics["rel_error_pinn"],
+    #         metrics["B1_pinn"],
+    #         color=colors[-1],
+    #         alpha=0.2,
+    #         label="PINN Error Bound"
+    #     )
+    plt.plot(metrics["t"], metrics["rel_error_pinngmm"], color=colors[0], label="PINN-GMM")
+    all_zeros = not np.any(metrics["B1_pinngmm"])
+    if(all_zeros is False):
+        plt.fill_between(
+            metrics["t"],
+            metrics["rel_error_pinngmm"],
+            metrics["B1_pinngmm"],
+            color=colors[0],
+            alpha=0.2,
+            label="PINN-GMM Error Bound"
+        )
+    plt.legend()
+    plt.xlabel("t")
+    plt.ylabel("norm. worst error %")
+    plt.grid(True)
+
+    plt.figure()
+    plt.plot(metrics["t"], metrics["tv_lp"], color=colors[1],   label="LP")
+    plt.plot(metrics["t"], metrics["tv_ut"], color=colors[2],   label="UT")
+    plt.plot(metrics["t"], metrics["tv_gmm"], color=colors[3],   label="GMM")
+    # plt.plot(metrics["t"], metrics["tv_pinn"], color=colors[-1], label="PINN-MLP")
+    plt.plot(metrics["t"], metrics["tv_pinngmm"], color=colors[0], label="PINN-GMM")
+    plt.legend()
+    plt.xlabel("t")
+    plt.ylabel("total variation %")
+    plt.grid(True)
+
+    # # metric 3: negative log liklihood (relative KL)
+    # plt.figure()
+    # plt.plot(metrics["t"], metrics["g_kl_lp"], color=colors[1],   label="LP")
+    # plt.plot(metrics["t"], metrics["g_kl_ut"], color=colors[2],   label="UT")
+    # # plt.plot(metrics["t"], metrics["g_kl_gmm"], color=colors[3],   label="GMM")
+    # # plt.plot(metrics["t"], metrics["rel_kl_ut_alpha_0_1"], color=colors[2], marker="o", label=r"$p$ Unscent Trans. $(\alpha=0.1)$")
+    # plt.plot(metrics["t"], metrics["g_kl_pinn"], color=colors[-1], label="PINN-MLP")
+    # plt.plot(metrics["t"], metrics["g_kl_pinngmm"], color=colors[0], label="PINN-GMM")
+    # plt.legend()
+    # plt.xlabel("t")
+    # plt.ylabel("General KL")
+    # plt.grid(True)
+
+    plt.show()

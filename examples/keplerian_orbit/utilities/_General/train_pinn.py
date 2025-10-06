@@ -1403,6 +1403,7 @@ def train_pinn_e1gmm_v0_scaled_improved(
     # Freeze p_net parameters
     for p in p_net.parameters():
         p.requires_grad_(False)
+    x_dim = p_net.D
 
     # -------- SAFETY CHECK 1: all p_net params frozen --------
     assert all(p.requires_grad is False for p in p_net.parameters()), "p_net has trainable params!"
@@ -1411,6 +1412,7 @@ def train_pinn_e1gmm_v0_scaled_improved(
     p_init   = configurations["ic_fcn"]
     diff_opt = configurations["diff_opt_fcn"]
     e1_path  = configurations["save_path"]
+    sample_res_uniform_fcn = configurations["sample_res_uniform_fcn"]
     # e1_path_inter = configurations.get("save_path_inter", None)
     
     # --- Optimizer ---
@@ -1419,7 +1421,7 @@ def train_pinn_e1gmm_v0_scaled_improved(
     scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.95)
 
     # train_helper_sample_res = configuration["sample_res"] # NOTE: change this
-    train_helper_sample_res_uniform = constants.sample_res_points_scaled_uniform
+    train_helper_sample_res_uniform = sample_res_uniform_fcn
     sample_uniform_fn = lambda n: train_helper_sample_res_uniform(n)  # must return (x, t) WITHOUT grad
     alpha_model = 0.5
 
@@ -1443,9 +1445,9 @@ def train_pinn_e1gmm_v0_scaled_improved(
     beta = np.float32(0.0)
     
     # Buffers for RAR points
-    x_bc_rar = torch.empty(0, 6, device=device)
+    x_bc_rar = torch.empty(0, x_dim, device=device)
     t_bc_rar = torch.empty(0, 1, device=device)
-    x_res_rar = torch.empty(0, 6, device=device)
+    x_res_rar = torch.empty(0, x_dim, device=device)
     t_res_rar = torch.empty(0, 1, device=device)
     
     # Best model dict
@@ -1532,7 +1534,7 @@ def train_pinn_e1gmm_v0_scaled_improved(
             print(f"[info] epoch {epoch+1}, lr={optimizer.param_groups[0]['lr']:.2e}")
         
         # --- Save best ---
-        if loss.item() < 0.95 * min_loss:
+        if loss.item() < min_loss:
             train_time = time.time() - start_time
             print(f"--- Save Epoch {epoch+1}, Loss={loss.item():.4f}, "
                   f"IC={mse_ic.item():.4f}, Res={mse_res.item():.4f}, Beta={beta:.2f} ---")

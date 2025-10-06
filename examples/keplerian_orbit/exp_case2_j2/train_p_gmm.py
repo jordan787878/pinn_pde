@@ -90,7 +90,7 @@ def diff_opt(x, t, p_net, beta=1.0, verbose=False):
 def config_training_TimeToGMM6D(constants, scale_torch, option=""):
     configuration = {
         "constants": constants,
-        "iterations": 60000,
+        "iterations": 40000,
         "sample_ic": constants.sample_init_points,
         "sample_res": constants.sample_res_points,
         "sample_res_uniform": constants.sample_res_points_uniform,
@@ -141,10 +141,10 @@ def main():
     #     check_error_flatten(constants, p_init, None, p_net, t_prime, MC_FOLDER)
 
     # NOTE: use a fitted GMM PDF as 'true'
-    t_check = [constants.T_PRIME_SPAN[-2]]
-    for t_prime in t_check:
-        gmm = GMMWhitenedModel.load("data/classic_gmm/gmm_whitened_t{:.2f}.npz".format(t_prime))
-        check_error_flatten_new(constants, p_init, p_net, t_prime, MC_FOLDER, gmm)
+    # t_check = constants.T_PRIME_SPAN
+    # for t_prime in t_check:
+    #     gmm = GMMWhitenedModel.load("data/classic_gmm/gmm_whitened_t{:.2f}.npz".format(t_prime))
+    #     check_error_flatten_new(constants, p_init, p_net, t_prime, MC_FOLDER, gmm)
 
     # check_pdf_cartesian_wrt_samples(constants, p_net=p_net)
     # --- (obsolete) ---
