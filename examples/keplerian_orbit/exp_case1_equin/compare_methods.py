@@ -430,17 +430,7 @@ def compare_methods():
 
     # --- "output/v0_scaled_T0.3(E1Net_XL) ---"
     # e1_net = E1Net_XL(constants, p_net=copy.deepcopy(p_net), scale=scale_torch, input_feature=7)
-
-    # NOTE: test if e1_net needs p_net directly?
     e1_net = E1Net_XL(constants, scale=scale_torch, normalize=scale_torch*0.02)
-
-    # print("[check] e1_net scale: {:.5f}, normalize: {:.5f}".format(
-    # e1_net.scale, e1_net.normalize))
-    # e1_net.normalize = scale_torch
-    # e1_net = E1Net_Scaled(constants)
-    # e1_net.scale = scale_torch*0.05 # assuming 10% percent error
-    # e1_net.set_p_net(p_net)
-    
     e1_net = load_trained_model(e1_net, path=OUTPUT_PATH+"/e1_net.pth"); e1_net.eval()
 
     # --- pinn-gmm ---
@@ -454,7 +444,7 @@ def compare_methods():
     data_gmm = PropagationData(SAVE_PATH_GMM_PROPAGATE)
 
     metrics_path = "output/baseline_methods/metrics.npz"
-    # compute_pdf_variations(N_batch=1000, p_net=p_net, p_net_gmm=p_net_gmm, 
+    # compute_pdf_variations(N_batch=1, p_net=p_net, p_net_gmm=p_net_gmm, 
     #                        data_lp=data_lp, data_ut=data_ut, data_gmm=data_gmm,
     #                        e1_net=e1_net, e1_net_gmm=e1_net_gmm, save_path=metrics_path)
     metrics = load_metrics_npz(metrics_path); plot_pdf_metrics(metrics)
