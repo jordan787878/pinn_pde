@@ -89,7 +89,7 @@ def check_pdf_Nrphi(constants, mc_folder=None, p_net=None):
         plt.show()
 
 
-def check_pinngmm_Nrphi(constants, p_net_gmm=None):
+def check_pinngmm_Nrphi(constants, p_net_gmm=None, N_samples=3000):
     """
     marginalize the pdf of normalize spherical to [r,phi]
     """
@@ -133,9 +133,10 @@ def check_pinngmm_Nrphi(constants, p_net_gmm=None):
             p_k = pdf_func.pdf(grid_pts).reshape(X_grid.shape)
             pdf_values = pdf_values + ws_k * p_k
 
-        samples = np.load("data/samples/samples_t{:.3f}.npy".format(t_prime))
-        r_samples = samples[:,0]
-        phi_samples = samples[:,2]
+        # samples = np.load("data/samples/samples_t{:.3f}.npy".format(t_prime))
+        samples = np.load("data/Xsamples_1e+6/X_t{:.2f}.npy".format(t_prime))
+        r_samples = samples[0:N_samples,0]
+        phi_samples = samples[0:N_samples,1]
 
         # --- Plotting the contour plot ----
         fig, ax = plt.subplots(figsize=(8, 6))
@@ -148,7 +149,7 @@ def check_pinngmm_Nrphi(constants, p_net_gmm=None):
         plt.colorbar(cp)
 
         # scatter samples of (r, phi) on to the plot
-        plt.scatter(r_samples, phi_samples, s=30, c='white', linewidths=0.5, edgecolor='black', alpha=1.0, label='Samples')
+        plt.scatter(r_samples, phi_samples, s=15, c='white', linewidths=0.1, edgecolor=None, alpha=0.1, label='Samples')
         
         ax.text(
             0.01, 0.99,                   # near top-left
@@ -760,16 +761,14 @@ def check_pinngmm_cartesian_wrt_monte(constants, p_net_gmm, mc_folder):
         # visualize p(x,y) using interpolation
         _grid_resolution = 70
         grid_x, grid_y = np.meshgrid(np.linspace(x.min(), x.max(), _grid_resolution), np.linspace(y.min(), y.max(), _grid_resolution), indexing="ij")
-        grid_z_mo = griddata((x, y), z_mo, (grid_x, grid_y), method='cubic')
         grid_z_pinn = griddata((x, y), z_pinn, (grid_x, grid_y), method='cubic')
-        surf1 = ax.plot_surface(grid_x, grid_y, grid_z_mo, color="none", rstride=3, cstride=3, 
+        grid_z_mo = griddata((x, y), z_mo, (grid_x, grid_y), method='cubic')
+        surf1 = ax.plot_surface(grid_x, grid_y, grid_z_pinn, cmap=cm.viridis, rstride=3, cstride=3, edgecolor=None, 
+                                label=r"PINN $\hat{p}(x,y)$" + ", t={:.3f}T".format(t_prime))
+        surf2 = ax.plot_surface(grid_x, grid_y, grid_z_mo, color="none", rstride=3, cstride=3, 
                                 edgecolor='white',  
                                 linewidth=0.5, linestyle="-", 
                                 label=r"MC $p(x,y)$"+", t={:.3f}T".format(t_prime))
-        
-
-        surf2 = ax.plot_surface(grid_x, grid_y, grid_z_pinn, cmap=cm.viridis, rstride=3, cstride=3, edgecolor=None, 
-                                label=r"PINN $\hat{p}(x,y)$" + ", t={:.3f}T".format(t_prime))
 
         ax.view_init(25, -40)
         ax.legend()
@@ -1655,7 +1654,7 @@ def plot_pdf_metrics(metrics):
     plt.plot(metrics["t"], metrics["rel_error_lp"], color=colors[1],   label="LP")
     plt.plot(metrics["t"], metrics["rel_error_ut"], color=colors[2],   label="UT")
     plt.plot(metrics["t"], metrics["rel_error_gmm"], color=colors[3],   label="GMM")
-    # plt.plot(metrics["t"], metrics["rel_error_pinn"], color=colors[-1], label="PINN-MLP")
+    plt.plot(metrics["t"], metrics["rel_error_pinn"], color=colors[-1], label="PINN-MLP")
     # all_zeros = not np.any(metrics["B1_pinn"])
     # if(all_zeros is False):
     #     plt.fill_between(
@@ -1677,7 +1676,7 @@ def plot_pdf_metrics(metrics):
             alpha=0.2,
             label="PINN-GMM Error Bound"
         )
-    plt.legend()
+    plt.legend(loc="upper left", ncol=2)
     plt.xlabel("t")
     plt.ylabel("norm. worst error %")
     plt.grid(True)
@@ -1686,9 +1685,9 @@ def plot_pdf_metrics(metrics):
     plt.plot(metrics["t"], metrics["tv_lp"], color=colors[1],   label="LP")
     plt.plot(metrics["t"], metrics["tv_ut"], color=colors[2],   label="UT")
     plt.plot(metrics["t"], metrics["tv_gmm"], color=colors[3],   label="GMM")
-    # plt.plot(metrics["t"], metrics["tv_pinn"], color=colors[-1], label="PINN-MLP")
+    plt.plot(metrics["t"], metrics["tv_pinn"], color=colors[-1], label="PINN-MLP")
     plt.plot(metrics["t"], metrics["tv_pinngmm"], color=colors[0], label="PINN-GMM")
-    plt.legend()
+    plt.legend(loc="upper left", ncol=2)
     plt.xlabel("t")
     plt.ylabel("total variation %")
     plt.grid(True)

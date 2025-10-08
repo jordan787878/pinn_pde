@@ -72,6 +72,7 @@ def diff_opt(x, t, p_net, beta=1.0, verbose=False):
     f4 = dyn_f4(x).view(-1,1)
     f4_x = torch.autograd.grad(f4, x, grad_outputs=torch.ones_like(f4), create_graph=True)[0]
     f4_x4 = f4_x[:,3].view(-1,1)
+    
     # Compute the second derivative (Hessian) of p with respect to x
     hessian = []
     for i in range(output_x.size(1)):
@@ -81,9 +82,91 @@ def diff_opt(x, t, p_net, beta=1.0, verbose=False):
     output_x4x4 = output_xx[:, 2, 2].view(-1,1)
     output_x6x6 = output_xx[:, 3, 3].view(-1,1)
     Q = torch.tensor(constants.N_Q_NOISE, dtype=torch.float32, requires_grad=False)
-    residual = output_t + beta*(output_x1*f1 + output_x2*f2 + output_x3*f3 + output_x4*f4 + f4_x4*output + \
-                                0.5*(Q[0]*output_x4x4 + Q[2]*output_x6x6))
+    div = (Q[0]*output_x4x4 + Q[2]*output_x6x6)
+
+    residual = output_t + beta*(output_x1*f1 + output_x2*f2 + output_x3*f3 + output_x4*f4 + f4_x4*output 
+                                - 0.5*div)
     # print(residual.dtype)
+    return residual
+
+
+def diff_opt_new(x, t, p_net, beta=1.0, verbose=False, make_graph=True, Q_tensor=None):
+    """
+    Differential operator with J2 and Brownian noise in reduced 4D (x1,x3,x4,x6).
+
+    - We always compute first-derivatives with create_graph=True so that we can
+      take second derivatives (Hessian diagonals).
+    - If make_graph=False (e.g., when p_net is the argument), we detach the
+      final residual so it does not contribute to the training graph.
+    """
+    global constants
+
+    # forward
+    output = p_net(x, t)                                 # (N,1) or (N,)
+
+    # first derivatives wrt inputs (create_graph=True to enable second-derivs)
+    ones_out = torch.ones_like(output)
+    output_x = torch.autograd.grad(
+        outputs=output, inputs=x, grad_outputs=ones_out,
+        create_graph=True, retain_graph=True
+    )[0]                                                 # (N,4)
+
+    output_t = torch.autograd.grad(
+        outputs=output, inputs=t, grad_outputs=ones_out,
+        create_graph=True, retain_graph=True
+    )[0]                                                 # (N,1)
+
+    # unpack ∂p/∂xi
+    output_x1 = output_x[:, 0:1]
+    output_x2 = output_x[:, 1:2]
+    output_x3 = output_x[:, 2:3]
+    output_x4 = output_x[:, 3:4]
+
+    # drift terms
+    f1 = dyn_f1(x).view(-1, 1)
+    f2 = dyn_f2(x).view(-1, 1)
+    f3 = dyn_f3(x).view(-1, 1)
+    f4 = dyn_f4(x).view(-1, 1)
+
+    # only need ∂f4/∂x4
+    ones_f4 = torch.ones_like(f4)
+    f4_x = torch.autograd.grad(
+        outputs=f4, inputs=x, grad_outputs=ones_f4,
+        create_graph=True, retain_graph=True
+    )[0]
+    f4_x4 = f4_x[:, 3:4]
+
+    # second-derivative diagonals we actually use
+    p_x3x3 = torch.autograd.grad(
+        outputs=output_x3, inputs=x, grad_outputs=torch.ones_like(output_x3),
+        create_graph=True, retain_graph=True
+    )[0][:, 2:3]                                         # (N,1)
+
+    p_x4x4 = torch.autograd.grad(
+        outputs=output_x4, inputs=x, grad_outputs=torch.ones_like(output_x4),
+        create_graph=True, retain_graph=True
+    )[0][:, 3:4]                                         # (N,1)
+
+    # noise weights
+    Q = Q_tensor
+    if Q is None:
+        Q = torch.tensor(constants.N_Q_NOISE, dtype=torch.float32, device=x.device)
+    # reduced system uses Q[0] for x3, Q[2] for x4
+    div = (Q[0] * p_x3x3 + Q[2] * p_x4x4)
+
+    residual = output_t + beta * (
+        output_x1 * f1 + output_x2 * f2 + output_x3 * f3 + output_x4 * f4
+        + f4_x4 * output - 0.5 * div
+    )
+
+    # print(residual.shape)
+    # v = output_x1 * f1
+    # print(v.shape)
+
+    # If we don't want this path to participate in backprop (e.g., p_net),
+    # cut the graph here.
+    if not make_graph:
+        return residual.detach()
     return residual
 
 
@@ -101,11 +184,17 @@ def config_training_TimeToGMM6D(constants, scale_torch, option=""):
         "beta_incre": 0.02,
         "loss_normalize": scale_torch,
         "reg_tv": None,
-        "training_fcn": PINN.train_pinngmm_sol_v0
+        "training_fcn": PINN.train_pinngmm_expcase2j2
     }
 
     if(option == "V0"):
         configuration["save_path"] = "output/pinn-gmm(V0)"
+
+    if(option == "V1"):
+        configuration["save_path"] = "output/pinn-gmm(V1)"
+        configuration["res_weight"] = 1.0
+        configuration["iterations"] = 30000
+        configuration["res_func"] = diff_opt_new
     
     print(configuration["save_path"])
 
@@ -117,12 +206,13 @@ def main():
     # Set a fixed seed for reproducibility
     torch.manual_seed(0); np.random.seed(0)
 
-    scale = get_p_init_max(constants)
+    # scale = get_p_init_max(constants)
+    scale = p_init(constants, constants.N_MEAN_I).item()
     scale_torch = torch.tensor(scale, dtype=torch.float32)
 
     p_net = TimeToGMM6D_V0(constants, K=11, D=4)
-    configuration = config_training_TimeToGMM6D(constants, scale_torch, option="V0")
-
+    # configuration = config_training_TimeToGMM6D(constants, scale_torch, option="V0")
+    configuration = config_training_TimeToGMM6D(constants, scale_torch, option="V1")
 
     if(TRAIN_FLAG):
         configuration["training_fcn"](p_net, configuration)
@@ -133,9 +223,9 @@ def main():
     # --- Post-process ---
     # print_mc_time(MC_FOLDER)
 
-    # check_pinngmm_Nrphi(constants, p_net_gmm=p_net)
+    check_pinngmm_Nrphi(constants, p_net_gmm=p_net)
 
-    # check_pinngmm_cartesian_wrt_monte(constants, p_net, MC_FOLDER)
+    check_pinngmm_cartesian_wrt_monte(constants, p_net, MC_FOLDER)
     
     # for t_prime in t_check:
     #     check_error_flatten(constants, p_init, None, p_net, t_prime, MC_FOLDER)

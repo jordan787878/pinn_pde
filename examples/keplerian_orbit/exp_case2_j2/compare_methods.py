@@ -3,13 +3,13 @@ import torch
 from tqdm import tqdm
 import copy
 from scipy.stats import multivariate_normal
-from monte import get_p_init_max
+from monte import p_init, get_p_init_max
 from exp_utilities.constants import Case2_4D_Constants
 from exp_utilities.plot_utilites import plot_pdf_metrics
 # import utilities
 import sys
 sys.path.insert(0, '../utilities/')
-from _General.neuralnetworks import TimeToGMM6D_V0, E1Net_XL, load_trained_model
+from _General.neuralnetworks import PNet, TimeToGMM6D_V0, E1Net, E1Net_XL, load_trained_model
 from _General.util import compute_volume, save_metrics_npz, load_metrics_npz
 from exp_utilities.classic_gmm import GMMWhitenedModel
 from functools import partial
@@ -165,13 +165,13 @@ def compute_pdf_variations(N_batch = 10, p_net=None, p_net_gmm=None, data_lp=Non
         "rel_error_lp": [],
         "rel_error_ut": [],
         "rel_error_gmm": [],
-        # "rel_error_pinn": [],
+        "rel_error_pinn": [],
         "rel_error_pinngmm": [],
 
         "tv_lp": [],
         "tv_ut": [],
         "tv_gmm": [],
-        # "tv_pinn": [],
+        "tv_pinn": [],
         "tv_pinngmm": [],
 
         # "g_kl_lp": [],
@@ -211,7 +211,9 @@ def compute_pdf_variations(N_batch = 10, p_net=None, p_net_gmm=None, data_lp=Non
         Z_pinn = 0.0
         e1_pinngmm_max = 0.0
 
-        gmm = GMMWhitenedModel.load("data/classic_gmm/gmm_whitened_t{:.2f}.npz".format(t))
+        # --- choose the source 'true' gmm pdf ---
+        # gmm = GMMWhitenedModel.load("data/classic_gmm/gmm_whitened_t{:.2f}.npz".format(t))
+        gmm = GMMWhitenedModel.load("data/classic_gmm_new/gmm_whitened_t{:.2f}.npz".format(t))
 
         for j in tqdm(range(1, N_batch+1), desc="Propagating batches"):
             X = get_uniform_Xsamples_numpy(N_samples=N_samples) # samples from random uniform
@@ -229,17 +231,17 @@ def compute_pdf_variations(N_batch = 10, p_net=None, p_net_gmm=None, data_lp=Non
             
             # X_mc = sample_joint_pdf(constants, t_prime=t, n_samples=N_samples, seed=j)
 
-            # # pinn-mlp
-            # pdf_pinn = constants.SCALING_PDF * p_net(_x_tensor, _t_tensor).detach().cpu().numpy().reshape(-1,)
-            # _delta_p = np.max(np.abs(pdf_pinn - pdf_ref)).item()
-            # delta_p_pinn_max = max(delta_p_pinn_max, _delta_p)
-            # _tv = p_total_variation(constants, pdf_pinn, pdf_ref)
-            # tv_pinn += _tv/N_batch
+            # pinn-mlp
+            pdf_pinn = p_net(_x_tensor, _t_tensor).detach().cpu().numpy().reshape(-1,)
+            _delta_p = np.max(np.abs(pdf_pinn - pdf_ref)).item()
+            delta_p_pinn_max = max(delta_p_pinn_max, _delta_p)
+            _tv = p_total_variation(constants, pdf_pinn, pdf_ref)
+            tv_pinn += _tv/N_batch
             # _gkl = compute_generalKL(t, X_mc, p_net=p_net)
             # gkl_pinn += _gkl/N_batch
             # _Z_pinn = p_normalize_constant(constants, pdf_pinn)
             # Z_pinn += _Z_pinn/N_batch
-            # del pdf_pinn
+            del pdf_pinn
             # if(e1_net is not None):
             #     e1_pinn = constants.SCALING_PDF * e1_net(_x_tensor, _t_tensor).detach().cpu().numpy().reshape(-1,)
             #     e1_pinn_max = max(e1_pinn_max, np.max(np.abs(e1_pinn)).item())
@@ -308,8 +310,8 @@ def compute_pdf_variations(N_batch = 10, p_net=None, p_net_gmm=None, data_lp=Non
         gkl_lp += 1
         gkl_ut += 1
         # gkl_gmm += 1
-        # metrics["rel_error_pinn"].append(100.*delta_p_pinn_max/pdf_ref_max)
-        # metrics["tv_pinn"].append(tv_pinn)
+        metrics["rel_error_pinn"].append(100.*delta_p_pinn_max/pdf_ref_max)
+        metrics["tv_pinn"].append(tv_pinn)
         # metrics["g_kl_pinn"].append(gkl_pinn)
         metrics["rel_error_pinngmm"].append(100.*delta_p_pinngmm_max/pdf_ref_max)
         metrics["tv_pinngmm"].append(tv_pinngmm)
@@ -399,22 +401,34 @@ def compare_corner_plots(p_net=None, data_lp=None, data_ut=None, save_path=None,
 def main():
     global constants
 
-    scale = get_p_init_max(constants)
+    # scale = get_p_init_max(constants)
+    scale = p_init(constants, constants.N_MEAN_I).item()
     scale_torch = torch.tensor(scale, dtype=torch.float32)
 
-    p_net_gmm = TimeToGMM6D_V0(constants, K=11, D=4)
-    p_net_gmm = load_trained_model(p_net_gmm, path="output/pinn-gmm(V0)/p_net.pth"); p_net_gmm.eval()
+    p_net = PNet(constants)
+    p_net.scale = scale
+    p_net = load_trained_model(p_net, path="output/v0/p_net.pth"); p_net.eval()
 
-    e1_net_gmm = E1Net_XL(constants, scale=0.05*scale_torch, normalize=scale_torch*0.05, input_feature=5,
-                      depth=4, input_skip_at=2)
-    e1_net_gmm = load_trained_model(e1_net_gmm, path="output/pinn-gmm(V0)/e1_net.pth"); e1_net_gmm.eval()
+    p_net_gmm = TimeToGMM6D_V0(constants, K=11, D=4)
+    # p_net_gmm = load_trained_model(p_net_gmm, path="output/pinn-gmm(V0)/p_net.pth"); p_net_gmm.eval()
+    p_net_gmm = load_trained_model(p_net_gmm, path="output/pinn-gmm(V1)/p_net.pth"); p_net_gmm.eval()
+
+    # e1_net_gmm = E1Net_XL(constants, scale=0.05*scale_torch, normalize=scale_torch*0.05, input_feature=5,
+    #                   depth=4, input_skip_at=2)
+    # e1_net_gmm = load_trained_model(e1_net_gmm, path="output/pinn-gmm(V0)/e1_net.pth"); e1_net_gmm.eval()
+    
+    # NOTE: testing the training of e1_net for pinn-gmm
+    # e1_net_gmm = E1Net(constants, scale=0.02*scale_torch)
+    e1_net_gmm = E1Net_XL(constants, scale=scale_torch, normalize=scale_torch*0.04, input_feature=5)
+    e1_net_gmm = load_trained_model(e1_net_gmm, path="output/pinn-gmm(V1)/e1_net.pth"); e1_net_gmm.eval()
 
     data_lp = PropagationData(SAVE_PATH_LINEAR_PROPAGATE)
     data_ut = PropagationData(SAVE_PATH_UNSCENT_PROPAGATE)
     data_gmm = PropagationData(SAVE_PATH_GMM_PROPAGATE)
 
     metrics_path = "output/baseline_methods/metrics.npz"
-    compute_pdf_variations(N_batch=100, p_net_gmm=p_net_gmm, e1_net_gmm=e1_net_gmm, 
+    compute_pdf_variations(N_batch=100, p_net=p_net,
+                           p_net_gmm=p_net_gmm, e1_net_gmm=e1_net_gmm, 
                            data_lp=data_lp, data_ut=data_ut, data_gmm=data_gmm,
                            save_path=metrics_path)
     metrics = load_metrics_npz(metrics_path); plot_pdf_metrics(metrics)

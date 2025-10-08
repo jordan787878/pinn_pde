@@ -5,14 +5,14 @@ import numpy as np
 import torch
 import argparse
 from monte import p_init, get_p_init_max
-from train_p import diff_opt, MC_FOLDER
+from train_p_gmm import diff_opt_new, MC_FOLDER
 from exp_utilities.plot_utilites import check_error_flatten, check_error_batched_normsup, visual_e1hat_training
 from exp_utilities.constants import Case2_4D_Constants
 from exp_utilities.classic_gmm import GMMWhitenedModel
 # import utilities
 import sys
 sys.path.insert(0, '../utilities/')
-from _General.neuralnetworks import TimeToGMM6D_V0, E1Net_XL, load_trained_model
+from _General.neuralnetworks import TimeToGMM6D_V0, E1Net, E1Net_XL, load_trained_model
 import _General.train_pinn as PINN
 
 
@@ -22,10 +22,11 @@ constants = Case2_4D_Constants()
 
 def main():
     global constants
-    OUTPUT_PATH = "output/pinn-gmm(V0)"
+    # OUTPUT_PATH = "output/pinn-gmm(V0)"
+    OUTPUT_PATH = "output/pinn-gmm(V1)"
     
     # --- Load pinn p_net and compute normalize scale ---
-    scale = get_p_init_max(constants)
+    scale = p_init(constants, constants.N_MEAN_I).item()
     scale_torch = torch.tensor(scale, dtype=torch.float32)
     print(scale_torch)
     
@@ -34,13 +35,13 @@ def main():
 
     # --- Init e1 pinn ---
     torch.manual_seed(0); np.random.seed(0) # set a fixed seed for reproducibility
-    e1_net = E1Net_XL(constants, scale=0.05*scale_torch, normalize=scale_torch*0.05, input_feature=5,
-                      depth=4, input_skip_at=2)
+    # e1_net = E1Net(constants, scale=0.02*scale_torch)
+    e1_net = E1Net_XL(constants, scale=scale_torch, normalize=scale_torch*0.04, input_feature=5)
     print("[check] e1_net scale: {:.5f}, normalize: {:.5f}".format(e1_net.scale, e1_net.normalize))
 
     configurations = {
         "ic_fcn":p_init,
-        "diff_opt_fcn": diff_opt,
+        "diff_opt_fcn": diff_opt_new,
         "save_path": OUTPUT_PATH+"/e1_net.pth",
         "save_path_inter": None, #OUTPUT_PATH+"/e1_net_",
         "sample_res_uniform_fcn": constants.sample_res_points_uniform
@@ -49,29 +50,29 @@ def main():
     # --- Train e1 pinn over first time seq ---
     if(TRAIN_FLAG):
         networks = (p_net, e1_net)
-        PINN.train_pinn_e1gmm_v0_scaled_improved(constants, networks, configurations, 
-                              iterations=25000, save_model=True)#, beta_incre=0.05)
+        PINN.train_pinne1_expcase2j2(constants, networks, configurations, 
+                              iterations=30000, save_model=True)#, beta_incre=0.05)
     
     # --- Load best model after training ---
     e1_net = load_trained_model(e1_net, path=configurations["save_path"]); e1_net.eval()
 
-    # --- Post-process ---
-    t_check = np.round(constants.T_PRIME_SPAN, 2)
-    for t_prime in t_check:
-        # check_error_flatten(constants, p_init, e1_net, p_net, t_prime, MC_FOLDER)
-        gmm = GMMWhitenedModel.load("data/classic_gmm/gmm_whitened_t{:.2f}.npz".format(t_prime))
-        res = check_error_batched_normsup(
-            constants=constants,
-            p_init_func=p_init,   # analytical p_true at t=0
-            e1_net=e1_net,        # can be None
-            p_net=p_net,
-            t=t_prime,
-            data_folder=MC_FOLDER,
-            max_points_tile=250_000,
-            batch_size_torch=64_000,
-            gmm=gmm,
-        )
-        print(res)
+    # # --- Post-process ---
+    # t_check = np.round(constants.T_PRIME_SPAN, 2)
+    # for t_prime in t_check:
+    #     # check_error_flatten(constants, p_init, e1_net, p_net, t_prime, MC_FOLDER)
+    #     gmm = GMMWhitenedModel.load("data/classic_gmm/gmm_whitened_t{:.2f}.npz".format(t_prime))
+    #     res = check_error_batched_normsup(
+    #         constants=constants,
+    #         p_init_func=p_init,   # analytical p_true at t=0
+    #         e1_net=e1_net,        # can be None
+    #         p_net=p_net,
+    #         t=t_prime,
+    #         data_folder=MC_FOLDER,
+    #         max_points_tile=250_000,
+    #         batch_size_torch=64_000,
+    #         gmm=gmm,
+    #     )
+    #     print(res)
 
     # # visual_e1hat_training(constants, (p_net, e1_net, e1_net), MC_FOLDER, save_plot_path="figs/case2_e1net.png")
 

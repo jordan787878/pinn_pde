@@ -1,8 +1,11 @@
+import os
+os.environ["CUDA_VISIBLE_DEVICES"] = ""   # hides all GPUs from CUDA apps
 import numpy as np
 import torch
 import time
 from torch.distributions import Categorical, MultivariateNormal
-device = "cpu"
+torch.set_default_device("cpu")
+device = torch.device("cpu")
 
 
 # --- helper functions ---
@@ -1575,6 +1578,7 @@ def train_pinn_e1gmm_v0_scaled_improved(
                 ehat_i = e1_net(xb_chk, tb_chk)
                 ic_err = torch.abs(e_i - ehat_i) / normalize
                 max_error_ic = ic_err.max().item()
+                del p_i_np, p_i, phat_i, e_i, ehat_i
                 if max_error_ic > RAR_eps:
                     topk  = torch.topk(ic_err.squeeze(), k=k_res)
                     idx   = topk.indices
@@ -1582,6 +1586,7 @@ def train_pinn_e1gmm_v0_scaled_improved(
                     t_bc_rar_new = tb_chk.detach()[idx, :]
                     x_bc_rar, t_bc_rar = rar_append_with_cap(x_bc_rar, t_bc_rar, x_bc_rar_new, t_bc_rar_new, cap=4000)
                     print(f"... RAR IC , Max IC error: {max_error_ic:.4f}, t:", torch.max(t_bc_rar_new))
+                    del xb_chk, tb_chk, ic_err, x_bc_rar_new, t_bc_rar_new
                     # idx = torch.topk(ic_err.squeeze(), 10).indices
                     # x_bc_rar = torch.cat((x_bc_rar, xb_chk[idx, :]), dim=0)
                     # t_bc_rar = torch.cat((t_bc_rar, tb_chk[idx]), dim=0)
@@ -1598,6 +1603,7 @@ def train_pinn_e1gmm_v0_scaled_improved(
             res_p = diff_opt(xr_chk, tr_chk, p_net, beta=beta)
             res_e = diff_opt(xr_chk, tr_chk, e1_net, beta=beta)
             res_err = torch.abs(res_e + res_p) / normalize
+            del res_p, res_e
             max_error_res = res_err.max().item()
             if max_error_res > RAR_eps:
                 topk  = torch.topk(res_err.squeeze(), k=k_res)
@@ -1607,6 +1613,7 @@ def train_pinn_e1gmm_v0_scaled_improved(
                 # 4) append with FIFO cap
                 x_res_rar, t_res_rar = rar_append_with_cap(x_res_rar, t_res_rar, x_res_rar_new, t_res_rar_new, cap=4000)
                 print(f"... RAR RES, Max residual error: {max_error_res:.4f}, t:", t_res_rar_new[0:3].data)
+                del x_cand_raw, t_cand_raw, res_err, x_res_rar_new, t_res_rar_new
                 # idx = torch.topk(res_err.squeeze(), 10).indices
                 # x_res_rar = torch.cat((x_res_rar, xr_chk[idx, :]), dim=0)
                 # t_res_rar = torch.cat((t_res_rar, tr_chk[idx]), dim=0)
