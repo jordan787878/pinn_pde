@@ -223,9 +223,9 @@ def main():
     # --- Post-process ---
     # print_mc_time(MC_FOLDER)
 
-    check_pinngmm_Nrphi(constants, p_net_gmm=p_net)
+    # check_pinngmm_Nrphi(constants, p_net_gmm=p_net)
 
-    check_pinngmm_cartesian_wrt_monte(constants, p_net, MC_FOLDER)
+    # check_pinngmm_cartesian_wrt_monte(constants, p_net, MC_FOLDER)
     
     # for t_prime in t_check:
     #     check_error_flatten(constants, p_init, None, p_net, t_prime, MC_FOLDER)

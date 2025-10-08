@@ -427,7 +427,7 @@ def main():
     data_gmm = PropagationData(SAVE_PATH_GMM_PROPAGATE)
 
     metrics_path = "output/baseline_methods/metrics.npz"
-    compute_pdf_variations(N_batch=100, p_net=p_net,
+    compute_pdf_variations(N_batch=1000, p_net=p_net,
                            p_net_gmm=p_net_gmm, e1_net_gmm=e1_net_gmm, 
                            data_lp=data_lp, data_ut=data_ut, data_gmm=data_gmm,
                            save_path=metrics_path)
