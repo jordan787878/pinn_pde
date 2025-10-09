@@ -11,7 +11,6 @@ from scipy.stats import multivariate_normal
 from scipy.linalg import expm, cholesky
 import seaborn as sns
 import time
-from test_fitgmm import make_gmm_pdf
 from pinn_train import train_pnet, train_pnet_v0
 from pinn_model import PNet, PNet_XL
 from pinn_train import train_e1net_v0
@@ -19,6 +18,13 @@ from pinn_model import E1Net, E1Net_Prior
 from test_normalpnet import TimeToNormal1D
 from test_gmmpnet import TimeToGMM1D
 from test_flow import PDF_Flow, PDF_Flow_CNF
+from types import SimpleNamespace
+import sys
+sys.path.insert(0, '../utilities/')
+from _General.baseline_methods import (PropagationData, 
+    linear_propagation_master, unscent_propagation_master, gmm_propagation_master)
+from _General.util import set_publication_plot_style
+from _General.classic_gmm import GMMWhitenedModel, fit_classic_gmm, make_gmm_pdf
 
 # --------------------------
 # Device & dtype
@@ -100,7 +106,8 @@ def load_train_model(net, PATH):
     net.load_state_dict(checkpoint['model_state_dict'])
     epoch = checkpoint['epoch']
     loss = checkpoint['loss']
-    print("best pnet epoch: ", epoch, ", loss:", loss, "train time:", checkpoint['train_time'])
+    print("load pinn from: ", PATH)
+    print("best epoch: ", epoch, ", loss:", loss, "train time:", checkpoint['train_time'])
     net.eval()
     return net
 
@@ -117,318 +124,39 @@ def train_helper_sample_res(batch_size):
     return x, t
 
 
-class PropagationData:
-    def __init__(self, input_data=None, path=None, prop_method=None):
-        if(prop_method == "LP"):
-            self.data = None
-            # self._get_Jacobian_expression()
-            self.linear_propagation(save_path=path, dt_precision=6)
-            self.data = np.load(path)
-        if(prop_method == "UT"):
-            self.data = None
-            # self._get_Jacobian_expression()
-            self.unscent_propagation(save_path=path, dt_precision=6)
-            self.data = np.load(path)
-        if(prop_method == "GMM"):
-            self.data = None
-            self.gmm_propagation(save_path=path, input_data=input_data, dt_precision=5)
-        else:
-            self.data = np.load(path)
+ 
+def _get_Jacobian_expression():
+    x1 = sp.symbols('x1', real=True)
+    A, B, C, D = sp.symbols('A B C D' , real=True, positive=True)
+    f1 = A*x1**3 + B*x1**2 + C*x1 + D
+    f = sp.Matrix([f1])
+    x = sp.Matrix([x1])
+    # symbolic Jacobian
+    J = sp.simplify(f.jacobian(x))
+    print("[info] Jacobian matrix: ", J)
 
-    def get(self, time, label=None):
-        if(self.data is None):
-            raise("data has not been loaded") 
-        times = self.data["times"]
-        means = self.data["means"]
-        covs = self.data["covs"]
-        # dt_precision = self.data["dt_precision"]
-        # time_threshold = 10. *10**(-1. *dt_precision)
-        time = np.round(time, 3)
-        idx = np.where(abs(time-times)< 1e-3)[0]
-        if len(idx) == 0:
-            assert("The linear propagation result does not have data at this time")
-        idx = idx[0]
-        if label == "GMM":
-            weights = self.data["weights"]
-            return times[idx], weights, means[idx], covs[idx]
-        return times[idx], means[idx], covs[idx]
+def get_Jacobian(c, x):
+    x1 = x
+    A, B, C, D = c.a, c.b, c.c, c.d
+    J = 3*A*x1**2 + 2*B*x1 + C
+    return J.reshape((1,1))
     
-    def _get_Jacobian_expression(self):
-        x1 = sp.symbols('x1', real=True)
-        A, B, C, D = sp.symbols('A B C D' , real=True, positive=True)
-        f1 = A*x1**3 + B*x1**2 + C*x1 + D
-        f = sp.Matrix([f1])
-        x = sp.Matrix([x1])
-        # symbolic Jacobian
-        J = sp.simplify(f.jacobian(x))
-        print("[info] Jacobian matrix: ", J)
+def nl_dyn(c, x):
+    x1 = x
+    A, B, C, D = c.a, c.b, c.c, c.d
+    f1 = A*x1**3 + B*x1**2 + C*x1 + D
+    return f1
 
-    def get_Jacobian(self, x):
-        x1 = x
-        J = 3*const_a*x1**2 + 2*const_b*x1 + const_c
-        return np.float32(J)
-    
-    def nl_dyn(self, x):
-        x1 = x
-        A, B, C, D = const_a, const_b, const_c, const_d
-        f1 = A*x1**3 + B*x1**2 + C*x1 + D
-        return f1
-    
-    def linear_propagation(self, dt_precision=6, dt_save=0.1, save_path=None):
-        # --- initialization ---
-        mu_i, cov_i = const_mu, const_std**2
-        x = np.float64(mu_i)    # initial mean
-        Px = np.float64(cov_i)     # initial covariance
 
-        dtt = np.float64(10**(-1*dt_precision))
-        tf = T_end
-        ti = t0
-        kf = int(np.ceil((tf-ti) / dtt))
-        print(kf)
-        current_time = ti
-
-        # --- storage arrays ---
-        times = [current_time]
-        means = [x]
-        covs = [Px]
-        t_to_save = current_time + dt_save
-
-        # --- time stepping loop ---
-        for k in tqdm(range(kf), desc="propagting over time"):
-            # compute dynamics and Jacobian
-            fx = self.nl_dyn(x)
-            Jx = self.get_Jacobian(x)
-            # propagate mean and covariance
-            x = x + fx * dtt
-            Px = Px + (Jx*Px + Jx*Px + const_e**2)*dtt
-
-            # update time
-            current_time += dtt
-            # current_time = np.round(current_time, dt_precision)
-            if(abs(current_time-t_to_save) < dtt/2):
-                # store results
-                times.append(np.round(current_time,2))
-                means.append(x.copy())
-                covs.append(Px.copy())
-                t_to_save += dt_save
-
-        # --- convert lists to arrays ---
-        times = np.array(times)
-        means = np.array(means)       # shape: (kf+1, n)
-        covs = np.array(covs)         # shape: (kf+1, n, n)
-        np.savez(save_path,
-                times=times,
-                means=means,
-                covs=covs,
-                dt_precision=dt_precision)
+def sample_p_init(N=1000, rng=None):
+    x_dim = 1
+    if rng is None:
+        rng = np.random.default_rng(0)
+    _mu  = np.asarray(const_mu, dtype=np.float64)
+    _std = np.asarray(const_std, dtype=np.float64)
+    Z = rng.normal(loc=_mu, scale=_std, size=(N, x_dim))
+    return Z
         
-    def _unscented_sigma_points(self, mean, cov, alpha=1.0, beta=2.0, kappa=0.0):
-        """
-        Generate Unscented Transform sigma points for N-dim state.
-
-        Parameters
-        ----------
-        mean : (N,) array_like
-            State mean vector.
-        cov : (N,N) array_like
-            State covariance (symmetric, PSD).
-        alpha : float, optional
-            Spread of the sigma set (small, e.g. 1e-3). Affects higher-order terms.
-        beta : float, optional
-            Prior knowledge about distribution; 2 is optimal for Gaussian.
-        kappa : float, optional
-            Secondary scaling (often 0 or 3-N).
-
-        Returns
-        -------
-        X : (2N+1, N) ndarray
-            Sigma points. X[0] is the mean, others are +/- columns of the scaled root.
-        Wm : (2N+1,) ndarray
-            Weights for computing the mean.
-        Wc : (2N+1,) ndarray
-            Weights for computing the covariance.
-
-        """
-        m = np.asarray(mean, dtype=float).reshape(-1)
-        N = m.size
-        P = np.asarray(cov, dtype=float).reshape(N, N)
-        assert P.shape == (N, N), "cov must be (N,N)"
-
-        lam = alpha**2 * (N + kappa) - N
-        c = N + lam
-        if c <= 0:
-            raise ValueError("N + lambda must be positive; adjust alpha/kappa.")
-        S = cholesky(P, lower=True)
-        S *= np.sqrt(c)  # scale by sqrt(N+lambda)
-
-        # Sigma points
-        X = np.empty((2*N + 1, N), dtype=float)
-        X[0] = m
-        X[1:N+1]     = m + S.T   # columns of S
-        X[N+1:2*N+1] = m - S.T
-
-        # Weights
-        Wm = np.full(2*N + 1, 1.0/(2.0*c), dtype=float)
-        Wc = np.full(2*N + 1, 1.0/(2.0*c), dtype=float)
-        Wm[0] = lam / c
-        Wc[0] = lam / c + (1.0 - alpha**2 + beta)
-        return X, Wm, Wc
-    
-    def unscent_propagation(self, dt_precision=6, dt_save=0.1, save_path=None):
-        # --- initialization ---
-        mu_i, cov_i = const_mu, const_std**2
-        x = np.float64(mu_i)    # initial mean
-        Px = np.float64(cov_i)     # initial covariance
-
-        dtt = np.float64(10**(-1*dt_precision))
-        tf = T_end
-        ti = t0
-        kf = int(np.ceil((tf-ti) / dtt))
-        print(kf)
-        current_time = ti
-
-        # --- storage arrays ---
-        times = [current_time]
-        means = [x.copy()]
-        covs = [Px.copy()]
-        t_to_save = current_time + dt_save
-
-        # --- time stepping loop ---
-        for k in tqdm(range(kf), desc="propagting over time"):
-            # compute sigma points
-            _sigma_pts, _w_mean, _w_cov = self._unscented_sigma_points(x, Px)
-            for i in range(_sigma_pts.shape[0]):
-                _x_i = _sigma_pts[i, :]
-                fx_i = self.nl_dyn(_x_i)
-                _sigma_pts[i, :] = _x_i + fx_i * dtt
-
-            x = _w_mean @ _sigma_pts
-            X_diff = _sigma_pts - x
-            Px = X_diff.T @ (_w_cov[:, None] * X_diff) + (const_e**2)*dtt
-            # x = (_w_mean[:, None] * _sigma_pts).sum(axis=0)
-            # diffs = _sigma_pts - x
-            # Px = diffs.T @ (diffs * _w_cov[:, None]) + (const_e**2)*dtt
-
-            # update time
-            current_time += dtt
-            current_time = np.round(current_time, dt_precision)
-            if(abs(current_time-t_to_save) < dtt/2):
-                # store results
-                times.append(np.round(current_time,3))
-                means.append(x.item())
-                covs.append(Px.item())
-                t_to_save += dt_save
-
-        # --- convert lists to arrays ---
-        times = np.array(times)
-        means = np.array(means)       # shape: (kf+1, n)
-        covs = np.array(covs)         # shape: (kf+1, n, n)
-        np.savez(save_path,
-                times=times,
-                means=means,
-                covs=covs,
-                dt_precision=dt_precision)
-
-    def indices_in_range(self, x, x_range):
-        a, b = x_range
-        start_idx = np.searchsorted(x, a, side="left")
-        end_idx = np.searchsorted(x, b, side="right")
-
-        # If everything is inside the range, return all indices
-        if start_idx == 0 and end_idx == len(x):
-            return np.arange(len(x))
-
-        # If the range is completely outside x, return empty array
-        if start_idx >= end_idx:
-            return np.array([], dtype=int)
-
-        return np.arange(start_idx, end_idx)
-    
-    def gmm_propagation(self, save_path=None, input_data=None, dt_precision=6, dt_save=0.1, verbose=True):
-        """
-        NOTE: see unit test: test_fitgmm.py
-        """
-        # --- initialization ---
-        data_gmm_init = np.load(input_data)
-        weights = data_gmm_init["weights"]
-        means_i = data_gmm_init["means"]
-        sigmas = data_gmm_init["sigmas"]
-        cov_i = sigmas**2
-        N_gmm = len(weights)
-
-        dtt = np.float64(10**(-1*dt_precision))
-        tf = T_end
-        ti = t0
-        kf = int(np.ceil((tf-ti) / dtt))
-        current_time = ti
-
-        # --- storage arrays ---
-        times = [current_time]
-        means = [means_i.copy()]
-        covs = [cov_i.copy()]
-        t_to_save = current_time + dt_save
-
-        # init
-        means_k = means_i.copy()
-        covs_k = cov_i.copy()
-
-        if(verbose):
-            # quick show
-            x_vals = np.linspace(x_low, x_hig, num=200, endpoint=True)
-            _pdf_func_gmm = make_gmm_pdf(weights, means_k, np.sqrt(covs_k))
-            pdf_gmm = _pdf_func_gmm(x_vals)
-            plt.figure()
-            plt.plot(x_vals, pdf_gmm)
-            plt.show()
-
-        # --- time stepping loop ---
-        for k in tqdm(range(kf), desc="propagting over time"):
-            for j in range(N_gmm):
-                x = means_k[j].copy() # 1D
-                Px = covs_k[j].copy() # 1D
-                # compute dynamics and Jacobian
-                fx = self.nl_dyn(x)
-                Jx = self.get_Jacobian(x)
-                # propagate mean and covariance
-                x = x + fx * dtt
-                Px = Px + (Jx*Px + Jx*Px + const_e**2)*dtt
-                means_k[j] = x.copy()
-                covs_k[j] = Px.copy()
-
-            # update time
-            current_time += dtt
-            # current_time = np.round(current_time, dt_precision)
-            if(abs(current_time-t_to_save) < dtt/2):
-                # store results
-                # print(means_k)
-                # print(covs_k)
-                times.append(np.round(current_time,2))
-                means.append(means_k.copy())
-                covs.append(covs_k.copy())
-                t_to_save += dt_save
-                if(verbose):
-                    if not np.isclose(current_time, np.round(current_time), atol=1e-10):
-                        continue
-                    # quick show
-                    x_vals = np.linspace(x_low, x_hig, num=200, endpoint=True)
-                    _pdf_func_gmm = make_gmm_pdf(weights, means_k, np.sqrt(covs_k))
-                    pdf_gmm = _pdf_func_gmm(x_vals)
-                    plt.figure()
-                    plt.plot(x_vals, pdf_gmm)
-                    plt.show()
-
-        # --- convert lists to arrays ---
-        times = np.array(times)
-        means = np.array(means)       # shape: (kf+1, n)
-        covs = np.array(covs)         # shape: (kf+1, n, n)
-        np.savez(save_path,
-                times=times,
-                weights=weights,
-                means=means,
-                covs=covs,
-                dt_precision=dt_precision,
-                label="GMM")
-
 
 def empirical_moments(x, p, N=1):
     # p = p/np.sum(p)
@@ -523,13 +251,13 @@ def main(TRAIN_FLAG=False, RUN_BASELINE=False, LOAD_PRIOR=False):
     # --- PDF Neural Network ---
 
     # --- Base ---
-    # p_net = PNet(scale=get_p_normalize()).to(device)
+    p_net = PNet(scale=get_p_normalize()).to(device)
     # --- Normal ---
     # p_net = TimeToNormal1D().to(device)
     # --- PINN-GMM ---
     # p_net = TimeToGMM1D().to(device)
     # --- FLOW ---
-    p_net = PDF_Flow(scale=get_p_normalize()).to(device)
+    # p_net = PDF_Flow(scale=get_p_normalize()).to(device)
     # p_net = PDF_Flow_CNF(scale=get_p_normalize()).to(device)
 
     configuration = {
@@ -539,15 +267,15 @@ def main(TRAIN_FLAG=False, RUN_BASELINE=False, LOAD_PRIOR=False):
         "p_ic": p_init,
         "res_func": res_func,
         "res_weight": 1.0,
-        # "save_path": "data/p_net.pth",
+        "save_path": "data/p_net.pth",
         # "save_path": "data/p_net(normal).pth"
         # "save_path": "data/p_net(pinn-gmm).pth"
-        "save_path": "data/p_net(flow).pth",
+        # "save_path": "data/p_net(flow).pth",
     }
     if(TRAIN_FLAG):
         print("traing pnet: ", configuration["save_path"])
         # train_pnet_model(p_net)
-        # train_pnet_v0(p_net, configuration)
+        train_pnet_v0(p_net, configuration)
 
     p_net = load_train_model(p_net, PATH=configuration["save_path"])
 
@@ -570,10 +298,10 @@ def main(TRAIN_FLAG=False, RUN_BASELINE=False, LOAD_PRIOR=False):
         "res_func": res_func,
         "res_weight": 1.0,
         "RAR_eps": 0.05,
-        # "save_path": "data/e1_net.pth",
+        "save_path": "data/e1_net.pth",
         # "save_path": "data/e1_net(normal).pth"
         # "save_path": "data/e1_net(pinn-gmm).pth"
-        "save_path": "data/e1_net(flow).pth"
+        # "save_path": "data/e1_net(flow).pth"
     }
 
     if(TRAIN_FLAG):
@@ -598,16 +326,76 @@ def main(TRAIN_FLAG=False, RUN_BASELINE=False, LOAD_PRIOR=False):
     gmm_path = os.path.join("data", "gmm_np64_dt6.npz")
     if(RUN_BASELINE):
         print("run baseline methods")
-        # data_lp = PropagationData(path=lp_path, prop_method="LP")
-        # data_ut = PropagationData(path=ut_path, prop_method="UT")
-        # data_ut_alpha0_1 = PropagationData(path=ut_path_alpha0_1, prop_method="UT")
-        data_gmm = PropagationData(path=gmm_path, input_data="data/fitted_gmm_pinit.npz", prop_method="GMM")
+        x0, P0 = const_mu, const_std**2
+
+        dyn_fcn = lambda t, x, c: nl_dyn(c, x)
+        jac_fcn = lambda t, x, c: get_Jacobian(c, x)
+        Q = np.asarray(const_e**2, dtype=np.float64).reshape((1,1))
+        t_span = (np.float64(np.round(t0, 2)), np.float64(np.round(T_end, 2)))
+        constants = SimpleNamespace(
+            a=np.float64(const_a),
+            b=np.float64(const_b),
+            c=np.float64(const_c),
+            d=np.float64(const_d),
+        )
+
+        linear_propagation_master(
+            x0=x0, P0=P0,
+            dyn_fcn=dyn_fcn, jac_fcn=jac_fcn,
+            constants=constants,
+            t_span=t_span,
+            dt_save=0.01,
+            Q=Q,
+            save_path=lp_path
+        )
+
+        unscent_propagation_master(
+            x0=x0, P0=P0,
+            dyn_fcn=dyn_fcn, jac_fcn=jac_fcn,
+            constants=constants,
+            t_span=t_span,
+            dt_save=0.01,
+            Q=Q,
+            save_path=ut_path,
+            alpha=1e-3,
+        )
+
+        unscent_propagation_master(
+            x0=x0, P0=P0,
+            dyn_fcn=dyn_fcn, jac_fcn=jac_fcn,
+            constants=constants,
+            t_span=t_span,
+            dt_save=0.01,
+            Q=Q,
+            save_path=ut_path_alpha0_1,
+            alpha=1.0,
+        )
+
+        X_tr = sample_p_init(N=1000000)
+        t_prime = 0.0
+        fit_classic_gmm(t_prime, X_tr, np.asarray(x0, dtype=np.float64).reshape(-1,), 
+                        np.asarray(P0, dtype=np.float64).reshape((1,1)), "data/",
+                        K_list=(10, 20, 30, 40))
+        model = GMMWhitenedModel.load("data/"+"gmm_whitened_t{:.2f}.npz".format(t_prime))
+        gmm_params = model.print_x_params()
+        gmm_propagation_master(
+            weights = gmm_params["weights"],
+            means0 = gmm_params["means_x"],
+            covs0 = gmm_params["covs_x"],
+            dyn_fcn=dyn_fcn, jac_fcn=jac_fcn,
+            constants=constants,
+            t_span=t_span,
+            dt_save=0.01,
+            Q=Q,
+            save_path=gmm_path
+        )
+        
     data_lp = PropagationData(path=lp_path)
     data_ut = PropagationData(path=ut_path)
     data_ut_alpha0_1 = PropagationData(path=ut_path_alpha0_1)
     data_gmm = PropagationData(path=gmm_path)
-    # print(data_ut_alpha0_1.data["times"])
 
+    set_publication_plot_style()
     colors = sns.color_palette("husl", 4)
     fig = plt.figure(figsize=(12, 8))
     ax = fig.add_subplot(111, projection="3d")
@@ -642,17 +430,8 @@ def main(TRAIN_FLAG=False, RUN_BASELINE=False, LOAD_PRIOR=False):
         _t = np.ones(x.shape[0], dtype=x.dtype)*t
         t_tensor = torch.from_numpy(_t.reshape(-1,1)).to(device)
 
-        # --- GMM ---
-        _, _w_gmm, _mu_gmm, _cov_gmm = data_gmm.get(t, label="GMM")
-        # print("[debug] gmm means: ", _mu_gmm)
-        # print("[debug] gmm weights sum: ", np.sum(_w_gmm))
-        # print(_cov_gmm)
-        pdf_func_gmm = make_gmm_pdf(_w_gmm, _mu_gmm, np.sqrt(_cov_gmm))
-        pdf_gmm = pdf_func_gmm(x).reshape(-1,).astype(x.dtype)
-        norm_error_gmm, tv_gmm, g_kl_gmm = compute_metrics(t, x_mc_samples, pdf_mc, pdf_gmm, pdf_func=pdf_func_gmm)
-
         # --- LP ---
-        _, _mu_lp, _cov_lp = data_lp.get(t)
+        _, _, _mu_lp, _cov_lp = data_lp.get(t)
         pdf_func = multivariate_normal(mean=_mu_lp, cov=_cov_lp)
         pdf_lp = pdf_func.pdf(x).reshape(-1,).astype(x.dtype)
         norm_error_lp, tv_lp, g_kl_lp = compute_metrics(t, x_mc_samples, pdf_mc, pdf_lp, pdf_func=pdf_func)
@@ -665,7 +444,7 @@ def main(TRAIN_FLAG=False, RUN_BASELINE=False, LOAD_PRIOR=False):
         #     pdf_mass_lp = 0.0
 
         # --- UT ---
-        _, _mu_ut, _cov_ut = data_ut.get(t)
+        _, _, _mu_ut, _cov_ut = data_ut.get(t)
         pdf_func = multivariate_normal(mean=_mu_ut, cov=_cov_ut)
         pdf_ut = pdf_func.pdf(x).reshape(-1,).astype(x.dtype)
         norm_error_ut, tv_ut, g_kl_ut = compute_metrics(t, x_mc_samples, pdf_mc, pdf_ut, pdf_func=pdf_func)
@@ -678,10 +457,18 @@ def main(TRAIN_FLAG=False, RUN_BASELINE=False, LOAD_PRIOR=False):
         #     pdf_mass_ut = 0.0
 
         # --- UT (alpha=0.1) ---
-        _, _mu_ut_alpha0_1, _cov_ut_alpha0_1 = data_ut_alpha0_1.get(t)
+        _, _, _mu_ut_alpha0_1, _cov_ut_alpha0_1 = data_ut_alpha0_1.get(t)
         pdf_func = multivariate_normal(mean=_mu_ut_alpha0_1, cov=_cov_ut_alpha0_1)
         pdf_ut_alpha0_1 = pdf_func.pdf(x).reshape(-1,).astype(x.dtype)
         norm_error_ut_alpha_0_1, tv_ut_alpha_0_1, g_kl_ut_alpha_0_1 = compute_metrics(t, x_mc_samples, pdf_mc, pdf_ut_alpha0_1, pdf_func=pdf_func)
+
+        # --- GMM ---
+        _, _w_gmm, _mu_gmm, _cov_gmm = data_gmm.get(t)
+        print("[debug] gmm params shape: ", _w_gmm.shape, _mu_gmm.shape, _cov_gmm.shape)
+        # print("[debug] gmm weights sum: ", np.sum(_w_gmm))
+        pdf_func_gmm = make_gmm_pdf(_w_gmm, _mu_gmm, _cov_gmm)
+        pdf_gmm = pdf_func_gmm(x).reshape(-1,).astype(x.dtype)
+        norm_error_gmm, tv_gmm, g_kl_gmm = compute_metrics(t, x_mc_samples, pdf_mc, pdf_gmm, pdf_func=pdf_func_gmm)
 
         # --- PINN ---
         pdf_pinn = p_net(x_tensor, t_tensor).detach().cpu().numpy().reshape(pdf_mc.shape)
@@ -695,15 +482,15 @@ def main(TRAIN_FLAG=False, RUN_BASELINE=False, LOAD_PRIOR=False):
         normalize_B1 = 100.*B1/p_true_max
         alpha1 = np.max(np.abs(e1_true - e1_pinn)).item() / np.max(np.abs(e1_pinn)).item()
 
-        print("time {:.2f} total variation , PINN: {:.5f} %,  LP: {:.5f} %,  UT: {:.5f} %,  UT (alpha=0.1): {:.5f} %".format(
-            t, tv_pinn, tv_lp, tv_ut, tv_ut_alpha_0_1
+        print("time {:.2f} total variation , PINN: {:.5f} %,  LP: {:.5f} %,  UT: {:.5f} %,  GMM: {:.5f} %".format(
+            t, tv_pinn, tv_lp, tv_ut, tv_gmm
         ))
-        print("time {:.2f} worst general error, PINN: {:.5f} %,  LP: {:.5f} %,  UT: {:.5f} %,  UT (alpha=0.1): {:.5f} %".format(
-            t, norm_error_pinn, norm_error_lp, norm_error_ut, norm_error_ut_alpha_0_1
+        print("time {:.2f} worst general error, PINN: {:.5f} %,  LP: {:.5f} %,  UT: {:.5f} %,  GMM: {:.5f} %".format(
+            t, norm_error_pinn, norm_error_lp, norm_error_ut, norm_error_gmm
         ))
         if(x_mc_samples is not None):
-            print("time {:.2f} general KL, PINN: {:.5f},  LP: {:.5f},  UT: {:.5f}".format(
-                t, g_kl_pinn, g_kl_lp, g_kl_ut
+            print("time {:.2f} general KL, PINN: {:.5f},  LP: {:.5f},  GMM: {:.5f}".format(
+                t, g_kl_pinn, g_kl_lp, g_kl_gmm
             ))
         if(B1 is not None):
             print("[debug] max error v.s. error est", np.max(np.abs(e1_true)).item(), np.max(np.abs(e1_pinn)).item())
@@ -731,10 +518,10 @@ def main(TRAIN_FLAG=False, RUN_BASELINE=False, LOAD_PRIOR=False):
         mean_mc = empirical_moments(x, pdf_mc)
         cov_mc = empirical_moments(x, pdf_mc, N=2)
         print("Mean, MC: {:.3f}, LP: {:.3f}, UT: {:.3f}".format(
-            mean_mc, _mu_lp, _mu_ut
+            mean_mc, _mu_lp[0], _mu_ut[0]
         ))
         print("Cov , MC: {:.3f}, LP: {:.3f}, UT: {:.3f}".format(
-            cov_mc, _cov_lp, _cov_ut
+            cov_mc, _cov_lp[0,0], _cov_ut[0,0]
         ))
         # print("probability mass within +/- 1 std, LP: {:.3f} %, UT: {:.3f} %".format(
         #     pdf_mass_lp, pdf_mass_ut))
@@ -765,9 +552,9 @@ def main(TRAIN_FLAG=False, RUN_BASELINE=False, LOAD_PRIOR=False):
     ax.legend(handles=legend_elements, loc="best", frameon=True)
 
     # metric 1: worst relative error %
+    set_publication_plot_style()
     plt.figure()
     plt.plot(metrics["t"], metrics["norm_error_pinn"], color=colors[0], label=r"$\hat{p}$ PINN")
-    # plt.plot(metrics["t"], metrics["normalize_B1"], color=colors[0], label=r"$Error Bound$ PINN")
     plt.fill_between(
         metrics["t"],
         metrics["norm_error_pinn"],
@@ -778,7 +565,7 @@ def main(TRAIN_FLAG=False, RUN_BASELINE=False, LOAD_PRIOR=False):
     )
     plt.plot(metrics["t"], metrics["norm_error_lp"], color=colors[1],   label=r"$p$ Linear Prop.")
     plt.plot(metrics["t"], metrics["norm_error_ut"], color=colors[2],   label=r"$p$ Unscent Trans.")
-    plt.plot(metrics["t"], metrics["norm_error_ut_alpha_0_1"], color=colors[2], marker="o", label=r"$p$ Unscent Trans. $(\alpha=0.1)$")
+    plt.plot(metrics["t"], metrics["norm_error_ut_alpha_0_1"], color=colors[2], marker="o", label=r"$p$ Unscent Trans. $(\alpha=1.0)$")
     plt.plot(metrics["t"], metrics["norm_error_gmm"], color=colors[3],   label=r"$p$ GMM Linear Prop.")
     plt.grid(True)
     plt.legend()
@@ -786,11 +573,12 @@ def main(TRAIN_FLAG=False, RUN_BASELINE=False, LOAD_PRIOR=False):
     plt.ylabel("norm. worst error %")
 
     # metric 2: total variation %
+    set_publication_plot_style()
     plt.figure()
     plt.plot(metrics["t"], metrics["tv_pinn"], color=colors[0], label=r"$\hat{p}$ PINN")
     plt.plot(metrics["t"], metrics["tv_lp"], color=colors[1],   label=r"$p$ Linear Prop.")
     plt.plot(metrics["t"], metrics["tv_ut"], color=colors[2],   label=r"$p$ Unscent Trans.")
-    plt.plot(metrics["t"], metrics["tv_ut_alpha_0_1"], color=colors[2], marker="o", label=r"$p$ Unscent Trans. $(\alpha=0.1)$")
+    plt.plot(metrics["t"], metrics["tv_ut_alpha_0_1"], color=colors[2], marker="o", label=r"$p$ Unscent Trans. $(\alpha=1.0)$")
     plt.plot(metrics["t"], metrics["tv_gmm"], color=colors[3],   label=r"$p$ GMM Linear Prop.")
     plt.grid(True)
     plt.legend()
@@ -798,11 +586,12 @@ def main(TRAIN_FLAG=False, RUN_BASELINE=False, LOAD_PRIOR=False):
     plt.ylabel("total variation %")
 
     # metric 3: negative log liklihood (relative KL)
+    set_publication_plot_style()
     plt.figure()
     plt.plot(metrics["t"], metrics["g_kl_pinn"], color=colors[0], label=r"$\hat{p}$ PINN")
     plt.plot(metrics["t"], metrics["g_kl_lp"], color=colors[1],   label=r"$p$ Linear Prop.")
     plt.plot(metrics["t"], metrics["g_kl_ut"], color=colors[2],   label=r"$p$ Unscent Trans.")
-    plt.plot(metrics["t"], metrics["g_kl_ut_alpha_0_1"], color=colors[2], marker="o", label=r"$p$ Unscent Trans. $(\alpha=0.1)$")
+    plt.plot(metrics["t"], metrics["g_kl_ut_alpha_0_1"], color=colors[2], marker="o", label=r"$p$ Unscent Trans. $(\alpha=1.0)$")
     plt.plot(metrics["t"], metrics["g_kl_gmm"], color=colors[3],   label=r"$p$ GMM Linear Prop.")
     plt.grid(True)
     plt.legend()
@@ -825,6 +614,6 @@ def main(TRAIN_FLAG=False, RUN_BASELINE=False, LOAD_PRIOR=False):
 
 
 if __name__ == "__main__":
-    main(TRAIN_FLAG=True, 
+    main(TRAIN_FLAG=False, 
          RUN_BASELINE=False,
          LOAD_PRIOR=False)
