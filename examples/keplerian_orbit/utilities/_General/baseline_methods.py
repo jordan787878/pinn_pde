@@ -244,16 +244,19 @@ def unscent_propagation_master(
         # 4) integrate noise accumulator S over [ta, tb]:
         #    dS = A S + S A^T + Q(t, m_ref),   S(ta)=0
         # choose reference mean for linearization (use previous mean m)
-        A_ref = np.asarray(jac_fcn(ta, m, constants), dtype=np.float64).reshape(n, n)
+        # A_ref = np.asarray(jac_fcn(ta, m, constants), dtype=np.float64).reshape(n, n)
+        t_mid = 0.5*(ta + tb)
+        A_ref = np.asarray(jac_fcn(t_mid, m_flow, constants), dtype=np.float64).reshape(n, n)
 
         def rhs_S(t, s_vec):
             S = s_vec.reshape(n, n)
             # evaluate Q at the (deterministic) mean; you could also use m_flow
-            Qt = Q_eval(t, m)
+            # Qt = Q_eval(t, m)
+            Qt = Q_eval(t, m_flow)   # <-- use m_flow, not previous m
             dS = A_ref @ S + S @ A_ref.T + Qt
             return dS.ravel()
 
-        if Q is None:
+        if Q is None:   
             S_end = np.zeros((n, n), dtype=np.float64)
         else:
             s0 = np.zeros(n*n, dtype=np.float64)
@@ -276,3 +279,106 @@ def unscent_propagation_master(
                  means=means,
                  covs=covs,
                  method="ut")
+
+
+def gmm_propagation_master(
+    weights: NDArray[np.float64],                 # (K,)
+    means0:  NDArray[np.float64],                 # (K, n)
+    covs0:   NDArray[np.float64],                 # (K, n, n)
+    dyn_fcn: Callable[[float, NDArray[np.float64], Any], NDArray[np.float64]],
+    jac_fcn: Callable[[float, NDArray[np.float64], Any], NDArray[np.float64]],
+    constants: Any,
+    t_span: Tuple[float, float],
+    dt_save: float = 1e-2,
+    Q: Optional[Union[NDArray[np.float64],
+                      Callable[[float, NDArray[np.float64], Any], NDArray[np.float64]]]] = None,
+    rtol: float = 1e-9,
+    atol: float = 1e-12,
+    solver: str = "RK45",
+    save_path: Optional[str] = None,
+) -> Dict[str, NDArray[np.float64]]:
+    """
+    Propagate a Gaussian Mixture under linearized (Lyapunov) dynamics per component.
+
+    For each component k:
+        ẋ = f(t, x)
+        Ṗ = A(t,x) P + P A(t,x)^T + Q(t,x)
+    with its own (x0_k, P0_k). Mixture weights stay constant.
+
+    Saves: times (T,), weights (K,), means (T,K,n), covs (T,K,n,n), method="gmm"
+    """
+    # ---- sanitize inputs (float64, shapes) ----
+    w = np.asarray(weights, dtype=np.float64).reshape(-1)
+    K = w.size
+    M0 = np.asarray(means0, dtype=np.float64)
+    C0 = np.asarray(covs0,  dtype=np.float64)
+    if M0.ndim != 2:
+        raise ValueError("means0 must be (K, n).")
+    if C0.ndim != 3:
+        raise ValueError("covs0 must be (K, n, n).")
+    if M0.shape[0] != K or C0.shape[0] != K:
+        raise ValueError("Leading dim of means0/covs0 must equal weights.size.")
+    n = M0.shape[1]
+    if C0.shape[1:] != (n, n):
+        raise ValueError("Each covariance must be (n,n).")
+    # (Optional) normalize weights defensively (keep exact zeros if any)
+    s = np.sum(w)
+    if s > 0:
+        w = w / s
+
+    # time span / grid
+    t0 = np.float64(np.round(t_span[0], 2))
+    tf = np.float64(np.round(t_span[1], 2))
+    if tf < t0:
+        raise ValueError("t_span must have tf >= t0.")
+    if dt_save <= 0:
+        raise ValueError("dt_save must be positive.")
+    t_eval = np.round(np.arange(t0, tf + 0.5*dt_save, dt_save, dtype=np.float64), 2)
+
+    # Q evaluator (per component, at its mean)
+    def Q_eval(t: float, x: NDArray[np.float64]) -> NDArray[np.float64]:
+        if Q is None:
+            return np.zeros((n, n), dtype=np.float64)
+        M = Q(t, x, constants) if callable(Q) else Q
+        return np.asarray(M, dtype=np.float64).reshape(n, n)
+
+    # storage
+    Tm = t_eval.size
+    means = np.empty((Tm, K, n), dtype=np.float64)
+    covs  = np.empty((Tm, K, n, n), dtype=np.float64)
+
+    # integrate each component independently
+    for k in range(K):
+        x0 = M0[k].reshape(-1)
+        P0 = C0[k]
+        # augmented initial condition: [x; vec(P)]
+        y0 = np.concatenate([x0, P0.ravel()])
+
+        def rhs(t: float, y: NDArray[np.float64]) -> NDArray[np.float64]:
+            x = y[:n]
+            P = y[n:].reshape(n, n)
+            fx = dyn_fcn(t, x, constants)               # (n,)
+            A  = jac_fcn(t, x, constants)               # (n,n)
+            Qt = Q_eval(t, x)
+            dP = A @ P + P @ A.T + Qt
+            # (Optional) symmetrize dP: dP = 0.5*(dP + dP.T)
+            return np.concatenate([fx, dP.ravel()])
+
+        sol = solve_ivp(rhs, (t0, tf), y0, t_eval=t_eval,
+                        rtol=rtol, atol=atol, method=solver)
+        if not sol.success:
+            raise RuntimeError(f"GMM component {k} integration failed: {sol.message}")
+
+        # unpack to outputs
+        means[:, k, :] = sol.y[:n, :].T
+        for i in range(Tm):
+            Pk = sol.y[n:, i].reshape(n, n)
+            covs[i, k, :, :] = Pk   # or 0.5*(Pk + Pk.T) if you prefer symmetry guard
+
+    if save_path is not None:
+        np.savez(save_path,
+                 times=np.round(t_eval, 3),
+                 weights=w,
+                 means=means,
+                 covs=covs,
+                 method="gmm")

@@ -1,5 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
+import seaborn as sns
 
 
 def compute_volume(bounds):
@@ -83,3 +84,36 @@ def set_publication_plot_style(font_family='Times New Roman', font_size=18):
         'savefig.bbox': 'tight',
         'savefig.pad_inches': 0.05,
     })
+
+
+def p_rel_worst_error(p1, p2):
+    p1 = p1.reshape(-1,)
+    p2 = p2.reshape(-1,)
+    max_p2 =  np.max(p2).item()
+    if(max_p2 > 0):
+        max_diff = np.max(np.abs(p1-p2)).item()
+        # print(max_diff, max_p2)
+        rel_error = max_diff / max_p2
+        return 100.*rel_error
+    else:
+        return np.NaN
+    
+
+def p_total_variation(p1, p2, vol_est, verbose=False, eps=np.finfo(np.float32).tiny):
+    p1 = p1.reshape(-1,)
+    p2 = p2.reshape(-1,)
+    diff = np.abs(p1-p2)
+    diff[diff < eps] = 0.0 # Set values below threshold to zero
+    tv = 0.5 * np.mean(diff) * vol_est
+    return 100. *tv.item()
+
+
+colors_6set = sns.color_palette([
+    "#000000",  
+    "#8C00FF",  
+    "#00FF1E",  # orange
+    "#FF008C",  # purple
+    "#00FBFF",  # green
+    "#FF8400",  # brown
+    "#999999",  # gray
+])
