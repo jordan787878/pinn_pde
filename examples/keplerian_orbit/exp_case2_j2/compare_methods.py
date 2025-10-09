@@ -1,11 +1,12 @@
 import numpy as np
 import torch
+import argparse
 from tqdm import tqdm
 import copy
 from scipy.stats import multivariate_normal
-from monte import p_init, get_p_init_max
+from monte import p_init, get_p_init_max, print_mc_time
 from exp_utilities.constants import Case2_4D_Constants
-from exp_utilities.plot_utilites import plot_pdf_metrics
+from exp_utilities.plot_utilites import plot_pdf_metrics, plt
 # import utilities
 import sys
 sys.path.insert(0, '../utilities/')
@@ -15,6 +16,29 @@ from exp_utilities.classic_gmm import GMMWhitenedModel
 from functools import partial
 from baseline_methods import PropagationData, SAVE_PATH_LINEAR_PROPAGATE, SAVE_PATH_UNSCENT_PROPAGATE, SAVE_PATH_GMM_PROPAGATE
 constants = Case2_4D_Constants()
+
+
+# --- globals (module scope) ---
+COMPUTE: bool = False
+NBATCH: int = 1000
+DATAMC: str = "data/Xsamples_1e+5_np64/"
+
+
+def _str2bool(v: str) -> bool:
+    if isinstance(v, bool):
+        return v
+    v = v.lower()
+    if v in ("y", "yes", "t", "true", "1", "on"):  return True
+    if v in ("n", "no", "f", "false", "0", "off"): return False
+    raise argparse.ArgumentTypeError("Expected a boolean value.")
+
+
+def parse_args():
+    p = argparse.ArgumentParser()
+    p.add_argument("--compute", type=_str2bool, default=COMPUTE,  help="Run compute stage (True/False)")
+    p.add_argument("--Nbatch",  type=int, default=NBATCH,   help="Batch size (int)")
+    p.add_argument("--datamc",  type=str, default=DATAMC, help="string tag/name")
+    return p.parse_args()
 
 
 # -----------------------------
@@ -191,10 +215,12 @@ def compute_pdf_variations(N_batch = 10, p_net=None, p_net_gmm=None, data_lp=Non
     for idx, t in enumerate(metrics["t"]):
         print("Time: {:.4f}".format(t))
         pdf_ref_max = 0.0
+        delta_p_t0 = 0.0
         delta_p_pinn_max = 0.0
         tv_pinn = 0.0
         gkl_pinn = 0.0
         delta_p_pinngmm_max = 0.0
+        delta_p_pinngmm_max_analy_t0 = 0.0
         tv_pinngmm = 0.0
         gkl_pinngmm = 0.0
         delta_p_lp_max = 0.0
@@ -212,8 +238,7 @@ def compute_pdf_variations(N_batch = 10, p_net=None, p_net_gmm=None, data_lp=Non
         e1_pinngmm_max = 0.0
 
         # --- choose the source 'true' gmm pdf ---
-        # gmm = GMMWhitenedModel.load("data/classic_gmm/gmm_whitened_t{:.2f}.npz".format(t))
-        gmm = GMMWhitenedModel.load("data/classic_gmm_new/gmm_whitened_t{:.2f}.npz".format(t))
+        gmm = GMMWhitenedModel.load(DATAMC+"gmm_whitened_t{:.2f}.npz".format(t))
 
         for j in tqdm(range(1, N_batch+1), desc="Propagating batches"):
             X = get_uniform_Xsamples_numpy(N_samples=N_samples) # samples from random uniform
@@ -225,8 +250,6 @@ def compute_pdf_variations(N_batch = 10, p_net=None, p_net_gmm=None, data_lp=Non
 
             # 'true' PDF
             pdf_ref = gmm.pdf(X).reshape(-1,)
-            if(idx == 0):
-                pdf_ref = p_normal(X, constants.N_MEAN_I, constants.N_COV_I).reshape(-1,)
             pdf_ref_max = max(pdf_ref_max, np.max(pdf_ref).item())
             
             # X_mc = sample_joint_pdf(constants, t_prime=t, n_samples=N_samples, seed=j)
@@ -251,6 +274,13 @@ def compute_pdf_variations(N_batch = 10, p_net=None, p_net_gmm=None, data_lp=Non
             pdf_pinn = p_net_gmm(_x_tensor, _t_tensor).detach().cpu().numpy().reshape(-1,)
             _delta_p = np.max(np.abs(pdf_pinn - pdf_ref)).item()
             delta_p_pinngmm_max = max(delta_p_pinngmm_max, _delta_p)
+            if(idx == 0):
+                pdf_t0 = p_normal(X, constants.N_MEAN_I, constants.N_COV_I).reshape(-1,)
+                _delta_p = np.max(np.abs(pdf_pinn - pdf_t0)).item()
+                delta_p_pinngmm_max_analy_t0 = max(delta_p_pinngmm_max_analy_t0, _delta_p)
+                _delta_p = np.max(np.abs(pdf_ref - pdf_t0)).item()
+                delta_p_t0 = max(delta_p_t0, _delta_p)
+
             _tv = p_total_variation(constants, pdf_pinn, pdf_ref)
             tv_pinngmm += _tv/N_batch
             # _gkl = compute_generalKL(t, X_mc, p_net=p_net_gmm)
@@ -331,8 +361,11 @@ def compute_pdf_variations(N_batch = 10, p_net=None, p_net_gmm=None, data_lp=Non
         # print("[check]: max e1: {:.4f}, max e1 pinn: {:.4f}".format(
         #     delta_p_pinn_max, e1_pinn_max))
         # print("[check] Z_pinn: {:.4f}".format(Z_pinn))
-        print("[check]: max e1 gmm: {:.4f}, max e1 pinngmm: {:.4f}".format(
-            delta_p_pinngmm_max, e1_pinngmm_max))
+        if(idx == 0):
+            print("[check]: at t0, max e1 (REF vs ANALY): {:.4f},    max e1 (PINN vs ANALY): {:.4f}".format(
+                delta_p_t0, delta_p_pinngmm_max_analy_t0))
+        print("[info]: max e1 (PINN vs REF): {:.4f},    max e1hat (PINN APPROX): {:.4f}".format(
+                delta_p_pinngmm_max, e1_pinngmm_max))
         # # print(metrics["rel_error_gmm"])
         # # print(metrics["rel_error_pinn"])
         print(metrics["rel_error_pinngmm"])
@@ -342,7 +375,7 @@ def compute_pdf_variations(N_batch = 10, p_net=None, p_net_gmm=None, data_lp=Non
         # print(metrics["g_kl_pinn"])
         # print(metrics["g_kl_pinngmm"])
 
-    # save computed metrics
+    # --- Save computed metrics ---
     save_metrics_npz(metrics, save_path)
 
 
@@ -400,6 +433,7 @@ def compare_corner_plots(p_net=None, data_lp=None, data_ut=None, save_path=None,
 
 def main():
     global constants
+    global COMPUTE, NBATCH
 
     # scale = get_p_init_max(constants)
     scale = p_init(constants, constants.N_MEAN_I).item()
@@ -426,12 +460,13 @@ def main():
     data_ut = PropagationData(SAVE_PATH_UNSCENT_PROPAGATE)
     data_gmm = PropagationData(SAVE_PATH_GMM_PROPAGATE)
 
-    metrics_path = "output/baseline_methods/metrics.npz"
-    metrics_path = "output/baseline_methods/metrics_linux_run1.npz"
-    # compute_pdf_variations(N_batch=1000, p_net=p_net,
-    #                        p_net_gmm=p_net_gmm, e1_net_gmm=e1_net_gmm, 
-    #                        data_lp=data_lp, data_ut=data_ut, data_gmm=data_gmm,
-    #                        save_path=metrics_path)
+    metrics_path = DATAMC + "metric_NB="+str(NBATCH)+".npz"
+    if(COMPUTE):
+        compute_pdf_variations(N_batch=NBATCH, p_net=p_net,
+                            p_net_gmm=p_net_gmm, e1_net_gmm=e1_net_gmm, 
+                            data_lp=data_lp, data_ut=data_ut, data_gmm=data_gmm,
+                            save_path=metrics_path)
+    print_mc_time(DATAMC)
     metrics = load_metrics_npz(metrics_path); plot_pdf_metrics(metrics)
 
     # Visualize marginal PDF
@@ -440,4 +475,8 @@ def main():
 
 
 if __name__ == "__main__":
+    args = parse_args()
+    COMPUTE   = bool(args.compute)
+    NBATCH    = int(args.Nbatch)
+    DATAMC    = str(args.datamc)
     main()

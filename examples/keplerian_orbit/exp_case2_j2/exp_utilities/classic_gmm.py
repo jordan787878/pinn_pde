@@ -7,13 +7,16 @@ import time
 import inspect
 from scipy.stats import norm
 
+
 # --------- small helpers ----------
 def _whiten(X: NDArray[np.float64], mu: NDArray[np.float64], std: NDArray[np.float64]) -> NDArray[np.float64]:
     return (X - mu[None, :]) / std[None, :]
 
+
 def _logsumexp(a: NDArray[np.float64], axis: int = -1) -> NDArray[np.float64]:
     m = np.max(a, axis=axis, keepdims=True)
     return (m + np.log(np.sum(np.exp(a - m), axis=axis, keepdims=True))).squeeze(axis)
+
 
 @dataclass
 class _Params:
@@ -24,6 +27,7 @@ class _Params:
     # whitening stats for x<->z
     mu_x: NDArray[np.float64]           # (D,)
     std_x: NDArray[np.float64]          # (D,)
+
 
 class GMMWhitenedModel:
     """
@@ -65,10 +69,17 @@ class GMMWhitenedModel:
         n_val = int(round(len(Z) * val_frac))
         Z_tr, Z_val = Z[idx[n_val:]], Z[idx[:n_val]]
 
+        # 2) train on a subset of data but evaluate over the entire data
+        # Z_tr = Z[idx[n_val:]]
+        # Z_val = Z
+
+        rng_local = np.random.default_rng(self.random_state)
         best, best_score = None, -np.inf
         for K in self.K_list:
+            # print(K)
             best_k, best_k_score = None, -np.inf
             for _ in range(self.n_init):
+                seed = rng_local.integers(np.iinfo(np.int32).max)
                 g = GaussianMixture(
                     n_components=K,
                     covariance_type="full",
@@ -76,10 +87,11 @@ class GMMWhitenedModel:
                     tol=self.tol,
                     max_iter=self.max_iter,
                     init_params="kmeans",
-                    random_state=self.random_state,
-                    verbose=2,
+                    random_state=seed,      # ← different each time
+                    verbose=0,
                 ).fit(Z_tr)
                 s = g.score(Z_val).mean()
+                # print(seed, s)
                 if s > best_k_score:
                     best_k, best_k_score = g, s
             if best_k_score > best_score:
@@ -161,6 +173,49 @@ class GMMWhitenedModel:
         # unwhiten to x-space
         return X * p.std_x[None, :] + p.mu_x[None, :]
 
+    # ---------- utilities: z->x parameter transform ----------
+    def _x_params(self) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """
+        Return (weights, means_x, covs_x) where
+            means_x[k] = mu_x + std_x * means_z[k]
+            covs_x[k]  = diag(std_x) @ covs_z[k] @ diag(std_x)
+        Shapes:
+            weights: (K,)
+            means_x: (K, D)
+            covs_x : (K, D, D)
+        """
+        assert self.params is not None, "Model not fitted/loaded."
+        p = self.params
+        # means: elementwise scale + shift
+        means_x = p.means_z * p.std_x[None, :] + p.mu_x[None, :]
+        # covariances: A Σ_z A^T with A = diag(std_x)
+        covs_x = np.einsum('kij,i,j->kij', p.covs_z, p.std_x, p.std_x)
+        return p.weights.copy(), means_x, covs_x
+
+    def print_x_params(self, decimals: int = 6, return_arrays: bool = True):
+        """
+        Print GMM weights and x-space means/covariances.
+        Args:
+            decimals: number of decimals to show.
+            return_arrays: if True, also return a dict with arrays.
+        """
+        w, m_x, C_x = self._x_params()
+        K, D = m_x.shape
+
+        # Pretty printing
+        old_opts = np.get_printoptions()
+        try:
+            np.set_printoptions(precision=decimals, suppress=True, linewidth=120)
+            print(f"[GMM x-space params] K={K}, D={D}")
+            print("weights:", w)
+            print("means_x:\n", m_x)
+            print("covs_x:\n", C_x)
+        finally:
+            np.set_printoptions(**old_opts)
+
+        if return_arrays:
+            return {"weights": w, "means_x": m_x, "covs_x": C_x}
+
     # ---------- persistence ----------
     def save(self, path: str):
         """
@@ -200,4 +255,3 @@ class GMMWhitenedModel:
             if key in data.files:
                 setattr(model, key, (int(data[key][0]) if key in ("max_iter", "n_init") else float(data[key][0]) if key in ("reg_covar", "tol") else int(data[key][0])))
         return model
-    
