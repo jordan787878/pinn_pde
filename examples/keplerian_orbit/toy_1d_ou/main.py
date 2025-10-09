@@ -237,7 +237,7 @@ def plot_p_surface(p_net, num=100):
 
     fig = plt.figure(figsize=(8,6))
     ax = fig.add_subplot(111, projection='3d')
-    ax.plot_surface(x_mesh, t_mesh, phat, cmap='viridis', alpha=0.8, label=r"$\hat{p}$")
+    ax.plot_surface(x_mesh, t_mesh, phat, cmap='viridis', alpha=0.6, label="PINN-MLP")
     z_max = 1.5*np.max(np.abs(phat))
     for i in range(len(t1s)):
         t1 = t1s[i]
@@ -246,7 +246,7 @@ def plot_p_surface(p_net, num=100):
             ax.plot(x, t1_monte, p_list[i], color="black", label=r"$p$")
         else:
             ax.plot(x, t1_monte, p_list[i], color="black")
-    ax.view_init(20, -50)
+    ax.view_init(21, 58)
     ax.set_xlabel(r'$x$')
     ax.set_ylabel(r'$t$')
     ax.text2D(0.94, 0.77, "PDF", transform=ax.transAxes)
@@ -375,7 +375,16 @@ def main(TRAIN_FLAG=False, RUN_BASELINE=False):
     }
 
     set_publication_plot_style()
-    colors = sns.color_palette("husl", 3)
+    colors = sns.color_palette([
+        "#000000",  
+        "#8C00FF",  
+        "#00FF1E",  # orange
+        "#FF008C",  # purple
+        "#00FBFF",  # green
+        "#FF8400",  # brown
+        "#999999",  # gray
+    ])
+
     fig = plt.figure(figsize=(12, 8))
     ax = fig.add_subplot(111, projection="3d")
     for t in t_span:
@@ -408,12 +417,12 @@ def main(TRAIN_FLAG=False, RUN_BASELINE=False):
             ))
             ax.plot(np.full_like(x, t), x, pdf_sol,
                     color="black", linestyle="-")
-            ax.plot(np.full_like(x, t), x, pdf_pinn,
-                    color=colors[0], linestyle="-")
             ax.plot(np.full_like(x, t), x, pdf_lp,
-                    color=colors[1], linestyle="--")
+                    color=colors[3], linestyle="--")
             ax.plot(np.full_like(x, t), x, pdf_ut,
-                    color=colors[2], linestyle=":", lw=3)
+                    color=colors[4], linestyle=":", lw=3)
+            ax.plot(np.full_like(x, t), x, pdf_pinn,
+                    color=colors[1], linestyle="-", lw=1)
         metrics["rel_error_lp"].append(rel_error_lp)
         metrics["rel_error_ut"].append(rel_error_ut)
         metrics["rel_error_pinn"].append(rel_error_pinn)
@@ -422,12 +431,12 @@ def main(TRAIN_FLAG=False, RUN_BASELINE=False):
         metrics["tv_pinn"].append(tv_pinn)
         idx_show += 1
 
-    legend_labels = ["Aanly", "PINN", "LP", "UT"]        
+    legend_labels = ["Aanly", "LP", "UT", "PINN-MLP"]        
     legend_elements = [
         Line2D([0], [0], color="black", linestyle="-", label=legend_labels[0]),
-        Line2D([0], [0], color=colors[0], linestyle="-", label=legend_labels[1]),
-        Line2D([0], [0], color=colors[1], linestyle="--",  label=legend_labels[2]),
-        Line2D([0], [0], color=colors[2], linestyle=":", lw=3, label=legend_labels[3]),
+        Line2D([0], [0], color=colors[3], linestyle="--",  label=legend_labels[1]),
+        Line2D([0], [0], color=colors[4], linestyle=":", lw=3, label=legend_labels[2]),
+        Line2D([0], [0], color=colors[1], linestyle="-", label=legend_labels[3]),
     ]
     ax.set_xlabel("t")
     ax.set_ylabel("x")
@@ -435,18 +444,18 @@ def main(TRAIN_FLAG=False, RUN_BASELINE=False):
     plt.title("1D OU Process")
 
     plt.figure()
-    plt.plot(metrics["t"], metrics["rel_error_pinn"], color=colors[0], label=legend_labels[1]),
-    plt.plot(metrics["t"], metrics["rel_error_lp"], color=colors[1], linestyle="--", label=legend_labels[2]),
-    plt.plot(metrics["t"], metrics["rel_error_ut"], color=colors[2], linestyle=":", lw=3, label=legend_labels[3]),
+    plt.plot(metrics["t"], metrics["rel_error_lp"], color=colors[3], linestyle="--", label=legend_labels[1]),
+    plt.plot(metrics["t"], metrics["rel_error_ut"], color=colors[4], linestyle=":", lw=3, label=legend_labels[2]),
+    plt.plot(metrics["t"], metrics["rel_error_pinn"], color=colors[1], label=legend_labels[3]),
     plt.legend(loc="upper left")
     plt.grid(True)
     plt.xlabel("t")
     plt.ylabel("worst rel. error %")
 
     plt.figure()
-    plt.plot(metrics["t"], metrics["tv_pinn"], color=colors[0], label=legend_labels[1]),
-    plt.plot(metrics["t"], metrics["tv_lp"], color=colors[1], linestyle="--", label=legend_labels[2]),
-    plt.plot(metrics["t"], metrics["tv_ut"], color=colors[2], linestyle=":", lw=3, label=legend_labels[3]),
+    plt.plot(metrics["t"], metrics["tv_lp"], color=colors[3], linestyle="--", label=legend_labels[1]),
+    plt.plot(metrics["t"], metrics["tv_ut"], color=colors[4], linestyle=":", lw=3, label=legend_labels[2]),
+    plt.plot(metrics["t"], metrics["tv_pinn"], color=colors[1], label=legend_labels[3]),
     plt.legend(loc="upper left")
     plt.grid(True)
     plt.xlabel("t")
