@@ -18,6 +18,7 @@ from pinn_train import train_e1net_v0
 from pinn_model import E1Net, E1Net_Prior
 from test_normalpnet import TimeToNormal1D
 from test_gmmpnet import TimeToGMM1D
+from test_flow import PDF_Flow, PDF_Flow_CNF
 
 # --------------------------
 # Device & dtype
@@ -522,11 +523,14 @@ def main(TRAIN_FLAG=False, RUN_BASELINE=False, LOAD_PRIOR=False):
     # --- PDF Neural Network ---
 
     # --- Base ---
-    p_net = PNet(scale=get_p_normalize()).to(device)
+    # p_net = PNet(scale=get_p_normalize()).to(device)
     # --- Normal ---
     # p_net = TimeToNormal1D().to(device)
     # --- PINN-GMM ---
     # p_net = TimeToGMM1D().to(device)
+    # --- FLOW ---
+    p_net = PDF_Flow(scale=get_p_normalize()).to(device)
+    # p_net = PDF_Flow_CNF(scale=get_p_normalize()).to(device)
 
     configuration = {
         "iterations": 10000,
@@ -535,14 +539,16 @@ def main(TRAIN_FLAG=False, RUN_BASELINE=False, LOAD_PRIOR=False):
         "p_ic": p_init,
         "res_func": res_func,
         "res_weight": 1.0,
-        "save_path": "data/p_net.pth",
+        # "save_path": "data/p_net.pth",
         # "save_path": "data/p_net(normal).pth"
         # "save_path": "data/p_net(pinn-gmm).pth"
+        "save_path": "data/p_net(flow).pth",
     }
     if(TRAIN_FLAG):
         print("traing pnet: ", configuration["save_path"])
         # train_pnet_model(p_net)
         # train_pnet_v0(p_net, configuration)
+
     p_net = load_train_model(p_net, PATH=configuration["save_path"])
 
     if(LOAD_PRIOR):
@@ -557,15 +563,17 @@ def main(TRAIN_FLAG=False, RUN_BASELINE=False, LOAD_PRIOR=False):
         
     configuration_e1 = {
         "iterations": 20000,
+        # "iterations": 100,
         "sample_ic": train_helper_sample_ic,
         "sample_res": train_helper_sample_res,
         "p_ic": p_init,
         "res_func": res_func,
         "res_weight": 1.0,
         "RAR_eps": 0.05,
-        "save_path": "data/e1_net.pth",
+        # "save_path": "data/e1_net.pth",
         # "save_path": "data/e1_net(normal).pth"
         # "save_path": "data/e1_net(pinn-gmm).pth"
+        "save_path": "data/e1_net(flow).pth"
     }
 
     if(TRAIN_FLAG):
@@ -698,7 +706,7 @@ def main(TRAIN_FLAG=False, RUN_BASELINE=False, LOAD_PRIOR=False):
                 t, g_kl_pinn, g_kl_lp, g_kl_ut
             ))
         if(B1 is not None):
-            print("[debug]", np.max(np.abs(e1_true)).item(), np.max(np.abs(e1_pinn)).item())
+            print("[debug] max error v.s. error est", np.max(np.abs(e1_true)).item(), np.max(np.abs(e1_pinn)).item())
 
         metrics["norm_error_pinn"].append(norm_error_pinn)
         metrics["norm_error_lp"].append(norm_error_lp)
@@ -811,6 +819,8 @@ def main(TRAIN_FLAG=False, RUN_BASELINE=False, LOAD_PRIOR=False):
         metrics_path = "data/metrics(normal).npz"
     if(configuration["save_path"] == "data/p_net(pinn-gmm).pth"):
         metrics_path = "data/metrics(pinn-gmm).npz"
+    if(configuration["save_path"] == "data/p_net(flow).pth"):
+        metrics_path = "data/metrics(flow).npz"
     helper_save_metrics_npz(metrics, metrics_path)
 
 

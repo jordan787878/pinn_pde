@@ -114,6 +114,7 @@ def train_pnet_v0(p_net, configuration):
 
         # FIX: Set requires_grad=True for x_res before using it in diff_opt_scaled
         x_res.requires_grad_(True)
+        t_res.requires_grad_(True)
         
         # --- Loss based on initial conditions ---
         u_bc = p_init(x_bc).detach()
