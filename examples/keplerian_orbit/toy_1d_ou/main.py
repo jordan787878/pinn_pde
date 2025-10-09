@@ -11,6 +11,10 @@ from scipy.linalg import expm, cholesky
 from matplotlib.lines import Line2D
 from scipy.stats import multivariate_normal
 import seaborn as sns
+import sys
+sys.path.insert(0, '../utilities/')
+from _General.baseline_methods import PropagationData, linear_propagation_master, unscent_propagation_master
+from _General.util import set_publication_plot_style
 
 
 # --------------------------
@@ -216,24 +220,7 @@ def load_train_model(net, PATH):
 # Plotting
 # --------------------------
 def plot_p_surface(p_net, num=100):
-    plt.rcParams.update({
-    # General font settings
-    "font.family": "serif",       # Use sans-serif font for non-math text
-    "font.sans-serif": ["Times New Roman"],  # Prioritize Helvetica (must be installed on your system)
-    "font.size": 18,                   # Base font size for non-math text
-    # "figure.autolayout": True,
-
-    # Math font settings
-    "mathtext.fontset": "stix",        # STIX fonts for math symbols
-
-    # Title and label sizes
-    "axes.titlesize": 18,              # Title font size
-    "axes.labelsize": 18,              # Axis label font size
-
-    # Legend settings
-    "legend.fontsize": 18,             # Legend text size
-    "legend.title_fontsize": 18        # Legend title size (if you use legend titles)
-    })
+    set_publication_plot_style()
 
     t1s = [1.0, 1.5, 2.0, 2.5, 3.0]
     x = np.linspace(x_low, x_hig, num=num, dtype=np.float32)
@@ -285,183 +272,13 @@ def _get_Jacobian_expression():
 
 
 def get_Jacobian(x):
-    J = -alpha
-    return np.float32(J)
+    J = np.asarray(-alpha, dtype=np.float64).reshape((1,1))
+    return J
 
 
 def ou_dyn(x):
-  f1 = -alpha*x
-  return f1
-
-
-def linear_propagation(dt_precision=7, dt_save=1e-2, save_path=None):
-    # --- initialization ---
-    mu_i, cov_i = get_mu_cov_sol(t0)
-    x = mu_i    # initial mean
-    Px = cov_i     # initial covariance
-
-    dtt = np.float64(10**(-1*dt_precision))
-    tf = T_end
-    ti = t0
-    kf = int((tf-ti) / dtt)
-    current_time = ti
-
-    # --- storage arrays ---
-    times = [current_time]
-    means = [x.copy()]
-    covs = [Px.copy()]
-    t_to_save = current_time + dt_save
-
-    # --- time stepping loop ---
-    for k in tqdm(range(kf), desc="propagting over time"):
-        # compute dynamics and Jacobian
-        fx = ou_dyn(x)
-        Jx = get_Jacobian(x)
-        # propagate mean and covariance
-        x = x + fx * dtt
-        Px = Px + (Jx*Px + Jx*Px + 2*D)*dtt
-
-        # update time
-        current_time += dtt
-        # current_time = np.round(current_time, dt_precision)
-        if(abs(current_time-t_to_save) < dtt/2):
-            # store results
-            times.append(np.round(current_time,3))
-            means.append(x.copy())
-            covs.append(Px.copy())
-            t_to_save += dt_save
-
-    # --- convert lists to arrays ---
-    times = np.array(times)
-    means = np.array(means)       # shape: (kf+1, n)
-    covs = np.array(covs)         # shape: (kf+1, n, n)
-    np.savez(save_path,
-             times=times,
-             means=means,
-             covs=covs,
-             dt_precision=dt_precision)
-
-
-def _unscented_sigma_points(mean, cov, alpha=1.0, beta=2.0, kappa=0.0):
-    """
-    Generate Unscented Transform sigma points for N-dim state.
-
-    Parameters
-    ----------
-    mean : (N,) array_like
-        State mean vector.
-    cov : (N,N) array_like
-        State covariance (symmetric, PSD).
-    alpha : float, optional
-        Spread of the sigma set (small, e.g. 1e-3). Affects higher-order terms.
-    beta : float, optional
-        Prior knowledge about distribution; 2 is optimal for Gaussian.
-    kappa : float, optional
-        Secondary scaling (often 0 or 3-N).
-
-    Returns
-    -------
-    X : (2N+1, N) ndarray
-        Sigma points. X[0] is the mean, others are +/- columns of the scaled root.
-    Wm : (2N+1,) ndarray
-        Weights for computing the mean.
-    Wc : (2N+1,) ndarray
-        Weights for computing the covariance.
-
-    """
-    m = np.asarray(mean, dtype=float).reshape(-1)
-    N = m.size
-    P = np.asarray(cov, dtype=float).reshape(N, N)
-    assert P.shape == (N, N), "cov must be (N,N)"
-
-    lam = alpha**2 * (N + kappa) - N
-    c = N + lam
-    if c <= 0:
-        raise ValueError("N + lambda must be positive; adjust alpha/kappa.")
-    S = cholesky(P, lower=True)
-    S *= np.sqrt(c)  # scale by sqrt(N+lambda)
-
-    # Sigma points
-    X = np.empty((2*N + 1, N), dtype=float)
-    X[0] = m
-    X[1:N+1]     = m + S.T   # columns of S
-    X[N+1:2*N+1] = m - S.T
-
-    # Weights
-    Wm = np.full(2*N + 1, 1.0/(2.0*c), dtype=float)
-    Wc = np.full(2*N + 1, 1.0/(2.0*c), dtype=float)
-    Wm[0] = lam / c
-    Wc[0] = lam / c + (1.0 - alpha**2 + beta)
-    return X, Wm, Wc
-
-def unscent_propagation(dt_precision=7, dt_save=1e-2, save_path=None):
-    # --- initialization ---
-    mu_i, cov_i = get_mu_cov_sol(t0)
-    x = mu_i    # initial mean
-    Px = cov_i     # initial covariance
-
-    dtt = np.float64(10**(-1*dt_precision))
-    tf = T_end
-    ti = t0
-    kf = int((tf-ti) / dtt)
-    current_time = ti
-
-    # --- storage arrays ---
-    times = [current_time]
-    means = [x.copy()]
-    covs = [Px.copy()]
-    t_to_save = current_time + dt_save
-
-    # --- time stepping loop ---
-    for k in tqdm(range(kf), desc="propagting over time"):
-        # compute sigma points
-        _sigma_pts, _w_mean, _w_cov = _unscented_sigma_points(x, Px)
-
-        for i in range(_sigma_pts.shape[0]):
-            _x_i = _sigma_pts[i, :]
-            fx_i = ou_dyn(_x_i)
-            _sigma_pts[i, :] = _x_i + fx_i * dtt
-
-        x = _w_mean @ _sigma_pts
-        X_diff = _sigma_pts - x
-        Px = X_diff.T @ (_w_cov[:, None] * X_diff) + (2*D)*dtt
-
-        # update time
-        current_time += dtt
-        current_time = np.round(current_time, dt_precision)
-        if(abs(current_time-t_to_save) < dtt/2):
-            # store results
-            times.append(current_time)
-            means.append(x.item())
-            covs.append(Px.item())
-            t_to_save += dt_save
-
-    # --- convert lists to arrays ---
-    times = np.array(times)
-    means = np.array(means)       # shape: (kf+1, n)
-    covs = np.array(covs)         # shape: (kf+1, n, n)
-    np.savez(save_path,
-             times=times,
-             means=means,
-             covs=covs,
-             dt_precision=dt_precision)
-
-
-class PropagationData:
-    def __init__(self, path: str):
-        self.data = np.load(path)
-    def get(self, time):
-        times = self.data["times"]
-        means = self.data["means"]
-        covs = self.data["covs"]
-        # dt_precision = self.data["dt_precision"]
-        # time_threshold = 10. *10**(-1. *dt_precision)
-        time = np.round(time, 3)
-        idx = np.where(abs(time-times)< 1e-3)[0]
-        if len(idx) == 0:
-            assert("The linear propagation result does not have data at this time")
-        idx = idx[0]
-        return times[idx], means[idx], covs[idx]
+    f1 = -alpha*x
+    return f1
 
 
 def p_total_variation(p1, p2):
@@ -481,9 +298,36 @@ def p_rel_worst_error(p1, p2):
 
 
 def run_baseline(lp_path, ut_path):
-  # NOTE float64 precision is used due to ensure small error
-  linear_propagation(save_path=lp_path, dt_precision=6)
-  unscent_propagation(save_path=ut_path, dt_precision=6)
+    # NOTE float64 precision is used due to ensure small error
+    global t0, T_end, D
+    x0, P0 = get_mu_cov_sol(t0)
+
+    # If you have f(x) and A(x) (no constants, no time):
+    dyn_fcn = lambda t, x, c: ou_dyn(x)
+    jac_fcn = lambda t, x, c: get_Jacobian(x)
+    Q = 2*D
+    t_span = (np.float64(np.round(t0, 2)), np.float64(np.round(T_end, 2)))
+
+    linear_propagation_master(
+        x0=x0, P0=P0,
+        dyn_fcn=dyn_fcn, jac_fcn=jac_fcn,
+        constants=None,
+        t_span=t_span,
+        dt_save=0.01,
+        Q=Q,
+        save_path=lp_path
+    )
+
+    unscent_propagation_master(
+        x0=x0, P0=P0,
+        dyn_fcn=dyn_fcn, jac_fcn=jac_fcn,
+        constants=None,
+        t_span=t_span,
+        dt_save=0.01,
+        Q=Q,
+        save_path=ut_path,
+        alpha=1e-3,
+    )
 
 
 # --------------------------
@@ -530,15 +374,16 @@ def main(TRAIN_FLAG=False, RUN_BASELINE=False):
         "t": t_span
     }
 
+    set_publication_plot_style()
     colors = sns.color_palette("husl", 3)
     fig = plt.figure(figsize=(12, 8))
     ax = fig.add_subplot(111, projection="3d")
     for t in t_span:
-        _, _mu_lp, _cov_lp = data_lp.get(t)
+        _, _, _mu_lp, _cov_lp = data_lp.get(t)
         pdf_func = multivariate_normal(mean=_mu_lp, cov=_cov_lp)
         pdf_lp = pdf_func.pdf(x).reshape(-1,).astype(x.dtype)
 
-        _, _mu_ut, _cov_ut = data_ut.get(t)
+        _, _, _mu_ut, _cov_ut = data_ut.get(t)
         pdf_func = multivariate_normal(mean=_mu_ut, cov=_cov_ut)
         pdf_ut = pdf_func.pdf(x).reshape(-1,).astype(x.dtype)
 
@@ -564,7 +409,7 @@ def main(TRAIN_FLAG=False, RUN_BASELINE=False):
             ax.plot(np.full_like(x, t), x, pdf_sol,
                     color="black", linestyle="-")
             ax.plot(np.full_like(x, t), x, pdf_pinn,
-                    color=colors[0], linestyle="--")
+                    color=colors[0], linestyle="-")
             ax.plot(np.full_like(x, t), x, pdf_lp,
                     color=colors[1], linestyle="--")
             ax.plot(np.full_like(x, t), x, pdf_ut,
@@ -576,12 +421,13 @@ def main(TRAIN_FLAG=False, RUN_BASELINE=False):
         metrics["tv_ut"].append(tv_ut)
         metrics["tv_pinn"].append(tv_pinn)
         idx_show += 1
-            
+
+    legend_labels = ["Aanly", "PINN", "LP", "UT"]        
     legend_elements = [
-        Line2D([0], [0], color="black", linestyle="-", label=r"$p$ MC"),
-        Line2D([0], [0], color=colors[0], linestyle="--", label=r"$\hat{p}$ PINN"),
-        Line2D([0], [0], color=colors[1], linestyle="--",  label=r"$p$ Linear Prop."),
-        Line2D([0], [0], color=colors[2], linestyle=":", lw=3, label=r"$p$ Unscent Trans.")
+        Line2D([0], [0], color="black", linestyle="-", label=legend_labels[0]),
+        Line2D([0], [0], color=colors[0], linestyle="-", label=legend_labels[1]),
+        Line2D([0], [0], color=colors[1], linestyle="--",  label=legend_labels[2]),
+        Line2D([0], [0], color=colors[2], linestyle=":", lw=3, label=legend_labels[3]),
     ]
     ax.set_xlabel("t")
     ax.set_ylabel("x")
@@ -589,39 +435,26 @@ def main(TRAIN_FLAG=False, RUN_BASELINE=False):
     plt.title("1D OU Process")
 
     plt.figure()
-    plt.plot(metrics["t"], metrics["rel_error_pinn"], color=colors[0], label=r"$\hat{p}$ PINN")
-    plt.plot(metrics["t"], metrics["rel_error_lp"], color=colors[1],   label=r"$p$ Linear Prop.")
-    plt.plot(metrics["t"], metrics["rel_error_ut"], color=colors[2],   label=r"$p$ Unscent Trans.")
-    plt.legend()
+    plt.plot(metrics["t"], metrics["rel_error_pinn"], color=colors[0], label=legend_labels[1]),
+    plt.plot(metrics["t"], metrics["rel_error_lp"], color=colors[1], linestyle="--", label=legend_labels[2]),
+    plt.plot(metrics["t"], metrics["rel_error_ut"], color=colors[2], linestyle=":", lw=3, label=legend_labels[3]),
+    plt.legend(loc="upper left")
+    plt.grid(True)
     plt.xlabel("t")
     plt.ylabel("worst rel. error %")
 
     plt.figure()
-    plt.plot(metrics["t"], metrics["tv_pinn"], color=colors[0], label=r"$\hat{p}$ PINN")
-    plt.plot(metrics["t"], metrics["tv_lp"], color=colors[1],   label=r"$p$ Linear Prop.")
-    plt.plot(metrics["t"], metrics["tv_ut"], color=colors[2],   label=r"$p$ Unscent Trans.")
-    plt.legend()
+    plt.plot(metrics["t"], metrics["tv_pinn"], color=colors[0], label=legend_labels[1]),
+    plt.plot(metrics["t"], metrics["tv_lp"], color=colors[1], linestyle="--", label=legend_labels[2]),
+    plt.plot(metrics["t"], metrics["tv_ut"], color=colors[2], linestyle=":", lw=3, label=legend_labels[3]),
+    plt.legend(loc="upper left")
+    plt.grid(True)
     plt.xlabel("t")
     plt.ylabel("total variation %")
 
     plt.show()
 
 
-
 if __name__ == "__main__":
     main(TRAIN_FLAG=False,
-         RUN_BASELINE=False)
-
-# from scipy.stats import multivariate_normal
-# def test_p_sol(t):
-#   x = np.linspace(x_low, x_hig, num=200, dtype=np.float32)
-#   mu, cov = get_mu_cov_sol(t)
-#   print(t, mu, cov)
-#   pdf_func = multivariate_normal(mean=mu, cov=cov)
-#   p_check = pdf_func.pdf(x).reshape(-1,).astype(x.dtype)
-#   p_sol = p_exact(x, t)
-#   plt.figure()
-#   plt.plot(x, p_sol)
-#   plt.plot(x, p_check, linestyle="--")
-#   plt.show()
-# test_p_sol(3.)
+         RUN_BASELINE=True)

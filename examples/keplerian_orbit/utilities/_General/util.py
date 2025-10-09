@@ -1,4 +1,5 @@
 import numpy as np
+import matplotlib.pyplot as plt
 
 
 def compute_volume(bounds):
@@ -47,3 +48,38 @@ def save_metrics_npz(metrics, path):
 def load_metrics_npz(path):
     data = np.load(path)
     return {k: data[k] for k in data.files}
+
+
+def set_publication_plot_style(font_family='Times New Roman', font_size=18):
+    """
+    Publication-ready Matplotlib defaults with safe spacing to prevent label/tick overlap.
+    """
+    plt.rcParams.update({
+        # Typography
+        'font.family': font_family,
+        'font.size': font_size,
+        'axes.labelsize': font_size,
+        'axes.titlesize': font_size,
+        'xtick.labelsize': font_size,
+        'ytick.labelsize': font_size,
+        'legend.fontsize': font_size,
+        'figure.titlesize': font_size,
+        'lines.linewidth': 2,
+
+        # Spacing (the important bits)
+        'figure.constrained_layout.use': True,     # auto-avoid overlaps
+        'figure.constrained_layout.h_pad': 0.05,   # inch padding between rows
+        'figure.constrained_layout.w_pad': 0.05,   # inch padding between cols
+        'figure.constrained_layout.hspace': 0.10,  # additional height space
+        'figure.constrained_layout.wspace': 0.10,  # additional width space
+
+        # Extra padding around text/ticks
+        'axes.labelpad': 8,        # space between axis and its label (pts)
+        'axes.titlepad': 10,       # space between axes and title (pts)
+        'xtick.major.pad': 6,      # tick label padding (pts)
+        'ytick.major.pad': 6,
+
+        # When saving, keep the tight layout
+        'savefig.bbox': 'tight',
+        'savefig.pad_inches': 0.05,
+    })
