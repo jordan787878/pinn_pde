@@ -507,24 +507,26 @@ def densify_between(v, n_between=1):
 def plot_pdf_metrics(metrics):
     set_publication_plot_style()
 
-    colors = sns.color_palette("husl", 5)
+    colors = sns.color_palette("bright", 6)
 
     plt.figure()
     print(metrics["t"])
-    plt.plot(metrics["t"], metrics["rel_error_lp"], color=colors[1],   label="LP")
-    plt.plot(metrics["t"], metrics["rel_error_ut"], color=colors[2],   label="UT")
-    plt.plot(metrics["t"], metrics["rel_error_gmm"], color=colors[3],   label="GMM")
-    plt.plot(metrics["t"], metrics["rel_error_pinn"], color=colors[-1], label="PINN-MLP")
+    plt.plot(metrics["t"], metrics["rel_error_lp"], color=colors[3],   label="LP")
+    plt.plot(metrics["t"], metrics["rel_error_ut"], color=colors[4],   label="UT")
+    plt.plot(metrics["t"], metrics["rel_error_gmm"], color=colors[5],   label="GMM")
+
+    plt.plot(metrics["t"], metrics["rel_error_pinn"], color=colors[1], label="PINN-MLP")
     all_zeros = not np.any(metrics["B1_pinn"])
     if(all_zeros is False):
         plt.fill_between(
             metrics["t"],
             metrics["rel_error_pinn"],
             metrics["B1_pinn"],
-            color=colors[-1],
+            color=colors[1],
             alpha=0.2,
             label="PINN Error Bound"
         )
+    
     plt.plot(metrics["t"], metrics["rel_error_pinngmm"], color=colors[0], label="PINN-GMM")
     all_zeros = not np.any(metrics["B1_pinngmm"])
     if(all_zeros is False):
@@ -536,34 +538,34 @@ def plot_pdf_metrics(metrics):
             alpha=0.2,
             label="PINN-GMM Error Bound"
         )
+
     plt.legend(loc="upper left", ncol=2)
     plt.xlabel("t")
     plt.ylabel("norm. worst error %")
     plt.grid(True)
 
     plt.figure()
-    plt.plot(metrics["t"], metrics["tv_lp"], color=colors[1],   label="LP")
-    plt.plot(metrics["t"], metrics["tv_ut"], color=colors[2],   label="UT")
-    plt.plot(metrics["t"], metrics["tv_gmm"], color=colors[3],   label="GMM")
-    plt.plot(metrics["t"], metrics["tv_pinn"], color=colors[-1], label="PINN-MLP")
+    plt.plot(metrics["t"], metrics["tv_lp"], color=colors[3],   label="LP")
+    plt.plot(metrics["t"], metrics["tv_ut"], color=colors[4],   label="UT")
+    plt.plot(metrics["t"], metrics["tv_gmm"], color=colors[5],   label="GMM")
+    plt.plot(metrics["t"], metrics["tv_pinn"], color=colors[1], label="PINN-MLP")
     plt.plot(metrics["t"], metrics["tv_pinngmm"], color=colors[0], label="PINN-GMM")
     plt.legend(loc="upper left", ncol=2)
     plt.xlabel("t")
     plt.ylabel("total variation %")
     plt.grid(True)
 
-    # # metric 3: negative log liklihood (relative KL)
-    # plt.figure()
-    # plt.plot(metrics["t"], metrics["g_kl_lp"], color=colors[1],   label="LP")
-    # plt.plot(metrics["t"], metrics["g_kl_ut"], color=colors[2],   label="UT")
-    # # plt.plot(metrics["t"], metrics["g_kl_gmm"], color=colors[3],   label="GMM")
-    # # plt.plot(metrics["t"], metrics["rel_kl_ut_alpha_0_1"], color=colors[2], marker="o", label=r"$p$ Unscent Trans. $(\alpha=0.1)$")
-    # plt.plot(metrics["t"], metrics["g_kl_pinn"], color=colors[-1], label="PINN-MLP")
-    # plt.plot(metrics["t"], metrics["g_kl_pinngmm"], color=colors[0], label="PINN-GMM")
-    # plt.legend()
-    # plt.xlabel("t")
-    # plt.ylabel("General KL")
-    # plt.grid(True)
+    # metric 3: negative log liklihood (relative KL)
+    plt.figure()
+    plt.plot(metrics["t"], metrics["g_kl_lp"], color=colors[3],   label="LP")
+    plt.plot(metrics["t"], metrics["g_kl_ut"], color=colors[4],   label="UT")
+    plt.plot(metrics["t"], metrics["g_kl_gmm"], color=colors[5],   label="GMM")
+    plt.plot(metrics["t"], metrics["g_kl_pinn"], color=colors[1], label="PINN-MLP")
+    plt.plot(metrics["t"], metrics["g_kl_pinngmm"], color=colors[0], label="PINN-GMM")
+    plt.legend(loc="upper left", ncol=2)
+    plt.xlabel("t")
+    plt.ylabel("General KL")
+    plt.grid(True)
 
     plt.show()
 
