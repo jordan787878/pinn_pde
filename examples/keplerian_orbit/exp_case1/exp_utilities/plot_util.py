@@ -10,34 +10,31 @@ from matplotlib.colors import LogNorm
 from matplotlib.ticker import MaxNLocator
 from mpl_toolkits.mplot3d import Axes3D  # noqa: F401  (needed for 3D projection)
 
-
-def set_publication_plot_style(font_family='Times New Roman', font_size=18):
-    """
-    Update Matplotlib settings to use publication-ready fonts.
-
-    Parameters:
-        font_family (str): Font family to be used for all texts.
-        font_size (int): Base font size for labels, titles, legends, and ticks.
-    """
-    plt.rcParams['font.family'] = font_family
-    plt.rcParams['font.size'] = font_size
-    plt.rcParams['axes.labelsize'] = font_size
-    plt.rcParams['axes.titlesize'] = font_size
-    plt.rcParams['xtick.labelsize'] = font_size
-    plt.rcParams['ytick.labelsize'] = font_size
-    plt.rcParams['legend.fontsize'] = font_size
-    plt.rcParams['figure.titlesize'] = font_size
-    plt.rcParams['lines.linewidth'] = 2
+import sys
+from pathlib import Path
+ROOT = Path(__file__).resolve().parents[2]   # repo_root
+sys.path.insert(0, str(ROOT))
+from utilities._General.util import set_publication_plot_style
 
 
-def plot_full_corner(constants, t,
-    X_samples,
+colors = sns.color_palette([
+    "#000000",  
+    "#8C00FF",  
+    "#00FF1E",  # orange
+    "#FF008C",  # purple
+    "#00FBFF",  # green
+    "#FF8400",  # brown
+    "#999999",  # gray
+])
+
+
+def plot_full_corner(constants, t, X_samples,
     bins=256,
     labels=None,
     figsize_per_dim=1.5,
     max_points=500_000,
     mode="heatmap",            # "scatter" or "heatmap"
-    cmap="cividis",
+    cmap="bwr",
     alpha=0.4,
     point_size=2,
     ranges="fixed",               # list of (lo,hi) per dim; if None -> data-driven
@@ -47,6 +44,7 @@ def plot_full_corner(constants, t,
     p_net_gmm_N1=None,
     p_net_gmm=None,
     data_lp=None,
+    data_ut=None,
     data_gmm=None,
 ):
     set_publication_plot_style(font_size=14)
@@ -89,7 +87,6 @@ def plot_full_corner(constants, t,
     else:
         raise("range for full corner plot not implemented.")
 
-    sns_colors = sns.color_palette("husl", 6)
     fig, axes = plt.subplots(
         D, D,
         figsize=(figsize_per_dim*D, figsize_per_dim*D),
@@ -106,21 +103,24 @@ def plot_full_corner(constants, t,
             data_marginal_pinn = np.load(filename)
             pdf_values = data_marginal_pinn['pdf']
             X_grid = data_marginal_pinn["X_grid"]
-            ax.plot(X_grid, pdf_values, color=sns_colors[-1])
+            ax.plot(X_grid, pdf_values, color=colors[-1])
 
     # Diagonals: 1D histograms (counts)
     for d in range(D):
         ax = axes[d, d]
         lo, hi = ranges[d]
+
         ax.hist(
             X[:, d],
             bins=bins,
             range=(lo, hi),
             histtype="stepfilled",
-            alpha=0.85,
-            color="steelblue",
+            alpha=1.0,
+            color=plt.cm.bwr(0.35),     # blue from "bwr"
+            edgecolor=plt.cm.bwr(0.35), # optional
             density=True,
         )
+        
         # ax.set_xlim(lo, hi)
         ax.yaxis.set_major_locator(MaxNLocator(nbins=4, prune="both"))
         if d == D - 1: ax.set_xlabel(labels[d])
@@ -131,8 +131,10 @@ def plot_full_corner(constants, t,
             axes[d, k].axis("off")
         if d == 0:
             ax.set_ylabel(labels[d])
+        
         if(PNet_XL_PATH is not None):
             _plot_pinn_1d_marginal(d+1)
+        
         if(p_net_gmm is not None):
             x_vals = np.linspace(lo, hi, num=128)
             ws, mus, covs = p_net_gmm.weights_means_covs_at(t)
@@ -146,14 +148,23 @@ def plot_full_corner(constants, t,
                 pdf_func = multivariate_normal(mean=mus[k,d], cov=covs[k,d,d])
                 p_k = pdf_func.pdf(x_vals).reshape(x_vals.shape)
                 pdf_values += ws[k] * p_k
-            ax.plot(x_vals, pdf_values, color=sns_colors[0])
+            ax.plot(x_vals, pdf_values, color=colors[0])
+
         if(data_lp is not None):
             x_vals = np.linspace(lo, hi, num=128)
-            _, mu_6d, cov_6d = data_lp.get(t)
+            _, _, mu_6d, cov_6d = data_lp.get(t)
             pdf_values = np.copy(x_vals) * 0.0
             pdf_func = multivariate_normal(mean=mu_6d[d], cov=cov_6d[d,d])
             pdf_values = pdf_func.pdf(x_vals).reshape(x_vals.shape)
-            ax.plot(x_vals, pdf_values, color=sns_colors[3])
+            ax.plot(x_vals, pdf_values, color=colors[3])
+
+        if(data_ut is not None):
+            x_vals = np.linspace(lo, hi, num=128)
+            _, _, mu_6d, cov_6d = data_ut.get(t)
+            pdf_values = np.copy(x_vals) * 0.0
+            pdf_func = multivariate_normal(mean=mu_6d[d], cov=cov_6d[d,d])
+            pdf_values = pdf_func.pdf(x_vals).reshape(x_vals.shape)
+            ax.plot(x_vals, pdf_values, color=colors[4])
 
     # Off-diagonals: scatter or heatmap (counts)
     for i in range(1, D):
@@ -189,8 +200,8 @@ def plot_full_corner(constants, t,
                     H, origin="lower",
                     extent=(xlo, xhi, ylo, yhi),
                     aspect="auto", cmap=cmap, norm=norm, interpolation="nearest",
-                    alpha=alpha
-                    # alpha=0.5,
+                    # alpha=alpha
+                    alpha=0.5,
                 )
 
             relative_levels = np.array([0.01, 0.05, 0.50, 0.95])
@@ -206,7 +217,7 @@ def plot_full_corner(constants, t,
                     # relative_levels = np.array([0.01, 0.05, 0.50, 0.95])
                     levels = relative_levels * pdf_max
                     # Draw the contour lines with the custom levels
-                    ax.contour(X_grid, Y_grid, pdf_values, levels=levels, colors=[sns_colors[-1]], linewidths=1.)
+                    ax.contour(X_grid, Y_grid, pdf_values, levels=levels, colors=[colors[1]], linewidths=1.)
                     return levels
 
             if(PNet_XL_PATH is not None):
@@ -230,13 +241,13 @@ def plot_full_corner(constants, t,
                     marginal_cov = covs_k[np.ix_(list(plot_axes), list(plot_axes))]
                     pdf_func = multivariate_normal(mean=marginal_mu, cov=marginal_cov)
                     p_k = pdf_func.pdf(grid_pts).reshape(X_grid.shape)
-                    # p_k = p_normal(grid_pts, marginal_mu, marginal_cov).reshape(X_grid.shape)
+                    # p_k = _p_normal(grid_pts, marginal_mu, marginal_cov).reshape(X_grid.shape)
                     pdf_values = pdf_values + ws_k * p_k
-                    if(ws.shape[0] > 1):
-                        _pdf_max = np.max(p_k).item()
-                        _levels = np.array([0.01]) * _pdf_max
-                        ax.contour(X_grid, Y_grid, p_k, levels=_levels, colors=[color], 
-                                linewidths=0.3, alpha=0.4)
+                    # if(ws.shape[0] > 1):
+                    #     _pdf_max = np.max(p_k).item()
+                    #     _levels = np.array([0.01]) * _pdf_max
+                    #     ax.contour(X_grid, Y_grid, p_k, levels=_levels, colors=[color], 
+                    #             linewidths=0.3, alpha=0.4)
                 # relative_levels = np.array([0.01, 0.05, 0.50, 0.95])
                 pdf_max = np.max(pdf_values).item()
                 levels = relative_levels * pdf_max
@@ -249,7 +260,7 @@ def plot_full_corner(constants, t,
                 ws = ws.detach().cpu().numpy()
                 mus = mus.detach().cpu().numpy()
                 covs = covs.detach().cpu().numpy()
-                _plot_pinn_gmm_contour(ws, mus, covs, x_coords, sns_colors[0])
+                _plot_pinn_gmm_contour(ws, mus, covs, x_coords, colors[0])
                             
             if(p_net_gmm is not None):
                 x_coords = (j+1, i+1)
@@ -257,11 +268,11 @@ def plot_full_corner(constants, t,
                 ws = ws.detach().cpu().numpy()
                 mus = mus.detach().cpu().numpy()
                 covs = covs.detach().cpu().numpy()
-                _plot_pinn_gmm_contour(ws, mus, covs, x_coords, sns_colors[0])
+                _plot_pinn_gmm_contour(ws, mus, covs, x_coords, colors[0])
 
             if(data_lp is not None):
                 x_coords = (j+1, i+1)
-                _, mu_6d, cov_6d = data_lp.get(t)
+                _, _, mu_6d, cov_6d = data_lp.get(t)
                 plot_axes = (x_coords[0]-1, x_coords[1]-1)
                 marginal_mu = mu_6d[list(plot_axes)]
                 marginal_cov = cov_6d[np.ix_(list(plot_axes), list(plot_axes))]
@@ -269,41 +280,301 @@ def plot_full_corner(constants, t,
                 ys = np.linspace(ylo, yhi, num=256, endpoint=True)
                 X_grid, Y_grid = np.meshgrid(xs, ys, indexing="ij")
                 grid_pts = np.vstack([X_grid.ravel(), Y_grid.ravel()]).T
-                pdf_values = p_normal(grid_pts, marginal_mu, marginal_cov).reshape(X_grid.shape)
+                pdf_values = _p_normal(grid_pts, marginal_mu, marginal_cov).reshape(X_grid.shape)
                 # relative_levels = np.array([0.01, 0.05, 0.50, 0.95])
                 pdf_max = np.max(pdf_values).item()
                 levels = relative_levels * pdf_max
                 # Draw the contour lines with the custom levels
-                ax.contour(X_grid, Y_grid, pdf_values, levels=levels, colors=[sns_colors[2]], 
+                ax.contour(X_grid, Y_grid, pdf_values, levels=levels, colors=[colors[3]], 
+                           linewidths=1.)
+                
+            if(data_ut is not None):
+                x_coords = (j+1, i+1)
+                _, _, mu_6d, cov_6d = data_ut.get(t)
+                plot_axes = (x_coords[0]-1, x_coords[1]-1)
+                marginal_mu = mu_6d[list(plot_axes)]
+                marginal_cov = cov_6d[np.ix_(list(plot_axes), list(plot_axes))]
+                xs = np.linspace(xlo, xhi, num=256, endpoint=True)
+                ys = np.linspace(ylo, yhi, num=256, endpoint=True)
+                X_grid, Y_grid = np.meshgrid(xs, ys, indexing="ij")
+                grid_pts = np.vstack([X_grid.ravel(), Y_grid.ravel()]).T
+                pdf_values = _p_normal(grid_pts, marginal_mu, marginal_cov).reshape(X_grid.shape)
+                # relative_levels = np.array([0.01, 0.05, 0.50, 0.95])
+                pdf_max = np.max(pdf_values).item()
+                levels = relative_levels * pdf_max
+                # Draw the contour lines with the custom levels
+                ax.contour(X_grid, Y_grid, pdf_values, levels=levels, colors=[colors[4]], 
                            linewidths=1.)
 
             if(data_gmm is not None):
                 x_coords = (j+1, i+1)
                 _, ws, mus, covs = data_gmm.get(t)
-                _plot_pinn_gmm_contour(ws, mus, covs, x_coords, sns_colors[4])
+                _plot_pinn_gmm_contour(ws, mus, covs, x_coords, colors[4])
 
-            # set_axis_limits_with_buffer(ax, (xlo, xhi), (ylo, yhi))
+            # _set_axis_limits_with_buffer(ax, (xlo, xhi), (ylo, yhi))
             # ax.set_xlim(xlo, xhi); ax.set_ylim(ylo, yhi)
             if i == D - 1: ax.set_xlabel(labels[j])
             else: ax.set_xticklabels([])
             if j == 0: ax.set_ylabel(labels[i])
             else: ax.set_yticklabels([])
+    
     plt.tick_params(axis='both', which='major', labelsize=8)
 
 
-def plot_pdf_metrics(metrics):
+def plot_corner_elem(
+    constants, t, X_samples, dims,
+    *,
+    bins=256,
+    labels=None,
+    ranges="auto",     # "fixed" (from constants) or "auto"
+    pad_frac=0.03,
+    cmap="bwr",
+    log_counts=True,
+    PNet_XL_PATH=None,
+    p_net_gmm_N1=None,
+    p_net_gmm=None,
+    data_lp=None,
+    data_ut=None,
+    data_gmm=None,
+):
+    """
+    dims = (i,) -> 1D histogram for x_i with model overlays (same colors as full plot)
+    dims = (i,j) -> 2D heatmap for (x_i, x_j) with model contour overlays
+    Indices in dims are 1-based.
+    """
     set_publication_plot_style()
-    
-    colors = sns.color_palette("husl", 5)
+    X = np.asarray(X_samples)
+    N, D = X.shape
+    idx = tuple(int(k) - 1 for k in dims)
+    if labels is None:
+        labels = [f"x{k+1}" for k in range(D)]
+
+    hist_color = plt.cm.bwr(0.35)          # keep your diagonal histogram color
+    hist_edge  = plt.cm.bwr(0.35)
+
+    # ---------- range helpers ----------
+    def _fixed_range(k):
+        lo, hi = getattr(constants, f"X{k+1}_RANGE")
+        return float(lo), float(hi)
+
+    def _auto_range(arr):
+        lo, hi = float(np.min(arr)), float(np.max(arr))
+        span = hi - lo
+        pad = pad_frac * (span if span > 0 else 1.0)
+        return lo - pad, hi + pad
+
+    # ---------- 1D (diagonal) ----------
+    if len(idx) == 1:
+        k = idx[0]
+        lo, hi = (_fixed_range(k) if ranges == "fixed" else _auto_range(X[:, k]))
+        fig, ax = plt.subplots(figsize=(4, 3))
+
+        ax.hist(
+            X[:, k], bins=bins, range=(lo, hi),
+            histtype="stepfilled", alpha=1.0, density=True,
+            color=hist_color, edgecolor=hist_edge
+        )
+        ax.yaxis.set_major_locator(MaxNLocator(nbins=4, prune="both"))
+        ax.set_xlabel(labels[k]); ax.set_ylabel("density")
+        ax.set_xlim(lo, hi)
+
+        # ---- overlays (keep same colors/logic as your full function) ----
+        # PINN precomputed 1D
+        def _plot_pinn_1d_marginal(k1b):  # k1b = 1-based
+            if PNet_XL_PATH is None: return
+            fn = f"{PNet_XL_PATH}/pre_compute/marginal_pdfpinn_x{k1b}_t{t:.3f}.npz"
+            if os.path.exists(fn):
+                data = np.load(fn)
+                ax.plot(data["X_grid"], data["pdf"], color=colors[-1])
+
+        _plot_pinn_1d_marginal(k+1)
+
+        # p_net_gmm (mixture’s 1D marginal)
+        x_vals = np.linspace(lo, hi, 256)
+
+        if p_net_gmm is not None:
+            ws, mus, covs = p_net_gmm.weights_means_covs_at(t)
+            ws, mus, covs = (ws.detach().cpu().numpy(),
+                             mus.detach().cpu().numpy(),
+                             covs.detach().cpu().numpy())
+            pdf = np.zeros_like(x_vals)
+            for c in range(ws.shape[0]):
+                pdf += ws[c] * multivariate_normal(mean=mus[c, k], cov=covs[c, k, k]).pdf(x_vals)
+            ax.plot(x_vals, pdf, color=colors[0])
+
+        # linear prop (Gaussian)
+        if data_lp is not None:
+            _, _, mu6, P6 = data_lp.get(t)
+            ax.plot(x_vals, multivariate_normal(mu6[k], P6[k, k]).pdf(x_vals), color=colors[3])
+
+        # UT (Gaussian)
+        if data_ut is not None:
+            _, _, mu6, P6 = data_ut.get(t)
+            ax.plot(x_vals, multivariate_normal(mu6[k], P6[k, k]).pdf(x_vals), color=colors[4])
+
+        if data_gmm is not None:
+            _, ws, mus, covs = data_gmm.get(t)
+            pdf = np.zeros_like(x_vals)
+            for c in range(ws.shape[0]):
+                pdf += ws[c] * multivariate_normal(mean=mus[c, k], cov=covs[c, k, k]).pdf(x_vals)
+            ax.plot(x_vals, pdf, color=colors[5])
+
+        return fig, ax
+
+    # ---------- 2D (off-diagonal heatmap) ----------
+    i, j = idx
+    xlo, xhi = (_fixed_range(i) if ranges == "fixed" else _auto_range(X[:, i]))
+    ylo, yhi = (_fixed_range(j) if ranges == "fixed" else _auto_range(X[:, j]))
+
+    H, xe, ye = np.histogram2d(X[:, i], X[:, j], bins=bins,
+                               range=[(xlo, xhi), (ylo, yhi)])
+    H = H.T
+
+    fig, ax = plt.subplots(figsize=(4, 4))
+    if log_counts:
+        pos = H[H > 0]
+        vmin = float(pos.min()) if pos.size else 1.0
+        vmax = float(pos.max()) if pos.size else 1.0
+        norm = LogNorm(vmin=vmin, vmax=vmax)
+    else:
+        norm = None
+
+    ax.imshow(
+        H, origin="lower",
+        extent=(xlo, xhi, ylo, yhi),
+        aspect="auto", cmap=cmap, norm=norm, interpolation="nearest",
+        alpha=0.5
+    )
+
+    # contour helpers (same levels/colors as your full function)
+    relative_levels = np.array([0.01, 0.05, 0.50, 0.95])
+
+    def _plot_pinn_2d_contour(i1b, j1b):
+        if PNet_XL_PATH is None: return
+        fn = f"{PNet_XL_PATH}/pre_compute/marginal_pdfpinn_x{i1b}_x{j1b}_t{t:.3f}.npz"
+        if os.path.isfile(fn):
+            data = np.load(fn)
+            pdf = data["pdf"]
+            Xg, Yg = data["X_grid"], data["Y_grid"]
+            pdf_max = float(np.max(pdf[pdf > 0])) if np.any(pdf > 0) else 1.0
+            levels = relative_levels * pdf_max
+            ax.contour(Xg, Yg, pdf, levels=levels, colors=[colors[1]], linewidths=1.0)
+
+    def _plot_gmm_contour(ws, mus, covs, color):
+        xs = np.linspace(xlo, xhi, 256)
+        ys = np.linspace(ylo, yhi, 256)
+        Xg, Yg = np.meshgrid(xs, ys, indexing="ij")
+        pts = np.column_stack([Xg.ravel(), Yg.ravel()])
+        pdf = np.zeros_like(Xg, dtype=float)
+        for c in range(ws.shape[0]):
+            mu_ij = mus[c, [i, j]]
+            cov_ij = covs[c][np.ix_([i, j], [i, j])]
+            pdf += ws[c] * multivariate_normal(mu_ij, cov_ij).pdf(pts).reshape(Xg.shape)
+        pdf_max = float(np.max(pdf)) if np.any(pdf > 0) else 1.0
+        levels = relative_levels * pdf_max
+        ax.contour(Xg, Yg, pdf, levels=levels, colors=[color], linewidths=1.0)
+
+    # PINN 2D
+    _plot_pinn_2d_contour(i+1, j+1)
+
+    # p_net_gmm_N1
+    if p_net_gmm_N1 is not None:
+        ws, mus, covs = p_net_gmm_N1.weights_means_covs_at(t)
+        _plot_gmm_contour(ws.detach().cpu().numpy(),
+                          mus.detach().cpu().numpy(),
+                          covs.detach().cpu().numpy(),
+                          colors[0])
+
+    # p_net_gmm
+    if p_net_gmm is not None:
+        ws, mus, covs = p_net_gmm.weights_means_covs_at(t)
+        _plot_gmm_contour(ws.detach().cpu().numpy(),
+                          mus.detach().cpu().numpy(),
+                          covs.detach().cpu().numpy(),
+                          colors[0])
+
+    # linear prop (Gaussian)
+    if data_lp is not None:
+        _, _, mu6, P6 = data_lp.get(t)
+        ws = np.array([1.0])
+        mus = np.array([mu6])
+        covs = np.array([P6])
+        _plot_gmm_contour(ws, mus, covs, colors[3])
+
+    # UT (Gaussian)
+    if data_ut is not None:
+        _, _, mu6, P6 = data_ut.get(t)
+        ws = np.array([1.0])
+        mus = np.array([mu6])
+        covs = np.array([P6])
+        _plot_gmm_contour(ws, mus, covs, colors[4])
+
+    # external GMM provider (same color as UT in your full code)
+    if data_gmm is not None:
+        _, ws, mus, covs = data_gmm.get(t)
+        _plot_gmm_contour(ws, mus, covs, colors[5])
+
+    ax.set_xlabel(labels[i]); ax.set_ylabel(labels[j])
+    ax.set_xlim(xlo, xhi); ax.set_ylim(ylo, yhi)
+    return fig, ax
+
+
+def plot_pdf_metrics(metrics):    
+    set_publication_plot_style()
+
+    # metric 1
+    plt.figure()
+    print(metrics["t"])
+    plt.plot(metrics["t"], metrics["rel_error_lp"], color=colors[3],   label="LP")
+    plt.plot(metrics["t"], metrics["rel_error_ut"], color=colors[4],   label="UT")
+    plt.plot(metrics["t"], metrics["rel_error_gmm"], color=colors[5],   label="GMM")
+    plt.plot(metrics["t"], metrics["rel_error_pinn"], color=colors[1], label="PINN-MLP")
+    # all_zeros = not np.any(metrics["B1_pinn"])
+    # if(all_zeros is False):
+    #     plt.fill_between(
+    #         metrics["t"],
+    #         metrics["rel_error_pinn"],
+    #         metrics["B1_pinn"],
+    #         color=colors[1],
+    #         alpha=0.2,
+    #         label="PINN Error Bound"
+    #     )
+    plt.plot(metrics["t"], metrics["rel_error_pinngmm"], color=colors[0], label="PINN-GMM")
+    # all_zeros = not np.any(metrics["B1_pinngmm"])
+    # if(all_zeros is False):
+    #     plt.fill_between(
+    #         metrics["t"],
+    #         metrics["rel_error_pinngmm"],
+    #         metrics["B1_pinngmm"],
+    #         color=colors[0],
+    #         alpha=0.2,
+    #         label="PINN-GMM Error Bound"
+    #     )
+    plt.legend(loc="upper left", ncol=2)
+    plt.xlabel("t")
+    plt.ylabel("norm. worst error %")
+    plt.grid(True)
+
+    # metric 2
+    plt.figure()
+    plt.plot(metrics["t"], metrics["tv_lp"], color=colors[3],   label="LP")
+    plt.plot(metrics["t"], metrics["tv_ut"], color=colors[4],   label="UT")
+    plt.plot(metrics["t"], metrics["tv_gmm"], color=colors[5],   label="GMM")
+    plt.plot(metrics["t"], metrics["tv_pinn"], color=colors[1], label="PINN-MLP")
+    plt.plot(metrics["t"], metrics["tv_pinngmm"], color=colors[0], label="PINN-GMM")
+    plt.legend(loc="upper left", ncol=2)
+    plt.xlabel("t")
+    plt.ylabel("total variation %")
+    plt.grid(True)
 
     # metric 3: negative log liklihood (general KL)
     plt.figure()
     print(metrics["t"])
     print(metrics["g_kl_pinn"])
-    plt.plot(metrics["t"], metrics["g_kl_lp"], color=colors[1],   label="LP")
-    plt.plot(metrics["t"], metrics["g_kl_ut"], color=colors[2],   label="UT")
-    plt.plot(metrics["t"], metrics["g_kl_gmm"], color=colors[3],   label="GMM")
-    # plt.plot(metrics["t"], metrics["g_kl_pinn"], color=colors[-1], label="PINN-MLP")
+    plt.plot(metrics["t"], metrics["g_kl_lp"], color=colors[3], label="GA")
+    plt.plot(metrics["t"], metrics["g_kl_ut"], color=colors[4], label="UT")
+    plt.plot(metrics["t"], metrics["g_kl_gmm"], color=colors[5], label="GMM")
+    plt.plot(metrics["t"], metrics["g_kl_pinn"], color=colors[1], label="PINN-MLP")
     plt.plot(metrics["t"], metrics["g_kl_pinngmm"], color=colors[0], label="PINN-GMM")
     # plt.plot(metrics["t"], metrics["g_kl_pinngmm(uniform)"], color=colors[0], linestyle=":", label="PINN-GMM (uniform)")
     # plt.plot(metrics["t"], metrics["g_kl_pinngmm(no-imp)"], color=colors[0], linestyle="--", label="PINN-GMM (uniform + p0)")
@@ -317,10 +588,10 @@ def plot_pdf_metrics(metrics):
     plt.show()
 
 
-### helper
+# --- Helper functions ---
 
 
-def p_normal(x, mean, cov):
+def _p_normal(x, mean, cov):
     """
     x is numpy array of shape (N x X_dim), N is the sample size
     """
@@ -332,7 +603,7 @@ def p_normal(x, mean, cov):
     return pdf_eval.reshape(-1,)
 
 
-def set_axis_limits_with_buffer(ax, xlim, ylim, buffer_frac=0.05):
+def _set_axis_limits_with_buffer(ax, xlim, ylim, buffer_frac=0.05):
     """
     Set axis limits with a relative buffer.
 
@@ -356,419 +627,3 @@ def set_axis_limits_with_buffer(ax, xlim, ylim, buffer_frac=0.05):
 
     ax.set_xlim(xlo - xbuf, xhi + xbuf)
     ax.set_ylim(ylo - ybuf, yhi + ybuf)
-
-
-##### Obsolete Below #####
-
-
-def _integrate_out_others(pdf: np.ndarray, axes_coords: Sequence[np.ndarray], keep_axis: int) -> Tuple[np.ndarray, np.ndarray]:
-    """Integrate a 6-D PDF over all axes except keep_axis using trapezoids (non-uniform grids OK)."""
-    f = np.asarray(pdf, dtype=float)
-    for ax in sorted([i for i in range(f.ndim) if i != keep_axis], reverse=True):
-        f = np.trapz(f, x=np.asarray(axes_coords[ax], dtype=float), axis=ax)
-    return np.asarray(axes_coords[keep_axis], dtype=float), f
-
-
-def compute_marginals_over_time(
-    times: np.ndarray,
-    data_dir: str = "data/1e+5",
-    grid_dir: str = "data/grids",
-    axes_files: Sequence[str] = ("x1s.npy","x2s.npy","x3s.npy","x4s.npy","x5s.npy","x6s.npy"),
-    keep_axis: int = 0,
-    filename_fmt: str = "pdf_t{:.3f}.npy",
-):
-    """Return x1 grid, kept times (filtered to existing files), and M[:, j]=p(x1|t_j)."""
-    times = np.asarray(times, dtype=float).ravel()
-
-    # load grids
-    axes = [np.load(os.path.join(grid_dir, fn)) for fn in axes_files]
-    x_keep = np.asarray(axes[keep_axis], dtype=float)
-
-    # filter to times with existing files
-    file_exists = np.array([os.path.isfile(os.path.join(data_dir, filename_fmt.format(t))) for t in times], dtype=bool)
-    times_kept = times[file_exists]
-    if times_kept.size == 0:
-        raise FileNotFoundError(f"No matching files in '{data_dir}' using format '{filename_fmt}'")
-    print(times_kept)
-
-    # preallocate
-    M = np.empty((x_keep.size, times_kept.size), dtype=float)
-
-    # process each snapshot
-    for j, t in enumerate(times_kept):
-        fpath = os.path.join(data_dir, filename_fmt.format(t))
-        f = np.load(fpath)
-        if f.ndim != 6:
-            raise ValueError(f"{fpath} is not 6-D (got {f.ndim})")
-        # shape checks
-        for i in range(6):
-            if f.shape[i] != axes[i].size:
-                raise ValueError(f"Shape mismatch at axis {i}: pdf {f.shape[i]} vs axis {axes[i].size} in {fpath}")
-
-        # if clip_negatives:
-        #     f = np.clip(f, 0.0, None)
-        # # normalize full 6-D snapshot
-        # g = f.copy()
-        # for ax in reversed(range(6)):
-        #     g = np.trapz(g, x=np.asarray(axes[ax], dtype=float), axis=ax)
-        # Z = float(g)
-        # if not np.isfinite(Z) or Z <= 0:
-        #     raise ValueError(f"Non-positive/invalid total mass in {fpath}")
-        # f /= Z
-
-        # marginal on keep_axis
-        xk, mk = _integrate_out_others(f, axes, keep_axis)
-        # mk = np.clip(mk, 0.0, None)
-        # # ensure each marginal integrates to ~1 over xk
-        area = np.trapz(mk, x=xk)
-        print("[check] pdf total: ", t, area)
-        if area > 0 and np.isfinite(area):
-            mk /= area
-
-        M[:, j] = mk
-
-    return x_keep, times_kept, M
-
-# ---------- plotting ----------
-def plot_time_curves_3d(x_components, constants, data1, data2=None, p_init=None, title="Marginal p(x1|t): curves (no interpolation)"):
-    """
-    Plot one 3D curve per time: (x1, t_fixed, p(x1|t_fixed)).
-    No faces between times -> no interpolation across time.
-    """
-    set_publication_plot_style()
-
-    # pick a seaborn color palette
-    colors = sns.color_palette("tab10")
-
-    fig = plt.figure(figsize=(10, 8))
-    ax = fig.add_subplot(111, projection="3d")
-
-    # --- first dataset ---
-    x_keep = data1["x"]; times = data1["times"]; M = data1["M"]
-    for j, t in enumerate(times):
-        color = colors[j % len(colors)]
-        ax.plot(np.full_like(x_keep, t), x_keep, M[:, j],
-                color="blue", linestyle="--")
-        if abs(t) < 1e-5 and p_init is not None:
-                p_init_mc_marginal = M[:, j]
-                pdf_func = multivariate_normal(
-                    mean=constants.N_MEAN_I[x_components-1],
-                    cov=constants.N_COV_I[x_components-1, x_components-1])
-                p_init_analy_marginal = pdf_func.pdf(x_keep).astype(x_keep.dtype)
-                rel_acc = (np.max(np.abs(p_init_mc_marginal - p_init_analy_marginal))
-                          / np.max(np.abs(p_init_analy_marginal)))
-                print(f"[check] rel. accuracy of PINN   (marginal to x{x_components:1d}) "
-                      f"--> the deviation between p(t0) PINN and p(t0): {100.0*rel_acc:.2f} %")
-
-    # --- second dataset ---
-    if data2 is not None:
-        x_keep = data2["x"]; times = data2["times"]; M = data2["M"]
-        for j, t in enumerate(times):
-            color = colors[j % len(colors)]
-            ax.plot(np.full_like(x_keep, t), x_keep, M[:, j],
-                    color="black", linestyle="-", marker="o", markersize=3)
-            if abs(t) < 1e-5 and p_init is not None:
-                p_init_mc_marginal = M[:, j]
-                pdf_func = multivariate_normal(
-                    mean=constants.N_MEAN_I[x_components-1],
-                    cov=constants.N_COV_I[x_components-1, x_components-1])
-                p_init_analy_marginal = pdf_func.pdf(x_keep).astype(x_keep.dtype)
-                rel_acc = (np.max(np.abs(p_init_mc_marginal - p_init_analy_marginal))
-                          / np.max(np.abs(p_init_analy_marginal)))
-                print(f"[check] rel. accuracy of MC   (marginal to x{x_components:1d}) "
-                      f"--> the deviation between p(t0) MC and p(t0): {100.0*rel_acc:.2f} %")
-                ax.plot(np.full_like(x_keep, t), x_keep, p_init_analy_marginal, lw=2.0, color="green", linestyle=":")
-
-    # labels — add padding to avoid collisions with tick labels
-    ax.set_xlabel(r"$t/T$", labelpad=8)
-    ax.set_ylabel(r"$x$" + str(x_components), labelpad=10)
-    ax.set_zlabel(r"$p(x$" + str(x_components) + r"$,t)$", labelpad=8)
-
-    # give tick labels a bit of breathing room
-    ax.tick_params(axis='x', pad=2)
-    ax.tick_params(axis='y', pad=2)
-    ax.tick_params(axis='z', pad=2)
-
-    ax.view_init(elev=25, azim=-60)
-
-    # legend
-    legend_elements = [
-        Line2D([0], [0], color="blue", linestyle="--", label=r"$\hat{p}$"),
-        Line2D([0], [0], color="black", linestyle="-", marker="o", markersize=3, label=r"$p_{MC}$"),
-        Line2D([0], [0], color="green", linestyle=":",  lw=2.0, label=r"$p(t_0)$ (analy.)")
-    ]
-    ax.legend(handles=legend_elements, loc="upper left", frameon=True)
-
-    # No tight_layout with big pad — constrained_layout already did the work.
-    # For export: trim outer whitespace aggressively.
-    savepath = f"figs/Case_6D_marginal_PDF{int(x_components)}.pdf"
-    plt.savefig(savepath, format="pdf", dpi=300,
-                bbox_inches='tight', pad_inches=0.5)
-    plt.close()
-
-
-def _iter_blocks(sizes, block_sizes):
-    """
-    Yield 6D index ranges for blocks covering a cartesian grid:
-    sizes = [N1,...,N6], block_sizes = [B1,...,B6]
-    Yields tuples of slices (s1,e1),...,(s6,e6) with e exclusive.
-    """
-    ranges = [ [(s, min(s+b, n)) for s in range(0, n, b)]
-               for n, b in zip(sizes, block_sizes) ]
-    for a1,b1 in ranges[0]:
-        for a2,b2 in ranges[1]:
-            for a3,b3 in ranges[2]:
-                for a4,b4 in ranges[3]:
-                    for a5,b5 in ranges[4]:
-                        for a6,b6 in ranges[5]:
-                            yield (a1,b1,a2,b2,a3,b3,a4,b4,a5,b5,a6,b6)
-
-def _make_block_points(x_axes, idxs, device, dtype):
-    """
-    Build a small block’s grid points (K,6) tensor from per-axis arrays and index ranges.
-    """
-    a1,b1,a2,b2,a3,b3,a4,b4,a5,b5,a6,b6 = idxs
-    Xs = [x_axes[0][a1:b1], x_axes[1][a2:b2], x_axes[2][a3:b3],
-          x_axes[3][a4:b4], x_axes[4][a5:b5], x_axes[5][a6:b6]]
-    g = np.meshgrid(*Xs, indexing="ij")  # small block only
-    pts = np.stack([gi.ravel() for gi in g], axis=1)  # (K,6) in numpy
-    return torch.as_tensor(pts, dtype=dtype, device=device), [b1-a1,b2-a2,b3-a3,b4-a4,b5-a5,b6-a6]
-
-def _open_memmap_npy(path, shape, dtype=np.float32):
-    """
-    Create/overwrite a .npy file as a memmap so we can write slices incrementally.
-    """
-    from numpy.lib.format import open_memmap
-    # mode='w+' creates the file and allows writing
-    return open_memmap(path, mode='w+', dtype=dtype, shape=shape)
-
-# ---- main computation ----
-def precompute_pdf_init_streaming(constants, p_init, out_dir, dtype=np.float32,
-                             grid_dir="data/grids", block_target_points=1_000_000,
-                             inner_batch_points=500_000, device="cpu"):
-    """
-    Streams the 6D grid in blocks; for each time t in constants.T_PRIME_SPAN:
-      - writes pdf_t_<t>.npy incrementally using a memmap
-    No full 30^6 grid or pdf is ever kept in memory.
-    """
-    os.makedirs(out_dir, exist_ok=True)
-
-    # load per-axis grids (numpy 1D arrays)
-    x_axes = [
-        np.load(os.path.join(grid_dir, f"x{i}s.npy")).astype(dtype, copy=False)
-        for i in range(1, 7)
-    ]
-    sizes = [len(a) for a in x_axes]  # expect [30,30,30,30,30,30]
-
-    # choose roughly cubic block sizes so product ~ block_target_points (cap by axis length)
-    root = max(1, round(block_target_points ** (1/6)))
-    block_sizes = [min(n, root) for n in sizes]
-    # nudge down if still too big
-    def prod(v):
-        r = 1
-        for x in v: r *= x
-        return r
-    while prod(block_sizes) > block_target_points:
-        i = int(np.argmax(block_sizes))
-        block_sizes[i] = max(1, block_sizes[i]-1)
-
-    print(f"[info] grid sizes: {sizes}, block sizes: {block_sizes} (~{prod(block_sizes):,} pts/block)")
-
-    t = 0.0
-    out_path = os.path.join(out_dir, f"pdf_analy_t{t:.3f}.npy")
-    print(f"[time {t:.3f}] writing -> {out_path}")
-
-    # create memmap file for this time
-    pdf_mm = _open_memmap_npy(out_path, shape=tuple(sizes), dtype=dtype)
-
-    with torch.no_grad():
-        # constant time tensor will be built per inner batch
-        for idxs in _iter_blocks(sizes, block_sizes):
-            # build block points on device
-            pts_block, blk_shape = _make_block_points(x_axes, idxs, device, torch.float32)
-            K = pts_block.shape[0]
-
-            # process this block in inner batches to fit GPU/CPU memory
-            vals_list = []
-            for start in range(0, K, inner_batch_points):
-                end = min(start + inner_batch_points, K)
-                x_batch = pts_block[start:end, :6]
-                x_batch_numpy = x_batch.detach().cpu().numpy()
-                # # time batch: (B,1)
-                # t_batch = torch.full((x_batch.shape[0], 1), fill_value=t,
-                #                     dtype=torch.float32, device=device)
-
-                y = p_init(constants, x_batch_numpy)           # (B,1) or (B,)
-                vals_list.append(y)
-
-            vals = np.concatenate(vals_list, axis=0)   # (K,)
-            vals = vals.reshape(blk_shape)             # reshape to local block shape
-
-            # write into proper slice of the memmap
-            a1,b1,a2,b2,a3,b3,a4,b4,a5,b5,a6,b6 = idxs
-            pdf_mm[a1:b1, a2:b2, a3:b3, a4:b4, a5:b5, a6:b6] = vals
-    # ensure data is flushed
-    del pdf_mm
-    print("done.")
-
-
-def precompute_pdf_streaming(constants, p_net, out_dir, dtype=np.float32,
-                             grid_dir="data/grids", block_target_points=1_000_000,
-                             inner_batch_points=500_000, device="cpu"):
-    """
-    Streams the 6D grid in blocks; for each time t in constants.T_PRIME_SPAN:
-      - writes pdf_t_<t>.npy incrementally using a memmap
-    No full 30^6 grid or pdf is ever kept in memory.
-    """
-    os.makedirs(out_dir, exist_ok=True)
-
-    # load per-axis grids (numpy 1D arrays)
-    x_axes = [
-        np.load(os.path.join(grid_dir, f"x{i}s.npy")).astype(dtype, copy=False)
-        for i in range(1, 7)
-    ]
-    sizes = [len(a) for a in x_axes]  # expect [30,30,30,30,30,30]
-
-    # choose roughly cubic block sizes so product ~ block_target_points (cap by axis length)
-    root = max(1, round(block_target_points ** (1/6)))
-    block_sizes = [min(n, root) for n in sizes]
-    # nudge down if still too big
-    def prod(v):
-        r = 1
-        for x in v: r *= x
-        return r
-    while prod(block_sizes) > block_target_points:
-        i = int(np.argmax(block_sizes))
-        block_sizes[i] = max(1, block_sizes[i]-1)
-
-    print(f"[info] grid sizes: {sizes}, block sizes: {block_sizes} (~{prod(block_sizes):,} pts/block)")
-
-    # set model to eval/device
-    p_net.eval().to(device)
-
-    # iterate all requested times
-    for t in constants.T_PRIME_SPAN:
-        out_path = os.path.join(out_dir, f"pdf_t{t:.3f}.npy")
-        print(f"[time {t:.3f}] writing -> {out_path}")
-
-        # create memmap file for this time
-        pdf_mm = _open_memmap_npy(out_path, shape=tuple(sizes), dtype=dtype)
-
-        with torch.no_grad():
-            # constant time tensor will be built per inner batch
-            for idxs in _iter_blocks(sizes, block_sizes):
-                # build block points on device
-                pts_block, blk_shape = _make_block_points(x_axes, idxs, device, torch.float32)
-                K = pts_block.shape[0]
-
-                # process this block in inner batches to fit GPU/CPU memory
-                vals_list = []
-                for start in range(0, K, inner_batch_points):
-                    end = min(start + inner_batch_points, K)
-                    x_batch = pts_block[start:end, :6]
-                    # time batch: (B,1)
-                    t_batch = torch.full((x_batch.shape[0], 1), fill_value=t,
-                                        dtype=torch.float32, device=device)
-
-                    y = p_net(x_batch, t_batch)           # (B,1) or (B,)
-                    vals_list.append(y.detach().flatten().cpu().numpy())
-
-                vals = np.concatenate(vals_list, axis=0)   # (K,)
-                vals = vals.reshape(blk_shape)             # reshape to local block shape
-
-                # write into proper slice of the memmap
-                a1,b1,a2,b2,a3,b3,a4,b4,a5,b5,a6,b6 = idxs
-                pdf_mm[a1:b1, a2:b2, a3:b3, a4:b4, a5:b5, a6:b6] = vals
-
-        # ensure data is flushed
-        del pdf_mm
-        print(f"[time {t:.3f}] done.")
-
-
-def precompute_error(constants, p_net, out_dir, mc_dir, dtype=np.float32):
-    for t in constants.T_PRIME_SPAN:
-        mc_path = mc_dir+f"pdf_t{t:.3f}.npy"
-        pdf_mc = np.load(mc_path)
-        pinn_path = os.path.join(out_dir, f"pdf_t{t:.3f}.npy")
-        pdf_pinn = np.load(pinn_path)
-        e1 = pdf_mc - pdf_pinn
-        del pdf_mc
-        del pdf_pinn
-        e1_path = os.path.join(out_dir, f"e1_t{t:.3f}.npy")
-        np.save(e1_path, e1)
-        del e1
-        print(f"[time {t:.3f}] writing -> {e1_path}")
-
-
-def precompute_e1hat_streaming(constants, net, out_dir, dtype=np.float32,
-                             grid_dir="data/grids", block_target_points=1_000_000,
-                             inner_batch_points=500_000, device="cpu"):
-    """
-    Streams the 6D grid in blocks; for each time t in constants.T_PRIME_SPAN:
-      - writes pdf_t_<t>.npy incrementally using a memmap
-    No full 30^6 grid or pdf is ever kept in memory.
-    """
-    os.makedirs(out_dir, exist_ok=True)
-
-    # load per-axis grids (numpy 1D arrays)
-    x_axes = [
-        np.load(os.path.join(grid_dir, f"x{i}s.npy")).astype(dtype, copy=False)
-        for i in range(1, 7)
-    ]
-    sizes = [len(a) for a in x_axes]  # expect [30,30,30,30,30,30]
-
-    # choose roughly cubic block sizes so product ~ block_target_points (cap by axis length)
-    root = max(1, round(block_target_points ** (1/6)))
-    block_sizes = [min(n, root) for n in sizes]
-    # nudge down if still too big
-    def prod(v):
-        r = 1
-        for x in v: r *= x
-        return r
-    while prod(block_sizes) > block_target_points:
-        i = int(np.argmax(block_sizes))
-        block_sizes[i] = max(1, block_sizes[i]-1)
-
-    print(f"[info] grid sizes: {sizes}, block sizes: {block_sizes} (~{prod(block_sizes):,} pts/block)")
-
-    # set model to eval/device
-    net.eval().to(device)
-
-    # iterate all requested times
-    for t in constants.T_PRIME_SPAN:
-        if(abs(t) < 1e-5):
-            out_path = os.path.join(out_dir, f"e1hat_t{t:.3f}.npy")
-            print(f"[time {t:.3f}] writing -> {out_path}")
-
-            # create memmap file for this time
-            pdf_mm = _open_memmap_npy(out_path, shape=tuple(sizes), dtype=dtype)
-
-            with torch.no_grad():
-                # constant time tensor will be built per inner batch
-                for idxs in _iter_blocks(sizes, block_sizes):
-                    # build block points on device
-                    pts_block, blk_shape = _make_block_points(x_axes, idxs, device, torch.float32)
-                    K = pts_block.shape[0]
-
-                    # process this block in inner batches to fit GPU/CPU memory
-                    vals_list = []
-                    for start in range(0, K, inner_batch_points):
-                        end = min(start + inner_batch_points, K)
-                        x_batch = pts_block[start:end, :6]
-                        # time batch: (B,1)
-                        t_batch = torch.full((x_batch.shape[0], 1), fill_value=t,
-                                            dtype=torch.float32, device=device)
-
-                        y = net(x_batch, t_batch)           # (B,1) or (B,)
-                        vals_list.append(y.detach().flatten().cpu().numpy())
-
-                    vals = np.concatenate(vals_list, axis=0)   # (K,)
-                    vals = vals.reshape(blk_shape)             # reshape to local block shape
-
-                    # write into proper slice of the memmap
-                    a1,b1,a2,b2,a3,b3,a4,b4,a5,b5,a6,b6 = idxs
-                    pdf_mm[a1:b1, a2:b2, a3:b3, a4:b4, a5:b5, a6:b6] = vals
-
-            # ensure data is flushed
-            del pdf_mm
-            print(f"[time {t:.3f}] done.")

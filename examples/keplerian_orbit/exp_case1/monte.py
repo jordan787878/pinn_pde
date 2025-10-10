@@ -1,21 +1,42 @@
 import numpy as np
 import torch
+import argparse
 import os
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 import time
-from typing import Sequence, Tuple, List
 from scipy.stats import norm
-from scipy.interpolate import griddata
 from exp_utilities.constants import Case1_6D_Constants
+
 import sys
-sys.path.insert(0, '../utilities/')
-from _General.astrodynamics import *
+from pathlib import Path
+ROOT = Path(__file__).resolve().parents[1]   # repo_root
+sys.path.insert(0, str(ROOT))
+from utilities._General.astrodynamics import *
+from utilities._General.classic_gmm import GMMWhitenedModel, fit_classic_gmm, plot_1d_true_vs_gmm_marginals_model
+
+
+GENERATE = False
+SHOW_PLOT = False
 
 
 GRID_FOLDER = "data/grids/"
 constants = Case1_6D_Constants()
 np.random.seed(0)
+
+
+def parse_args():
+    def _str2bool(v: str) -> bool:
+        if isinstance(v, bool):
+            return v
+        v = v.lower()
+        if v in ("y", "yes", "t", "true", "1", "on"):  return True
+        if v in ("n", "no", "f", "false", "0", "off"): return False
+        raise argparse.ArgumentTypeError("Expected a boolean value.")
+    p = argparse.ArgumentParser()
+    p.add_argument("--generate",   type=_str2bool, default=GENERATE,  help="Generate data (True/False)")
+    p.add_argument("--showplot",   type=_str2bool, default=SHOW_PLOT, help="Show plots (True/False)")
+    return p.parse_args()
 
 
 def p_init(constants, x):
@@ -262,6 +283,28 @@ def generate_data(data_folder, N_samples):
             np.save(data_folder+"/mc_time.npy", np.array(mc_time))
 
 
+def generate_true_pdf_by_fitting_gmm(constants, data_folder):
+    if(GENERATE):
+        T_monte = np.round(constants.T_PRIME_SPAN, 2)
+        mu_whiten = constants.N_MEAN_I
+        cov_whiten = constants.N_COV_I
+        for t_prime in T_monte:
+            Xsamples = np.load(data_folder + "xsamples_t{:.3f}.npy".format(t_prime))  # saved as float64
+            fit_classic_gmm(t_prime, Xsamples, mu_whiten, cov_whiten, data_folder)
+
+
+def show_fitted_gmm(constants, data_folder):
+    if(SHOW_PLOT):
+        T_monte = np.round(constants.T_PRIME_SPAN, 2)
+        T_show = [T_monte[0], T_monte[-1]]
+        for t_prime in T_show:
+            Xsamples = np.load(data_folder + "xsamples_t{:.3f}.npy".format(t_prime))  # saved as float64
+            model = GMMWhitenedModel.load(data_folder+"gmm_whitened_t{:.2f}.npz".format(t_prime))
+            title="True vs GMM (1D marginals) at t:{:.2f}".format(t_prime)
+            plot_1d_true_vs_gmm_marginals_model(model, Xsamples, title=title)
+        plt.show()
+
+
 def print_mc_time(mc_folder):
     mc_time = np.load(mc_folder+"mc_time.npy") # print mc computation time
     print("[check] MC computation time: ", mc_time)
@@ -279,8 +322,14 @@ def main():
 
     # --- Generate dataset: each consists of 10e+6 samples ---
     data_folder = "dataset"
-    generate_data(data_folder, 1000000)
+    # generate_data(data_folder, 1000000)
+
+    generate_true_pdf_by_fitting_gmm(constants, "dataset/run1/")
+    show_fitted_gmm(constants, "dataset/run1/")
     
 
 if __name__ == "__main__":
+    args = parse_args()
+    GENERATE  = bool(args.generate)
+    SHOW_PLOT = bool(args.showplot)
     main()
