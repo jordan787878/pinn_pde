@@ -10,24 +10,11 @@ from matplotlib import cm
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes, mark_inset
 from matplotlib.patches import Rectangle
 
-
-def set_publication_plot_style(font_family='Times New Roman', font_size=18):
-    """
-    Update Matplotlib settings to use publication-ready fonts.
-
-    Parameters:
-        font_family (str): Font family to be used for all texts.
-        font_size (int): Base font size for labels, titles, legends, and ticks.
-    """
-    plt.rcParams['font.family'] = font_family
-    plt.rcParams['font.size'] = font_size
-    plt.rcParams['axes.labelsize'] = font_size
-    plt.rcParams['axes.titlesize'] = font_size
-    plt.rcParams['xtick.labelsize'] = font_size
-    plt.rcParams['ytick.labelsize'] = font_size
-    plt.rcParams['legend.fontsize'] = font_size
-    plt.rcParams['figure.titlesize'] = font_size
-    plt.rcParams['lines.linewidth'] = 2
+import sys
+from pathlib import Path
+ROOT = Path(__file__).resolve().parents[2]   # repo_root
+sys.path.insert(0, str(ROOT))
+from utilities._General.util import set_publication_plot_style, colors_6set
 
 
 def check_pdf_Nrphi(constants, mc_folder=None, p_net=None):
@@ -1647,14 +1634,12 @@ def plot_pdf_gmm_wrt_pinn(constants, p_net, p_gmm, target_r, target_phi, t, save
 def plot_pdf_metrics(metrics):
     set_publication_plot_style()
 
-    colors = sns.color_palette("husl", 5)
-
     plt.figure()
     print(metrics["t"])
-    plt.plot(metrics["t"], metrics["rel_error_lp"], color=colors[1],   label="LP")
-    plt.plot(metrics["t"], metrics["rel_error_ut"], color=colors[2],   label="UT")
-    plt.plot(metrics["t"], metrics["rel_error_gmm"], color=colors[3],   label="GMM")
-    plt.plot(metrics["t"], metrics["rel_error_pinn"], color=colors[-1], label="PINN-MLP")
+    plt.plot(metrics["t"], metrics["rel_error_lp"], color=colors_6set[3],   label="GA")
+    plt.plot(metrics["t"], metrics["rel_error_ut"], color=colors_6set[4],   label="UT")
+    plt.plot(metrics["t"], metrics["rel_error_gmm"], color=colors_6set[5],   label="GMM")
+    plt.plot(metrics["t"], metrics["rel_error_pinn"], color=colors_6set[1], label="PINN-MLP")
     # all_zeros = not np.any(metrics["B1_pinn"])
     # if(all_zeros is False):
     #     plt.fill_between(
@@ -1665,16 +1650,16 @@ def plot_pdf_metrics(metrics):
     #         alpha=0.2,
     #         label="PINN Error Bound"
     #     )
-    plt.plot(metrics["t"], metrics["rel_error_pinngmm"], color=colors[0], label="PINN-GMM")
+    plt.plot(metrics["t"], metrics["rel_error_pinngmm"], color=colors_6set[0], label="PINN-GMM")
     all_zeros = not np.any(metrics["B1_pinngmm"])
     if(all_zeros is False):
         plt.fill_between(
             metrics["t"],
             metrics["rel_error_pinngmm"],
             metrics["B1_pinngmm"],
-            color=colors[0],
+            color=colors_6set[0],
             alpha=0.2,
-            label="PINN-GMM Error Bound"
+            label="Error Bound"
         )
     plt.legend(loc="upper left", ncol=2)
     plt.xlabel("t")
@@ -1682,27 +1667,26 @@ def plot_pdf_metrics(metrics):
     plt.grid(True)
 
     plt.figure()
-    plt.plot(metrics["t"], metrics["tv_lp"], color=colors[1],   label="LP")
-    plt.plot(metrics["t"], metrics["tv_ut"], color=colors[2],   label="UT")
-    plt.plot(metrics["t"], metrics["tv_gmm"], color=colors[3],   label="GMM")
-    plt.plot(metrics["t"], metrics["tv_pinn"], color=colors[-1], label="PINN-MLP")
-    plt.plot(metrics["t"], metrics["tv_pinngmm"], color=colors[0], label="PINN-GMM")
+    plt.plot(metrics["t"], metrics["tv_lp"], color=colors_6set[3],   label="GA")
+    plt.plot(metrics["t"], metrics["tv_ut"], color=colors_6set[4],   label="UT")
+    plt.plot(metrics["t"], metrics["tv_gmm"], color=colors_6set[5],   label="GMM")
+    plt.plot(metrics["t"], metrics["tv_pinn"], color=colors_6set[1], label="PINN-MLP")
+    plt.plot(metrics["t"], metrics["tv_pinngmm"], color=colors_6set[0], label="PINN-GMM")
     plt.legend(loc="upper left", ncol=2)
     plt.xlabel("t")
     plt.ylabel("total variation %")
     plt.grid(True)
 
-    # # metric 3: negative log liklihood (relative KL)
-    # plt.figure()
-    # plt.plot(metrics["t"], metrics["g_kl_lp"], color=colors[1],   label="LP")
-    # plt.plot(metrics["t"], metrics["g_kl_ut"], color=colors[2],   label="UT")
-    # # plt.plot(metrics["t"], metrics["g_kl_gmm"], color=colors[3],   label="GMM")
-    # # plt.plot(metrics["t"], metrics["rel_kl_ut_alpha_0_1"], color=colors[2], marker="o", label=r"$p$ Unscent Trans. $(\alpha=0.1)$")
-    # plt.plot(metrics["t"], metrics["g_kl_pinn"], color=colors[-1], label="PINN-MLP")
-    # plt.plot(metrics["t"], metrics["g_kl_pinngmm"], color=colors[0], label="PINN-GMM")
-    # plt.legend()
-    # plt.xlabel("t")
-    # plt.ylabel("General KL")
-    # plt.grid(True)
+    # metric 3: negative log liklihood (relative KL)
+    plt.figure()
+    plt.plot(metrics["t"], metrics["g_kl_lp"], color=colors_6set[3],   label="GA")
+    plt.plot(metrics["t"], metrics["g_kl_ut"], color=colors_6set[4],   label="UT")
+    plt.plot(metrics["t"], metrics["g_kl_gmm"], color=colors_6set[5],   label="GMM")
+    plt.plot(metrics["t"], metrics["g_kl_pinn"], color=colors_6set[1], label="PINN-MLP")
+    plt.plot(metrics["t"], metrics["g_kl_pinngmm"], color=colors_6set[0], label="PINN-GMM")
+    plt.legend(loc="upper left", ncol=2)
+    plt.xlabel("t")
+    plt.ylabel("General KL")
+    plt.grid(True)
 
     plt.show()

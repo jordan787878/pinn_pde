@@ -7,33 +7,35 @@ from scipy.stats import multivariate_normal
 from monte import p_init, get_p_init_max, print_mc_time
 from exp_utilities.constants import Case2_4D_Constants
 from exp_utilities.plot_utilites import plot_pdf_metrics, plt
-# import utilities
+from run_baseline import SAVE_PATH_LINEAR_PROPAGATE, SAVE_PATH_UNSCENT_PROPAGATE, SAVE_PATH_GMM_PROPAGATE
+
 import sys
-sys.path.insert(0, '../utilities/')
-from _General.neuralnetworks import PNet, TimeToGMM6D_V0, E1Net, E1Net_XL, load_trained_model
-from _General.util import compute_volume, save_metrics_npz, load_metrics_npz
-from exp_utilities.classic_gmm import GMMWhitenedModel
-from functools import partial
-from baseline_methods import PropagationData, SAVE_PATH_LINEAR_PROPAGATE, SAVE_PATH_UNSCENT_PROPAGATE, SAVE_PATH_GMM_PROPAGATE
+from pathlib import Path
+ROOT = Path(__file__).resolve().parents[1]   # repo_root
+sys.path.insert(0, str(ROOT))
+from utilities._General.neuralnetworks import PNet, TimeToGMM6D_V0, E1Net, E1Net_XL, load_trained_model
+from utilities._General.util import compute_volume, save_metrics_npz, load_metrics_npz, p_total_variation
+from utilities._General.baseline_methods import PropagationData
+from utilities._General.classic_gmm import GMMWhitenedModel, make_gmm_pdf
+
+
 constants = Case2_4D_Constants()
 
 
 # --- globals (module scope) ---
 COMPUTE: bool = False
-NBATCH: int = 1000
-DATAMC: str = "data/Xsamples_1e+5_np64/"
-
-
-def _str2bool(v: str) -> bool:
-    if isinstance(v, bool):
-        return v
-    v = v.lower()
-    if v in ("y", "yes", "t", "true", "1", "on"):  return True
-    if v in ("n", "no", "f", "false", "0", "off"): return False
-    raise argparse.ArgumentTypeError("Expected a boolean value.")
+NBATCH: int = 2000
+DATAMC: str = "data/Xsamples_1e+6_np64/"
 
 
 def parse_args():
+    def _str2bool(v: str) -> bool:
+        if isinstance(v, bool):
+            return v
+        v = v.lower()
+        if v in ("y", "yes", "t", "true", "1", "on"):  return True
+        if v in ("n", "no", "f", "false", "0", "off"): return False
+        raise argparse.ArgumentTypeError("Expected a boolean value.")
     p = argparse.ArgumentParser()
     p.add_argument("--compute", type=_str2bool, default=COMPUTE,  help="Run compute stage (True/False)")
     p.add_argument("--Nbatch",  type=int, default=NBATCH,   help="Batch size (int)")
@@ -150,36 +152,93 @@ def p_rel_worst_error(p1, p2):
         return np.NaN
 
 
-def compute_and_update_metrics(metrics, pdf_eval=None, pdf_ref=None, key=None):
-    global constants
-    rel_error= p_rel_worst_error(pdf_eval, pdf_ref)
-    tv = p_total_variation(constants, pdf_eval, pdf_ref)
-    metrics["rel_error_"+key].append(rel_error)
-    metrics["tv_"+key].append(tv)
-    print(key, " - rel_error: {:.2f} %, tv: {:.2f} %".format(rel_error, tv))
-
-
 def compute_generalKL(t, X, p_data_normal=None, p_net=None, key=None):
     global constants
     eps = np.finfo(np.float32).tiny   # machine precision of np.float32 ≈ 1.175e-38
+    
     if(p_net is not None):
-        X_scaled = constants.scaled_x(X)
-        _x_tensor = torch.tensor(X_scaled, dtype=torch.float32, requires_grad=False)
+        _x_tensor = torch.tensor(X, dtype=torch.float32, requires_grad=False)
         _t = np.ones((len(_x_tensor), 1)) * t
         _t_tensor = torch.tensor(_t, dtype=torch.float32, requires_grad=False).view(-1,1)
-        pdf_eval = constants.SCALING_PDF * p_net(_x_tensor, _t_tensor).detach().cpu().numpy().reshape(-1,)
+        pdf_eval = p_net(_x_tensor, _t_tensor).detach().cpu().numpy().reshape(-1,)
+    
     if(p_data_normal is not None):
-        _, _, _mu, _cov = p_data_normal.get(t)
+        _, _w, _mu, _cov = p_data_normal.get(t)
         _mu = np.float32(_mu)
         _cov = np.float32(_cov)
-        pdf_eval = p_normal(X, _mu, _cov).reshape(-1,)
+        _pdf_func = make_gmm_pdf(_w, _mu, _cov)
+        pdf_eval = _pdf_func(X).reshape(-1,)
+    
     mask = pdf_eval >= eps
+    
     if np.any(mask):
         KL = np.mean(-np.log(pdf_eval[mask])).item()
     else:
         print("All pdf_lp values are below machine precision!")
         KL = np.NaN
+
     return KL
+
+
+def print_metrics_block(metrics, idx, colw=12, prec=6):
+    """
+    Print a fixed-width table block for time index `idx`.
+
+    Layout (same as before):
+      header: '=== t = ... ==='
+      rows:   LP, UT, GMM, PINN, PINN-GMM
+      cols:   rel(%), TV, gKL, B1(%)
+    """
+    t = float(metrics["t"][idx])
+
+    def get(key):
+        arr = metrics.get(key, None)
+        return None if arr is None or idx >= len(arr) else arr[idx]
+
+    def _fmt_num(x, width=colw, p=prec, suf=""):
+        # em-dash for missing / non-finite
+        if x is None or (isinstance(x, float) and not np.isfinite(x)):
+            return "—".rjust(width)
+        # try decreasing precision until it fits
+        pp = p
+        while pp >= 1:
+            s = f"{x:.{pp}g}{suf}"
+            if len(s) <= width:
+                return s.rjust(width)
+            pp -= 1
+        # last resort: hard cut (should rarely trigger)
+        return (f"{x:.1e}{suf}")[-width:].rjust(width)
+
+    # column headers (fixed widths)
+    name_w = 10
+    header = (
+        f"\n=== t = {t:.3f} ===\n"
+        f"{'Model':<{name_w}}"
+        f"{'rel(%)':>{colw}}"
+        f"{'TV (%)':>{colw}}"
+        f"{'gKL':>{colw}}"
+        f"{'B1 (%)':>{colw}}"
+    )
+    print(header)
+    print("-" * (name_w + 4*colw))
+
+    # rows in your preferred order
+    rows = [
+        ("LP",        get("rel_error_lp"),      get("tv_lp"),      get("g_kl_lp"),      None),
+        ("UT",        get("rel_error_ut"),      get("tv_ut"),      get("g_kl_ut"),      None),
+        ("GMM",       get("rel_error_gmm"),     get("tv_gmm"),     get("g_kl_gmm"),     None),
+        ("PINN",      get("rel_error_pinn"),    get("tv_pinn"),    get("g_kl_pinn"),    get("B1_pinn")),
+        ("PINN-GMM",  get("rel_error_pinngmm"), get("tv_pinngmm"), get("g_kl_pinngmm"), get("B1_pinngmm")),
+    ]
+
+    for name, rel, tv, gkl, b1 in rows:
+        print(
+            f"{name:<{name_w}}"
+            f"{_fmt_num(rel)}"
+            f"{_fmt_num(tv)}"
+            f"{_fmt_num(gkl)}"
+            f"{_fmt_num(b1)}"
+        )
 
 
 def compute_pdf_variations(N_batch = 10, p_net=None, p_net_gmm=None, data_lp=None, data_ut=None, data_gmm=None,
@@ -198,11 +257,11 @@ def compute_pdf_variations(N_batch = 10, p_net=None, p_net_gmm=None, data_lp=Non
         "tv_pinn": [],
         "tv_pinngmm": [],
 
-        # "g_kl_lp": [],
-        # "g_kl_ut": [],
-        # # "g_kl_gmm": [],
-        # "g_kl_pinn": [],
-        # "g_kl_pinngmm": [],
+        "g_kl_lp": [],
+        "g_kl_ut": [],
+        "g_kl_gmm": [],
+        "g_kl_pinn": [],
+        "g_kl_pinngmm": [],
 
         # "B1_pinn": [],
         "B1_pinngmm": [],
@@ -216,26 +275,50 @@ def compute_pdf_variations(N_batch = 10, p_net=None, p_net_gmm=None, data_lp=Non
         print("Time: {:.4f}".format(t))
         pdf_ref_max = 0.0
         delta_p_t0 = 0.0
+
         delta_p_pinn_max = 0.0
         tv_pinn = 0.0
-        gkl_pinn = 0.0
+        g_kl_pinn = 0.0
+
         delta_p_pinngmm_max = 0.0
         delta_p_pinngmm_max_analy_t0 = 0.0
         tv_pinngmm = 0.0
-        gkl_pinngmm = 0.0
+        g_kl_pinngmm = 0.0
+
         delta_p_lp_max = 0.0
         tv_lp = 0.0
-        gkl_lp = 0.0
+        g_kl_lp = 0.0
+
         delta_p_ut_max = 0.0
         tv_ut = 0.0
-        gkl_ut = 0.0
+        g_kl_ut = 0.0
+
         delta_p_gmm_max = 0.0
         tv_gmm = 0.0
-        # gkl_gmm = 0.0
+        g_kl_gmm = 0.0
+
         # additional data for pinn
         e1_pinn_max = 0.0
         Z_pinn = 0.0
         e1_pinngmm_max = 0.0
+
+        # --- compute general KL without normalizing constant ---
+        filename_mc = DATAMC+"X_t{:.2f}.npy".format(t)
+        X_mc = np.load(filename_mc)
+        if(data_lp is not None):
+            g_kl_lp = compute_generalKL(t, X_mc, p_data_normal=data_lp)
+        
+        if(data_ut is not None):
+            g_kl_ut = compute_generalKL(t, X_mc, p_data_normal=data_ut)
+
+        if(data_gmm is not None):
+            g_kl_gmm = compute_generalKL(t, X_mc, p_data_normal=data_gmm)
+
+        if(p_net is not None):
+            g_kl_pinn = compute_generalKL(t, X_mc, p_net=p_net)
+
+        if(p_net_gmm is not None):
+            g_kl_pinngmm = compute_generalKL(t, X_mc, p_net=p_net_gmm)
 
         # --- choose the source 'true' gmm pdf ---
         gmm = GMMWhitenedModel.load(DATAMC+"gmm_whitened_t{:.2f}.npz".format(t))
@@ -274,12 +357,12 @@ def compute_pdf_variations(N_batch = 10, p_net=None, p_net_gmm=None, data_lp=Non
             pdf_pinn = p_net_gmm(_x_tensor, _t_tensor).detach().cpu().numpy().reshape(-1,)
             _delta_p = np.max(np.abs(pdf_pinn - pdf_ref)).item()
             delta_p_pinngmm_max = max(delta_p_pinngmm_max, _delta_p)
-            if(idx == 0):
-                pdf_t0 = p_normal(X, constants.N_MEAN_I, constants.N_COV_I).reshape(-1,)
-                _delta_p = np.max(np.abs(pdf_pinn - pdf_t0)).item()
-                delta_p_pinngmm_max_analy_t0 = max(delta_p_pinngmm_max_analy_t0, _delta_p)
-                _delta_p = np.max(np.abs(pdf_ref - pdf_t0)).item()
-                delta_p_t0 = max(delta_p_t0, _delta_p)
+            # if(idx == 0):
+            #     pdf_t0 = p_normal(X, constants.N_MEAN_I, constants.N_COV_I).reshape(-1,)
+            #     _delta_p = np.max(np.abs(pdf_pinn - pdf_t0)).item()
+            #     delta_p_pinngmm_max_analy_t0 = max(delta_p_pinngmm_max_analy_t0, _delta_p)
+            #     _delta_p = np.max(np.abs(pdf_ref - pdf_t0)).item()
+            #     delta_p_t0 = max(delta_p_t0, _delta_p)
 
             _tv = p_total_variation(constants, pdf_pinn, pdf_ref)
             tv_pinngmm += _tv/N_batch
@@ -335,45 +418,36 @@ def compute_pdf_variations(N_batch = 10, p_net=None, p_net_gmm=None, data_lp=Non
             del pdf_gmm
         
         # After all batch
-        gkl_pinn += Z_pinn
-        gkl_pinngmm += 1
-        gkl_lp += 1
-        gkl_ut += 1
+        # gkl_pinn += Z_pinn
+        # gkl_pinngmm += 1
+        # gkl_lp += 1
+        # gkl_ut += 1
         # gkl_gmm += 1
+
         metrics["rel_error_pinn"].append(100.*delta_p_pinn_max/pdf_ref_max)
         metrics["tv_pinn"].append(tv_pinn)
-        # metrics["g_kl_pinn"].append(gkl_pinn)
+        metrics["g_kl_pinn"].append(g_kl_pinn)
+
         metrics["rel_error_pinngmm"].append(100.*delta_p_pinngmm_max/pdf_ref_max)
         metrics["tv_pinngmm"].append(tv_pinngmm)
-        # metrics["g_kl_pinngmm"].append(gkl_pinngmm)
+        metrics["g_kl_pinngmm"].append(g_kl_pinngmm)
+
         metrics["rel_error_lp"].append(100.*delta_p_lp_max/pdf_ref_max)
         metrics["tv_lp"].append(tv_lp)
-        # metrics["g_kl_lp"].append(gkl_lp)
+        metrics["g_kl_lp"].append(g_kl_lp)
+
         metrics["rel_error_ut"].append(100.*delta_p_ut_max/pdf_ref_max)
         metrics["tv_ut"].append(tv_ut)
-        # metrics["g_kl_ut"].append(gkl_ut)
+        metrics["g_kl_ut"].append(g_kl_ut)
+
         metrics["rel_error_gmm"].append(100.*delta_p_gmm_max/pdf_ref_max)
         metrics["tv_gmm"].append(tv_gmm)
-        # metrics["g_kl_gmm"].append(gkl_gmm)
+        metrics["g_kl_gmm"].append(g_kl_gmm)
+
         # metrics["B1_pinn"].append(100. * 2. * e1_pinn_max/pdf_ref_max)
         metrics["B1_pinngmm"].append(100. * 2. * e1_pinngmm_max/pdf_ref_max)
-        
-        # print("[check]: max e1: {:.4f}, max e1 pinn: {:.4f}".format(
-        #     delta_p_pinn_max, e1_pinn_max))
-        # print("[check] Z_pinn: {:.4f}".format(Z_pinn))
-        if(idx == 0):
-            print("[check]: at t0, max e1 (REF vs ANALY): {:.4f},    max e1 (PINN vs ANALY): {:.4f}".format(
-                delta_p_t0, delta_p_pinngmm_max_analy_t0))
-        print("[info]: max e1 (PINN vs REF): {:.4f},    max e1hat (PINN APPROX): {:.4f}".format(
-                delta_p_pinngmm_max, e1_pinngmm_max))
-        # # print(metrics["rel_error_gmm"])
-        # # print(metrics["rel_error_pinn"])
-        print(metrics["rel_error_pinngmm"])
-        # print(metrics["tv_gmm"])
-        # print(metrics["tv_pinn"])
-        print(metrics["tv_pinngmm"])
-        # print(metrics["g_kl_pinn"])
-        # print(metrics["g_kl_pinngmm"])
+
+        print_metrics_block(metrics, idx)
 
     # --- Save computed metrics ---
     save_metrics_npz(metrics, save_path)
