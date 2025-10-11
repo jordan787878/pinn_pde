@@ -1,16 +1,8 @@
 import numpy as np
 import torch
-import matplotlib.pyplot as plt
-import os
+from pathlib import Path
 from tqdm import tqdm
-
-# Assuming the following imports and setup are the same as your original code
-from monte import p_init_scaled
-from exp_utilities.constants import Case1_6D_Constants_Equin
-from _General.neuralnetworks import PNet_Scaled, PNet_XL, load_trained_model
-
-# --- Initial setup (as in your original script) ---
-constants = Case1_6D_Constants_Equin()
+from compare_methods import config_trained_models, load_model_by_key, constants
 device = "cpu"
 
 
@@ -204,34 +196,35 @@ def marginal_pinn_1d(
     return x_vals, pdf_vals
 
 
-
 # --- Example Usage ---
 if __name__ == '__main__':
-    OUTPUT_PATH = "output/v0_scaled_T0.3"
+    # select the pinn
+    key = "PINN-XL"
 
-    # p_net = PNet_Scaled(constants, input_feature=7)
-    p_net = PNet_XL(constants, input_feature=7)
-    _x_at_mean = constants.N_MEAN_I.copy()
-    p_max = p_init_scaled(constants, _x_at_mean.reshape(-1, 6)).item()
-    scale_torch = torch.tensor(p_max, dtype=torch.float32)
-    p_net.scale = scale_torch
-    # load p_net
-    p_net = load_trained_model(p_net, path=OUTPUT_PATH+"/p_net.pth"); p_net.eval()
+    # setup trained models dictionary
+    trained_models = config_trained_models()
+
+    # load pinn-mlp
+    p_net, _ , _ = load_model_by_key(trained_models, key=key)
+
+    p = Path(f"{trained_models[key]}/precompute")
+    p.mkdir(parents=False, exist_ok=True)
 
     # marginalize 2D: select x_coords
-    x_coords = (4, 5)
+    x_coords = (1, 6)
     plot_axes = tuple(c - 1 for c in x_coords)
     for t in [constants.T_PRIME_SPAN[-1]]:
-        save_path = f"{OUTPUT_PATH}/pre_compute/marginal_pdfpinn_x{x_coords[0]}_x{x_coords[1]}_t{t:.3f}.npz"
+        save_path = f"{trained_models[key]}/precompute/marginal_pdfpinn_x{x_coords[0]}_x{x_coords[1]}_t{t:.3f}.npz"
         X_grid, Y_grid, pdf_values = marginal_pinn(
-            p_net, t, constants, #x1_vals_scaled, x6_vals_scaled,
+            p_net, t, constants,
             plot_axes,
+            # num_linespace=16, num_samples_mc=100,
             save_path=save_path
         )
 
     # Marginalize 1D: select x_coord
-    # x_coord = 6
-    # plot_axs = x_coord-1
-    # for t in [constants.T_PRIME_SPAN[-1]]:
-    #     save_path = f"{OUTPUT_PATH}/pre_compute/marginal_pdfpinn_x{x_coord}_t{t:.3f}.npz"
-    #     marginal_pinn_1d(p_net, t, constants, plot_axs, save_path=save_path)
+    x_coord = 6
+    plot_axs = x_coord-1
+    for t in [constants.T_PRIME_SPAN[-1]]:
+        save_path = f"{trained_models[key]}/precompute/marginal_pdfpinn_x{x_coord}_t{t:.3f}.npz"
+        marginal_pinn_1d(p_net, t, constants, plot_axs, save_path=save_path)

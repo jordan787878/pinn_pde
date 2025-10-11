@@ -3,19 +3,21 @@ Train PINN e1
 """
 import numpy as np
 import torch
-from tqdm import tqdm
 import argparse
-import copy
+from tqdm import tqdm
+from functools import partial
 from monte import p_init_scaled, p_sol
-from train_p import diff_opt_scaled, MC_FOLDER
-# from exp_utilities.plot_util import precompute_e1hat_streaming
-from exp_utilities.plot_util import plot_e1_pinn_validation
+from train_p import diff_opt_scaled
+# from exp_utilities.plot_util import plot_e1_pinn_validation
 from exp_utilities.constants import Case1_6D_Constants_Equin
-# import utilities
+
 import sys
-sys.path.insert(0, '../utilities/')
-from _General.neuralnetworks import PNet, PNet_XL, E1Net_Equin, E1Net_Scaled, E1Net_XL, load_trained_model, init_weights_He
-import _General.train_pinn as PINN
+from pathlib import Path
+ROOT = Path(__file__).resolve().parents[1]   # repo_root
+sys.path.insert(0, str(ROOT))
+from utilities._General.neuralnetworks import PNet_XL, ENet_XL, TimeToGMM6D_V0, load_trained_model
+import utilities._General.train_pinn as PINN
+from utilities._General.util import RunLogger, save_config_human
 
 
 TRAIN_FLAG = False
@@ -72,143 +74,131 @@ def pre_compute_validation_data(p_net, e1_net, OUTPUT_PATH, PRE_COMPUTE_FLAG=Fal
     np.savez(OUTPUT_PATH+"/data_e1_pinn_max.npz", times=t_check, N_trials=N_trials, values=data_e1_pinn_max)
             
 
-def main():
+def quick_training_check(e1_net, p_net, N_samples=100000):
+    """
+    checking joint PDF against p_sol
+    """
     global constants
-    OUTPUT_PATH = "output/v0_scaled_T0.3"
+
+    # x points
+    _x = np.column_stack([
+        np.random.uniform(constants.X1_RANGE[0], constants.X1_RANGE[1], N_samples),
+        np.random.uniform(constants.X2_RANGE[0], constants.X2_RANGE[1], N_samples),
+        np.random.uniform(constants.X3_RANGE[0], constants.X3_RANGE[1], N_samples),
+        np.random.uniform(constants.X4_RANGE[0], constants.X4_RANGE[1], N_samples),
+        np.random.uniform(constants.X5_RANGE[0], constants.X5_RANGE[1], N_samples),
+        np.random.uniform(constants.X6_RANGE[0], constants.X6_RANGE[1], N_samples),
+    ])
+    # scaled x points
+    _x_scaled = constants.scaled_x(_x)
+
+    # # checking in scaled x
+    # for t in constants.T_PRIME_SPAN:
+    #     pdf_sol_scaled = p_sol_scaled(constants, _x_scaled, t).reshape(-1,)
+
+    #     _x_tensor = torch.tensor(_x_scaled, dtype=torch.float32, requires_grad=True)
+    #     _t = np.ones((len(_x_tensor), 1)) * t
+    #     _t_tensor = torch.tensor(_t, dtype=torch.float32, requires_grad=True).view(-1,1)
+    #     pdf_pinn = p_net(_x_tensor, _t_tensor).detach().cpu().numpy().reshape(-1,)
+    #     rel_error = np.max(np.abs(pdf_sol_scaled-pdf_pinn)) / np.max(pdf_sol_scaled) # NOTE this metric needs sufficient large samples.
+    #     print(100. *rel_error.item())
     
-    # --- Load pinn p_net and compute normalize scale ---
-    p_net = PNet_XL(constants, input_feature=7)
+    # checking in x
+    for t in constants.T_PRIME_SPAN:
+        pdf_sol = p_sol(constants, _x, t).reshape(-1,)
+        p_max = np.max(pdf_sol).item()
+
+        _x_tensor = torch.tensor(_x_scaled, dtype=torch.float32, requires_grad=True)
+        _t = np.ones((len(_x_tensor), 1)) * t
+        _t_tensor = torch.tensor(_t, dtype=torch.float32, requires_grad=True).view(-1,1)
+        pdf_pinn_scaled = p_net(_x_tensor, _t_tensor).detach().cpu().numpy().reshape(-1,)
+        pdf_pinn = pdf_pinn_scaled.copy() * constants.SCALING_PDF
+        del pdf_pinn_scaled
+        error_pinn_scaled = e1_net(_x_tensor, _t_tensor).detach().cpu().numpy().reshape(-1,)
+        error_pinn = error_pinn_scaled.copy() * constants.SCALING_PDF
+        del error_pinn_scaled
+
+        norm_worst_error = 100. * np.max(np.abs(pdf_sol-pdf_pinn)).item() / p_max # NOTE this metric needs sufficient large samples.
+        norm_pinn_worst_error = 100. * np.max(np.abs(error_pinn)).item() / p_max
+        print("[check] norm. worst error (%): ", norm_worst_error, norm_pinn_worst_error)
+
+
+def config_training_ENet_XL(constants, fac=0.02, option=""):
+    # Scale of p0 max
     _x_at_mean = constants.N_MEAN_I.copy()
-    p_max = p_init_scaled(constants, _x_at_mean.reshape(-1, 6)).item()
-    scale = p_max
+    scale = p_init_scaled(constants, _x_at_mean.reshape(-1, 6)).item()
     scale_torch = torch.tensor(scale, dtype=torch.float32)
-    p_net.scale = scale_torch
-    print("p net scale: ", p_net.scale)
-    p_net = load_trained_model(p_net, path=OUTPUT_PATH+"/p_net.pth"); p_net.eval()
 
-    # --- Init e1 pinn ---
-    torch.manual_seed(0); np.random.seed(0) # set a fixed seed for reproducibility
-    
-    # e1_net = E1Net_Scaled(constants)
-    # e1_net.apply(init_weights_He)
-    # e1_net.scale = scale_torch*0.05 # assuming 10% percent error
-    # e1_net.set_p_net(copy.deepcopy(p_net))
-    # print("[check] e1_net scale: ", e1_net.scale)
-
-    # --- "output/v0_scaled_T0.3(E1Net_XL) ---"
-    # e1_net = E1Net_XL(constants, p_net=copy.deepcopy(p_net), scale=scale_torch, input_feature=7)
-    # e1_net.normalize = scale_torch*0.02
-    # print("[check] e1_net scale: {:.5f}, normalize: {:.5f}".format(
-    #     e1_net.scale, e1_net.normalize))
-    
-    # NOTE: test if e1_net needs p_net directly?
-    e1_net = E1Net_XL(constants, scale=scale_torch, normalize=scale_torch*0.02)
-    print("[check] e1_net scale: {:.5f}, normalize: {:.5f}".format(
-        e1_net.scale, e1_net.normalize))
-
-    configurations = {
-        "ic_fcn": p_init_scaled,
-        "diff_opt_fcn": diff_opt_scaled,
-        "save_path": OUTPUT_PATH+"/e1_net.pth",
-        "save_path_inter": OUTPUT_PATH+"/e1_net_",
+    configuration = {
+        "constants": constants,
+        "iterations": 40000,
+        "sample_ic": constants.sample_init_points_scaled,
+        "sample_res": constants.sample_res_points_scaled_uniform,
+        "p_ic": p_init_scaled,
+        "res_func": diff_opt_scaled,
+        "res_weight": 1.0,
+        "save_path": "output/" + option,
+        "beta_incre": 0.02,
+        "fac": fac,
+        "loss_normalize": scale_torch*fac,
+        "reg_tv": None,
+        "training_fcn": PINN.train_pinn_error_expcase1equin,
+        "N0_samples_initial": 4000,
+        "Nr_samples_initial": 4000,
+        "iterations_per_decay" : 1000,
+        "N_RAR": 30000,
+        "N_RAR_TO_ADD": 32,
+        "N_RAR_CAP": 4000,
+        "iterations_per_rar": 100,
+        "RAR_eps": 0.01,
+        "bias_fac": 0.
     }
 
-    # --- Train e1 pinn over first time seq ---
+    if option == "pinn-xl":
+        e1_net = ENet_XL(constants, scale=scale_torch, normalize=fac*scale_torch, input_feature=7)
+        p_net = PNet_XL(constants, scale=scale_torch, input_feature=7)
+        p_net = load_trained_model(p_net, path=configuration["save_path"]+"/p_net.pth"); p_net.eval()
+
+    if option == "pinn-gmm":
+        e1_net = ENet_XL(constants, scale=scale_torch, normalize=fac*scale_torch, input_feature=7)
+        p_net = TimeToGMM6D_V0(constants, K=11)
+        p_net = load_trained_model(p_net, path=configuration["save_path"]+"/p_net.pth"); p_net.eval()
+
+    if option == "pinn-gmm_bias-test":
+        e1_net = ENet_XL(constants, scale=scale_torch, normalize=fac*scale_torch, input_feature=7)
+        p_net = TimeToGMM6D_V0(constants, K=11)
+        p_net = load_trained_model(p_net, path=configuration["save_path"]+"/p_net.pth"); p_net.eval()
+        configuration["bias_fac"] = 0.5
+
+    return configuration, p_net, e1_net
+
+
+def main():
+    global constants #; constants.test_printout()
+
+    # Set a fixed seed for reproducibility
+    torch.manual_seed(0); np.random.seed(0)
+
+    # Setup config
+    fac = 0.02
+    config, p_net, e1_net = config_training_ENet_XL(constants, fac=fac, option="pinn-gmm")
+    save_config_human(config, model_name="e1_net")
+
+    # Train & log
     if(TRAIN_FLAG):
-        networks = (p_net, e1_net)
-        PINN.train_pinn_e1_v0_scaled_improved(constants, networks, configurations, 
-                              iterations=50000, save_model=True, beta_incre=0.05)
+        log_file = Path(config["save_path"]) / "e1_net-train.log"
+        with RunLogger(log_file, tee=True):      # tee=False if you want file-only
+            networks = (p_net, e1_net)
+            config["training_fcn"](networks, config)
     
-    # --- Load best model after training ---
-    e1_net = load_trained_model(e1_net, path=configurations["save_path"]); e1_net.eval()
-
-    # # --- Pre-computation ---
-    PRE_COMPUTE_FLAG = False
-    # pre_compute_validation_data(p_net, e1_net, OUTPUT_PATH, PRE_COMPUTE_FLAG)
-
-    # data_e1_max = np.load(OUTPUT_PATH+"/data_e1_max.npz")
-    # data_e1_pinn_max = np.load(OUTPUT_PATH+"/data_e1_pinn_max.npz")
-    # plot_e1_pinn_validation(data_e1_max, data_e1_pinn_max)
-
-    # 1) compute e1_init from analytical p_init
-    # p_init_analy = np.load("data/1e+6/pdf_analy_t0.000.npy")
-    # p_init_pinn = np.load(OUTPUT_PATH+"/pdf_t0.000.npy")
-    # e1_init_analy = p_init_analy - p_init_pinn
-    # print(np.max(np.abs(e1_init_analy)))
-    # np.save(OUTPUT_PATH+"/e1_analy_t0.000.npy", e1_init_analy)
-
-    # 2) compute e1 over time using MC data
-    # precompute_error(constants, p_net, OUTPUT_PATH, MC_FOLDER)
-
-    # 3) marginalize e1 
-    # for i in range(1, 2): # pre-compute marginal pdf over time
-    #     x, t_kept, M = compute_marginals_over_time(
-    #         times=constants.T_PRIME_SPAN,   # time array you mentioned
-    #         data_dir=OUTPUT_PATH,
-    #         grid_dir="data/grids",
-    #         keep_axis=(i-1),                # first dimension
-    #         filename_fmt="e1_t{:.3f}.npy",
-    #     )
-    #     np.savez(OUTPUT_PATH+"/pre_compute/marginal_e1_x"+str(i)+"_t_M.npz", x=x, times=t_kept, M=M)
-    
-    # 4) compute e1hat over time using pinn
-    # precompute_e1hat_streaming(constants, e1_net, OUTPUT_PATH)
-
-    # 5) marginalize e1hat
-    # for i in range(1,2):
-    #     x, t_kept, M = compute_marginals_over_time(
-    #         times=constants.T_PRIME_SPAN,   # time array you mentioned
-    #         data_dir=OUTPUT_PATH,
-    #         grid_dir="data/grids",
-    #         keep_axis=(i-1),                # first dimension
-    #         filename_fmt="e1hat_t{:.3f}.npy",
-    #     )
-    #     np.savez(OUTPUT_PATH+"/pre_compute/marginal_e1hat_x"+str(i)+"_t_M.npz", x=x, times=t_kept, M=M)
-
-    # --- Plot ---
-    # for i in range(1, 7):
-    #     data_mc = np.load(OUTPUT_PATH+"/pre_compute/marginal_e1_x"+str(i)+"_t_M.npz")
-    #     # data_pinn = np.load(PNET_PATH+"/pre_compute/marginal_p_x"+str(i)+"_t_M.npz")
-    #     plot_time_curves_3d(data_mc, title="Marginal e1(x"+str(i)+"|t): curves")
-
-    # for i in range(1, 2):
-    #     data_mc = np.load(OUTPUT_PATH+"/pre_compute/marginal_e1_x"+str(i)+"_t_M.npz")
-    #     data_pinn = np.load(OUTPUT_PATH+"/pre_compute/marginal_e1hat_x"+str(i)+"_t_M.npz")
-    #     plot_time_curves_3d(data_pinn, data2=data_mc, title="Marginal error(x"+str(i)+"|t): curves")
-
-    # --- Print ---
-    # check MC accuracy by comparing e1_analy_t0.000.npy vs e1_t0.000.npy
-    # e1_init_analy = np.load(OUTPUT_PATH+"/e1_analy_t0.000.npy")
-    # e1_init_mc = np.load(OUTPUT_PATH+"/e1_t0.000.npy")
-    # rel_acc = np.max(np.abs(e1_init_mc - e1_init_analy))/np.max(np.abs(e1_init_analy))
-    # del e1_init_analy; del e1_init_mc
-    # print("[check] rel. accuracy of MC at t0: ", rel_acc.item())
-
-    # --- Check how e1hat approximate e1 ---
-    # for t in constants.T_PRIME_SPAN:
-    #     e1_mc = np.load(OUTPUT_PATH+"/e1_t{:.3f}".format(t)+".npy")
-    #     e1_pinn = np.load(OUTPUT_PATH+"/e1hat_t{:.3f}".format(t)+".npy")
-    #     alpha = np.max(np.abs(e1_mc - e1_pinn))/np.max(np.abs(e1_pinn))
-    #     print("[check] t: {:.2f}, alpha: {:.3f}, e1hat*: {:.3f}, e1*: {:.4f}".format(
-    #         t, alpha, np.max(np.abs(e1_pinn)), np.max(np.abs(e1_mc))))
-    #     if(np.abs(t) < 1e-5):
-    #         e1_init_analy = np.load(OUTPUT_PATH+"/e1_analy_t0.000.npy")
-    #         alpha = np.max(np.abs(e1_init_analy - e1_pinn))/np.max(np.abs(e1_pinn))
-    #         print("[check] analy. t: {:.2f}, alpha: {:.3f}, e1hat*: {:.3f}, e1*: {:.4f}".format(
-    #         t, alpha, np.max(np.abs(e1_pinn)), np.max(np.abs(e1_init_analy))))
-    #         del e1_init_analy
-    #     del e1_mc; del e1_pinn
-
-    # --- Post-process ---
-    # for t_prime in constants.T_PRIME_SPAN:
-    #     check_error_flatten(constants, p_init, e1_net, p_net, t_prime, MC_FOLDER)
-    # visual_e1hat_training(constants, (p_net, e1_net, e1_net), MC_FOLDER,
-    #                       save_plot_path="figs/case2_e1net.png")
+    # Load the best network after training
+    e1_net = load_trained_model(e1_net, path=config["save_path"]+"/e1_net.pth"); e1_net.eval()
+    # quick_training_check(e1_net, p_net)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Pass 1 to train, 0 to use the pre-trained models")
-    parser.add_argument("--train", type=int, required=True, help="train bool")
+    parser.add_argument("--train", type=int, default=False, help="train bool")
     args = parser.parse_args()
     TRAIN_FLAG = args.train
     main()

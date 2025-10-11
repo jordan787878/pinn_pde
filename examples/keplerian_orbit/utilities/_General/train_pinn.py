@@ -3,6 +3,7 @@ os.environ["CUDA_VISIBLE_DEVICES"] = ""   # hides all GPUs from CUDA apps
 import numpy as np
 import torch
 import time
+from pathlib import Path
 from torch.distributions import Categorical, MultivariateNormal
 torch.set_default_device("cpu")
 device = torch.device("cpu")
@@ -10,83 +11,9 @@ device = torch.device("cpu")
 
 # --- helper functions ---
 
-def _enable_grad(x: torch.Tensor, t: torch.Tensor):
-    """Return fresh tensors with requires_grad=True (no graph history kept)."""
-    xg = x.detach().clone().requires_grad_(True)
-    tg = t.detach().clone().requires_grad_(True)
-    return xg, tg
-
-
 @torch.no_grad()
-def sample_from_model_gmm_xspace(p_net, constants, N_samples, device, t_sampler="uniform", t_values=None):
-    """
-    Draw N_samples from the current model p_theta(x,t) in **x-space**.
-    Requires the model to provide either:
-      - vectorized params(tau) -> (means_z, Ls_z, logw), then z->x mapping, or
-      - a batched version of weights_means_covs_at; if not available, we roll our own.
-
-    Returns:
-      x_gmm: (N_samples, D)
-      t_gmm: (N_samples, 1)
-    """
-    D = int(len(constants.N_MEAN_I))
-    T_end = float(constants.T_PRIME_SPAN[-1])
-    N = int(N_samples)
-
-    # ---- sample times ----
-    if t_sampler == "uniform" or t_values is None:
-        t = torch.rand(N, 1, device=device, dtype=torch.float32) * T_end
-    else:
-        # t_values provided as (N,1)
-        t = t_values.to(device=device, dtype=torch.float32)
-        if t.ndim == 1: t = t.view(-1, 1)
-        if t.shape[0] != N:
-            # simple fallback if sizes mismatch
-            t = torch.rand(N, 1, device=device, dtype=torch.float32) * T_end
-
-    # ---- get mixture parameters in x-space for each t ----
-    # If your class has a vectorized "params" method, use it directly for speed.
-    # Otherwise, do a small batch loop over unique time minibatches.
-    # Here we try to use a vectorized path first; if missing, fall back to loop.
-    x_list = []
-
-    tau = t / p_net.T_end
-    means_z, Ls_z, logw = p_net.params(tau)                     # (N,K,D), (N,K,D,D), (N,K)
-    means_x, Ls_x = p_net._zparams_to_xparams(tau, means_z, Ls_z)    # x-space
-    # print(logw)
-    weights = logw.exp()                                         # (N,K)
-    # print(weights)
-    K = weights.shape[1]
-    # sample component per row
-    comp = Categorical(weights).sample()                         # (N,)
-    # fancy gather means_x, Ls_x by comp
-    inds = comp.view(-1, 1, 1).expand(-1, 1, D)
-    mu_sel = means_x.gather(1, inds).squeeze(1)                  # (N,D)
-
-    indsL = comp.view(-1, 1, 1, 1).expand(-1, 1, D, D)
-    L_sel = Ls_x.gather(1, indsL).squeeze(1)                     # (N,D,D)
-
-    # sample from selected Gaussians
-    eps = torch.randn(N, D, device=device, dtype=mu_sel.dtype)   # (N,D)
-    x = mu_sel + torch.matmul(L_sel, eps.unsqueeze(-1)).squeeze(-1)
-    x_list.append(x)
-    # except Exception:
-    #     # Fallback: per-sample (slower but robust)
-    #     x = torch.empty(N, D, device=device, dtype=torch.float32)
-    #     for i in range(N):
-    #         wi, mui, covi = p_net.weights_means_covs_at(float(t[i,0].item()))
-    #         wi = wi.to(device=device); mui = mui.to(device=device); covi = covi.to(device=device)
-    #         comp = torch.multinomial(wi, 1).item()
-    #         mvn = MultivariateNormal(mui[comp], covariance_matrix=covi[comp])
-    #         x[i] = mvn.sample()
-    #     x_list.append(x)
-
-    x_gmm = torch.cat(x_list, dim=0)
-    return x_gmm, t
-
-
-@torch.no_grad()
-def sample_gmm_per_time_multi(p_net, constants, N_times, S_per_time, device, return_reshaped=False):
+def sample_gmm_per_time_multi(p_net, constants, N_times, S_per_time, device, 
+                              return_reshaped=False, only_t0=False):
     """
     For each time t_i ~ Uniform[0, T_end), draw S_per_time samples from the *mixture* p(x | t_i).
     Vectorized: runs the model once on the N_times unique t_i, then repeats parameters S times.
@@ -101,8 +28,12 @@ def sample_gmm_per_time_multi(p_net, constants, N_times, S_per_time, device, ret
     T_end = float(getattr(p_net, "T_end", float(constants.T_PRIME_SPAN[-1])))
 
     # 1) Sample unique times and normalize
-    t   = torch.rand(N, 1, device=device, dtype=torch.float32) * T_end
-    tau = t / T_end
+    if only_t0:
+        t   = torch.zeros(N, 1, device=device, dtype=torch.float32)
+        tau = torch.zeros_like(t)                     # normalized time = 0
+    else:
+        t   = torch.rand(N, 1, device=device, dtype=torch.float32) * T_end
+        tau = t / T_end
 
     # 2) Get GMM params for the N unique times (vectorized)
     #    means_x: (N,K,D), Ls_x: (N,K,D,D), logw: (N,K)
@@ -138,7 +69,7 @@ def rar_candidate_pool_mixed(p_net,
                              constants,
                              N_cand,
                              x_range,
-                             alpha_model=0.5,
+                             bias_fac=0.0,
                              sample_uniform_fn=None,   # function that returns (x_u, t_u) uniform
                              device="cpu",
                              only_t0=False):
@@ -151,7 +82,7 @@ def rar_candidate_pool_mixed(p_net,
       x_cand: (N_cand, D)
       t_cand: (N_cand, 1)
     """
-    N_model = int(round(alpha_model * N_cand))
+    N_model = int(round(bias_fac * N_cand))
     N_uni   = max(0, N_cand - N_model)
 
     xs, ts = [], []
@@ -161,12 +92,14 @@ def rar_candidate_pool_mixed(p_net,
         x_u, t_u = sample_uniform_fn(N_uni)            # expect tensors on CPU/GPU already
         xs.append(x_u.to(device))
         ts.append(t_u.to(device))
+        # print("sample from uniform")
 
     if N_model > 0:
         # x_m, t_m = sample_from_model_gmm_xspace(p_net, constants, N_model, device=device)
         S_per_time = 100
         N_model_time = int(N_model / S_per_time)
-        x_m, t_m = sample_gmm_per_time_multi(p_net, constants, N_model_time, S_per_time, device=device)
+        x_m, t_m = sample_gmm_per_time_multi(p_net, constants, N_model_time, S_per_time, 
+            device=device, only_t0=only_t0)
         
         lo = x_range[:, 0].view(1, -1)            # (1, D) for broadcasting
         hi = x_range[:, 1].view(1, -1)            # (1, D)
@@ -183,11 +116,11 @@ def rar_candidate_pool_mixed(p_net,
 
         xs.append(x_sat)
         ts.append(t_m)
+        # print("sample from gmm")
 
     x_cand = torch.cat(xs, dim=0)
     t_cand = torch.cat(ts, dim=0)
-    if(only_t0):
-        t_cand = t_cand * 0.0
+    # np.testing.assert_equal(x_cand.shape[0], N_cand)
 
     # Random shuffle to avoid ordering bias
     perm = torch.randperm(x_cand.shape[0], device=device)
@@ -214,14 +147,14 @@ def rar_append_with_cap(x_buf, t_buf, x_new, t_new, cap: int):
 #################
 
 
-def train_pinn_sol_base(constants, p_net, configurations, iterations=50000, save_model=False, beta_incre=0.02):
+def train_pinn_sol_base(constants, p_net, configs, iterations=50000, save_model=False, beta_incre=0.02):
     mse_cost_function = torch.nn.MSELoss()
     optimizer = torch.optim.Adam(p_net.parameters(), lr=1e-3)
     scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.95)
-    p_init = configurations["ic_fcn"]
-    diff_opt = configurations["diff_opt_fcn"]
-    pnet_path = configurations["pnet_path"]
-    pnet_path_inter = configurations["pnet_path_inter"]
+    p_init = configs["ic_fcn"]
+    diff_opt = configs["diff_opt_fcn"]
+    pnet_path = configs["pnet_path"]
+    pnet_path_inter = configs["pnet_path_inter"]
 
     min_loss = np.inf
     iterations_per_decay = 1000
@@ -327,22 +260,22 @@ def train_pinn_sol_base(constants, p_net, configurations, iterations=50000, save
             print("[info] training epoch: ", epoch)
 
 
-def train_pinn_sol_v0(p_net, configuration):
+def train_pinn_sol_v0(p_net, config):
     """
     Improved training loop for the physics-informed neural network.
     """
     p_net.train()
     p_net.to(device)
-    constants = configuration["constants"]
-    iterations = configuration["iterations"]
-    train_helper_sample_ic = configuration["sample_ic"]
-    train_helper_sample_res = configuration["sample_res"]
-    p_init = configuration["p_ic"]
-    res_func = configuration["res_func"]
-    res_weight = configuration["res_weight"]
-    save_path = configuration["save_path"]
-    beta_incre = configuration["beta_incre"]
-    normalize = configuration["loss_normalize"]
+    constants = config["constants"]
+    iterations = config["iterations"]
+    train_helper_sample_ic = config["sample_ic"]
+    train_helper_sample_res = config["sample_res"]
+    p_init = config["p_ic"]
+    res_func = config["res_func"]
+    res_weight = config["res_weight"]
+    save_path = config["save_path"]
+    beta_incre = config["beta_incre"]
+    normalize = config["loss_normalize"]
 
     mse_cost_function = torch.nn.MSELoss()
     optimizer = torch.optim.Adam(p_net.parameters(), lr=1e-3)
@@ -448,7 +381,7 @@ def train_pinn_sol_v0(p_net, configuration):
                 print(f"... RAR Res, Max Res error: {max_error_res:.4f}")
 
 
-def train_pinngmm_sol_v0(p_net, configuration):
+def train_pinngmm_sol_v0(p_net, config):
     """
     Improved training loop for the physics-informed neural network.
     NOTE: [make sampling method consistent test]
@@ -460,19 +393,19 @@ def train_pinngmm_sol_v0(p_net, configuration):
     p_net.to(device)
     x_dim = p_net.D
 
-    constants = configuration["constants"]
-    iterations = configuration["iterations"]
-    train_helper_sample_ic = configuration["sample_ic"]
-    # train_helper_sample_res = configuration["sample_res"] # NOTE: change this
-    train_helper_sample_res_uniform = configuration["sample_res_uniform"]
-    p_init = configuration["p_ic"]
-    res_func = configuration["res_func"]
-    res_weight = configuration["res_weight"]
-    save_path = configuration["save_path"]
-    beta_incre = configuration["beta_incre"]
-    normalize = configuration["loss_normalize"]
-    reg_tv = configuration["reg_tv"]
-    increased_icsamples_factor = int(configuration.get("increased_icsamples_factor", 1))
+    constants = config["constants"]
+    iterations = config["iterations"]
+    train_helper_sample_ic = config["sample_ic"]
+    # train_helper_sample_res = config["sample_res"] # NOTE: change this
+    train_helper_sample_res_uniform = config["sample_res_uniform"]
+    p_init = config["p_ic"]
+    res_func = config["res_func"]
+    res_weight = config["res_weight"]
+    save_path = config["save_path"]
+    beta_incre = config["beta_incre"]
+    normalize = config["loss_normalize"]
+    reg_tv = config["reg_tv"]
+    increased_icsamples_factor = int(config.get("increased_icsamples_factor", 1))
     
     mse_cost_function = torch.nn.MSELoss()
     # optimizer = torch.optim.Adam(p_net.parameters(), lr=1e-3)
@@ -500,7 +433,7 @@ def train_pinngmm_sol_v0(p_net, configuration):
     Nr_samples_initial = 2000
     print("[check] number of IC samples: ", N0_samples_initial )
     N_RAR = 30000
-    alpha_model = 0.50  # tune 0.2–0.8
+    bias_fac = 0.50  # tune 0.2–0.8
     x_bc_rar = torch.empty(0, x_dim, device=device)
     t_bc_rar = torch.empty(0, 1, device=device)
     x_res_rar = torch.empty(0, x_dim, device=device)
@@ -519,7 +452,7 @@ def train_pinngmm_sol_v0(p_net, configuration):
         x_bc_new, t_bc_new = rar_candidate_pool_mixed(
                 p_net, constants, N_cand=N0_samples_initial, 
                 x_range = constants.NX_RANGE,
-                alpha_model=alpha_model,
+                bias_fac=bias_fac,
                 sample_uniform_fn=sample_uniform_fn, 
                 device=device,
                 only_t0=True)
@@ -528,7 +461,7 @@ def train_pinngmm_sol_v0(p_net, configuration):
         _x_res_new, _t_res_new = rar_candidate_pool_mixed(
                 p_net, constants, N_cand=Nr_samples_initial, 
                 x_range = constants.NX_RANGE,
-                alpha_model=alpha_model,
+                bias_fac=bias_fac,
                 sample_uniform_fn=sample_uniform_fn, 
                 device=device)
         x_res_new, t_res_new = _enable_grad(_x_res_new, _t_res_new)
@@ -620,7 +553,7 @@ def train_pinngmm_sol_v0(p_net, configuration):
                 x_bc_check, t_bc_check = rar_candidate_pool_mixed(
                     p_net, constants, N_cand=N_RAR, 
                     x_range = constants.NX_RANGE,
-                    alpha_model=alpha_model,
+                    bias_fac=bias_fac,
                     sample_uniform_fn=sample_uniform_fn, device=device,
                     only_t0=True)
                 
@@ -644,7 +577,7 @@ def train_pinngmm_sol_v0(p_net, configuration):
             x_cand_raw, t_cand_raw = rar_candidate_pool_mixed(
                 p_net, constants, N_cand=N_RAR, 
                 x_range = constants.NX_RANGE,
-                alpha_model=alpha_model,
+                bias_fac=bias_fac,
                 sample_uniform_fn=sample_uniform_fn, device=device)
             # 2) enable grad ONLY for the residual scoring step
             x_cand, t_cand = _enable_grad(x_cand_raw, t_cand_raw)
@@ -662,25 +595,25 @@ def train_pinngmm_sol_v0(p_net, configuration):
                 print(f"... RAR RES, Max residual error: {max_err:.4f}, t:", t_res_rar_new[0:3].data)
 
 
-def train_pinngmm_sol_uniform(p_net, configuration):
+def train_pinngmm_sol_uniform(p_net, config):
     """
     only using uniform samples for RES
     """
     p_net.train()
     p_net.to(device)
 
-    constants = configuration["constants"]
-    iterations = configuration["iterations"]
-    train_helper_sample_ic = configuration["sample_ic"]
-    train_helper_sample_res = configuration["sample_res_uniform"]
-    p_init = configuration["p_ic"]
-    res_func = configuration["res_func"]
-    res_weight = configuration["res_weight"]
-    save_path = configuration["save_path"]
-    beta_incre = configuration["beta_incre"]
-    normalize = configuration["loss_normalize"]
-    reg_tv = configuration["reg_tv"]
-    increased_icsamples_factor = int(configuration.get("increased_icsamples_factor", 1))
+    constants = config["constants"]
+    iterations = config["iterations"]
+    train_helper_sample_ic = config["sample_ic"]
+    train_helper_sample_res = config["sample_res_uniform"]
+    p_init = config["p_ic"]
+    res_func = config["res_func"]
+    res_weight = config["res_weight"]
+    save_path = config["save_path"]
+    beta_incre = config["beta_incre"]
+    normalize = config["loss_normalize"]
+    reg_tv = config["reg_tv"]
+    increased_icsamples_factor = int(config.get("increased_icsamples_factor", 1))
     
     mse_cost_function = torch.nn.MSELoss()
     optimizer = torch.optim.Adam(p_net.parameters(), lr=1e-3)
@@ -799,7 +732,7 @@ def train_pinngmm_sol_uniform(p_net, configuration):
                 print(f"... RAR Res, Max Res error: {max_error_res:.6f}")
 
 
-def train_pinn_sol_v0_scaled_improved(constants, p_net, configurations, 
+def train_pinn_sol_v0_scaled_improved(constants, p_net, configs, 
                                       iterations=50000, save_model=False, beta_incre=0.02):
     """
     Improved training loop for the physics-informed neural network.
@@ -811,10 +744,10 @@ def train_pinn_sol_v0_scaled_improved(constants, p_net, configurations,
     optimizer = torch.optim.Adam(p_net.parameters(), lr=1e-3)
     scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.95)
     
-    p_init = configurations["ic_fcn"]
-    diff_opt = configurations["diff_opt_fcn"]
-    pnet_path = configurations["pnet_path"]
-    pnet_path_inter = configurations["pnet_path_inter"]
+    p_init = configs["ic_fcn"]
+    diff_opt = configs["diff_opt_fcn"]
+    pnet_path = configs["pnet_path"]
+    pnet_path_inter = configs["pnet_path_inter"]
 
     min_loss = np.inf
     iterations_per_decay = 1000
@@ -939,14 +872,14 @@ def train_pinn_sol_v0_scaled_improved(constants, p_net, configurations,
 #################
 
 
-def train_pinn_e1_v0(constants, networks, configurations, iterations=50000, save_model=False, beta_incre=0.005):
+def train_pinn_e1_v0(constants, networks, configs, iterations=50000, save_model=False, beta_incre=0.005):
     """
     no TV loss
     """
-    p_init = configurations["ic_fcn"]
-    diff_opt = configurations["diff_opt_fcn"]
-    save_path = configurations["save_path"]
-    save_path_inter = configurations["save_path_inter"]
+    p_init = configs["ic_fcn"]
+    diff_opt = configs["diff_opt_fcn"]
+    save_path = configs["save_path"]
+    save_path_inter = configs["save_path_inter"]
     p_net, e1_net = networks
 
     mse_cost_function = torch.nn.MSELoss()
@@ -1091,13 +1024,13 @@ def train_pinn_e1_v0(constants, networks, configurations, iterations=50000, save
         torch.save(best_model_dict, save_path)
 
 
-def train_pinn_e1_v0_scaled(constants, networks, configurations, iterations=50000, save_model=False, beta_incre=0.005):
+def train_pinn_e1_v0_scaled(constants, networks, configs, iterations=50000, save_model=False, beta_incre=0.005):
     """
     no TV loss
     """
-    p_init = configurations["ic_fcn"]
-    diff_opt = configurations["diff_opt_fcn"]
-    save_path = configurations["save_path"]
+    p_init = configs["ic_fcn"]
+    diff_opt = configs["diff_opt_fcn"]
+    save_path = configs["save_path"]
     p_net, e1_net = networks
     p_net.eval()
     # Freeze p_net parameters
@@ -1197,7 +1130,7 @@ def train_pinn_e1_v0_scaled(constants, networks, configurations, iterations=5000
 def train_pinn_e1_v0_scaled_improved(
     constants,
     networks,                          # (p_net, e1_net)
-    configurations,
+    configs,
     iterations=50000,
     save_model=False,
     beta_incre=0.02
@@ -1220,10 +1153,10 @@ def train_pinn_e1_v0_scaled_improved(
     assert all(p.requires_grad is False for p in p_net.parameters()), "p_net has trainable params!"
 
     # --- Config ---
-    p_init   = configurations["ic_fcn"]
-    diff_opt = configurations["diff_opt_fcn"]
-    e1_path  = configurations["save_path"]
-    # e1_path_inter = configurations.get("save_path_inter", None)
+    p_init   = configs["ic_fcn"]
+    diff_opt = configs["diff_opt_fcn"]
+    e1_path  = configs["save_path"]
+    # e1_path_inter = configs.get("save_path_inter", None)
     
     # --- Optimizer ---
     mse = torch.nn.MSELoss()
@@ -1388,7 +1321,7 @@ def train_pinn_e1_v0_scaled_improved(
 def train_pinn_e1gmm_v0_scaled_improved(
     constants,
     networks,                          # (p_net, e1_net)
-    configurations,
+    configs,
     iterations=50000,
     save_model=False,
     beta_incre=0.02
@@ -1412,22 +1345,22 @@ def train_pinn_e1gmm_v0_scaled_improved(
     assert all(p.requires_grad is False for p in p_net.parameters()), "p_net has trainable params!"
 
     # --- Config ---
-    p_init   = configurations["ic_fcn"]
-    diff_opt = configurations["diff_opt_fcn"]
-    e1_path  = configurations["save_path"]
-    sample_res_uniform_fcn = configurations["sample_res_uniform_fcn"]
+    p_init   = configs["ic_fcn"]
+    diff_opt = configs["diff_opt_fcn"]
+    e1_path  = configs["save_path"]
+    sample_res_uniform_fcn = configs["sample_res_uniform_fcn"]
     Q_tensor = torch.tensor(constants.N_Q_NOISE, dtype=torch.float32, device=device)
-    # e1_path_inter = configurations.get("save_path_inter", None)
+    # e1_path_inter = configs.get("save_path_inter", None)
     
     # --- Optimizer ---
     mse = torch.nn.MSELoss()
     optimizer = torch.optim.Adam(e1_net.parameters(), lr=1e-3)
     scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.95)
 
-    # train_helper_sample_res = configuration["sample_res"] # NOTE: change this
+    # train_helper_sample_res = config["sample_res"] # NOTE: change this
     train_helper_sample_res_uniform = sample_res_uniform_fcn
     sample_uniform_fn = lambda n: train_helper_sample_res_uniform(n)  # must return (x, t) WITHOUT grad
-    alpha_model = 0.5
+    bias_fac = 0.5
 
     # -------- SAFETY CHECK 2: optimizer only sees e1_net params --------
     e1_param_ids = {id(p) for p in e1_net.parameters()}
@@ -1489,14 +1422,14 @@ def train_pinn_e1gmm_v0_scaled_improved(
         x_bc_new, t_bc_new = rar_candidate_pool_mixed(
                 p_net, constants, N_cand=N0_samples_initial, 
                 x_range = constants.NX_RANGE,
-                alpha_model=alpha_model,
+                bias_fac=bias_fac,
                 sample_uniform_fn=sample_uniform_fn, 
                 device=device,
                 only_t0=True)
         _x_res_new, _t_res_new = rar_candidate_pool_mixed(
                 p_net, constants, N_cand=Nr_samples_initial, 
                 x_range = constants.NX_RANGE,
-                alpha_model=alpha_model,
+                bias_fac=bias_fac,
                 sample_uniform_fn=sample_uniform_fn, 
                 device=device)
         x_res_new, t_res_new = _enable_grad(_x_res_new, _t_res_new)
@@ -1574,7 +1507,7 @@ def train_pinn_e1gmm_v0_scaled_improved(
                 xb_chk, tb_chk = rar_candidate_pool_mixed(
                     p_net, constants, N_cand=N_RAR, 
                     x_range = constants.NX_RANGE,
-                    alpha_model=alpha_model,
+                    bias_fac=bias_fac,
                     sample_uniform_fn=sample_uniform_fn, device=device,
                     only_t0=True)
                 p_i_np = p_init(constants, xb_chk.detach().cpu().numpy())
@@ -1602,7 +1535,7 @@ def train_pinn_e1gmm_v0_scaled_improved(
             x_cand_raw, t_cand_raw = rar_candidate_pool_mixed(
                 p_net, constants, N_cand=N_RAR, 
                 x_range = constants.NX_RANGE,
-                alpha_model=alpha_model,
+                bias_fac=bias_fac,
                 sample_uniform_fn=sample_uniform_fn, device=device)
             # 2) enable grad ONLY for the residual scoring step
             xr_chk, tr_chk = _enable_grad(x_cand_raw, t_cand_raw)
@@ -1627,14 +1560,14 @@ def train_pinn_e1gmm_v0_scaled_improved(
                 # print(f"... RAR Res, added {len(idx)} points. Max Res error: {max_error_res:.4f}")
 
 
-def train_pinn_e1seq1_base(constants, networks, configurations, iterations=50000, save_model=False):
+def train_pinn_e1seq1_base(constants, networks, configs, iterations=50000, save_model=False):
     """
     base: no TV loss
     """
-    p_init = configurations["ic_fcn"]
-    diff_opt = configurations["diff_opt_fcn"]
-    save_path = configurations["save_path"]
-    save_path_inter = configurations["save_path_inter"]
+    p_init = configs["ic_fcn"]
+    diff_opt = configs["diff_opt_fcn"]
+    save_path = configs["save_path"]
+    save_path_inter = configs["save_path_inter"]
     p_net, e1_net = networks
 
     mse_cost_function = torch.nn.MSELoss()
@@ -1767,11 +1700,11 @@ def train_pinn_e1seq1_base(constants, networks, configurations, iterations=50000
         torch.save(best_model_dict, save_path)
 
 
-def train_pinn_e1seq1_v0(constants, networks, configurations, iterations=50000, save_model=False):
-    p_init = configurations["ic_fcn"]
-    diff_opt = configurations["diff_opt_fcn"]
-    save_path = configurations["save_path"]
-    save_path_inter = configurations["save_path_inter"]
+def train_pinn_e1seq1_v0(constants, networks, configs, iterations=50000, save_model=False):
+    p_init = configs["ic_fcn"]
+    diff_opt = configs["diff_opt_fcn"]
+    save_path = configs["save_path"]
+    save_path_inter = configs["save_path_inter"]
     p_net, e1_net = networks
 
     mse_cost_function = torch.nn.MSELoss()
@@ -1903,10 +1836,10 @@ def train_pinn_e1seq1_v0(constants, networks, configurations, iterations=50000, 
             scheduler.step()
 
 
-def train_pinn_e1seq2_base(constants, networks, configurations, iterations=50000, save_model=False):
-    diff_opt = configurations["diff_opt_fcn"]
-    save_path = configurations["save_path"]
-    save_path_inter = configurations["save_path_inter"]
+def train_pinn_e1seq2_base(constants, networks, configs, iterations=50000, save_model=False):
+    diff_opt = configs["diff_opt_fcn"]
+    save_path = configs["save_path"]
+    save_path_inter = configs["save_path_inter"]
     p_net, e1_net_seq1, e1_net = networks
 
     mse_cost_function = torch.nn.MSELoss()
@@ -2024,10 +1957,10 @@ def train_pinn_e1seq2_base(constants, networks, configurations, iterations=50000
             scheduler.step()
 
 
-def train_pinn_e1seq2_v0(constants, networks, configurations, iterations=50000, save_model=False):
-    diff_opt = configurations["diff_opt_fcn"]
-    save_path = configurations["save_path"]
-    save_path_inter = configurations["save_path_inter"]
+def train_pinn_e1seq2_v0(constants, networks, configs, iterations=50000, save_model=False):
+    diff_opt = configs["diff_opt_fcn"]
+    save_path = configs["save_path"]
+    save_path_inter = configs["save_path_inter"]
     p_net, e1_net_seq1, e1_net = networks
 
     mse_cost_function = torch.nn.MSELoss()
@@ -2151,9 +2084,569 @@ def train_pinn_e1seq2_v0(constants, networks, configurations, iterations=50000, 
             scheduler.step()
 
 
+
+### Exp Case1 Equin ###
+
+def train_pinn_expcase1equin(p_net, config):
+    p_net.train()
+    p_net.to(device)
+    x_dim = p_net.D
+    constants = config["constants"]
+    iterations = config["iterations"]
+    sample_ic = config["sample_ic"]
+    sample_res = config["sample_res"]
+    p_init = config["p_ic"]
+    res_func = config["res_func"]
+    res_weight = config["res_weight"]
+    save_path = config["save_path"]
+    normalize = config["loss_normalize"]
+    reg_tv = config["reg_tv"]
+    N0_samples_initial = config["N0_samples_initial"]
+    Nr_samples_initial = config["Nr_samples_initial"]
+    iterations_per_decay = config["iterations_per_decay"]
+    N_RAR = config["N_RAR"]
+    N_RAR_TO_ADD = config["N_RAR_TO_ADD"]
+    N_RAR_CAP = config["N_RAR_CAP"]
+    iterations_per_rar = config["iterations_per_rar"]
+    RAR_eps = config["RAR_eps"]
+    beta_incre = config["beta_incre"]
+    optimizer = torch.optim.Adam(p_net.parameters(), lr=1e-3)
+    scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.95)
+    
+    min_loss = np.inf
+    loss_history = []
+    beta = np.float32(0.0)
+    inter_count = 0
+    x_bc_rar = torch.empty(0, x_dim, device=device)
+    t_bc_rar = torch.empty(0, 1, device=device)
+    x_res_rar = torch.empty(0, x_dim, device=device)
+    t_res_rar = torch.empty(0, 1, device=device)
+    FLAG = False
+    beta = np.float32(0.0)
+    
+    start_time = time.time()
+    for epoch in range(1, iterations+1):
+        optimizer.zero_grad(set_to_none=True)    
+        
+        # Sample new points at each epoch for better generalization
+        x_bc_new, t_bc_new = sample_ic(N0_samples_initial)
+        # np.testing.assert_equal(x_bc_new.shape[0], N0_samples_initial)
+        x_res_new, t_res_new = sample_res(Nr_samples_initial)
+        # np.testing.assert_equal(x_res_new.shape[0], Nr_samples_initial)
+        
+        # Combine with RAR points and ensure they are on the correct device
+        x_bc = torch.cat((x_bc_new.to(device), x_bc_rar), dim=0).detach()
+        t_bc = torch.cat((t_bc_new.to(device), t_bc_rar), dim=0).detach()
+        x_res = torch.cat((x_res_new.to(device), x_res_rar), dim=0).detach().requires_grad_(True)
+        t_res = torch.cat((t_res_new.to(device), t_res_rar), dim=0).detach().requires_grad_(True)
+        del x_bc_new, t_bc_new, x_res_new, t_res_new
+        
+        # --- Loss based on initial conditions ---
+        with torch.no_grad():
+            p_i_np = p_init(x_bc.detach().cpu().numpy())
+            p_i = torch.from_numpy(p_i_np).to(device=device, dtype=torch.float32)
+        phat_i = p_net(x_bc, t_bc)
+        eps = torch.finfo(phat_i.dtype).tiny
+        ph = phat_i.clamp_min(eps)
+        p  = p_i.clamp_min(eps)
+        # Standard Hellinger^2 often has a 1/2 factor; optional for training
+        hellinger_u = 0.5 * (torch.sqrt(ph)/ normalize - torch.sqrt(p)/ normalize).pow(2).mean()
+        mse_u = hellinger_u
+        # mse_u = mse_cost_function(phat_i / normalize, p_i / normalize)
+
+        # --- Loss based on PDE ---
+        res_p = res_func(x_res, t_res, p_net, beta=beta)
+        mse_res = (res_p / normalize).pow(2).mean()
+
+        # --- Total Loss ---
+        loss = mse_u + res_weight * mse_res
+        if(reg_tv is not None):
+            tv_t = torch.autograd.grad(res_p, t_res, grad_outputs=torch.ones_like(res_p), create_graph=True)[0]
+            mse_tv = (tv_t / normalize).pow(2).mean()
+            loss += reg_tv * mse_tv
+
+        # --- Optimize ---
+        if not torch.isfinite(loss):
+            print("[NaN] loss blew up; skipping update")
+            optimizer.zero_grad(set_to_none=True)
+            continue
+        loss.backward()
+        loss_history.append(loss.item())
+        # guard bad grads
+        bad_grad = False
+        for p in p_net.parameters():
+            if p.grad is not None and not torch.isfinite(p.grad).all():
+                bad_grad = True; break
+        if bad_grad:
+            print("[NaN] gradient non-finite; skipping update")
+            optimizer.zero_grad(set_to_none=True)
+            continue
+        torch.nn.utils.clip_grad_norm_(p_net.parameters(), max_norm=1.0)
+        optimizer.step()
+        del p_i_np, p_i, phat_i, res_p
+        
+        # --- Learning rate decay ---
+        if (epoch) % iterations_per_decay == 0:
+            scheduler.step()
+            print(f"[info] Training epoch: {epoch}, LR: {optimizer.param_groups[0]['lr']:.2e}")
+
+        # --- Save min loss model and update beta ---
+        if loss.data < min_loss:
+            train_time = time.time() - start_time
+            if(reg_tv is not None):
+                print(f"--- Save Epoch: {epoch}, Loss: {loss.item():.4e}, IC: {mse_u.item():.4e}, Res: {mse_res.item():.4e} & {mse_tv.item():.4e}, Beta: {beta:.2f} ---")
+            else:
+                print(f"--- Save Epoch: {epoch}, Loss: {loss.item():.4e}, IC: {mse_u.item():.4e}, Res: {mse_res.item():.4e}, Beta: {beta:.2f} ---")
+            if save_path is not None:
+                torch.save({
+                    'epoch': epoch, 'model_state_dict': p_net.state_dict(),
+                    'optimizer_state_dict': optimizer.state_dict(),
+                    'loss_history': loss_history, 'train_time': train_time,
+                }, save_path+"/p_net.pth")
+                np.savez(save_path+"/p_net-RARsamples.npz",
+                         X_BC_RAR=x_bc_rar,
+                         X_RES_RAR=x_res_rar,
+                         T_RES_RAR=t_res_rar)
+            min_loss = loss.data
+            beta = min(1.0, beta + beta_incre)
+            FLAG = True
+
+        # --- RAR ---
+        if (epoch % iterations_per_rar == 0 and FLAG) or (epoch == 1):
+            FLAG = False # reset flag
+            
+            # Add IC points
+            with torch.no_grad():
+                x_bc_check, t_bc_check = sample_ic(N_RAR)                
+                p_i_np = p_init(x_bc_check.detach().cpu().numpy())
+                p_i = torch.from_numpy(p_i_np).to(device=device, dtype=torch.float32)
+                phat_i = p_net(x_bc_check, t_bc_check)
+                ic_errors = torch.abs(p_i - phat_i) / normalize
+                max_error_ic = ic_errors.max().item()
+                if max_error_ic > RAR_eps:
+                    # max_indices = torch.topk(ic_errors.squeeze(), 10).indices # NOTE: change this
+                    # x_bc_rar = torch.cat((x_bc_rar, x_bc_check[max_indices, :]), dim=0)
+                    # t_bc_rar = torch.cat((t_bc_rar, t_bc_check[max_indices]), dim=0)
+                    topk  = torch.topk(ic_errors.squeeze(), k=N_RAR_TO_ADD)
+                    idx   = topk.indices
+                    x_bc_rar_new = x_bc_check.detach()[idx, :]
+                    t_bc_rar_new = t_bc_check.detach()[idx, :]
+                    x_bc_rar, t_bc_rar = rar_append_with_cap(x_bc_rar, t_bc_rar, x_bc_rar_new, t_bc_rar_new, cap=N_RAR_CAP)
+                    print(f"... RAR IC , Max IC error: {max_error_ic:.4f}, t:", torch.max(t_bc_rar_new))
+                    del topk, idx, x_bc_rar_new, t_bc_rar_new
+                del p_i, phat_i, ic_errors, max_error_ic, x_bc_check, t_bc_check
+
+            # Add Residual points
+            x_cand, t_cand = sample_res(N_RAR)
+            x_cand = x_cand.detach().requires_grad_(True)
+            t_cand = t_cand.detach().requires_grad_(True)
+            res_vals = res_func(x_cand, t_cand, p_net, beta=beta)
+            res_err  = torch.abs(res_vals) / normalize
+            max_err  = res_err.max().item()
+            if max_err > RAR_eps:
+                topk  = torch.topk(res_err.squeeze(), k=N_RAR_TO_ADD)
+                idx   = topk.indices
+                x_res_rar_new = x_cand.detach()[idx, :]
+                t_res_rar_new = t_cand.detach()[idx, :]
+                # 4) append with FIFO cap
+                x_res_rar, t_res_rar = rar_append_with_cap(x_res_rar, t_res_rar, x_res_rar_new, t_res_rar_new, cap=N_RAR_CAP)
+                print(f"... RAR RES, Max residual error: {max_err:.4f}, t:", t_res_rar_new[0:3].data)
+                del topk, idx, x_res_rar_new, t_res_rar_new
+            del res_vals, res_err, max_err, x_cand, t_cand
+        
+def train_pinngmm_expcase1equin(p_net, config):
+    p_net.train()
+    p_net.to(device)
+    x_dim = p_net.D
+    constants = config["constants"]
+    iterations = config["iterations"]
+    sample_ic = config["sample_ic"]
+    sample_res = config["sample_res"]
+    p_init = config["p_ic"]
+    res_func = config["res_func"]
+    res_weight = config["res_weight"]
+    save_path = config["save_path"]
+    normalize = config["loss_normalize"]
+    reg_tv = config["reg_tv"]
+    N0_samples_initial = config["N0_samples_initial"]
+    Nr_samples_initial = config["Nr_samples_initial"]
+    iterations_per_decay = config["iterations_per_decay"]
+    N_RAR = config["N_RAR"]
+    N_RAR_TO_ADD = config["N_RAR_TO_ADD"]
+    N_RAR_CAP = config["N_RAR_CAP"]
+    iterations_per_rar = config["iterations_per_rar"]
+    RAR_eps = config["RAR_eps"]
+    beta_incre = config["beta_incre"]
+    bias_fac = config["bias_fac"]
+    
+    mean_head_params  = list(p_net.mean_head.parameters())
+    tri_head_params   = list(p_net.tri_head.parameters())
+    weight_head_params= list(p_net.weight_head.parameters())
+    optimizer = torch.optim.Adam(
+        [
+            {"params": mean_head_params,   "lr": 1e-3},
+            {"params": tri_head_params,    "lr": 1e-4},
+            {"params": weight_head_params, "lr": 1e-4},
+        ]
+    )
+    scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.95)
+    sample_uniform_fn = lambda n: sample_res(n)
+
+    min_loss = np.inf
+    loss_history = []
+    x_bc_rar = torch.empty(0, x_dim, device=device)
+    t_bc_rar = torch.empty(0, 1, device=device)
+    x_res_rar = torch.empty(0, x_dim, device=device)
+    t_res_rar = torch.empty(0, 1, device=device)
+    FLAG = False
+    beta = np.float32(0.0)
+    
+    start_time = time.time()
+    print("[check] bias_fac: ", bias_fac)
+    for epoch in range(1, iterations+1):
+        optimizer.zero_grad(set_to_none=True)    
+        
+        # Sample new points at each epoch for better generalization
+        x_bc_new, t_bc_new = sample_ic(N0_samples_initial)
+        # np.testing.assert_equal(x_bc_new.shape[0], N0_samples_initial)
+        x_res_new, t_res_new = rar_candidate_pool_mixed(
+                p_net, constants, N_cand=Nr_samples_initial, 
+                x_range = constants.NX_RANGE,
+                bias_fac=bias_fac,
+                sample_uniform_fn=sample_uniform_fn, 
+                device=device)
+        
+        # Combine with RAR points and ensure they are on the correct device
+        x_bc = torch.cat((x_bc_new.to(device), x_bc_rar), dim=0).detach()
+        t_bc = torch.cat((t_bc_new.to(device), t_bc_rar), dim=0).detach()
+        x_res = torch.cat((x_res_new.to(device), x_res_rar), dim=0).detach().requires_grad_(True)
+        t_res = torch.cat((t_res_new.to(device), t_res_rar), dim=0).detach().requires_grad_(True)
+        del x_bc_new, t_bc_new, x_res_new, t_res_new
+        
+        # --- Loss based on initial conditions ---
+        with torch.no_grad():
+            p_i_np = p_init(x_bc.detach().cpu().numpy())
+            p_i = torch.from_numpy(p_i_np).to(device=device, dtype=torch.float32)
+        phat_i = p_net(x_bc, t_bc)
+        eps = torch.finfo(phat_i.dtype).tiny
+        ph = phat_i.clamp_min(eps)
+        p  = p_i.clamp_min(eps)
+        # Standard Hellinger^2 often has a 1/2 factor; optional for training
+        hellinger_u = 0.5 * (torch.sqrt(ph)/ normalize - torch.sqrt(p)/ normalize).pow(2).mean()
+        mse_u = hellinger_u
+        # mse_u = mse_cost_function(phat_i / normalize, p_i / normalize)
+
+        # --- Loss based on PDE ---
+        res_p = res_func(x_res, t_res, p_net, beta=beta)
+        mse_res = (res_p / normalize).pow(2).mean()
+
+        # --- Total Loss ---
+        loss = mse_u + res_weight * mse_res
+        if(reg_tv is not None):
+            tv_t = torch.autograd.grad(res_p, t_res, grad_outputs=torch.ones_like(res_p), create_graph=True)[0]
+            mse_tv = (tv_t / normalize).pow(2).mean()
+            loss += reg_tv * mse_tv
+
+        # --- Optimize ---
+        if not torch.isfinite(loss):
+            print("[NaN] loss blew up; skipping update")
+            optimizer.zero_grad(set_to_none=True)
+            continue
+        loss.backward()
+        loss_history.append(loss.item())
+        # guard bad grads
+        bad_grad = False
+        for p in p_net.parameters():
+            if p.grad is not None and not torch.isfinite(p.grad).all():
+                bad_grad = True; break
+        if bad_grad:
+            print("[NaN] gradient non-finite; skipping update")
+            optimizer.zero_grad(set_to_none=True)
+            continue
+        torch.nn.utils.clip_grad_norm_(p_net.parameters(), max_norm=1.0)
+        optimizer.step()
+        del p_i_np, p_i, phat_i, res_p
+        
+        # --- Learning rate decay ---
+        if (epoch) % iterations_per_decay == 0:
+            scheduler.step()
+            print(f"[info] Training epoch: {epoch}, LR: {optimizer.param_groups[0]['lr']:.2e}")
+
+        # --- Save min loss model and update beta ---
+        if loss.data < min_loss:
+            train_time = time.time() - start_time
+            if(reg_tv is not None):
+                print(f"--- Save Epoch: {epoch}, Loss: {loss.item():.4e}, IC: {mse_u.item():.4e}, Res: {mse_res.item():.4e} & {mse_tv.item():.4e}, Beta: {beta:.2f} ---")
+            else:
+                print(f"--- Save Epoch: {epoch}, Loss: {loss.item():.4e}, IC: {mse_u.item():.4e}, Res: {mse_res.item():.4e}, Beta: {beta:.2f} ---")
+            if save_path is not None:
+                torch.save({
+                    'epoch': epoch, 'model_state_dict': p_net.state_dict(),
+                    'optimizer_state_dict': optimizer.state_dict(),
+                    'loss_history': loss_history, 'train_time': train_time,
+                }, save_path+"/p_net.pth")
+                np.savez(save_path+"/p_net-RARsamples.npz",
+                         X_BC_RAR=x_bc_rar,
+                         X_RES_RAR=x_res_rar,
+                         T_RES_RAR=t_res_rar)
+            min_loss = loss.data
+            beta = min(1.0, beta + beta_incre)
+            FLAG = True
+
+        # --- RAR ---
+        if (epoch % iterations_per_rar == 0 and FLAG) or (epoch == 1):
+            FLAG = False # reset flag
+            
+            # Add IC points
+            with torch.no_grad():
+                x_bc_check, t_bc_check = sample_ic(N_RAR)                
+                p_i_np = p_init(x_bc_check.detach().cpu().numpy())
+                p_i = torch.from_numpy(p_i_np).to(device=device, dtype=torch.float32)
+                phat_i = p_net(x_bc_check, t_bc_check)
+                ic_errors = torch.abs(p_i - phat_i) / normalize
+                max_error_ic = ic_errors.max().item()
+                if max_error_ic > RAR_eps:
+                    # max_indices = torch.topk(ic_errors.squeeze(), 10).indices # NOTE: change this
+                    # x_bc_rar = torch.cat((x_bc_rar, x_bc_check[max_indices, :]), dim=0)
+                    # t_bc_rar = torch.cat((t_bc_rar, t_bc_check[max_indices]), dim=0)
+                    topk  = torch.topk(ic_errors.squeeze(), k=N_RAR_TO_ADD)
+                    idx   = topk.indices
+                    x_bc_rar_new = x_bc_check.detach()[idx, :]
+                    t_bc_rar_new = t_bc_check.detach()[idx, :]
+                    x_bc_rar, t_bc_rar = rar_append_with_cap(x_bc_rar, t_bc_rar, x_bc_rar_new, t_bc_rar_new, cap=N_RAR_CAP)
+                    print(f"... RAR IC , Max IC error: {max_error_ic:.4f}, t:", torch.max(t_bc_rar_new))
+                    del topk, idx, x_bc_rar_new, t_bc_rar_new
+                del p_i, phat_i, ic_errors, max_error_ic, x_bc_check, t_bc_check
+
+            # Add Residual points
+            x_cand, t_cand = rar_candidate_pool_mixed(
+                p_net, constants, N_cand=N_RAR, 
+                x_range = constants.NX_RANGE,
+                bias_fac=bias_fac,
+                sample_uniform_fn=sample_uniform_fn, device=device)
+            x_cand = x_cand.detach().requires_grad_(True)
+            t_cand = t_cand.detach().requires_grad_(True)
+            res_vals = res_func(x_cand, t_cand, p_net, beta=beta)
+            res_err  = torch.abs(res_vals) / normalize
+            max_err  = res_err.max().item()
+            if max_err > RAR_eps:
+                topk  = torch.topk(res_err.squeeze(), k=N_RAR_TO_ADD)
+                idx   = topk.indices
+                x_res_rar_new = x_cand.detach()[idx, :]
+                t_res_rar_new = t_cand.detach()[idx, :]
+                # 4) append with FIFO cap
+                x_res_rar, t_res_rar = rar_append_with_cap(x_res_rar, t_res_rar, x_res_rar_new, t_res_rar_new, cap=N_RAR_CAP)
+                print(f"... RAR RES, Max residual error: {max_err:.4f}, t:", t_res_rar_new[0:3].data)
+                del topk, idx, x_res_rar_new, t_res_rar_new
+            del res_vals, res_err, max_err, x_cand, t_cand
+    
+def train_pinn_error_expcase1equin(networks, config):
+    """
+    Improved training loop for the error network e1_net.
+    Uses same structure as train_pinn_sol_v0_scaled_improved.
+    """
+    # --- Unpack ---
+    p_net, e1_net = networks
+    e1_net.train().to(device)
+    p_net.eval().to(device)   # frozen reference
+    # Freeze p_net parameters
+    for p in p_net.parameters():
+        p.requires_grad_(False)
+
+    # -------- SAFETY CHECK 1: all p_net params frozen --------
+    assert all(p.requires_grad is False for p in p_net.parameters()), "p_net has trainable params!"
+
+    # --- Config ---
+    constants = config["constants"]
+    iterations = config["iterations"]
+    p_init   = config["p_ic"]
+    diff_opt = config["res_func"]
+    e1_path  = config["save_path"] + "/e1_net.pth"
+    # e1_path_inter = configs.get("save_path_inter", None)
+    sample_ic = config["sample_ic"]
+    sample_res = config["sample_res"]
+    normalize = config["loss_normalize"]
+    N0_samples_initial = config["N0_samples_initial"]
+    Nr_samples_initial = config["Nr_samples_initial"]
+    iterations_per_decay = config["iterations_per_decay"]
+    N_RAR = config["N_RAR"]
+    N_RAR_TO_ADD = config["N_RAR_TO_ADD"]
+    N_RAR_CAP = config["N_RAR_CAP"]
+    iterations_per_rar = config["iterations_per_rar"]
+    RAR_eps = config["RAR_eps"]
+    beta_incre = config["beta_incre"]
+    bias_fac = config["bias_fac"]
+    sample_uniform_fn = lambda n: sample_res(n)
+    
+    # --- Optimizer ---
+    mse = torch.nn.MSELoss()
+    optimizer = torch.optim.Adam(e1_net.parameters(), lr=1e-3)
+    scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.95)
+
+    # -------- SAFETY CHECK 2: optimizer only sees e1_net params --------
+    e1_param_ids = {id(p) for p in e1_net.parameters()}
+    opt_param_ids = {id(p) for g in optimizer.param_groups for p in g["params"]}
+    assert opt_param_ids <= e1_param_ids, "Optimizer includes non-e1_net parameters!"
+    
+    # --- Inits ---
+    min_loss = float("inf")
+    loss_history = []
+    FLAG = False
+    # inter_count = 0
+    beta = np.float32(0.0)
+    # Buffers for RAR points
+    x_bc_rar = torch.empty(0, 6, device=device)
+    t_bc_rar = torch.empty(0, 1, device=device)
+    x_res_rar = torch.empty(0, 6, device=device)
+    t_res_rar = torch.empty(0, 1, device=device)
+    # Best model dict
+    best_model_dict = {
+        "epoch": -1,
+        "model_state_dict": None,
+        "optimizer_state_dict": None,
+        "loss_history": None,
+        "train_time": None,
+    }
+
+    # # -------- SAFETY CHECK 3: snapshot p_net weights --------
+    # with torch.no_grad():
+    #     pnet_ref = {k: v.detach().cpu().clone() for k, v in p_net.state_dict().items()}
+    # def _assert_pnet_unchanged(when: str, atol=0.0, rtol=0.0):
+    #     """Verifies p_net.state_dict matches the frozen snapshot exactly (float-exact)."""
+    #     cur = p_net.state_dict()
+    #     for k, v0 in pnet_ref.items():
+    #         v = cur[k].detach().cpu()
+    #         if v.dtype.is_floating_point:
+    #             if not torch.allclose(v, v0, atol=atol, rtol=rtol):
+    #                 raise RuntimeError(f"p_net changed at {when}: param {k} drift detected.")
+    #         else:
+    #             if not torch.equal(v, v0):
+    #                 raise RuntimeError(f"p_net changed at {when}: param {k} drift detected.")
+    # # First check before training
+    # _assert_pnet_unchanged("start")
+    
+    start_time = time.time()
+    for epoch in range(1, iterations+1):
+        optimizer.zero_grad()
+        
+        # --- New samples ---
+        x_bc_new, t_bc_new = sample_ic(N0_samples_initial)
+        # x_res_new, t_res_new = constants.sample_res_points_scaled(Nr_samples_initial)
+        x_res_new, t_res_new = rar_candidate_pool_mixed(
+            p_net, constants, N_cand=Nr_samples_initial, 
+            x_range = constants.NX_RANGE,
+            bias_fac=bias_fac,
+            sample_uniform_fn=sample_uniform_fn, 
+            device=device)
+        
+        x_bc = torch.cat((x_bc_new.to(device), x_bc_rar), dim=0).detach()
+        t_bc = torch.cat((t_bc_new.to(device), t_bc_rar), dim=0).detach()
+        x_res = torch.cat((x_res_new.to(device), x_res_rar), dim=0).detach().requires_grad_(True)
+        t_res = torch.cat((t_res_new.to(device), t_res_rar), dim=0).detach().requires_grad_(True)
+        del x_bc_new, t_bc_new, x_res_new, t_res_new
+        
+        # --- IC loss: ehat ~ (p_init - p_net) ---
+        with torch.no_grad():
+            p_i_np = p_init(constants, x_bc.detach().cpu().numpy())
+            p_i = torch.tensor(p_i_np, dtype=torch.float32, device=device)
+            phat_i = p_net(x_bc, t_bc)
+            e_i = p_i - phat_i
+        ehat_i = e1_net(x_bc, t_bc)
+        mse_ic = mse(ehat_i / normalize, e_i / normalize)
+        
+        # --- PDE loss: diff_opt[e1] ~ -diff_opt[p] ---
+        res_p = diff_opt(x_res, t_res, p_net, beta=beta).detach()
+        res_e = diff_opt(x_res, t_res, e1_net, beta=beta)
+        mse_res = mse(res_e / normalize, (-res_p) / normalize)
+        
+        # --- Total loss ---
+        loss = mse_ic + mse_res
+        loss_history.append(loss.item())
+        
+        # --- Backward ---
+        loss.backward(retain_graph=False)
+        torch.nn.utils.clip_grad_norm_(e1_net.parameters(), max_norm=1.0)
+        optimizer.step()
+
+        # # -------- SAFETY CHECK 5: verify p_net weights unchanged after step --------
+        # _assert_pnet_unchanged(f"epoch {epoch+1}/post-step")
+        
+        # --- LR decay ---
+        if (epoch) % iterations_per_decay == 0:
+            scheduler.step()
+            print(f"[info] epoch {epoch}, lr={optimizer.param_groups[0]['lr']:.2e}")
+        
+        # --- Save best ---
+        if loss.item() < 0.95 * min_loss:
+            train_time = time.time() - start_time
+            print(f"--- Save Epoch {epoch}, Loss={loss.item():.4f}, "
+                  f"IC={mse_ic.item():.4f}, Res={mse_res.item():.4f}, Beta={beta:.2f} ---")
+            # Res={mse_res.item():.4f}
+            
+            best_model_dict.update({
+                "epoch": epoch,
+                "model_state_dict": e1_net.state_dict(),
+                "optimizer_state_dict": optimizer.state_dict(),
+                "loss_history": loss_history,
+                "train_time": train_time,
+            })
+            torch.save(best_model_dict, e1_path)
+            
+            min_loss = loss.item()
+            beta = min(1.0, beta + beta_incre)
+            FLAG = True
+
+        # --- RAR ---
+        if (epoch % iterations_per_rar == 0 and FLAG) or (epoch == 1):
+            FLAG = False
+            # IC RAR
+            with torch.no_grad():
+                xb_chk, tb_chk = sample_ic(N_RAR)
+                p_i_np = p_init(constants, xb_chk.detach().cpu().numpy())
+                p_i = torch.tensor(p_i_np, dtype=torch.float32, device=device)
+                phat_i = p_net(xb_chk, tb_chk)
+                e_i = p_i - phat_i
+                ehat_i = e1_net(xb_chk, tb_chk)
+                ic_errors = torch.abs(e_i - ehat_i) / normalize
+                max_error_ic = ic_errors.max().item()
+                if max_error_ic > RAR_eps:
+                    topk  = torch.topk(ic_errors.squeeze(), k=N_RAR_TO_ADD)
+                    idx   = topk.indices
+                    x_bc_rar_new = xb_chk.detach()[idx, :]
+                    t_bc_rar_new = tb_chk.detach()[idx, :]
+                    x_bc_rar, t_bc_rar = rar_append_with_cap(x_bc_rar, t_bc_rar, x_bc_rar_new, t_bc_rar_new, cap=N_RAR_CAP)
+                    print(f"... RAR IC , Max IC error: {max_error_ic:.4f}, t:", torch.max(t_bc_rar_new))
+            
+            # Residual RAR
+            # xr_chk, tr_chk = constants.sample_res_points_scaled(N_RAR)
+            xr_chk, tr_chk = rar_candidate_pool_mixed(
+                p_net, constants, N_cand=N_RAR, 
+                x_range = constants.NX_RANGE,
+                bias_fac=bias_fac,
+                sample_uniform_fn=sample_uniform_fn, device=device)
+            xr_chk = xr_chk.detach().requires_grad_(True)
+            tr_chk = tr_chk.detach().requires_grad_(True)
+            res_p = diff_opt(xr_chk, tr_chk, p_net, beta=beta)
+            res_e = diff_opt(xr_chk, tr_chk, e1_net, beta=beta)
+            res_err = torch.abs(res_e + res_p) / normalize
+            max_err = res_err.max().item()
+            if max_err > RAR_eps:
+                topk  = torch.topk(res_err.squeeze(), k=N_RAR_TO_ADD)
+                idx   = topk.indices
+                x_res_rar_new = xr_chk.detach()[idx, :]
+                t_res_rar_new = tr_chk.detach()[idx, :]
+                # 4) append with FIFO cap
+                x_res_rar, t_res_rar = rar_append_with_cap(x_res_rar, t_res_rar, x_res_rar_new, t_res_rar_new, cap=N_RAR_CAP)
+                print(f"... RAR RES, Max residual error: {max_err:.4f}, t:", t_res_rar_new[0:3].data)
+    # End of training
+
+### End of Exp Case1 Equin ###
+
+
+
 ### Exp_Case2_J2 ###
 
-def train_pinngmm_expcase2j2(p_net, configuration):
+def train_pinngmm_expcase2j2(p_net, config):
     """
     Improved training loop for the physics-informed neural network.
     NOTE: [make sampling method consistent test]
@@ -2164,16 +2657,16 @@ def train_pinngmm_expcase2j2(p_net, configuration):
     p_net.train().to(device)
     x_dim = p_net.D
 
-    constants = configuration["constants"]
-    iterations = configuration["iterations"]
-    train_helper_sample_res_uniform = configuration["sample_res_uniform"]
-    p_init = configuration["p_ic"]
-    res_func = configuration["res_func"]
-    res_weight = configuration["res_weight"]
-    save_path = configuration["save_path"]
-    beta_incre = configuration["beta_incre"]
-    normalize = configuration["loss_normalize"]
-    reg_tv = configuration["reg_tv"]
+    constants = config["constants"]
+    iterations = config["iterations"]
+    train_helper_sample_res_uniform = config["sample_res_uniform"]
+    p_init = config["p_ic"]
+    res_func = config["res_func"]
+    res_weight = config["res_weight"]
+    save_path = config["save_path"]
+    beta_incre = config["beta_incre"]
+    normalize = config["loss_normalize"]
+    reg_tv = config["reg_tv"]
     Q_tensor = torch.tensor(constants.N_Q_NOISE, dtype=torch.float32, device=device)
     
     mse_cost_function = torch.nn.MSELoss()
@@ -2199,7 +2692,7 @@ def train_pinngmm_expcase2j2(p_net, configuration):
     print("[check] number of IC samples: ", N0_samples_initial )
     N_RAR = 30000
     k_res = 32   # how many to add
-    alpha_model = 0.50  # tune 0.2–0.8
+    bias_fac = 0.50  # tune 0.2–0.8
     x_bc_rar = torch.empty(0, x_dim, device=device)
     t_bc_rar = torch.empty(0, 1, device=device)
     x_res_rar = torch.empty(0, x_dim, device=device)
@@ -2217,7 +2710,7 @@ def train_pinngmm_expcase2j2(p_net, configuration):
         x_bc_new, t_bc_new = rar_candidate_pool_mixed(
                 p_net, constants, N_cand=N0_samples_initial, 
                 x_range = constants.NX_RANGE,
-                alpha_model=alpha_model,
+                bias_fac=bias_fac,
                 sample_uniform_fn=sample_uniform_fn, 
                 device=device,
                 only_t0=True)
@@ -2225,7 +2718,7 @@ def train_pinngmm_expcase2j2(p_net, configuration):
         _x_res_new, _t_res_new = rar_candidate_pool_mixed(
                 p_net, constants, N_cand=Nr_samples_initial, 
                 x_range = constants.NX_RANGE,
-                alpha_model=alpha_model,
+                bias_fac=bias_fac,
                 sample_uniform_fn=sample_uniform_fn, 
                 device=device)
         x_res_new, t_res_new = _enable_grad(_x_res_new, _t_res_new)
@@ -2315,7 +2808,7 @@ def train_pinngmm_expcase2j2(p_net, configuration):
                 x_bc_check, t_bc_check = rar_candidate_pool_mixed(
                     p_net, constants, N_cand=N_RAR, 
                     x_range = constants.NX_RANGE,
-                    alpha_model=alpha_model,
+                    bias_fac=bias_fac,
                     sample_uniform_fn=sample_uniform_fn, device=device,
                     only_t0=True)
                 
@@ -2338,7 +2831,7 @@ def train_pinngmm_expcase2j2(p_net, configuration):
             x_cand_raw, t_cand_raw = rar_candidate_pool_mixed(
                 p_net, constants, N_cand=N_RAR, 
                 x_range = constants.NX_RANGE,
-                alpha_model=alpha_model,
+                bias_fac=bias_fac,
                 sample_uniform_fn=sample_uniform_fn, device=device)
             # 2) enable grad ONLY for the residual scoring step
             x_cand, t_cand = _enable_grad(x_cand_raw, t_cand_raw)
@@ -2358,8 +2851,7 @@ def train_pinngmm_expcase2j2(p_net, configuration):
                 print(f"... RAR RES, Max residual error: {max_err:.4f}, t:", t_res_rar_new[0:3].data)
                 del x_cand, t_cand, res_err, x_res_rar_new, t_res_rar_new, max_err, topk, idx
 
-
-def train_pinne1_expcase2j2(constants, networks, configurations,
+def train_pinne1_expcase2j2(constants, networks, configs,
     iterations=50000,
     save_model=False,
     beta_incre=0.02
@@ -2377,22 +2869,22 @@ def train_pinne1_expcase2j2(constants, networks, configurations,
     assert all(p.requires_grad is False for p in p_net.parameters()), "p_net has trainable params!"
 
     # --- Config ---
-    p_init   = configurations["ic_fcn"]
-    res_func = configurations["diff_opt_fcn"]
-    e1_path  = configurations["save_path"]
-    sample_res_uniform_fcn = configurations["sample_res_uniform_fcn"]
+    p_init   = configs["ic_fcn"]
+    res_func = configs["diff_opt_fcn"]
+    e1_path  = configs["save_path"]
+    sample_res_uniform_fcn = configs["sample_res_uniform_fcn"]
     Q_tensor = torch.tensor(constants.N_Q_NOISE, dtype=torch.float32, device=device)
-    # e1_path_inter = configurations.get("save_path_inter", None)
+    # e1_path_inter = configs.get("save_path_inter", None)
     
     # --- Optimizer ---
     mse = torch.nn.MSELoss()
     optimizer = torch.optim.Adam(e1_net.parameters(), lr=1e-3)
     scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.95)
 
-    # train_helper_sample_res = configuration["sample_res"] # NOTE: change this
+    # train_helper_sample_res = config["sample_res"] # NOTE: change this
     train_helper_sample_res_uniform = sample_res_uniform_fcn
     sample_uniform_fn = lambda n: train_helper_sample_res_uniform(n)  # must return (x, t) WITHOUT grad
-    alpha_model = 0.5
+    bias_fac = 0.5
 
     # -------- SAFETY CHECK 2: optimizer only sees e1_net params --------
     e1_param_ids = {id(p) for p in e1_net.parameters()}
@@ -2438,14 +2930,14 @@ def train_pinne1_expcase2j2(constants, networks, configurations,
         x_bc_new, t_bc_new = rar_candidate_pool_mixed(
                 p_net, constants, N_cand=N0_samples_initial, 
                 x_range = constants.NX_RANGE,
-                alpha_model=alpha_model,
+                bias_fac=bias_fac,
                 sample_uniform_fn=sample_uniform_fn, 
                 device=device,
                 only_t0=True)
         _x_res_new, _t_res_new = rar_candidate_pool_mixed(
                 p_net, constants, N_cand=Nr_samples_initial, 
                 x_range = constants.NX_RANGE,
-                alpha_model=alpha_model,
+                bias_fac=bias_fac,
                 sample_uniform_fn=sample_uniform_fn, 
                 device=device)
         x_res_new, t_res_new = _enable_grad(_x_res_new, _t_res_new)
@@ -2521,7 +3013,7 @@ def train_pinne1_expcase2j2(constants, networks, configurations,
                 xb_chk, tb_chk = rar_candidate_pool_mixed(
                     p_net, constants, N_cand=N_RAR, 
                     x_range = constants.NX_RANGE,
-                    alpha_model=alpha_model,
+                    bias_fac=bias_fac,
                     sample_uniform_fn=sample_uniform_fn, device=device,
                     only_t0=True)
                 p_i_np = p_init(constants, xb_chk.detach().cpu().numpy())
@@ -2545,7 +3037,7 @@ def train_pinne1_expcase2j2(constants, networks, configurations,
             x_cand_raw, t_cand_raw = rar_candidate_pool_mixed(
                 p_net, constants, N_cand=N_RAR, 
                 x_range = constants.NX_RANGE,
-                alpha_model=alpha_model,
+                bias_fac=bias_fac,
                 sample_uniform_fn=sample_uniform_fn, device=device)
             # 2) enable grad ONLY for the residual scoring step
             xr_chk, tr_chk = _enable_grad(x_cand_raw, t_cand_raw)

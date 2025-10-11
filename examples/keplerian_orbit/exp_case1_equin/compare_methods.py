@@ -2,39 +2,36 @@ import numpy as np
 import torch
 import argparse
 from tqdm import tqdm
-import copy
-from scipy.stats import multivariate_normal, norm
-from monte import p_init, p_init_scaled, p_sol, print_mc_time
+from monte import p_init_scaled, p_sol, print_mc_time
 from exp_utilities.constants import Case1_6D_Constants_Equin
-from exp_utilities.plot_util import (plot_time_curves_3d, plot_pdf_metrics, 
-                                     plot_single_corner, plot_full_corner, plt)
+from exp_utilities.plot_util import (plot_pdf_metrics, plot_corner_elem,
+                                     plot_full_corner, plt)
 from run_baseline import SAVE_PATH_LINEAR_PROPAGATE, SAVE_PATH_UNSCENT_PROPAGATE, SAVE_PATH_GMM_PROPAGATE
-# import utilities
+
 import sys
-sys.path.insert(0, '../utilities/')
-from _General.neuralnetworks import PNet, PNet_Scaled, PNet_XL, E1Net_Scaled, E1Net_XL, load_trained_model
-from _General.util import compute_volume, save_metrics_npz, load_metrics_npz, p_total_variation
-from _General.neuralnetworks import TimeToGMM6D, TimeToGMM6D_V0
-from _General.baseline_methods import PropagationData
-from _General.classic_gmm import make_gmm_pdf
+from pathlib import Path
+ROOT = Path(__file__).resolve().parents[1]   # repo_root
+sys.path.insert(0, str(ROOT))
+from utilities._General.neuralnetworks import PNet, PNet_Scaled, PNet_XL, E1Net_Scaled, ENet_XL, load_trained_model
+from utilities._General.util import compute_volume, save_metrics_npz, load_metrics_npz, p_total_variation, plot_training_history
+from utilities._General.neuralnetworks import TimeToGMM6D, TimeToGMM6D_V0
+from utilities._General.baseline_methods import PropagationData
+from utilities._General.classic_gmm import make_gmm_pdf
+
+
+COMPUTE: bool = False
+NBATCH: int = 2000
 constants = Case1_6D_Constants_Equin()
 
 
-# --- globals (module scope) ---
-COMPUTE: bool = False
-NBATCH: int = 2000
-
-
-def _str2bool(v: str) -> bool:
-    if isinstance(v, bool):
-        return v
-    v = v.lower()
-    if v in ("y", "yes", "t", "true", "1", "on"):  return True
-    if v in ("n", "no", "f", "false", "0", "off"): return False
-    raise argparse.ArgumentTypeError("Expected a boolean value.")
-
-
 def parse_args():
+    def _str2bool(v: str) -> bool:
+        if isinstance(v, bool):
+            return v
+        v = v.lower()
+        if v in ("y", "yes", "t", "true", "1", "on"):  return True
+        if v in ("n", "no", "f", "false", "0", "off"): return False
+        raise argparse.ArgumentTypeError("Expected a boolean value.")
     p = argparse.ArgumentParser()
     p.add_argument("--compute", type=_str2bool, default=COMPUTE,  help="Run compute stage (True/False)")
     p.add_argument("--Nbatch",  type=int, default=NBATCH,   help="Batch size (int)")
@@ -180,7 +177,7 @@ def print_metrics_block(metrics, idx, colw=12, prec=6):
         )
 
 
-def compute_pdf_variations(N_batch = 10, p_net=None, p_net_gmm=None, data_lp=None, data_ut=None, data_gmm=None,
+def compute_pdf_variations(N_batch=1, p_net=None, p_net_gmm=None, data_lp=None, data_ut=None, data_gmm=None,
                            e1_net=None,  e1_net_gmm=None, save_path=None):
     global constants
     metrics = {
@@ -238,6 +235,16 @@ def compute_pdf_variations(N_batch = 10, p_net=None, p_net_gmm=None, data_lp=Non
         e1_pinn_max = 0.0
         Z_pinn = 0.0
         e1_pinngmm_max = 0.0
+
+        # --- pinn-gmm verbose ---
+        ws, mus, covs = p_net_gmm.weights_means_covs_at(t)
+        ws, mus, covs = (ws.detach().cpu().numpy(),
+                            mus.detach().cpu().numpy(),
+                            covs.detach().cpu().numpy())
+        print("pinn-gmm params")
+        print("weights")
+        print(np.array2string(ws, formatter={'float_kind': lambda x: f"{float(x):.2f}"}))
+
         for j in tqdm(range(1, N_batch+1), desc="Propagating batches"):
             X = get_uniform_Xsamples_numpy(N_samples=N_samples) # samples from random uniform
             # print(X[0:3, :])
@@ -280,8 +287,8 @@ def compute_pdf_variations(N_batch = 10, p_net=None, p_net_gmm=None, data_lp=Non
                 e1_pinngmm = constants.SCALING_PDF * e1_net_gmm(_x_tensor, _t_tensor).detach().cpu().numpy().reshape(-1,)
                 e1_pinngmm_max = max(e1_pinngmm_max, np.max(np.abs(e1_pinngmm)).item())
                 del e1_pinngmm
-            del _t, _t_tensor, X_scaled, _x_tensor
-
+            del _t, _t_tensor, X_scaled, _x_tensor    
+            
             # print("[info] pdf LP")
             _, _, _mu_lp, _cov_lp = data_lp.get(t)
             _mu_lp = np.float32(_mu_lp)
@@ -352,10 +359,12 @@ def compute_pdf_variations(N_batch = 10, p_net=None, p_net_gmm=None, data_lp=Non
     save_metrics_npz(metrics, save_path)
 
 
-def compare_corner_plots(p_net=None, data_lp=None, data_ut=None, save_path=None, 
-                         OUTPUT_PATH=None, p_net_gmm=None):
+def compare_corner_plots(OUTPUT_PATH=None, data_lp=None, data_ut=None, data_gmm=None,
+                         p_net_gmm=None, rar_samples=None, save_path=None):
     global constants
-    t_show = [constants.T_PRIME_SPAN[-1]]
+    t_show = [constants.T_PRIME_SPAN[0],
+              constants.T_PRIME_SPAN[3],
+              constants.T_PRIME_SPAN[-1]]
     # t_show = np.array([0.4])
 
     N_samples = 1000000
@@ -366,67 +375,117 @@ def compare_corner_plots(p_net=None, data_lp=None, data_ut=None, save_path=None,
     for idx, t in enumerate(t_show):
         print("\ntime {:.4f}".format(t))
 
-        x_coords = (1, 6)
-
-        print("[info] ref")
         X_ref = sample_joint_pdf(constants, t, N_samples)
 
-        print("[info] pinn")
-        data_marginal_pinn = None
-        if(OUTPUT_PATH is not None):
-            data_marginal_pinn = np.load(
-                f"{OUTPUT_PATH}/pre_compute/marginal_pdfpinn_x{x_coords[0]}_x{x_coords[1]}_t{t:.3f}.npz")
+        # x_coords = (1, 6)
+        # data_marginal_pinn = None
+        # if(OUTPUT_PATH is not None):
+        #     data_marginal_pinn = np.load(
+        #         f"{OUTPUT_PATH}/pre_compute/marginal_pdfpinn_x{x_coords[0]}_x{x_coords[1]}_t{t:.3f}.npz")
 
-        print("[info] pdf LP")
-        _, _, _mu_lp, _cov_lp = data_lp.get(t)
-        _mu_lp = np.float32(_mu_lp)
-        _cov_lp = np.float32(_cov_lp)
-        gaussian_lp = (_mu_lp, _cov_lp)
+        # Single element plot 1D (x6,)
+        # plot_corner_elem(constants, t, X_ref, (6,),
+        #                  data_lp=data_lp, data_ut=data_ut, data_gmm=data_gmm,
+        #                  PNet_XL_PATH=OUTPUT_PATH, p_net_gmm=p_net_gmm)
 
-        print("[info] pdf UT")
-        _, _, _mu_ut, _cov_ut = data_ut.get(t)
-        _mu_ut = np.float32(_mu_ut)
-        _cov_ut = np.float32(_cov_ut)
-        gaussian_ut = (_mu_ut, _cov_ut)
+        # Single element plot 2D (x1, x6)
+        plot_corner_elem(constants, t, X_ref, (1, 6),
+                         data_lp=data_lp, data_ut=data_ut, data_gmm=data_gmm,
+                         PNet_XL_PATH=OUTPUT_PATH, p_net_gmm=p_net_gmm, rar_samples=rar_samples)
 
-        # Singler corner plot as coordinate: x_coords
-        # ax = plot_single_corner(
-        #     t, constants, x_coord1=x_coords[0], x_coord2=x_coords[1], X_samples=X_ref,
-        #     data_marginal_pinn=data_marginal_pinn,
-        #     gaussian_lp=gaussian_lp,
-        #     gaussian_ut=gaussian_ut,
-        #     p_net_gmm=p_net_gmm,
-        # )
-
-        # Full corner plot
-        plot_full_corner(constants, t, X_ref, OUTPUT_PATH=OUTPUT_PATH, p_net_gmm=p_net_gmm)
+        # Full corner plot NOTE: need updates
+        # plot_full_corner(constants, t, X_ref, OUTPUT_PATH=OUTPUT_PATH, p_net_gmm=p_net_gmm)
 
         plt.show()
+
+
+def config_trained_models():
+    """
+    use standard training to replace V0 models
+    """
+    trained_models = {
+        "PINN-XL": "output/pinn-xl",
+        "PINN-GMM" : "output/pinn-gmm",
+        "PINN-GMM_2xsamples": "output/pinn-gmm_double-samples",
+        "PINN-GMM_bias" : "output/pinn-gmm_bias",
+    }
+    return trained_models
+
+
+def load_model_by_key(trained_models, key=""):
+    if key not in trained_models:
+        raise KeyError(f"Missing key {key!r}. Available: {list(trained_models.keys())}")
+
+    # Scale of p0 max
+    _x_at_mean = constants.N_MEAN_I.copy()
+    scale = p_init_scaled(constants, _x_at_mean.reshape(-1, 6)).item()
+    scale_torch = torch.tensor(scale, dtype=torch.float32)
+
+    KEY_PATH = trained_models[key]
+
+    if(key == "PINN-XL"):
+        p_net = PNet_XL(constants, scale=scale_torch, input_feature=7)
+        p_net = load_trained_model(p_net, path=KEY_PATH+"/p_net.pth"); p_net.eval()
+        e1_net = ENet_XL(constants, scale=scale_torch, normalize=scale_torch*0.02)
+        e1_net = load_trained_model(e1_net, path=KEY_PATH+"/e1_net.pth"); e1_net.eval()
+        rar_samples = None
+        return p_net, e1_net, rar_samples
+    
+    if(key == "PINN-GMM"):
+        p_net = TimeToGMM6D_V0(constants, K=11)
+        p_net = load_trained_model(p_net, path=KEY_PATH+"/p_net.pth"); p_net.eval()
+        e1_net = None
+        # e1_net = ENet_XL(constants, scale=scale_torch, normalize=scale_torch*0.02)
+        # e1_net = load_trained_model(e1_net, path=KEY_PATH+"/e1_net.pth"); e1_net.eval()
+        _p = Path(KEY_PATH) / "p_net-RARsamples.npz"
+        if _p.is_file(): 
+            rar_samples = np.load(_p)
+        else:
+            rar_samples = None
+        del _p
+        return p_net, e1_net, rar_samples
+    
+    if(key == "PINN-GMM_2xsamples"):
+        p_net = TimeToGMM6D_V0(constants, K=11)
+        p_net = load_trained_model(p_net, path=KEY_PATH+"/p_net.pth"); p_net.eval()
+        e1_net = None
+        # e1_net = ENet_XL(constants, scale=scale_torch, normalize=scale_torch*0.02)
+        # e1_net = load_trained_model(e1_net, path=KEY_PATH+"/e1_net.pth"); e1_net.eval()
+        _p = Path(KEY_PATH) / "p_net-RARsamples.npz"
+        if _p.is_file(): 
+            rar_samples = np.load(_p)
+        else:
+            rar_samples = None
+        del _p
+        return p_net, e1_net, rar_samples
+    
+    if(key == "PINN-GMM_bias"):
+        p_net = TimeToGMM6D_V0(constants, K=11)
+        p_net = load_trained_model(p_net, path=KEY_PATH+"/p_net.pth"); p_net.eval()
+        e1_net = ENet_XL(constants, scale=scale_torch, normalize=scale_torch*0.02)
+        e1_net = load_trained_model(e1_net, path=KEY_PATH+"/e1_net.pth"); e1_net.eval()
+        _p = Path(KEY_PATH) / "p_net-RARsamples.npz"
+        if _p.is_file(): 
+            rar_samples = np.load(_p)
+        else:
+            rar_samples = None
+        del _p
+        return p_net, e1_net, rar_samples
 
 
 def compare_methods():
     global constants
 
-    # p_net = PNet(constants, input_feature=7)
-    # p_net = PNet_Scaled(constants, input_feature=7)
+    # setup trained models dictionary
+    trained_models = config_trained_models()
 
-    p_net = PNet_XL(constants, input_feature=7)
-    _x_at_mean = constants.N_MEAN_I.copy()
-    p_max = p_init_scaled(constants, _x_at_mean.reshape(-1, 6)).item()
-    scale = p_max
-    scale_torch = torch.tensor(scale, dtype=torch.float32)
-    p_net.scale = scale_torch
-    OUTPUT_PATH = "output/v0_scaled_T0.3"
-    p_net = load_trained_model(p_net, path=OUTPUT_PATH+"/p_net.pth"); p_net.eval()
-    e1_net = E1Net_XL(constants, scale=scale_torch, normalize=scale_torch*0.02)
-    e1_net = load_trained_model(e1_net, path=OUTPUT_PATH+"/e1_net.pth"); e1_net.eval()
+    # load pinn-mlp
+    p_net, e1_net, _ = load_model_by_key(trained_models, key="PINN-XL")
 
-    # --- pinn-gmm ---
-    p_net_gmm = TimeToGMM6D_V0(constants, K=11)
-    p_net_gmm = load_trained_model(p_net_gmm, path="output/pinn-gmm(V0)/p_net.pth"); p_net_gmm.eval()
-    e1_net_gmm = E1Net_XL(constants, scale=0.02*scale_torch, normalize=scale_torch*0.02)
-    e1_net_gmm = load_trained_model(e1_net_gmm, path="output/pinn-gmm(V0)/e1_net.pth"); e1_net.eval()
+    # load pinn-gmm
+    p_net_gmm, e1_net_gmm, rar_samples = load_model_by_key(trained_models, key="PINN-GMM_bias")
 
+    # load baseline methods
     data_lp = PropagationData(SAVE_PATH_LINEAR_PROPAGATE)
     data_ut = PropagationData(SAVE_PATH_UNSCENT_PROPAGATE)
     data_gmm = PropagationData(SAVE_PATH_GMM_PROPAGATE)
@@ -439,8 +498,14 @@ def compare_methods():
     metrics = load_metrics_npz(metrics_path); plot_pdf_metrics(metrics)
 
     # Visualize marginal PDF
-    # compare_corner_plots(p_net=p_net, data_lp=data_lp, data_ut=data_ut, OUTPUT_PATH=None,#OUTPUT_PATH,
-    #                      p_net_gmm=p_net_gmm)
+    compare_corner_plots(
+        OUTPUT_PATH=None,
+        data_lp=data_lp, data_ut=None, data_gmm=None,
+        p_net_gmm=p_net_gmm, rar_samples=rar_samples
+    )
+    
+    # --- plot training history ---
+    plot_training_history(trained_models)
         
 
 def main():

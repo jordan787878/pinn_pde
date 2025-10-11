@@ -1,0 +1,409 @@
+===== logging start 2025-10-16 20:57:41 =====
+--- Save Epoch 1, Loss=1149081.0000, IC=0.3269, Res=1149080.6250, Beta=0.00 ---
+... RAR IC , Max IC error: 1.6658, t: tensor(0.)
+... RAR RES, Max residual error: 7791.4375, t: tensor([[0.0762],
+        [0.2567],
+        [0.1420]])
+--- Save Epoch 140, Loss=1037681.1875, IC=105.6075, Res=1037575.5625, Beta=0.02 ---
+--- Save Epoch 142, Loss=983725.2500, IC=108.7344, Res=983616.5000, Beta=0.04 ---
+--- Save Epoch 145, Loss=884871.0625, IC=117.3720, Res=884753.6875, Beta=0.06 ---
+--- Save Epoch 152, Loss=839127.6250, IC=137.5101, Res=838990.1250, Beta=0.08 ---
+--- Save Epoch 160, Loss=776611.9375, IC=136.1951, Res=776475.7500, Beta=0.10 ---
+--- Save Epoch 171, Loss=689448.6250, IC=146.2238, Res=689302.3750, Beta=0.12 ---
+--- Save Epoch 175, Loss=565001.8750, IC=145.6500, Res=564856.2500, Beta=0.14 ---
+--- Save Epoch 178, Loss=512853.2500, IC=150.0717, Res=512703.1875, Beta=0.16 ---
+--- Save Epoch 181, Loss=436580.5625, IC=159.4133, Res=436421.1562, Beta=0.18 ---
+--- Save Epoch 196, Loss=402361.0938, IC=181.0936, Res=402180.0000, Beta=0.20 ---
+... RAR IC , Max IC error: 25.1086, t: tensor(0.)
+... RAR RES, Max residual error: 6032.3296, t: tensor([[0.2406],
+        [0.2901],
+        [0.2195]])
+--- Save Epoch 222, Loss=362011.2812, IC=176.4632, Res=361834.8125, Beta=0.22 ---
+--- Save Epoch 225, Loss=330537.3125, IC=174.0043, Res=330363.3125, Beta=0.24 ---
+--- Save Epoch 226, Loss=310749.1250, IC=171.5726, Res=310577.5625, Beta=0.26 ---
+--- Save Epoch 230, Loss=291925.0312, IC=175.5932, Res=291749.4375, Beta=0.28 ---
+--- Save Epoch 246, Loss=237195.9219, IC=178.3271, Res=237017.5938, Beta=0.30 ---
+--- Save Epoch 296, Loss=195758.8594, IC=172.5428, Res=195586.3125, Beta=0.32 ---
+... RAR IC , Max IC error: 25.0005, t: tensor(0.)
+... RAR RES, Max residual error: 5326.8691, t: tensor([[0.0909],
+        [0.0092],
+        [0.1493]])
+--- Save Epoch 304, Loss=166959.7656, IC=180.1126, Res=166779.6562, Beta=0.34 ---
+--- Save Epoch 307, Loss=144553.9219, IC=179.3655, Res=144374.5625, Beta=0.36 ---
+--- Save Epoch 325, Loss=124986.5234, IC=172.2809, Res=124814.2422, Beta=0.38 ---
+--- Save Epoch 328, Loss=96442.0234, IC=178.5087, Res=96263.5156, Beta=0.40 ---
+--- Save Epoch 330, Loss=91296.8125, IC=184.0593, Res=91112.7500, Beta=0.42 ---
+--- Save Epoch 336, Loss=64554.2070, IC=170.9177, Res=64383.2891, Beta=0.44 ---
+--- Save Epoch 377, Loss=60341.9570, IC=170.5697, Res=60171.3867, Beta=0.46 ---
+--- Save Epoch 396, Loss=48864.7891, IC=177.6764, Res=48687.1133, Beta=0.48 ---
+... RAR IC , Max IC error: 24.9565, t: tensor(0.)
+... RAR RES, Max residual error: 2939.8721, t: tensor([[0.2866],
+        [0.2978],
+        [0.2870]])
+--- Save Epoch 657, Loss=44156.6172, IC=265.4344, Res=43891.1836, Beta=0.50 ---
+--- Save Epoch 660, Loss=37613.5742, IC=262.6151, Res=37350.9609, Beta=0.52 ---
+--- Save Epoch 661, Loss=25468.1406, IC=264.7050, Res=25203.4355, Beta=0.54 ---
+--- Save Epoch 665, Loss=21274.3965, IC=265.1988, Res=21009.1973, Beta=0.56 ---
+... RAR IC , Max IC error: 27.1216, t: tensor(0.)
+... RAR RES, Max residual error: 2681.3757, t: tensor([[0.0321],
+        [0.0098],
+        [0.0400]])
+--- Save Epoch 805, Loss=19761.3066, IC=304.1633, Res=19457.1426, Beta=0.58 ---
+... RAR IC , Max IC error: 26.9275, t: tensor(0.)
+... RAR RES, Max residual error: 1615.8940, t: tensor([[0.0041],
+        [0.1297],
+        [0.0664]])
+--- Save Epoch 996, Loss=13345.3232, IC=319.2559, Res=13026.0674, Beta=0.60 ---
+[info] epoch 1000, lr=9.50e-04
+... RAR IC , Max IC error: 26.2419, t: tensor(0.)
+... RAR RES, Max residual error: 4324.7295, t: tensor([[0.2940],
+        [0.2573],
+        [0.2859]])
+--- Save Epoch 1640, Loss=8742.8906, IC=262.1127, Res=8480.7783, Beta=0.62 ---
+--- Save Epoch 1668, Loss=7386.5981, IC=259.9804, Res=7126.6177, Beta=0.64 ---
+--- Save Epoch 1696, Loss=6471.6909, IC=252.2065, Res=6219.4844, Beta=0.66 ---
+... RAR IC , Max IC error: 26.9538, t: tensor(0.)
+... RAR RES, Max residual error: 1999.7499, t: tensor([[0.0162],
+        [0.0234],
+        [0.0162]])
+[info] epoch 2000, lr=9.02e-04
+--- Save Epoch 2048, Loss=5638.7261, IC=200.2081, Res=5438.5181, Beta=0.68 ---
+... RAR IC , Max IC error: 27.5675, t: tensor(0.)
+... RAR RES, Max residual error: 1835.8483, t: tensor([[0.2964],
+        [0.2259],
+        [0.2872]])
+--- Save Epoch 2295, Loss=3986.0347, IC=176.1003, Res=3809.9343, Beta=0.70 ---
+... RAR IC , Max IC error: 24.5114, t: tensor(0.)
+... RAR RES, Max residual error: 1666.4551, t: tensor([[0.2947],
+        [0.1958],
+        [0.2666]])
+[info] epoch 3000, lr=8.57e-04
+--- Save Epoch 3079, Loss=3686.6838, IC=94.3086, Res=3592.3752, Beta=0.72 ---
+... RAR IC , Max IC error: 31.8064, t: tensor(0.)
+... RAR RES, Max residual error: 1317.2922, t: tensor([[0.0393],
+        [0.1827],
+        [0.1641]])
+--- Save Epoch 3106, Loss=3055.0452, IC=101.7997, Res=2953.2454, Beta=0.74 ---
+... RAR IC , Max IC error: 32.9596, t: tensor(0.)
+... RAR RES, Max residual error: 1676.1832, t: tensor([[0.0067],
+        [0.0081],
+        [0.1584]])
+--- Save Epoch 3551, Loss=2207.1128, IC=63.2155, Res=2143.8972, Beta=0.76 ---
+--- Save Epoch 3552, Loss=1820.5533, IC=63.7469, Res=1756.8064, Beta=0.78 ---
+--- Save Epoch 3594, Loss=1536.1108, IC=54.6864, Res=1481.4244, Beta=0.80 ---
+... RAR IC , Max IC error: 30.9344, t: tensor(0.)
+... RAR RES, Max residual error: 809.9173, t: tensor([[0.0579],
+        [0.2904],
+        [0.0479]])
+--- Save Epoch 3704, Loss=1357.5994, IC=63.6033, Res=1293.9961, Beta=0.82 ---
+--- Save Epoch 3786, Loss=1192.2432, IC=40.1783, Res=1152.0649, Beta=0.84 ---
+--- Save Epoch 3790, Loss=1071.6630, IC=41.0164, Res=1030.6465, Beta=0.86 ---
+--- Save Epoch 3800, Loss=902.8736, IC=41.6110, Res=861.2626, Beta=0.88 ---
+... RAR IC , Max IC error: 32.3703, t: tensor(0.)
+... RAR RES, Max residual error: 498.0760, t: tensor([[0.2336],
+        [0.2932],
+        [0.2969]])
+--- Save Epoch 3813, Loss=827.1744, IC=40.7777, Res=786.3967, Beta=0.90 ---
+--- Save Epoch 3814, Loss=677.9590, IC=38.9497, Res=639.0093, Beta=0.92 ---
+--- Save Epoch 3818, Loss=607.8795, IC=39.8465, Res=568.0330, Beta=0.94 ---
+--- Save Epoch 3819, Loss=411.4438, IC=41.6238, Res=369.8201, Beta=0.96 ---
+--- Save Epoch 3820, Loss=195.6280, IC=41.8865, Res=153.7414, Beta=0.98 ---
+--- Save Epoch 3822, Loss=149.0129, IC=37.2136, Res=111.7992, Beta=1.00 ---
+--- Save Epoch 3825, Loss=106.7326, IC=7.7191, Res=99.0136, Beta=1.00 ---
+--- Save Epoch 3828, Loss=63.7686, IC=13.4275, Res=50.3410, Beta=1.00 ---
+--- Save Epoch 3829, Loss=19.8998, IC=13.0511, Res=6.8488, Beta=1.00 ---
+--- Save Epoch 3830, Loss=3.4400, IC=1.1190, Res=2.3210, Beta=1.00 ---
+--- Save Epoch 3831, Loss=2.0875, IC=0.3568, Res=1.7307, Beta=1.00 ---
+--- Save Epoch 3834, Loss=0.8644, IC=0.2705, Res=0.5939, Beta=1.00 ---
+--- Save Epoch 3841, Loss=0.8127, IC=0.4389, Res=0.3738, Beta=1.00 ---
+--- Save Epoch 3847, Loss=0.5931, IC=0.1894, Res=0.4037, Beta=1.00 ---
+--- Save Epoch 3850, Loss=0.4205, IC=0.0781, Res=0.3424, Beta=1.00 ---
+--- Save Epoch 3853, Loss=0.3942, IC=0.0283, Res=0.3659, Beta=1.00 ---
+--- Save Epoch 3876, Loss=0.3299, IC=0.0107, Res=0.3192, Beta=1.00 ---
+--- Save Epoch 3898, Loss=0.3081, IC=0.0070, Res=0.3011, Beta=1.00 ---
+... RAR IC , Max IC error: 0.3021, t: tensor(0.)
+... RAR RES, Max residual error: 3.4608, t: tensor([[0.0012],
+        [0.0012],
+        [0.0012]])
+--- Save Epoch 3976, Loss=0.2768, IC=0.0094, Res=0.2674, Beta=1.00 ---
+[info] epoch 4000, lr=8.15e-04
+... RAR IC , Max IC error: 0.2544, t: tensor(0.)
+... RAR RES, Max residual error: 4.1962, t: tensor([[0.0025],
+        [0.0289],
+        [0.2940]])
+--- Save Epoch 4033, Loss=0.2619, IC=0.0032, Res=0.2588, Beta=1.00 ---
+--- Save Epoch 4041, Loss=0.2456, IC=0.0037, Res=0.2419, Beta=1.00 ---
+--- Save Epoch 4048, Loss=0.2290, IC=0.0040, Res=0.2249, Beta=1.00 ---
+--- Save Epoch 4055, Loss=0.2092, IC=0.0040, Res=0.2053, Beta=1.00 ---
+--- Save Epoch 4077, Loss=0.1889, IC=0.0036, Res=0.1853, Beta=1.00 ---
+--- Save Epoch 4092, Loss=0.1794, IC=0.0035, Res=0.1759, Beta=1.00 ---
+... RAR IC , Max IC error: 0.3926, t: tensor(0.)
+... RAR RES, Max residual error: 3.0019, t: tensor([[0.0377],
+        [0.0194],
+        [0.1958]])
+--- Save Epoch 4138, Loss=0.1600, IC=0.0044, Res=0.1556, Beta=1.00 ---
+--- Save Epoch 4161, Loss=0.1504, IC=0.0043, Res=0.1461, Beta=1.00 ---
+--- Save Epoch 4165, Loss=0.1428, IC=0.0048, Res=0.1380, Beta=1.00 ---
+--- Save Epoch 4167, Loss=0.1319, IC=0.0046, Res=0.1273, Beta=1.00 ---
+... RAR IC , Max IC error: 0.4126, t: tensor(0.)
+... RAR RES, Max residual error: 5.2183, t: tensor([[0.2669],
+        [0.0407],
+        [0.0231]])
+--- Save Epoch 4268, Loss=0.1212, IC=0.0039, Res=0.1173, Beta=1.00 ---
+--- Save Epoch 4271, Loss=0.1122, IC=0.0039, Res=0.1082, Beta=1.00 ---
+--- Save Epoch 4289, Loss=0.1040, IC=0.0039, Res=0.1001, Beta=1.00 ---
+... RAR IC , Max IC error: 0.4689, t: tensor(0.)
+... RAR RES, Max residual error: 4.3539, t: tensor([[0.0116],
+        [0.0011],
+        [0.0005]])
+--- Save Epoch 4388, Loss=0.0948, IC=0.0049, Res=0.0900, Beta=1.00 ---
+... RAR IC , Max IC error: 0.3948, t: tensor(0.)
+... RAR RES, Max residual error: 2.8584, t: tensor([[0.0386],
+        [0.2935],
+        [0.0063]])
+--- Save Epoch 4479, Loss=0.0891, IC=0.0038, Res=0.0853, Beta=1.00 ---
+--- Save Epoch 4485, Loss=0.0819, IC=0.0036, Res=0.0783, Beta=1.00 ---
+... RAR IC , Max IC error: 0.4391, t: tensor(0.)
+... RAR RES, Max residual error: 3.9739, t: tensor([[0.0026],
+        [0.2514],
+        [0.2982]])
+--- Save Epoch 4537, Loss=0.0748, IC=0.0034, Res=0.0714, Beta=1.00 ---
+--- Save Epoch 4560, Loss=0.0621, IC=0.0036, Res=0.0585, Beta=1.00 ---
+... RAR IC , Max IC error: 0.2871, t: tensor(0.)
+... RAR RES, Max residual error: 3.4414, t: tensor([[0.0008],
+        [0.0008],
+        [0.2900]])
+--- Save Epoch 4780, Loss=0.0545, IC=0.0028, Res=0.0516, Beta=1.00 ---
+... RAR IC , Max IC error: 0.2664, t: tensor(0.)
+... RAR RES, Max residual error: 4.5350, t: tensor([[0.0005],
+        [0.0085],
+        [0.0092]])
+--- Save Epoch 4969, Loss=0.0498, IC=0.0025, Res=0.0474, Beta=1.00 ---
+[info] epoch 5000, lr=7.74e-04
+... RAR IC , Max IC error: 0.3036, t: tensor(0.)
+... RAR RES, Max residual error: 2.8846, t: tensor([[0.0039],
+        [0.0012],
+        [0.2971]])
+--- Save Epoch 5034, Loss=0.0469, IC=0.0025, Res=0.0443, Beta=1.00 ---
+--- Save Epoch 5073, Loss=0.0432, IC=0.0026, Res=0.0406, Beta=1.00 ---
+... RAR IC , Max IC error: 0.2426, t: tensor(0.)
+... RAR RES, Max residual error: 3.6136, t: tensor([[0.0012],
+        [0.0363],
+        [0.0485]])
+--- Save Epoch 5199, Loss=0.0400, IC=0.0027, Res=0.0373, Beta=1.00 ---
+... RAR IC , Max IC error: 0.2116, t: tensor(0.)
+... RAR RES, Max residual error: 2.4098, t: tensor([[0.0104],
+        [0.0024],
+        [0.0024]])
+--- Save Epoch 5244, Loss=0.0377, IC=0.0027, Res=0.0350, Beta=1.00 ---
+--- Save Epoch 5292, Loss=0.0314, IC=0.0026, Res=0.0288, Beta=1.00 ---
+... RAR IC , Max IC error: 0.2350, t: tensor(0.)
+... RAR RES, Max residual error: 3.3249, t: tensor([[0.0067],
+        [0.0092],
+        [0.0618]])
+--- Save Epoch 5565, Loss=0.0262, IC=0.0022, Res=0.0240, Beta=1.00 ---
+... RAR IC , Max IC error: 0.1750, t: tensor(0.)
+... RAR RES, Max residual error: 1.8774, t: tensor([[0.0115],
+        [0.0025],
+        [0.0135]])
+--- Save Epoch 5889, Loss=0.0214, IC=0.0021, Res=0.0194, Beta=1.00 ---
+... RAR IC , Max IC error: 0.1897, t: tensor(0.)
+... RAR RES, Max residual error: 2.8500, t: tensor([[0.0281],
+        [0.0345],
+        [0.0038]])
+[info] epoch 6000, lr=7.35e-04
+--- Save Epoch 6119, Loss=0.0194, IC=0.0018, Res=0.0176, Beta=1.00 ---
+... RAR IC , Max IC error: 0.1578, t: tensor(0.)
+... RAR RES, Max residual error: 2.5689, t: tensor([[0.0447],
+        [0.2615],
+        [0.0050]])
+--- Save Epoch 6380, Loss=0.0182, IC=0.0017, Res=0.0165, Beta=1.00 ---
+... RAR IC , Max IC error: 0.1658, t: tensor(0.)
+... RAR RES, Max residual error: 4.3370, t: tensor([[0.0241],
+        [0.2731],
+        [0.0235]])
+--- Save Epoch 6594, Loss=0.0163, IC=0.0017, Res=0.0145, Beta=1.00 ---
+... RAR IC , Max IC error: 0.1706, t: tensor(0.)
+... RAR RES, Max residual error: 4.7755, t: tensor([[0.0257],
+        [0.0201],
+        [0.2623]])
+[info] epoch 7000, lr=6.98e-04
+--- Save Epoch 7153, Loss=0.0143, IC=0.0015, Res=0.0128, Beta=1.00 ---
+... RAR IC , Max IC error: 0.1350, t: tensor(0.)
+... RAR RES, Max residual error: 2.0449, t: tensor([[0.0011],
+        [0.0011],
+        [0.0006]])
+--- Save Epoch 7325, Loss=0.0125, IC=0.0015, Res=0.0110, Beta=1.00 ---
+... RAR IC , Max IC error: 0.1357, t: tensor(0.)
+... RAR RES, Max residual error: 2.4788, t: tensor([[0.0202],
+        [0.0193],
+        [0.0408]])
+--- Save Epoch 7771, Loss=0.0115, IC=0.0015, Res=0.0100, Beta=1.00 ---
+... RAR IC , Max IC error: 0.1519, t: tensor(0.)
+... RAR RES, Max residual error: 2.3491, t: tensor([[9.4771e-05],
+        [5.7271e-03],
+        [3.9134e-02]])
+[info] epoch 8000, lr=6.63e-04
+--- Save Epoch 8364, Loss=0.0105, IC=0.0013, Res=0.0092, Beta=1.00 ---
+... RAR IC , Max IC error: 0.1343, t: tensor(0.)
+... RAR RES, Max residual error: 3.5433, t: tensor([[0.0007],
+        [0.0021],
+        [0.0096]])
+--- Save Epoch 8809, Loss=0.0097, IC=0.0013, Res=0.0084, Beta=1.00 ---
+... RAR IC , Max IC error: 0.1295, t: tensor(0.)
+... RAR RES, Max residual error: 2.9092, t: tensor([[0.0004],
+        [0.0004],
+        [0.0004]])
+[info] epoch 9000, lr=6.30e-04
+--- Save Epoch 9211, Loss=0.0083, IC=0.0012, Res=0.0071, Beta=1.00 ---
+... RAR IC , Max IC error: 0.1641, t: tensor(0.)
+... RAR RES, Max residual error: 2.3512, t: tensor([[1.6933e-02],
+        [1.8239e-05],
+        [1.8239e-05]])
+[info] epoch 10000, lr=5.99e-04
+--- Save Epoch 10698, Loss=0.0074, IC=0.0010, Res=0.0064, Beta=1.00 ---
+... RAR IC , Max IC error: 0.1218, t: tensor(0.)
+... RAR RES, Max residual error: 1.3843, t: tensor([[0.2621],
+        [0.0113],
+        [0.0065]])
+--- Save Epoch 10862, Loss=0.0057, IC=0.0010, Res=0.0047, Beta=1.00 ---
+... RAR IC , Max IC error: 0.1166, t: tensor(0.)
+... RAR RES, Max residual error: 1.2989, t: tensor([[0.2761],
+        [0.0350],
+        [0.0640]])
+[info] epoch 11000, lr=5.69e-04
+[info] epoch 12000, lr=5.40e-04
+[info] epoch 13000, lr=5.13e-04
+--- Save Epoch 13001, Loss=0.0051, IC=0.0007, Res=0.0045, Beta=1.00 ---
+... RAR IC , Max IC error: 0.1154, t: tensor(0.)
+... RAR RES, Max residual error: 1.9375, t: tensor([[0.2835],
+        [0.0018],
+        [0.2887]])
+--- Save Epoch 13596, Loss=0.0047, IC=0.0007, Res=0.0041, Beta=1.00 ---
+... RAR IC , Max IC error: 0.0964, t: tensor(0.)
+... RAR RES, Max residual error: 1.4469, t: tensor([[0.0079],
+        [0.0046],
+        [0.2344]])
+[info] epoch 14000, lr=4.88e-04
+--- Save Epoch 14084, Loss=0.0043, IC=0.0006, Res=0.0036, Beta=1.00 ---
+... RAR IC , Max IC error: 0.0887, t: tensor(0.)
+... RAR RES, Max residual error: 1.2495, t: tensor([[0.0009],
+        [0.0510],
+        [0.0009]])
+--- Save Epoch 14263, Loss=0.0039, IC=0.0006, Res=0.0032, Beta=1.00 ---
+... RAR IC , Max IC error: 0.0969, t: tensor(0.)
+... RAR RES, Max residual error: 1.8001, t: tensor([[0.0024],
+        [0.0026],
+        [0.0028]])
+[info] epoch 15000, lr=4.63e-04
+--- Save Epoch 15699, Loss=0.0037, IC=0.0005, Res=0.0032, Beta=1.00 ---
+... RAR IC , Max IC error: 0.0697, t: tensor(0.)
+... RAR RES, Max residual error: 1.0536, t: tensor([[0.2920],
+        [0.2946],
+        [0.0010]])
+[info] epoch 16000, lr=4.40e-04
+[info] epoch 17000, lr=4.18e-04
+--- Save Epoch 17254, Loss=0.0034, IC=0.0004, Res=0.0030, Beta=1.00 ---
+... RAR IC , Max IC error: 0.0926, t: tensor(0.)
+... RAR RES, Max residual error: 1.9244, t: tensor([[0.0001],
+        [0.0424],
+        [0.0001]])
+[info] epoch 18000, lr=3.97e-04
+--- Save Epoch 18480, Loss=0.0030, IC=0.0004, Res=0.0026, Beta=1.00 ---
+... RAR IC , Max IC error: 0.0610, t: tensor(0.)
+... RAR RES, Max residual error: 1.0216, t: tensor([[0.0016],
+        [0.0016],
+        [0.0011]])
+[info] epoch 19000, lr=3.77e-04
+--- Save Epoch 19301, Loss=0.0028, IC=0.0003, Res=0.0025, Beta=1.00 ---
+... RAR IC , Max IC error: 0.0529, t: tensor(0.)
+... RAR RES, Max residual error: 1.2171, t: tensor([[0.0378],
+        [0.0004],
+        [0.0106]])
+--- Save Epoch 19993, Loss=0.0025, IC=0.0003, Res=0.0022, Beta=1.00 ---
+[info] epoch 20000, lr=3.58e-04
+... RAR IC , Max IC error: 0.0543, t: tensor(0.)
+... RAR RES, Max residual error: 1.0172, t: tensor([[0.2862],
+        [0.0028],
+        [0.0138]])
+[info] epoch 21000, lr=3.41e-04
+--- Save Epoch 21260, Loss=0.0022, IC=0.0002, Res=0.0019, Beta=1.00 ---
+... RAR IC , Max IC error: 0.0574, t: tensor(0.)
+... RAR RES, Max residual error: 0.8985, t: tensor([[0.0026],
+        [0.0267],
+        [0.0023]])
+[info] epoch 22000, lr=3.24e-04
+--- Save Epoch 22706, Loss=0.0019, IC=0.0002, Res=0.0017, Beta=1.00 ---
+... RAR IC , Max IC error: 0.0551, t: tensor(0.)
+... RAR RES, Max residual error: 1.5589, t: tensor([[0.0004],
+        [0.0004],
+        [0.0165]])
+[info] epoch 23000, lr=3.07e-04
+[info] epoch 24000, lr=2.92e-04
+--- Save Epoch 24449, Loss=0.0018, IC=0.0002, Res=0.0016, Beta=1.00 ---
+... RAR IC , Max IC error: 0.0520, t: tensor(0.)
+... RAR RES, Max residual error: 1.0153, t: tensor([[0.0058],
+        [0.0048],
+        [0.0189]])
+[info] epoch 25000, lr=2.77e-04
+--- Save Epoch 25397, Loss=0.0016, IC=0.0002, Res=0.0015, Beta=1.00 ---
+... RAR IC , Max IC error: 0.0431, t: tensor(0.)
+... RAR RES, Max residual error: 1.1453, t: tensor([[0.0377],
+        [0.0023],
+        [0.0051]])
+[info] epoch 26000, lr=2.64e-04
+[info] epoch 27000, lr=2.50e-04
+--- Save Epoch 27061, Loss=0.0015, IC=0.0001, Res=0.0013, Beta=1.00 ---
+... RAR IC , Max IC error: 0.0513, t: tensor(0.)
+... RAR RES, Max residual error: 1.2794, t: tensor([[0.0012],
+        [0.0012],
+        [0.0012]])
+[info] epoch 28000, lr=2.38e-04
+--- Save Epoch 28522, Loss=0.0014, IC=0.0001, Res=0.0012, Beta=1.00 ---
+... RAR IC , Max IC error: 0.0543, t: tensor(0.)
+... RAR RES, Max residual error: 0.8271, t: tensor([[0.2845],
+        [0.0029],
+        [0.2474]])
+[info] epoch 29000, lr=2.26e-04
+[info] epoch 30000, lr=2.15e-04
+--- Save Epoch 30190, Loss=0.0013, IC=0.0001, Res=0.0012, Beta=1.00 ---
+... RAR IC , Max IC error: 0.0429, t: tensor(0.)
+... RAR RES, Max residual error: 1.4197, t: tensor([[5.4914e-05],
+        [5.4050e-04],
+        [5.4914e-05]])
+[info] epoch 31000, lr=2.04e-04
+--- Save Epoch 31259, Loss=0.0012, IC=0.0001, Res=0.0011, Beta=1.00 ---
+... RAR IC , Max IC error: 0.0398, t: tensor(0.)
+... RAR RES, Max residual error: 0.8568, t: tensor([[0.0004],
+        [0.0004],
+        [0.0004]])
+[info] epoch 32000, lr=1.94e-04
+[info] epoch 33000, lr=1.84e-04
+--- Save Epoch 33234, Loss=0.0011, IC=0.0001, Res=0.0011, Beta=1.00 ---
+... RAR IC , Max IC error: 0.0382, t: tensor(0.)
+... RAR RES, Max residual error: 1.2524, t: tensor([[0.0220],
+        [0.0056],
+        [0.0003]])
+--- Save Epoch 33995, Loss=0.0010, IC=0.0001, Res=0.0009, Beta=1.00 ---
+[info] epoch 34000, lr=1.75e-04
+... RAR IC , Max IC error: 0.0423, t: tensor(0.)
+... RAR RES, Max residual error: 0.7882, t: tensor([[0.0007],
+        [0.0007],
+        [0.2729]])
+[info] epoch 35000, lr=1.66e-04
+--- Save Epoch 35061, Loss=0.0009, IC=0.0001, Res=0.0008, Beta=1.00 ---
+... RAR IC , Max IC error: 0.0539, t: tensor(0.)
+... RAR RES, Max residual error: 1.0021, t: tensor([[0.2992],
+        [0.2321],
+        [0.0402]])
+[info] epoch 36000, lr=1.58e-04
+[info] epoch 37000, lr=1.50e-04
+[info] epoch 38000, lr=1.42e-04
+--- Save Epoch 38155, Loss=0.0008, IC=0.0001, Res=0.0008, Beta=1.00 ---
+... RAR IC , Max IC error: 0.0377, t: tensor(0.)
+... RAR RES, Max residual error: 0.6995, t: tensor([[0.0278],
+        [0.2867],
+        [0.2759]])
+[info] epoch 39000, lr=1.35e-04
+[info] epoch 40000, lr=1.29e-04
+===== logging end   2025-10-16 23:28:31 =====

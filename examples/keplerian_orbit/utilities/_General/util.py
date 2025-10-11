@@ -2,6 +2,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 import torch
+from pathlib import Path
+import sys, time
 
 
 def compute_volume(bounds):
@@ -120,11 +122,94 @@ colors_6set = sns.color_palette([
 ])
 
 
-def plot_training_history(paths, labels):
+def plot_training_history(model_paths: dict, palette: str = "husl", model="p_net.pth"):
+    """
+    model_paths: dict like {"PNet_XL_V1": "output/.../best.pt", ...}
+    palette: seaborn palette name (e.g., 'mako', 'rocket', 'flare', 'viridis', ...)
+    """
     set_publication_plot_style()
-    colors = [colors_6set[1], colors_6set[0]]
-    for i, (p, l) in enumerate(zip(paths, labels)):
-        y = np.asarray(torch.load(p, map_location="cpu")["loss_history"], dtype=float)
-        plt.plot(np.arange(len(y)), y, label=l, color=colors[i % len(colors)])
-    plt.yscale("log"); plt.legend(); plt.xlabel("Iteration"); plt.ylabel("Loss"); plt.grid(True, ls="--", alpha=0.5)
+    colors = sns.color_palette(palette, n_colors=len(model_paths))
+
+    for (label, path), color in zip(model_paths.items(), colors):
+        y = np.asarray(torch.load(path+"/"+model, map_location="cpu")["loss_history"], dtype=float)
+        x = np.arange(len(y))
+        plt.plot(x, y, label=label, color=color, alpha=0.7)
+    plt.yscale("log")
+    plt.xlabel("Iteration")
+    plt.ylabel("Loss")
+    plt.grid(True, ls="--", alpha=0.5)
+    plt.legend()
     plt.show()
+
+
+def save_config_human(config, model_name):
+    out = Path(config["save_path"]); out.mkdir(parents=True, exist_ok=True)
+    # Plain text (ultra-readable)
+    txt_path  = out / f"{model_name}-config.txt"
+    with open(txt_path, "w") as f:
+        for k, v in config.items():
+            f.write(f"{k}: {v}\n")
+
+
+class RunLogger:
+    """
+    Redirects stdout/stderr to a file. If tee=True, also keeps console output.
+    Usage:
+        with RunLogger("output/pinn-xl/train.log", tee=True):
+            ... your code ...
+    Or:
+        lg = RunLogger("output/pinn-xl/train.log", tee=True); lg.start()
+        ... your code ...
+        lg.stop()
+    """
+    def __init__(self, log_path, tee: bool = True, header: bool = True):
+        self.log_path = Path(log_path)
+        self.tee = bool(tee)
+        self.header = bool(header)
+        self._old_out = None
+        self._old_err = None
+        self._fh = None
+
+    def start(self):
+        self.log_path.parent.mkdir(parents=True, exist_ok=True)
+        # line-buffered file
+        self._fh = open(self.log_path, "a", buffering=1)
+        if self.header:
+            ts = time.strftime("%Y-%m-%d %H:%M:%S")
+            self._fh.write(f"\n===== logging start {ts} =====\n")
+
+        self._old_out, self._old_err = sys.stdout, sys.stderr
+
+        if self.tee:
+            class _Tee:
+                def write(_, s):
+                    self._old_out.write(s)
+                    self._fh.write(s)
+                def flush(_):
+                    self._old_out.flush()
+                    self._fh.flush()
+            sys.stdout = sys.stderr = _Tee()
+        else:
+            sys.stdout = sys.stderr = self._fh
+
+    def stop(self):
+        if self._fh is None:
+            return
+        if self.header:
+            ts = time.strftime("%Y-%m-%d %H:%M:%S")
+            self._fh.write(f"===== logging end   {ts} =====\n")
+        # restore
+        if self._old_out is not None: sys.stdout = self._old_out
+        if self._old_err is not None: sys.stderr = self._old_err
+        self._fh.close()
+        self._fh = None
+
+    # context-manager API
+    def __enter__(self):
+        self.start()
+        return self
+    def __exit__(self, exc_type, exc, tb):
+        self.stop()
+        # don't suppress exceptions
+        return False
+

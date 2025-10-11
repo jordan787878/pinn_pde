@@ -1,0 +1,21 @@
+constants: <exp_utilities.constants.Case1_6D_Constants_Equin object at 0x30389e990>
+iterations: 60000
+sample_ic: <bound method Case1_6D_Constants_Equin.sample_init_points_scaled of <exp_utilities.constants.Case1_6D_Constants_Equin object at 0x30389e990>>
+sample_res: <bound method Case1_6D_Constants_Equin.sample_res_points_scaled_uniform of <exp_utilities.constants.Case1_6D_Constants_Equin object at 0x30389e990>>
+p_ic: functools.partial(<function p_init_scaled at 0x3038efa60>, <exp_utilities.constants.Case1_6D_Constants_Equin object at 0x30389e990>)
+res_func: <function diff_opt_scaled at 0x303c6c680>
+res_weight: 1.0
+save_path: output/pinn-gmm_double-samples
+beta_incre: 0.02
+loss_normalize: 0.004031441640108824
+reg_tv: None
+N0_samples_initial: 8000
+Nr_samples_initial: 8000
+iterations_per_decay: 1000
+N_RAR: 60000
+N_RAR_TO_ADD: 64
+N_RAR_CAP: 8000
+iterations_per_rar: 100
+RAR_eps: 0.01
+bias_fac: 0.0
+training_fcn: <function train_pinngmm_expcase1equin at 0x303c6c040>

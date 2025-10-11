@@ -5,6 +5,226 @@ import torch.nn.functional as F
 import math
 
 
+### Exp Case1 Equin ###
+
+class PNet_XL(nn.Module):
+    def __init__(
+        self,
+        constants,
+        scale=1.0,
+        input_feature=5,
+        width=64,
+        depth=8,
+        act="silu",
+        use_layernorm=False,
+        fourier_t=False,
+        fourier_f=8,
+        input_skip_at=4
+    ):
+        super().__init__()
+        self.D = int(input_feature - 1)
+        self.constants = constants
+        self.scale = scale
+        self.input_feature = input_feature
+        self.width = int(width)
+        self.depth = int(depth)
+        self.use_layernorm = use_layernorm
+        self.input_skip_at = input_skip_at if (0 < input_skip_at < depth) else -1
+
+        # Time encoding
+        self.use_fourier_t = bool(fourier_t)
+        if self.use_fourier_t:
+            self.time_embed = FourierFeatures(num_frequencies=fourier_f, include_input=True)
+            self.t_dim = 1 + 2 * fourier_f
+        else:
+            self.time_embed = nn.Identity()
+            self.t_dim = 1
+
+        in_dim = int(input_feature + (self.t_dim - 1))
+        self.fc_in = nn.Linear(in_dim, self.width)
+
+        # Residual trunk
+        self.blocks = nn.ModuleList([
+            ResidualBlock(self.width, act=act, use_layernorm=use_layernorm)
+            for _ in range(self.depth)
+        ])
+
+        if self.input_skip_at > 0:
+            self.proj_after_skip = nn.Linear(self.width + in_dim, self.width)
+        else:
+            self.proj_after_skip = None
+
+        self.fc_out = nn.Linear(self.width, 1)
+        self.act = get_activation(act)
+        self.softplus_out = nn.Softplus(beta=1.0)
+
+        # **Initialize weights after defining all layers**
+        self._init_weights()
+
+    def _init_weights(self):
+        """
+        Custom weight initialization:
+          - Kaiming init for hidden/residual layers (good for SiLU/GELU)
+          - Xavier init for output for smoother initial pdf scaling
+          - Zero bias where appropriate
+        """
+        for m in self.modules():
+            if isinstance(m, nn.Linear):
+                if m is self.fc_out:
+                    nn.init.xavier_uniform_(m.weight)
+                else:
+                    nn.init.kaiming_uniform_(m.weight, a=math.sqrt(5))
+                if m.bias is not None:
+                    fan_in, _ = nn.init._calculate_fan_in_and_fan_out(m.weight)
+                    bound = 1 / math.sqrt(fan_in)
+                    nn.init.uniform_(m.bias, -bound, bound)
+
+    def _build_inputs(self, x, t):
+        if self.input_feature == 5:
+            inputs = normalize_inputs(x, t, self.constants)
+        elif self.input_feature == 7:
+            inputs = normalize_inputs_6d_scaled(x, t, self.constants)
+        else:
+            raise RuntimeError(f"PINN not yet implemented for input feature: {self.input_feature}")
+
+        if self.use_fourier_t:
+            t_enc = self.time_embed(t if t.dim() == 2 else t.view(-1, 1))
+            inputs = torch.cat([inputs[:, :-1], t_enc], dim=1)
+        return inputs
+
+    def forward(self, x, t):
+        inputs = self._build_inputs(x, t)
+        h0 = self.fc_in(inputs)
+        h = h0
+        for i, block in enumerate(self.blocks):
+            h = block(h)
+            if i == self.input_skip_at and self.proj_after_skip is not None:
+                h = torch.cat([h, inputs], dim=1)
+                h = self.proj_after_skip(h)
+
+        out_hidden = h + h0
+        y = self.fc_out(out_hidden)
+        return self.softplus_out(y) * self.scale
+
+class ENet_XL(nn.Module):
+    def __init__(
+        self,
+        constants,
+        p_net=None,
+        scale=1.0,
+        normalize=1.0,
+        input_feature=7,
+        width=64,
+        depth=8,
+        act="silu",
+        use_layernorm=True,
+        fourier_t=False,
+        fourier_f=8,
+        input_skip_at=4,
+    ):
+        super().__init__()
+        self.D = int(input_feature - 1)
+        self.constants = constants
+        self.scale = scale
+        self.p_net = None
+        self.normalize = normalize
+        self.input_feature = input_feature
+        self.width = int(width)
+        self.depth = int(depth)
+        self.use_layernorm = use_layernorm
+        self.input_skip_at = input_skip_at if (0 < input_skip_at < depth) else -1
+        if(p_net is not None):
+            self.p_net = p_net
+            self.p_net.eval()
+            for p in self.p_net.parameters():
+                p.requires_grad_(False)
+        else:
+            # directly learning the error
+            self.scale = self.normalize
+
+        # Time encoding
+        self.use_fourier_t = bool(fourier_t)
+        if self.use_fourier_t:
+            self.time_embed = FourierFeatures(num_frequencies=fourier_f, include_input=True)
+            self.t_dim = 1 + 2 * fourier_f
+        else:
+            self.time_embed = nn.Identity()
+            self.t_dim = 1
+
+        in_dim = int(input_feature + (self.t_dim - 1))
+        self.fc_in = nn.Linear(in_dim, self.width)
+
+        # Residual trunk
+        self.blocks = nn.ModuleList([
+            ResidualBlock(self.width, act=act, use_layernorm=use_layernorm)
+            for _ in range(self.depth)
+        ])
+
+        if self.input_skip_at > 0:
+            self.proj_after_skip = nn.Linear(self.width + in_dim, self.width)
+        else:
+            self.proj_after_skip = None
+
+        self.fc_out = nn.Linear(self.width, 1)
+        self.act = get_activation(act)
+        self.softplus_out = nn.Softplus(beta=1.0)
+
+        # **Initialize weights after defining all layers**
+        self._init_weights()
+
+    def _init_weights(self):
+        """
+        Custom weight initialization:
+          - Kaiming init for hidden/residual layers (good for SiLU/GELU)
+          - Xavier init for output for smoother initial pdf scaling
+          - Zero bias where appropriate
+        """
+        for m in self.modules():
+            if isinstance(m, nn.Linear):
+                if m is self.fc_out:
+                    nn.init.xavier_uniform_(m.weight)
+                else:
+                    nn.init.kaiming_uniform_(m.weight, a=math.sqrt(5))
+                if m.bias is not None:
+                    fan_in, _ = nn.init._calculate_fan_in_and_fan_out(m.weight)
+                    bound = 1 / math.sqrt(fan_in)
+                    nn.init.uniform_(m.bias, -bound, bound)
+
+    def _build_inputs(self, x, t):
+        if self.input_feature == 5:
+            inputs = normalize_inputs(x, t, self.constants)
+        elif self.input_feature == 7:
+            inputs = normalize_inputs_6d_scaled(x, t, self.constants)
+        else:
+            raise RuntimeError(f"PINN not yet implemented for input feature: {self.input_feature}")
+
+        if self.use_fourier_t:
+            t_enc = self.time_embed(t if t.dim() == 2 else t.view(-1, 1))
+            inputs = torch.cat([inputs[:, :-1], t_enc], dim=1)
+        return inputs
+
+    def forward(self, x, t):
+        inputs = self._build_inputs(x, t)
+        h0 = self.fc_in(inputs)
+        h = h0
+        for i, block in enumerate(self.blocks):
+            h = block(h)
+            if i == self.input_skip_at and self.proj_after_skip is not None:
+                h = torch.cat([h, inputs], dim=1)
+                h = self.proj_after_skip(h)
+
+        out_hidden = h + h0
+        y = self.fc_out(out_hidden)
+        if(self.p_net is not None):
+            p_net_out = self.p_net(x, t)
+            return y * self.scale - p_net_out
+        else:
+            return y * self.scale
+ 
+### End of Exp Case1 Equin ###
+    
+
+
 class PNet(nn.Module):
     def __init__(self, constants, scale=1.0, input_feature=5): 
         super().__init__()
@@ -40,7 +260,6 @@ class PNet(nn.Module):
                 if m.bias is not None:
                     nn.init.zeros_(m.bias)
      
-
 class PNet_XL_Sphere(nn.Module):
     def __init__(
         self,
@@ -144,6 +363,7 @@ class PNet_XL_Sphere(nn.Module):
         return self.softplus_out(y) * self.scale
 
 
+
 ##### These are for Equinoctial in scaled dimension #####
 
 class PNet_Scaled(nn.Module):
@@ -181,8 +401,6 @@ def get_activation(name: str):
         return nn.GELU()
     if name == "tanh":
         return nn.Tanh()
-    if name == "relu":
-        return nn.ReLU(inplace=True)
     if name == "softplus":
         # softer than default beta=1 to avoid stiff grads
         return nn.Softplus(beta=1.0)
@@ -244,110 +462,107 @@ class ResidualBlock(nn.Module):
         return x + h
 
 # ---- Bigger, deeper PINN head ----
-class PNet_XL(nn.Module):
-    def __init__(
-        self,
-        constants,
-        scale=1.0,
-        input_feature=5,
-        width=64,
-        depth=8,
-        act="silu",
-        use_layernorm=False,
-        fourier_t=False,
-        fourier_f=8,
-        input_skip_at=4
-    ):
-        super().__init__()
-        self.constants = constants
-        self.scale = scale
-        self.input_feature = input_feature
-        self.width = int(width)
-        self.depth = int(depth)
-        self.use_layernorm = use_layernorm
-        self.input_skip_at = input_skip_at if (0 < input_skip_at < depth) else -1
+# class PNet_XL(nn.Module):
+#     def __init__(
+#         self,
+#         constants,
+#         scale=1.0,
+#         input_feature=5,
+#         width=64,
+#         depth=8,
+#         act="silu",
+#         use_layernorm=False,
+#         fourier_t=False,
+#         fourier_f=8,
+#         input_skip_at=4
+#     ):
+#         super().__init__()
+#         self.constants = constants
+#         self.scale = scale
+#         self.input_feature = input_feature
+#         self.width = int(width)
+#         self.depth = int(depth)
+#         self.use_layernorm = use_layernorm
+#         self.input_skip_at = input_skip_at if (0 < input_skip_at < depth) else -1
 
-        # Time encoding
-        self.use_fourier_t = bool(fourier_t)
-        if self.use_fourier_t:
-            self.time_embed = FourierFeatures(num_frequencies=fourier_f, include_input=True)
-            self.t_dim = 1 + 2 * fourier_f
-        else:
-            self.time_embed = nn.Identity()
-            self.t_dim = 1
+#         # Time encoding
+#         self.use_fourier_t = bool(fourier_t)
+#         if self.use_fourier_t:
+#             self.time_embed = FourierFeatures(num_frequencies=fourier_f, include_input=True)
+#             self.t_dim = 1 + 2 * fourier_f
+#         else:
+#             self.time_embed = nn.Identity()
+#             self.t_dim = 1
 
-        in_dim = int(input_feature + (self.t_dim - 1))
-        self.fc_in = nn.Linear(in_dim, self.width)
+#         in_dim = int(input_feature + (self.t_dim - 1))
+#         self.fc_in = nn.Linear(in_dim, self.width)
 
-        # Residual trunk
-        self.blocks = nn.ModuleList([
-            ResidualBlock(self.width, act=act, use_layernorm=use_layernorm)
-            for _ in range(self.depth)
-        ])
+#         # Residual trunk
+#         self.blocks = nn.ModuleList([
+#             ResidualBlock(self.width, act=act, use_layernorm=use_layernorm)
+#             for _ in range(self.depth)
+#         ])
 
-        if self.input_skip_at > 0:
-            self.proj_after_skip = nn.Linear(self.width + in_dim, self.width)
-        else:
-            self.proj_after_skip = None
+#         if self.input_skip_at > 0:
+#             self.proj_after_skip = nn.Linear(self.width + in_dim, self.width)
+#         else:
+#             self.proj_after_skip = None
 
-        self.fc_out = nn.Linear(self.width, 1)
-        self.act = get_activation(act)
-        self.softplus_out = nn.Softplus(beta=1.0)
+#         self.fc_out = nn.Linear(self.width, 1)
+#         self.act = get_activation(act)
+#         self.softplus_out = nn.Softplus(beta=1.0)
 
-        # **Initialize weights after defining all layers**
-        self._init_weights()
+#         # **Initialize weights after defining all layers**
+#         self._init_weights()
 
-    def _init_weights(self):
-        """
-        Custom weight initialization:
-          - Kaiming init for hidden/residual layers (good for SiLU/GELU)
-          - Xavier init for output for smoother initial pdf scaling
-          - Zero bias where appropriate
-        """
-        for m in self.modules():
-            if isinstance(m, nn.Linear):
-                if m is self.fc_out:
-                    nn.init.xavier_uniform_(m.weight)
-                else:
-                    nn.init.kaiming_uniform_(m.weight, a=math.sqrt(5))
-                if m.bias is not None:
-                    fan_in, _ = nn.init._calculate_fan_in_and_fan_out(m.weight)
-                    bound = 1 / math.sqrt(fan_in)
-                    nn.init.uniform_(m.bias, -bound, bound)
+#     def _init_weights(self):
+#         """
+#         Custom weight initialization:
+#           - Kaiming init for hidden/residual layers (good for SiLU/GELU)
+#           - Xavier init for output for smoother initial pdf scaling
+#           - Zero bias where appropriate
+#         """
+#         for m in self.modules():
+#             if isinstance(m, nn.Linear):
+#                 if m is self.fc_out:
+#                     nn.init.xavier_uniform_(m.weight)
+#                 else:
+#                     nn.init.kaiming_uniform_(m.weight, a=math.sqrt(5))
+#                 if m.bias is not None:
+#                     fan_in, _ = nn.init._calculate_fan_in_and_fan_out(m.weight)
+#                     bound = 1 / math.sqrt(fan_in)
+#                     nn.init.uniform_(m.bias, -bound, bound)
 
-    def _build_inputs(self, x, t):
-        if self.input_feature == 5:
-            inputs = normalize_inputs(x, t, self.constants)
-        elif self.input_feature == 7:
-            inputs = normalize_inputs_6d_scaled(x, t, self.constants)
-        else:
-            raise RuntimeError(f"PINN not yet implemented for input feature: {self.input_feature}")
+#     def _build_inputs(self, x, t):
+#         if self.input_feature == 5:
+#             inputs = normalize_inputs(x, t, self.constants)
+#         elif self.input_feature == 7:
+#             inputs = normalize_inputs_6d_scaled(x, t, self.constants)
+#         else:
+#             raise RuntimeError(f"PINN not yet implemented for input feature: {self.input_feature}")
 
-        if self.use_fourier_t:
-            t_enc = self.time_embed(t if t.dim() == 2 else t.view(-1, 1))
-            inputs = torch.cat([inputs[:, :-1], t_enc], dim=1)
-        return inputs
+#         if self.use_fourier_t:
+#             t_enc = self.time_embed(t if t.dim() == 2 else t.view(-1, 1))
+#             inputs = torch.cat([inputs[:, :-1], t_enc], dim=1)
+#         return inputs
 
-    def forward(self, x, t):
-        inputs = self._build_inputs(x, t)
-        h0 = self.fc_in(inputs)
-        h = h0
-        for i, block in enumerate(self.blocks):
-            h = block(h)
-            if i == self.input_skip_at and self.proj_after_skip is not None:
-                h = torch.cat([h, inputs], dim=1)
-                h = self.proj_after_skip(h)
+#     def forward(self, x, t):
+#         inputs = self._build_inputs(x, t)
+#         h0 = self.fc_in(inputs)
+#         h = h0
+#         for i, block in enumerate(self.blocks):
+#             h = block(h)
+#             if i == self.input_skip_at and self.proj_after_skip is not None:
+#                 h = torch.cat([h, inputs], dim=1)
+#                 h = self.proj_after_skip(h)
 
-        out_hidden = h + h0
-        y = self.fc_out(out_hidden)
-        return self.softplus_out(y) * self.scale
+#         out_hidden = h + h0
+#         y = self.fc_out(out_hidden)
+#         return self.softplus_out(y) * self.scale
 
-#########################################################
-#
-#
-#
+
+
 ##### E1 Nueral Networks #####
-
 
 class E1Net(nn.Module):
     def __init__(self, constants, scale=1.0, input_feature=5): 
@@ -381,7 +596,6 @@ class E1Net(nn.Module):
         output = (self.output_layer(layer7_out + layer1_out)) * self.scale
         return output
     
-
 class E1Net_Equin(nn.Module):
     def __init__(self, constants, scale=1.0, input_feature=5, p_net=None): 
         super(E1Net_Equin, self).__init__()
@@ -412,6 +626,7 @@ class E1Net_Equin(nn.Module):
         return output
 
 
+
 ##### These are for Equinoctial in scaled dimension #####
 
 class E1Net_Scaled(nn.Module):
@@ -440,125 +655,126 @@ class E1Net_Scaled(nn.Module):
         for p in self.p_net.parameters():
             p.requires_grad_(False)
     
-
 # ---- Bigger, deeper PINN head ----
-class E1Net_XL(nn.Module):
-    def __init__(
-        self,
-        constants,
-        p_net=None,
-        scale=1.0,
-        normalize=1.0,
-        input_feature=7,
-        width=64,
-        depth=8,
-        act="silu",
-        use_layernorm=True,
-        fourier_t=False,
-        fourier_f=8,
-        input_skip_at=4,
-    ):
-        super().__init__()
-        self.constants = constants
-        self.scale = scale
-        self.p_net = None
-        self.normalize = normalize
-        self.input_feature = input_feature
-        self.width = int(width)
-        self.depth = int(depth)
-        self.use_layernorm = use_layernorm
-        self.input_skip_at = input_skip_at if (0 < input_skip_at < depth) else -1
-        if(p_net is not None):
-            self.p_net = p_net
-            self.p_net.eval()
-            for p in self.p_net.parameters():
-                p.requires_grad_(False)
-        else:
-            # directly learning the error
-            self.scale = self.normalize
+# class E1Net_XL(nn.Module):
+#     def __init__(
+#         self,
+#         constants,
+#         p_net=None,
+#         scale=1.0,
+#         normalize=1.0,
+#         input_feature=7,
+#         width=64,
+#         depth=8,
+#         act="silu",
+#         use_layernorm=True,
+#         fourier_t=False,
+#         fourier_f=8,
+#         input_skip_at=4,
+#     ):
+#         super().__init__()
+#         self.constants = constants
+#         self.scale = scale
+#         self.p_net = None
+#         self.normalize = normalize
+#         self.input_feature = input_feature
+#         self.width = int(width)
+#         self.depth = int(depth)
+#         self.use_layernorm = use_layernorm
+#         self.input_skip_at = input_skip_at if (0 < input_skip_at < depth) else -1
+#         if(p_net is not None):
+#             self.p_net = p_net
+#             self.p_net.eval()
+#             for p in self.p_net.parameters():
+#                 p.requires_grad_(False)
+#         else:
+#             # directly learning the error
+#             self.scale = self.normalize
 
-        # Time encoding
-        self.use_fourier_t = bool(fourier_t)
-        if self.use_fourier_t:
-            self.time_embed = FourierFeatures(num_frequencies=fourier_f, include_input=True)
-            self.t_dim = 1 + 2 * fourier_f
-        else:
-            self.time_embed = nn.Identity()
-            self.t_dim = 1
+#         # Time encoding
+#         self.use_fourier_t = bool(fourier_t)
+#         if self.use_fourier_t:
+#             self.time_embed = FourierFeatures(num_frequencies=fourier_f, include_input=True)
+#             self.t_dim = 1 + 2 * fourier_f
+#         else:
+#             self.time_embed = nn.Identity()
+#             self.t_dim = 1
 
-        in_dim = int(input_feature + (self.t_dim - 1))
-        self.fc_in = nn.Linear(in_dim, self.width)
+#         in_dim = int(input_feature + (self.t_dim - 1))
+#         self.fc_in = nn.Linear(in_dim, self.width)
 
-        # Residual trunk
-        self.blocks = nn.ModuleList([
-            ResidualBlock(self.width, act=act, use_layernorm=use_layernorm)
-            for _ in range(self.depth)
-        ])
+#         # Residual trunk
+#         self.blocks = nn.ModuleList([
+#             ResidualBlock(self.width, act=act, use_layernorm=use_layernorm)
+#             for _ in range(self.depth)
+#         ])
 
-        if self.input_skip_at > 0:
-            self.proj_after_skip = nn.Linear(self.width + in_dim, self.width)
-        else:
-            self.proj_after_skip = None
+#         if self.input_skip_at > 0:
+#             self.proj_after_skip = nn.Linear(self.width + in_dim, self.width)
+#         else:
+#             self.proj_after_skip = None
 
-        self.fc_out = nn.Linear(self.width, 1)
-        self.act = get_activation(act)
-        self.softplus_out = nn.Softplus(beta=1.0)
+#         self.fc_out = nn.Linear(self.width, 1)
+#         self.act = get_activation(act)
+#         self.softplus_out = nn.Softplus(beta=1.0)
 
-        # **Initialize weights after defining all layers**
-        self._init_weights()
+#         # **Initialize weights after defining all layers**
+#         self._init_weights()
 
-    def _init_weights(self):
-        """
-        Custom weight initialization:
-          - Kaiming init for hidden/residual layers (good for SiLU/GELU)
-          - Xavier init for output for smoother initial pdf scaling
-          - Zero bias where appropriate
-        """
-        for m in self.modules():
-            if isinstance(m, nn.Linear):
-                if m is self.fc_out:
-                    nn.init.xavier_uniform_(m.weight)
-                else:
-                    nn.init.kaiming_uniform_(m.weight, a=math.sqrt(5))
-                if m.bias is not None:
-                    fan_in, _ = nn.init._calculate_fan_in_and_fan_out(m.weight)
-                    bound = 1 / math.sqrt(fan_in)
-                    nn.init.uniform_(m.bias, -bound, bound)
+#     def _init_weights(self):
+#         """
+#         Custom weight initialization:
+#           - Kaiming init for hidden/residual layers (good for SiLU/GELU)
+#           - Xavier init for output for smoother initial pdf scaling
+#           - Zero bias where appropriate
+#         """
+#         for m in self.modules():
+#             if isinstance(m, nn.Linear):
+#                 if m is self.fc_out:
+#                     nn.init.xavier_uniform_(m.weight)
+#                 else:
+#                     nn.init.kaiming_uniform_(m.weight, a=math.sqrt(5))
+#                 if m.bias is not None:
+#                     fan_in, _ = nn.init._calculate_fan_in_and_fan_out(m.weight)
+#                     bound = 1 / math.sqrt(fan_in)
+#                     nn.init.uniform_(m.bias, -bound, bound)
 
-    def _build_inputs(self, x, t):
-        if self.input_feature == 5:
-            inputs = normalize_inputs(x, t, self.constants)
-        elif self.input_feature == 7:
-            inputs = normalize_inputs_6d_scaled(x, t, self.constants)
-        else:
-            raise RuntimeError(f"PINN not yet implemented for input feature: {self.input_feature}")
+#     def _build_inputs(self, x, t):
+#         if self.input_feature == 5:
+#             inputs = normalize_inputs(x, t, self.constants)
+#         elif self.input_feature == 7:
+#             inputs = normalize_inputs_6d_scaled(x, t, self.constants)
+#         else:
+#             raise RuntimeError(f"PINN not yet implemented for input feature: {self.input_feature}")
 
-        if self.use_fourier_t:
-            t_enc = self.time_embed(t if t.dim() == 2 else t.view(-1, 1))
-            inputs = torch.cat([inputs[:, :-1], t_enc], dim=1)
-        return inputs
+#         if self.use_fourier_t:
+#             t_enc = self.time_embed(t if t.dim() == 2 else t.view(-1, 1))
+#             inputs = torch.cat([inputs[:, :-1], t_enc], dim=1)
+#         return inputs
 
-    def forward(self, x, t):
-        inputs = self._build_inputs(x, t)
-        h0 = self.fc_in(inputs)
-        h = h0
-        for i, block in enumerate(self.blocks):
-            h = block(h)
-            if i == self.input_skip_at and self.proj_after_skip is not None:
-                h = torch.cat([h, inputs], dim=1)
-                h = self.proj_after_skip(h)
+#     def forward(self, x, t):
+#         inputs = self._build_inputs(x, t)
+#         h0 = self.fc_in(inputs)
+#         h = h0
+#         for i, block in enumerate(self.blocks):
+#             h = block(h)
+#             if i == self.input_skip_at and self.proj_after_skip is not None:
+#                 h = torch.cat([h, inputs], dim=1)
+#                 h = self.proj_after_skip(h)
 
-        out_hidden = h + h0
-        y = self.fc_out(out_hidden)
-        if(self.p_net is not None):
-            p_net_out = self.p_net(x, t)
-            return y * self.scale - p_net_out
-        else:
-            return y * self.scale
+#         out_hidden = h + h0
+#         y = self.fc_out(out_hidden)
+#         if(self.p_net is not None):
+#             p_net_out = self.p_net(x, t)
+#             return y * self.scale - p_net_out
+#         else:
+#             return y * self.scale
 
 #########################################################
 
-# helper functions
+
+
+# --- helper functions ---
 def normalize_inputs(x, t, constants):
     _x1 = (x[:,0].view(-1, 1) - 0.5*(constants.X1_RANGE[1]+constants.X1_RANGE[0]))/(0.5*(constants.X1_RANGE[1]-constants.X1_RANGE[0]))
     _x2 = (x[:,1].view(-1, 1) - 0.5*(constants.X2_RANGE[1]+constants.X2_RANGE[0]))/(0.5*(constants.X2_RANGE[1]-constants.X2_RANGE[0]))
@@ -567,7 +783,6 @@ def normalize_inputs(x, t, constants):
     _t  = t/(constants.TF/constants.T) #[0,1]
     inputs = torch.cat([_x1, _x2, _x3, _x4, _t],axis=1)
     return inputs
-
 
 def normalize_inputs_6d(x, t, constants):
     _x1 = (x[:,0].view(-1, 1) - 0.5*(constants.X1_RANGE[1]+constants.X1_RANGE[0]))/(0.5*(constants.X1_RANGE[1]-constants.X1_RANGE[0]))
@@ -580,7 +795,6 @@ def normalize_inputs_6d(x, t, constants):
     inputs = torch.cat([_x1, _x2, _x3, _x4, _x5, _x6, _t],axis=1)
     return inputs
 
-
 def normalize_inputs_6d_scaled(x, t, constants):
     _x1 = (x[:,0].view(-1, 1) - 0.5*(constants.N_X1_RANGE[1]+constants.N_X1_RANGE[0]))/(0.5*(constants.N_X1_RANGE[1]-constants.N_X1_RANGE[0]))
     _x2 = (x[:,1].view(-1, 1) - 0.5*(constants.N_X2_RANGE[1]+constants.N_X2_RANGE[0]))/(0.5*(constants.N_X2_RANGE[1]-constants.N_X2_RANGE[0]))
@@ -591,7 +805,6 @@ def normalize_inputs_6d_scaled(x, t, constants):
     _t  = t/(constants.TF/constants.T) #[0,1]
     inputs = torch.cat([_x1, _x2, _x3, _x4, _x5, _x6, _t],axis=1)
     return inputs
-
 
 def load_trained_model(net, path, method="new"):
     print("[load model] from: "+ path)
@@ -618,7 +831,6 @@ def load_trained_model(net, path, method="new"):
     # plt.savefig("figs/pnet_loss_history.pdf", format='pdf', dpi=300)
     # plt.close()
     return net
-
 
 def init_weights_He(m):
     if isinstance(m, nn.Linear):
@@ -834,7 +1046,6 @@ class TimeToGMM6D(nn.Module):
 
         return weights, means_x, covs_x
 
-
 class TimeToGMM6D_V0(nn.Module):
     """
     Time-conditioned 6D Gaussian Mixture with K components.
@@ -1010,33 +1221,14 @@ class TimeToGMM6D_V0(nn.Module):
         v = self.weight_head(h)                                   # (N, K)
         if torch.isnan(v).any():
             print("v Nan")
-        logw = F.log_softmax(v, dim=-1)       # (N,K)
-        if torch.isnan(logw).any():
-            print("logw Nan")
-
-        # # tau is (N,1)
-        # if torch.isnan(tau).any():
-        #     print("tau Nan")
-        # v = self.weight_head(tau)                     # (N, Kc) logits
-        # if torch.isnan(v).any():
-        #     print("v Nan")
-        # # log-softmax logits -> logw_raw
-        # logw = F.log_softmax(v, dim=-1)               # (N, Kc)
-        # if torch.isnan(logw).any():
-        #     print("logw Nan (pre-floor)")
-        # # --- smooth floor: mix with uniform so each prob >= alpha/Kc ---
-        # alpha = 0.50
-        # Kc = v.size(-1)
-        # w = logw.exp()                                # (N, Kc) probs
-        # w = (1.0 - alpha) * w + (alpha / Kc)          # still sums to 1; min >= 0.1/Kc
-        # # back to log-space, with tiny clamp for numerical safety
-        # eps = torch.finfo(w.dtype).tiny
-        # logw = torch.log(w.clamp_min(eps))            # (N, Kc) floored log-probs
-        # # optional sanity checks
-        # if (w < (alpha / Kc) - 1e-12).any():
-        #     print("Warning: weight floor violated (numerics).")
-        # if torch.isnan(logw).any():
-        #     print("logw Nan (post-floor)")
+        temp = getattr(self, "softmax_temp_w", 1.0)
+        logw = F.log_softmax(v / max(temp, 1e-6), dim=-1)         # (N,K)
+        w = logw.exp()                                            # (N,K)
+        alpha_floor = 0.10     # try 0.05–0.20; tune
+        Kc = w.size(-1)
+        w = (1.0 - alpha_floor) * w + (alpha_floor / Kc)          # min prob = α/K
+        eps = torch.finfo(w.dtype).tiny
+        logw = torch.log(w.clamp_min(eps))  
 
         return means, Ls, logw
 
