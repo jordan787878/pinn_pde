@@ -1,6 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
+import torch
 
 
 def compute_volume(bounds):
@@ -117,3 +118,13 @@ colors_6set = sns.color_palette([
     "#FF8400",  # brown
     "#999999",  # gray
 ])
+
+
+def plot_training_history(paths, labels):
+    set_publication_plot_style()
+    colors = [colors_6set[1], colors_6set[0]]
+    for i, (p, l) in enumerate(zip(paths, labels)):
+        y = np.asarray(torch.load(p, map_location="cpu")["loss_history"], dtype=float)
+        plt.plot(np.arange(len(y)), y, label=l, color=colors[i % len(colors)])
+    plt.yscale("log"); plt.legend(); plt.xlabel("Iteration"); plt.ylabel("Loss"); plt.grid(True, ls="--", alpha=0.5)
+    plt.show()

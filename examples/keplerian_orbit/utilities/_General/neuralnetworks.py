@@ -600,7 +600,7 @@ def load_trained_model(net, path, method="new"):
     epoch = checkpoint['epoch']
     if(method == "new"):
         loss_history = np.array(checkpoint['loss_history'])
-        print(loss_history.shape)
+        # print(loss_history.shape)
         print("best epoch: ", epoch, ", min loss:", np.min(loss_history), ", train time:", checkpoint['train_time'])
     else:
         print("best epoch: ", epoch, ", min loss:", checkpoint['loss'], ", train time:", checkpoint['train_time'])
