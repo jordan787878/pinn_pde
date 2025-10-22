@@ -6,6 +6,7 @@ from sklearn.mixture import GaussianMixture
 import matplotlib.pyplot as plt
 import time
 import inspect
+from typing import Sequence, Union
 from scipy.stats import norm, multivariate_normal
 from scipy.special import logsumexp
 
@@ -257,6 +258,140 @@ class GMMWhitenedModel:
             if key in data.files:
                 setattr(model, key, (int(data[key][0]) if key in ("max_iter", "n_init") else float(data[key][0]) if key in ("reg_covar", "tol") else int(data[key][0])))
         return model
+
+    @classmethod
+    def load_multiple(
+        cls,
+        sources: Sequence[Union[str, "GMMWhitenedModel"]],
+        model_weights: Optional[Sequence[float]] = None,
+        *,
+        strict: bool = True,  # default: require identical whitening
+        target_mu_x: Optional[np.ndarray] = None,
+        target_std_x: Optional[np.ndarray] = None,
+        atol: float = 0.0,
+        rtol: float = 1e-12,
+    ) -> "GMMWhitenedModel":
+        """
+        Load several saved/loaded GMMWhitenedModel instances and merge by concatenating
+        components. By default (strict=True), all models must share identical whitening
+        stats (mu_x, std_x); otherwise a ValueError is raised.
+
+        To merge models trained with different whitenings, you MUST explicitly set:
+            strict=False AND provide target_mu_x and target_std_x.
+
+        Args:
+            sources: list of .npz paths or already-loaded models.
+            model_weights: optional nonnegative weights per model; defaults to uniform.
+            strict: require identical (mu_x, std_x) across sources (default True).
+            target_mu_x, target_std_x: common whitening to retarget into; BOTH required
+                only when strict=False.
+            atol, rtol: tolerances for equality checks under strict=True.
+
+        Returns:
+            Combined GMMWhitenedModel in the common z-space.
+        """
+        if len(sources) == 0:
+            raise ValueError("No sources provided to load_multiple().")
+
+        # Load models
+        models: list[GMMWhitenedModel] = []
+        for s in sources:
+            if isinstance(s, cls):
+                if s.params is None:
+                    raise ValueError("A provided model has no params (not fitted/loaded).")
+                models.append(s)
+            else:
+                models.append(cls.load(str(s)))
+
+        # Dimension check
+        Ds = [m.params.means_z.shape[1] for m in models]  # type: ignore
+        if len(set(Ds)) != 1:
+            raise ValueError(f"All models must share the same dimensionality; got {Ds}.")
+        D = Ds[0]
+
+        # Determine common whitening
+        if strict:
+            if (target_mu_x is not None) or (target_std_x is not None):
+                raise ValueError("In strict=True mode, do not pass target_mu_x/std_x.")
+            mu_t = models[0].params.mu_x.copy()   # type: ignore
+            std_t = models[0].params.std_x.copy() # type: ignore
+
+            # Enforce identical whitening
+            for i, m in enumerate(models):
+                if not np.allclose(m.params.mu_x, mu_t, rtol=rtol, atol=atol):  # type: ignore
+                    raise ValueError(
+                        f"mu_x mismatch at model index {i}. "
+                        f"Expected {mu_t}, got {m.params.mu_x}."
+                    )
+                if not np.allclose(m.params.std_x, std_t, rtol=rtol, atol=atol):  # type: ignore
+                    raise ValueError(
+                        f"std_x mismatch at model index {i}. "
+                        f"Expected {std_t}, got {m.params.std_x}."
+                    )
+        else:
+            # Non-strict requires explicit target whitening
+            if (target_mu_x is None) or (target_std_x is None):
+                raise ValueError("When strict=False, provide both target_mu_x and target_std_x.")
+            mu_t = np.asarray(target_mu_x, dtype=np.float64).reshape(D)
+            std_t = np.asarray(target_std_x, dtype=np.float64).reshape(D)
+
+        # Model-level mixing weights
+        M = len(models)
+        if model_weights is None:
+            alpha = np.full(M, 1.0 / M, dtype=np.float64)
+        else:
+            alpha = np.asarray(model_weights, dtype=np.float64).reshape(M)
+            if np.any(alpha < 0):
+                raise ValueError("model_weights must be nonnegative.")
+            s = alpha.sum()
+            if not np.isfinite(s) or s <= 0:
+                raise ValueError("Sum of model_weights must be positive.")
+            alpha /= s
+
+        # Gather all components (convert to common z-space only if strict=False)
+        comp_w, comp_mz, comp_Cz = [], [], []
+        inv_std_t = 1.0 / mu_t if False else 1.0 / std_t  # keep explicitness
+        A_t_inv = np.diag(inv_std_t)
+
+        for a, m in zip(alpha, models):
+            p = m.params  # type: ignore
+            if strict:
+                # Same whitening: already in target z-space
+                w_i = p.weights.copy()
+                mz_i = p.means_z.copy()
+                Cz_i = p.covs_z.copy()
+            else:
+                # Different whitening: x-space -> target z-space
+                w_i, mx_i, Cx_i = m._x_params()
+                mz_i = (mx_i - mu_t[None, :]) * inv_std_t[None, :]
+                Cz_i = np.einsum('kij,i,j->kij', Cx_i, inv_std_t, inv_std_t)
+
+            comp_w.append(a * w_i)
+            comp_mz.append(mz_i)
+            comp_Cz.append(Cz_i)
+
+        # Concatenate + renormalize
+        W = np.concatenate(comp_w, axis=0)
+        MZ = np.concatenate(comp_mz, axis=0)
+        CZ = np.concatenate(comp_Cz, axis=0)
+
+        W = np.maximum(W, 0.0)
+        s = W.sum()
+        if not np.isfinite(s) or s <= 0:
+            raise RuntimeError("Combined mixture has nonpositive total weight.")
+        W /= s
+
+        # Build final model
+        out = cls()
+        out.params = _Params(
+            weights=W.astype(np.float64),
+            means_z=MZ.astype(np.float64),
+            covs_z=CZ.astype(np.float64),
+            mu_x=mu_t.astype(np.float64),
+            std_x=std_t.astype(np.float64),
+        )
+        out._inv_det_std = float(1.0 / np.prod(std_t))
+        return out
 
 
 def fit_classic_gmm(t_prime, X_tr, mu_whiten, cov_whiten, data_folder, K_list=(1, 2, 4, 8, 16)):

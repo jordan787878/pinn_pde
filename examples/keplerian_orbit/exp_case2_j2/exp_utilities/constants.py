@@ -16,8 +16,6 @@ class Case2_4D_Constants:
     _R        = np.float32(2e+6)
     _THETA    = np.float32(0.015)
     _PHI      = np.float32(0.0387)
-    _TI       = np.float32(0.0)
-    _TF       = np.float32(0.2*_T)
     _MEAN_I   = np.float32([_A, 0.0, 0.0, _W])
     _N_MEAN_I = np.float32([_MEAN_I[0]/_R, 
                             _MEAN_I[1]/_PHI,
@@ -31,20 +29,43 @@ class Case2_4D_Constants:
     _J2_VR = 2.0*(3*_T**2 * _J2 * _MU_EARTH * _R_EARTH**2)/(2*_R**5)
 
     # Domain of TF = 0.2*T
-    _X1_RANGE = np.float32(np.array([18.0, 24.0]))
-    _X2_RANGE = np.float32(np.array([-2.0, 3.0]))
-    _X3_RANGE = np.float32(np.array([-20.0, 20.0]))
-    _X4_RANGE = np.float32(np.array([-22.0, 32.0]))
+    _N_X1_RANGE = np.float32(np.array([18.0, 24.0]))
+    _N_X2_RANGE = np.float32(np.array([-2.0, 3.0]))
+    _N_X3_RANGE = np.float32(np.array([-20.0, 20.0]))
+    _N_X4_RANGE = np.float32(np.array([-22.0, 32.0]))
     
-    _MAX_PX1  = np.float32(3.0)
-    _MAX_PX2  = np.float32(1.8)
-    _MAX_PX3  = np.float32(0.35)
-    _MAX_PX4  = np.float32(0.2)
     _T_PRIME_SPAN   = np.float32(np.array([0.0, 0.04, 0.08, 0.12, 0.16, 0.20]))
 
     _N_Q_NOISE = np.array([1e-8/(_R**2*_T**3), 
-                          1e-22/(_THETA**2*_T**3),
-                          1e-22/(_PHI**2*_T**3)])
+                           1e-22/(_PHI**2*_T**3)])
+    
+    _N_Q_NOISE_TENSOR = torch.tensor(_N_Q_NOISE, dtype=torch.float32, device="cpu")
+    
+    _NX_RANGE_NP = np.array([
+        _N_X1_RANGE,
+        _N_X2_RANGE,
+        _N_X3_RANGE,
+        _N_X4_RANGE,
+    ])
+
+    _NX_RANGE = torch.from_numpy(_NX_RANGE_NP)
+
+    _N_MEAN_I_TENSOR = torch.as_tensor(_N_MEAN_I, dtype=torch.float32, device="cpu")
+    _N_COV_I_TENSOR = torch.as_tensor(_N_COV_I, dtype=torch.float32, device="cpu")
+    _D = 4
+    _COV_INV_TENSOR = torch.linalg.inv(_N_COV_I_TENSOR)
+    _COV_DET_TENSOR = torch.linalg.det(_N_COV_I_TENSOR)
+    _NORM_CONST = 1.0 / torch.sqrt((2 * torch.pi) ** _D * _COV_DET_TENSOR)
+
+    def p_init_torch(self, x):
+        diff = x - self._N_MEAN_I_TENSOR
+        mahal = torch.einsum("ni,ij,nj->n", diff, self._COV_INV_TENSOR, diff)
+        pdf_eval = self._NORM_CONST * torch.exp(-0.5 * mahal)
+        return pdf_eval.view(-1, 1)
+    
+    @property
+    def N_Q_NOISE_TENSOR(self):
+        return self._N_Q_NOISE_TENSOR
 
     @property
     def MU_EARTH(self):
@@ -75,14 +96,6 @@ class Case2_4D_Constants:
         return self._PHI
     
     @property
-    def TI(self):
-        return self._TI
-    
-    @property
-    def TF(self):
-        return self._TF
-    
-    @property
     def N_MEAN_I(self):
         return self._N_MEAN_I
     
@@ -99,36 +112,20 @@ class Case2_4D_Constants:
         return self._J2_VR
     
     @property
-    def X1_RANGE(self):
-        return self._X1_RANGE
+    def N_X1_RANGE(self):
+        return self._N_X1_RANGE
     
     @property
-    def X2_RANGE(self):
-        return self._X2_RANGE
+    def N_X2_RANGE(self):
+        return self._N_X2_RANGE
     
     @property
-    def X3_RANGE(self):
-        return self._X3_RANGE
+    def N_X3_RANGE(self):
+        return self._N_X3_RANGE
     
     @property
-    def X4_RANGE(self):
-        return self._X4_RANGE
-    
-    @property
-    def MAX_PX1(self):
-        return self._MAX_PX1
-    
-    @property
-    def MAX_PX2(self):
-        return self._MAX_PX2
-    
-    @property
-    def MAX_PX3(self):
-        return self._MAX_PX3
-    
-    @property
-    def MAX_PX4(self):
-        return self._MAX_PX4
+    def N_X4_RANGE(self):
+        return self._N_X4_RANGE
     
     @property
     def T_PRIME_SPAN(self):
@@ -137,15 +134,6 @@ class Case2_4D_Constants:
     @property
     def N_Q_NOISE(self):
         return self._N_Q_NOISE
-    
-    _NX_RANGE_NP = np.array([
-        _X1_RANGE,
-        _X2_RANGE,
-        _X3_RANGE,
-        _X4_RANGE,
-    ])
-
-    _NX_RANGE = torch.from_numpy(_NX_RANGE_NP)
 
     @property
     def NX_RANGE(self):
@@ -162,145 +150,78 @@ class Case2_4D_Constants:
         print("TF: ", self.TF)
         print("N_MEAN_I: ", self.N_MEAN_I)
         print("N_COV_I: ", self.N_COV_I)
-        print("X1_RANGE: ", self.X1_RANGE)
-        print("X2_RANGE: ", self.X2_RANGE)
-        print("X3_RANGE: ", self.X3_RANGE)
-        print("X4_RANGE: ", self.X4_RANGE)
+        print("N X1_RANGE: ", self.N_X1_RANGE)
+        print("N X2_RANGE: ", self.N_X2_RANGE)
+        print("N X3_RANGE: ", self.N_X3_RANGE)
+        print("N X4_RANGE: ", self.N_X4_RANGE)
+
+    def _saturate_to_range(self, x):
+        """
+        Clamp samples to per-dimension ranges in NX_RANGE.
+        Supports np.ndarray (N,D) and torch.Tensor (N,D).
+        """
+        if isinstance(x, np.ndarray):
+            lo = self._NX_RANGE_NP[:, 0]          # shape (D,)
+            hi = self._NX_RANGE_NP[:, 1]          # shape (D,)
+            return np.clip(x, lo, hi, out=x)      # in-place, returns x
+        elif torch.is_tensor(x):
+            lo = self._NX_RANGE[:, 0].to(x.dtype).to(x.device)  # shape (D,)
+            hi = self._NX_RANGE[:, 1].to(x.dtype).to(x.device)  # shape (D,)
+            return torch.max(torch.min(x, hi), lo)              # broadcasting clamp
+        else:
+            raise TypeError(f"Unsupported type: {type(x)}")
 
     def sample_init_points(self, N_samples):
-        _x_bc_normal = np.random.multivariate_normal(self.N_MEAN_I, self.N_COV_I, size=N_samples).astype(np.float32)
-        _x_bc_normal = torch.tensor(_x_bc_normal, dtype=torch.float32, requires_grad=False)
+        N_nom = int(0.5 * N_samples)
+        N_uni = N_samples - N_nom
+        _x_bc_normal = self._saturate_to_range(np.random.multivariate_normal(self.N_MEAN_I, self.N_COV_I, size=N_nom).astype(np.float32))
+        _x_bc_normal = torch.tensor(_x_bc_normal, dtype=torch.float32)
         _x_bc = np.column_stack([
-            np.random.uniform(self.X1_RANGE[0], self.X1_RANGE[1], N_samples),
-            np.random.uniform(self.X2_RANGE[0], self.X2_RANGE[1], N_samples),
-            np.random.uniform(self.X3_RANGE[0], self.X3_RANGE[1], N_samples),
-            np.random.uniform(self.X4_RANGE[0], self.X4_RANGE[1], N_samples),
+            np.random.uniform(self.N_X1_RANGE[0], self.N_X1_RANGE[1], N_uni),
+            np.random.uniform(self.N_X2_RANGE[0], self.N_X2_RANGE[1], N_uni),
+            np.random.uniform(self.N_X3_RANGE[0], self.N_X3_RANGE[1], N_uni),
+            np.random.uniform(self.N_X4_RANGE[0], self.N_X4_RANGE[1], N_uni),
         ])
-        _x_bc = torch.tensor(_x_bc, dtype=torch.float32, requires_grad=False)
+        _x_bc = torch.tensor(_x_bc, dtype=torch.float32)
         x_bc = torch.cat((_x_bc_normal, _x_bc), dim=0)
-        t_bc = (torch.ones(len(x_bc), 1) * self.TI)
+        t_bc = (torch.ones(len(x_bc), 1) * self.T_PRIME_SPAN[0])
         return x_bc, t_bc
     
-    def sample_res_points(self, N_samples):
-        _x_normal = np.random.multivariate_normal(self.N_MEAN_I, self.N_COV_I, size=N_samples).astype(np.float32)
-        _x_normal = torch.tensor(_x_normal, dtype=torch.float32, requires_grad=True)
+    def sample_res_points_bias(self, N_samples):
+        N_nom = int(0.5 * N_samples)
+        N_uni = N_samples - N_nom
+        _x_normal = self._saturate_to_range(np.random.multivariate_normal(self.N_MEAN_I, self.N_COV_I, size=N_nom).astype(np.float32))
+        _x_normal = torch.tensor(_x_normal, dtype=torch.float32)
         _x = np.column_stack([
-            np.random.uniform(self.X1_RANGE[0], self.X1_RANGE[1], N_samples),
-            np.random.uniform(self.X2_RANGE[0], self.X2_RANGE[1], N_samples),
-            np.random.uniform(self.X3_RANGE[0], self.X3_RANGE[1], N_samples),
-            np.random.uniform(self.X4_RANGE[0], self.X4_RANGE[1], N_samples),
+            np.random.uniform(self.N_X1_RANGE[0], self.N_X1_RANGE[1], N_uni),
+            np.random.uniform(self.N_X2_RANGE[0], self.N_X2_RANGE[1], N_uni),
+            np.random.uniform(self.N_X3_RANGE[0], self.N_X3_RANGE[1], N_uni),
+            np.random.uniform(self.N_X4_RANGE[0], self.N_X4_RANGE[1], N_uni),
         ])
-        _x = torch.tensor(_x, dtype=torch.float32, requires_grad=True)
+        _x = torch.tensor(_x, dtype=torch.float32)
         x = torch.cat((_x_normal, _x), dim=0)
-        t = np.random.uniform(self.TI, self.TF/self.T, len(x))
-        t = torch.tensor(t, dtype=torch.float32, requires_grad=True).view(-1,1)
+        t = np.random.uniform(self.T_PRIME_SPAN[0], self.T_PRIME_SPAN[-1], len(x))
+        t = torch.tensor(t, dtype=torch.float32).view(-1,1)
         return x, t
     
-    def sample_res_points_uniform(self, N_samples, multiplyer=1):
-        N_samples = multiplyer*N_samples
+    def sample_res_points_uniform(self, N_samples):
         _x = np.column_stack([
-            np.random.uniform(self.X1_RANGE[0], self.X1_RANGE[1], N_samples),
-            np.random.uniform(self.X2_RANGE[0], self.X2_RANGE[1], N_samples),
-            np.random.uniform(self.X3_RANGE[0], self.X3_RANGE[1], N_samples),
-            np.random.uniform(self.X4_RANGE[0], self.X4_RANGE[1], N_samples),
+            np.random.uniform(self.N_X1_RANGE[0], self.N_X1_RANGE[1], N_samples),
+            np.random.uniform(self.N_X2_RANGE[0], self.N_X2_RANGE[1], N_samples),
+            np.random.uniform(self.N_X3_RANGE[0], self.N_X3_RANGE[1], N_samples),
+            np.random.uniform(self.N_X4_RANGE[0], self.N_X4_RANGE[1], N_samples),
         ])
-        x = torch.tensor(_x, dtype=torch.float32, requires_grad=True)
-        t = np.random.uniform(self.TI, self.TF/self.T, len(x))
-        t = torch.tensor(t, dtype=torch.float32, requires_grad=True).view(-1,1)
+        x = torch.tensor(_x, dtype=torch.float32)
+        t = np.random.uniform(self.T_PRIME_SPAN[0], self.T_PRIME_SPAN[-1], len(x))
+        t = torch.tensor(t, dtype=torch.float32).view(-1,1)
         return x, t
     
-    # [new sampling methods]
-    def sample_init_points_seq(self, N_samples, T_seq, sobol_seed=0):
-        _x_bc_normal = np.random.multivariate_normal(self.N_MEAN_I, self.N_COV_I, size=N_samples).astype(np.float32)
-        _x_bc_normal = torch.tensor(_x_bc_normal, dtype=torch.float32, requires_grad=False)
-        _x_bc = np.column_stack([
-            np.random.uniform(self.X1_RANGE[0], self.X1_RANGE[1], N_samples),
-            np.random.uniform(self.X2_RANGE[0], self.X2_RANGE[1], N_samples),
-            np.random.uniform(self.X3_RANGE[0], self.X3_RANGE[1], N_samples),
-            np.random.uniform(self.X4_RANGE[0], self.X4_RANGE[1], N_samples),
+    def sample_x_uniform(self, N_samples):
+        X = np.column_stack([
+            np.random.uniform(self.N_X1_RANGE[0], self.N_X1_RANGE[1], N_samples),
+            np.random.uniform(self.N_X2_RANGE[0], self.N_X2_RANGE[1], N_samples),
+            np.random.uniform(self.N_X3_RANGE[0], self.N_X3_RANGE[1], N_samples),
+            np.random.uniform(self.N_X4_RANGE[0], self.N_X4_RANGE[1], N_samples),
         ])
-        _x_bc = torch.tensor(_x_bc, dtype=torch.float32, requires_grad=False)
-
-        # sobol sequence 
-        lower_bounds = np.array([self.X1_RANGE[0], self.X2_RANGE[0], self.X3_RANGE[0], self.X4_RANGE[0]])
-        upper_bounds = np.array([self.X1_RANGE[1], self.X2_RANGE[1], self.X3_RANGE[1], self.X4_RANGE[1]])
-        # Create a Sobol sequence sampler for 4 dimensions
-        sobol_sampler = qmc.Sobol(d=4, scramble=True, seed=sobol_seed)
-        # Generate samples in the unit hypercube [0, 1]^4
-        samples_unit = sobol_sampler.random_base2(m=10)
-        # Scale the samples to the specified ranges for each dimension
-        _x_bc_sol = qmc.scale(samples_unit, lower_bounds, upper_bounds)
-        _x_bc_sol = torch.tensor(_x_bc_sol, dtype=torch.float32, requires_grad=False)
-        x_bc = torch.cat((_x_bc_normal, _x_bc, _x_bc_sol), dim=0)
-        # x_bc = torch.cat((_x_bc_normal, _x_bc), dim=0)
-        t_bc = (torch.ones(len(x_bc), 1) * T_seq[0]/self.T)
-        return x_bc, t_bc
-    
-    def sample_res_points_seq(self, N_samples, T_seq, sobol_seed=0):
-        _x_normal = np.random.multivariate_normal(self.N_MEAN_I, self.N_COV_I, size=N_samples).astype(np.float32)
-        _x_normal = torch.tensor(_x_normal, dtype=torch.float32, requires_grad=True)
-        _x = np.column_stack([
-            np.random.uniform(self.X1_RANGE[0], self.X1_RANGE[1], N_samples),
-            np.random.uniform(self.X2_RANGE[0], self.X2_RANGE[1], N_samples),
-            np.random.uniform(self.X3_RANGE[0], self.X3_RANGE[1], N_samples),
-            np.random.uniform(self.X4_RANGE[0], self.X4_RANGE[1], N_samples),
-        ])
-        _x = torch.tensor(_x, dtype=torch.float32, requires_grad=True)
-        
-        # sobol sequence 
-        lower_bounds = np.array([self.X1_RANGE[0], self.X2_RANGE[0], self.X3_RANGE[0], self.X4_RANGE[0]])
-        upper_bounds = np.array([self.X1_RANGE[1], self.X2_RANGE[1], self.X3_RANGE[1], self.X4_RANGE[1]])
-        # Create a Sobol sequence sampler for 4 dimensions
-        sobol_sampler = qmc.Sobol(d=4, scramble=True, seed=sobol_seed)
-        # Generate samples in the unit hypercube [0, 1]^4
-        samples_unit = sobol_sampler.random_base2(m=10)
-        # Scale the samples to the specified ranges for each dimension
-        _x_sol = qmc.scale(samples_unit, lower_bounds, upper_bounds)
-        _x_sol = torch.tensor(_x_sol, dtype=torch.float32, requires_grad=True)
-        x = torch.cat((_x_normal, _x, _x_sol), dim=0)
-        # x = torch.cat((_x_normal, _x), dim=0)
-        
-        portion_of_time_boundary = 0.05
-        N_total = len(x)
-        # Number of boundary samples (20% of total)
-        N_boundary = int(portion_of_time_boundary * N_total)
-        N_internal = N_total - N_boundary
-        # Half boundary samples at T_seq[0], half at T_seq[1]
-        N_boundary_half = N_boundary // 2
-        # Boundary samples
-        t_boundary_start = np.full(N_boundary_half, T_seq[0]/self.T)
-        t_boundary_end = np.full(N_boundary - N_boundary_half, T_seq[1]/self.T)
-        # Internal uniform samples
-        t_internal = np.random.uniform(T_seq[0]/self.T, T_seq[1]/self.T, N_internal)
-        # Combine boundary and internal samples
-        t_combined = np.concatenate([t_boundary_start, t_boundary_end, t_internal])
-        # Shuffle the combined samples
-        np.random.shuffle(t_combined)
-        # Convert to tensor
-        t = torch.tensor(t_combined, dtype=torch.float32, requires_grad=True).view(-1, 1)
-        return x, t
-    
-    def sample_points(self, N_samples, bounds):
-        _x_bc = np.column_stack([
-            np.random.uniform(bounds[0,0], bounds[0,1], N_samples),
-            np.random.uniform(bounds[1,0], bounds[1,1], N_samples),
-            np.random.uniform(bounds[2,0], bounds[2,1], N_samples),
-            np.random.uniform(bounds[3,0], bounds[3,1], N_samples),
-        ])
-        _x_bc = torch.tensor(_x_bc, dtype=torch.float32, requires_grad=False)
-        return _x_bc
-    
-    def quasi_sample_points(self, N_samples, bounds):
-        # sobol sequence 
-        lower_bounds = bounds[:,0]
-        upper_bounds = bounds[:,1]
-        # Create a Sobol sequence sampler for 4 dimensions
-        sobol_sampler = qmc.Sobol(d=4, scramble=False)
-        # Generate samples in the unit hypercube [0, 1]^4
-        samples_unit = sobol_sampler.random(N_samples)
-        # Scale the samples to the specified ranges for each dimension
-        _x_bc_sol = qmc.scale(samples_unit, lower_bounds, upper_bounds)
-        _x_bc_sol = torch.tensor(_x_bc_sol, dtype=torch.float32, requires_grad=False)
-        return _x_bc_sol
-    
+        return X
     

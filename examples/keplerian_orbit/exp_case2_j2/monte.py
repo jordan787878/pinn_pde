@@ -8,7 +8,7 @@ import time
 from scipy.stats import norm, multivariate_normal
 from scipy.interpolate import griddata
 from exp_utilities.constants import Case2_4D_Constants
-from exp_utilities.plot_utilites import check_pdf_Nrphi, check_pdf_cartesian_wrt_samples, set_publication_plot_style
+# from exp_utilities.plot_utilites import check_pdf_Nrphi, check_pdf_cartesian_wrt_samples, set_publication_plot_style
 from exp_utilities.classic_gmm import GMMWhitenedModel
 import sys
 sys.path.insert(0, '../utilities/')
