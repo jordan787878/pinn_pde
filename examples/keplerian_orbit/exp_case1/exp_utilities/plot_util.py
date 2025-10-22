@@ -14,18 +14,7 @@ import sys
 from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]   # repo_root
 sys.path.insert(0, str(ROOT))
-from utilities._General.util import set_publication_plot_style
-
-
-colors = sns.color_palette([
-    "#000000",  
-    "#8C00FF",  
-    "#00FF1E",  # orange
-    "#FF008C",  # purple
-    "#00FBFF",  # green
-    "#FF8400",  # brown
-    "#999999",  # gray
-])
+from utilities._General.util import set_publication_plot_style, colors_6set
 
 
 def plot_full_corner(constants, t, X_samples,
@@ -57,12 +46,12 @@ def plot_full_corner(constants, t, X_samples,
     # --- fixed ranges ---
     if ranges == "fixed":
         ranges = [
-            (constants.X1_RANGE[0],constants.X1_RANGE[1]),
-            (constants.X2_RANGE[0],constants.X2_RANGE[1]),
-            (constants.X3_RANGE[0],constants.X3_RANGE[1]),
-            (constants.X4_RANGE[0],constants.X4_RANGE[1]),
-            (constants.X5_RANGE[0],constants.X5_RANGE[1]),
-            (constants.X6_RANGE[0],constants.X6_RANGE[1]),
+            (constants.N_X1_RANGE[0],constants.N_X1_RANGE[1]),
+            (constants.N_X2_RANGE[0],constants.N_X2_RANGE[1]),
+            (constants.N_X3_RANGE[0],constants.N_X3_RANGE[1]),
+            (constants.N_X4_RANGE[0],constants.N_X4_RANGE[1]),
+            (constants.N_X5_RANGE[0],constants.N_X5_RANGE[1]),
+            (constants.N_X6_RANGE[0],constants.N_X6_RANGE[1]),
         ]
     # ---- auto ranges ----
     elif ranges == "auto":
@@ -103,7 +92,7 @@ def plot_full_corner(constants, t, X_samples,
             data_marginal_pinn = np.load(filename)
             pdf_values = data_marginal_pinn['pdf']
             X_grid = data_marginal_pinn["X_grid"]
-            ax.plot(X_grid, pdf_values, color=colors[-1])
+            ax.plot(X_grid, pdf_values, color=colors_6set[-1])
 
     # Diagonals: 1D histograms (counts)
     for d in range(D):
@@ -139,8 +128,8 @@ def plot_full_corner(constants, t, X_samples,
             x_vals = np.linspace(lo, hi, num=128)
             ws, mus, covs = p_net_gmm.weights_means_covs_at(t)
             ws = ws.detach().cpu().numpy()
-            # if(d == 0):
-            #     print(ws)
+            if(d == 0):
+                print(ws)
             mus = mus.detach().cpu().numpy()
             covs = covs.detach().cpu().numpy()
             pdf_values = np.copy(x_vals) * 0.0
@@ -148,7 +137,7 @@ def plot_full_corner(constants, t, X_samples,
                 pdf_func = multivariate_normal(mean=mus[k,d], cov=covs[k,d,d])
                 p_k = pdf_func.pdf(x_vals).reshape(x_vals.shape)
                 pdf_values += ws[k] * p_k
-            ax.plot(x_vals, pdf_values, color=colors[0])
+            ax.plot(x_vals, pdf_values, color=colors_6set[0])
 
         if(data_lp is not None):
             x_vals = np.linspace(lo, hi, num=128)
@@ -156,7 +145,7 @@ def plot_full_corner(constants, t, X_samples,
             pdf_values = np.copy(x_vals) * 0.0
             pdf_func = multivariate_normal(mean=mu_6d[d], cov=cov_6d[d,d])
             pdf_values = pdf_func.pdf(x_vals).reshape(x_vals.shape)
-            ax.plot(x_vals, pdf_values, color=colors[3])
+            ax.plot(x_vals, pdf_values, color=colors_6set[3])
 
         if(data_ut is not None):
             x_vals = np.linspace(lo, hi, num=128)
@@ -164,7 +153,7 @@ def plot_full_corner(constants, t, X_samples,
             pdf_values = np.copy(x_vals) * 0.0
             pdf_func = multivariate_normal(mean=mu_6d[d], cov=cov_6d[d,d])
             pdf_values = pdf_func.pdf(x_vals).reshape(x_vals.shape)
-            ax.plot(x_vals, pdf_values, color=colors[4])
+            ax.plot(x_vals, pdf_values, color=colors_6set[4])
 
     # Off-diagonals: scatter or heatmap (counts)
     for i in range(1, D):
@@ -217,7 +206,7 @@ def plot_full_corner(constants, t, X_samples,
                     # relative_levels = np.array([0.01, 0.05, 0.50, 0.95])
                     levels = relative_levels * pdf_max
                     # Draw the contour lines with the custom levels
-                    ax.contour(X_grid, Y_grid, pdf_values, levels=levels, colors=[colors[1]], linewidths=1.)
+                    ax.contour(X_grid, Y_grid, pdf_values, levels=levels, colors=[colors_6set[1]], linewidths=1.)
                     return levels
 
             if(PNet_XL_PATH is not None):
@@ -260,7 +249,7 @@ def plot_full_corner(constants, t, X_samples,
                 ws = ws.detach().cpu().numpy()
                 mus = mus.detach().cpu().numpy()
                 covs = covs.detach().cpu().numpy()
-                _plot_pinn_gmm_contour(ws, mus, covs, x_coords, colors[0])
+                _plot_pinn_gmm_contour(ws, mus, covs, x_coords, colors_6set[0])
                             
             if(p_net_gmm is not None):
                 x_coords = (j+1, i+1)
@@ -268,7 +257,7 @@ def plot_full_corner(constants, t, X_samples,
                 ws = ws.detach().cpu().numpy()
                 mus = mus.detach().cpu().numpy()
                 covs = covs.detach().cpu().numpy()
-                _plot_pinn_gmm_contour(ws, mus, covs, x_coords, colors[0])
+                _plot_pinn_gmm_contour(ws, mus, covs, x_coords, colors_6set[0])
 
             if(data_lp is not None):
                 x_coords = (j+1, i+1)
@@ -285,7 +274,7 @@ def plot_full_corner(constants, t, X_samples,
                 pdf_max = np.max(pdf_values).item()
                 levels = relative_levels * pdf_max
                 # Draw the contour lines with the custom levels
-                ax.contour(X_grid, Y_grid, pdf_values, levels=levels, colors=[colors[3]], 
+                ax.contour(X_grid, Y_grid, pdf_values, levels=levels, colors=[colors_6set[3]], 
                            linewidths=1.)
                 
             if(data_ut is not None):
@@ -303,13 +292,13 @@ def plot_full_corner(constants, t, X_samples,
                 pdf_max = np.max(pdf_values).item()
                 levels = relative_levels * pdf_max
                 # Draw the contour lines with the custom levels
-                ax.contour(X_grid, Y_grid, pdf_values, levels=levels, colors=[colors[4]], 
+                ax.contour(X_grid, Y_grid, pdf_values, levels=levels, colors=[colors_6set[4]], 
                            linewidths=1.)
 
             if(data_gmm is not None):
                 x_coords = (j+1, i+1)
                 _, ws, mus, covs = data_gmm.get(t)
-                _plot_pinn_gmm_contour(ws, mus, covs, x_coords, colors[4])
+                _plot_pinn_gmm_contour(ws, mus, covs, x_coords, colors_6set[4])
 
             # _set_axis_limits_with_buffer(ax, (xlo, xhi), (ylo, yhi))
             # ax.set_xlim(xlo, xhi); ax.set_ylim(ylo, yhi)
@@ -338,7 +327,7 @@ def plot_corner_elem(
     data_gmm=None,
 ):
     """
-    dims = (i,) -> 1D histogram for x_i with model overlays (same colors as full plot)
+    dims = (i,) -> 1D histogram for x_i with model overlays (same colors_6set as full plot)
     dims = (i,j) -> 2D heatmap for (x_i, x_j) with model contour overlays
     Indices in dims are 1-based.
     """
@@ -378,14 +367,14 @@ def plot_corner_elem(
         ax.set_xlabel(labels[k]); ax.set_ylabel("density")
         ax.set_xlim(lo, hi)
 
-        # ---- overlays (keep same colors/logic as your full function) ----
+        # ---- overlays (keep same colors_6set/logic as your full function) ----
         # PINN precomputed 1D
         def _plot_pinn_1d_marginal(k1b):  # k1b = 1-based
             if PNet_XL_PATH is None: return
             fn = f"{PNet_XL_PATH}/pre_compute/marginal_pdfpinn_x{k1b}_t{t:.3f}.npz"
             if os.path.exists(fn):
                 data = np.load(fn)
-                ax.plot(data["X_grid"], data["pdf"], color=colors[-1])
+                ax.plot(data["X_grid"], data["pdf"], color=colors_6set[-1])
 
         _plot_pinn_1d_marginal(k+1)
 
@@ -400,24 +389,24 @@ def plot_corner_elem(
             pdf = np.zeros_like(x_vals)
             for c in range(ws.shape[0]):
                 pdf += ws[c] * multivariate_normal(mean=mus[c, k], cov=covs[c, k, k]).pdf(x_vals)
-            ax.plot(x_vals, pdf, color=colors[0])
+            ax.plot(x_vals, pdf, color=colors_6set[0])
 
         # linear prop (Gaussian)
         if data_lp is not None:
             _, _, mu6, P6 = data_lp.get(t)
-            ax.plot(x_vals, multivariate_normal(mu6[k], P6[k, k]).pdf(x_vals), color=colors[3])
+            ax.plot(x_vals, multivariate_normal(mu6[k], P6[k, k]).pdf(x_vals), color=colors_6set[3])
 
         # UT (Gaussian)
         if data_ut is not None:
             _, _, mu6, P6 = data_ut.get(t)
-            ax.plot(x_vals, multivariate_normal(mu6[k], P6[k, k]).pdf(x_vals), color=colors[4])
+            ax.plot(x_vals, multivariate_normal(mu6[k], P6[k, k]).pdf(x_vals), color=colors_6set[4])
 
         if data_gmm is not None:
             _, ws, mus, covs = data_gmm.get(t)
             pdf = np.zeros_like(x_vals)
             for c in range(ws.shape[0]):
                 pdf += ws[c] * multivariate_normal(mean=mus[c, k], cov=covs[c, k, k]).pdf(x_vals)
-            ax.plot(x_vals, pdf, color=colors[5])
+            ax.plot(x_vals, pdf, color=colors_6set[5])
 
         return fig, ax
 
@@ -446,7 +435,7 @@ def plot_corner_elem(
         alpha=0.5
     )
 
-    # contour helpers (same levels/colors as your full function)
+    # contour helpers (same levels/colors_6set as your full function)
     relative_levels = np.array([0.01, 0.05, 0.50, 0.95])
 
     def _plot_pinn_2d_contour(i1b, j1b):
@@ -458,7 +447,7 @@ def plot_corner_elem(
             Xg, Yg = data["X_grid"], data["Y_grid"]
             pdf_max = float(np.max(pdf[pdf > 0])) if np.any(pdf > 0) else 1.0
             levels = relative_levels * pdf_max
-            ax.contour(Xg, Yg, pdf, levels=levels, colors=[colors[1]], linewidths=1.0)
+            ax.contour(Xg, Yg, pdf, levels=levels, colors=[colors_6set[1]], linewidths=1.0)
 
     def _plot_gmm_contour(ws, mus, covs, color):
         xs = np.linspace(xlo, xhi, 256)
@@ -483,7 +472,7 @@ def plot_corner_elem(
         _plot_gmm_contour(ws.detach().cpu().numpy(),
                           mus.detach().cpu().numpy(),
                           covs.detach().cpu().numpy(),
-                          colors[0])
+                          colors_6set[0])
 
     # p_net_gmm
     if p_net_gmm is not None:
@@ -491,7 +480,7 @@ def plot_corner_elem(
         _plot_gmm_contour(ws.detach().cpu().numpy(),
                           mus.detach().cpu().numpy(),
                           covs.detach().cpu().numpy(),
-                          colors[0])
+                          colors_6set[0])
 
     # linear prop (Gaussian)
     if data_lp is not None:
@@ -499,7 +488,7 @@ def plot_corner_elem(
         ws = np.array([1.0])
         mus = np.array([mu6])
         covs = np.array([P6])
-        _plot_gmm_contour(ws, mus, covs, colors[3])
+        _plot_gmm_contour(ws, mus, covs, colors_6set[3])
 
     # UT (Gaussian)
     if data_ut is not None:
@@ -507,12 +496,12 @@ def plot_corner_elem(
         ws = np.array([1.0])
         mus = np.array([mu6])
         covs = np.array([P6])
-        _plot_gmm_contour(ws, mus, covs, colors[4])
+        _plot_gmm_contour(ws, mus, covs, colors_6set[4])
 
     # external GMM provider (same color as UT in your full code)
     if data_gmm is not None:
         _, ws, mus, covs = data_gmm.get(t)
-        _plot_gmm_contour(ws, mus, covs, colors[5])
+        _plot_gmm_contour(ws, mus, covs, colors_6set[5])
 
     ax.set_xlabel(labels[i]); ax.set_ylabel(labels[j])
     ax.set_xlim(xlo, xhi); ax.set_ylim(ylo, yhi)
@@ -525,31 +514,31 @@ def plot_pdf_metrics(metrics):
     # metric 1
     plt.figure()
     print(metrics["t"])
-    plt.plot(metrics["t"], metrics["rel_error_lp"], color=colors[3],   label="LP")
-    plt.plot(metrics["t"], metrics["rel_error_ut"], color=colors[4],   label="UT")
-    plt.plot(metrics["t"], metrics["rel_error_gmm"], color=colors[5],   label="GMM")
-    plt.plot(metrics["t"], metrics["rel_error_pinn"], color=colors[1], label="PINN-MLP")
+    plt.plot(metrics["t"], metrics["rel_error_lp"], color=colors_6set[3],   label="LP")
+    plt.plot(metrics["t"], metrics["rel_error_ut"], color=colors_6set[4],   label="UT")
+    plt.plot(metrics["t"], metrics["rel_error_gmm"], color=colors_6set[5],   label="GMM")
+    plt.plot(metrics["t"], metrics["rel_error_pinn"], color=colors_6set[1], label="PINN-MLP")
     # all_zeros = not np.any(metrics["B1_pinn"])
     # if(all_zeros is False):
     #     plt.fill_between(
     #         metrics["t"],
     #         metrics["rel_error_pinn"],
     #         metrics["B1_pinn"],
-    #         color=colors[1],
+    #         color=colors_6set[1],
     #         alpha=0.2,
     #         label="PINN Error Bound"
     #     )
-    plt.plot(metrics["t"], metrics["rel_error_pinngmm"], color=colors[0], label="PINN-GMM")
-    # all_zeros = not np.any(metrics["B1_pinngmm"])
-    # if(all_zeros is False):
-    #     plt.fill_between(
-    #         metrics["t"],
-    #         metrics["rel_error_pinngmm"],
-    #         metrics["B1_pinngmm"],
-    #         color=colors[0],
-    #         alpha=0.2,
-    #         label="PINN-GMM Error Bound"
-    #     )
+    plt.plot(metrics["t"], metrics["rel_error_pinngmm"], color=colors_6set[0], label="PINN-GMM")
+    all_zeros = not np.any(metrics["B1_pinngmm"])
+    if(all_zeros is False):
+        plt.fill_between(
+            metrics["t"],
+            metrics["rel_error_pinngmm"],
+            metrics["B1_pinngmm"],
+            color=colors_6set[0],
+            alpha=0.2,
+            label="PINN-GMM Error Bound"
+        )
     plt.legend(loc="upper left", ncol=2)
     plt.xlabel("t")
     plt.ylabel("norm. worst error %")
@@ -557,11 +546,11 @@ def plot_pdf_metrics(metrics):
 
     # metric 2
     plt.figure()
-    plt.plot(metrics["t"], metrics["tv_lp"], color=colors[3],   label="LP")
-    plt.plot(metrics["t"], metrics["tv_ut"], color=colors[4],   label="UT")
-    plt.plot(metrics["t"], metrics["tv_gmm"], color=colors[5],   label="GMM")
-    plt.plot(metrics["t"], metrics["tv_pinn"], color=colors[1], label="PINN-MLP")
-    plt.plot(metrics["t"], metrics["tv_pinngmm"], color=colors[0], label="PINN-GMM")
+    plt.plot(metrics["t"], metrics["tv_lp"], color=colors_6set[3],   label="LP")
+    plt.plot(metrics["t"], metrics["tv_ut"], color=colors_6set[4],   label="UT")
+    plt.plot(metrics["t"], metrics["tv_gmm"], color=colors_6set[5],   label="GMM")
+    plt.plot(metrics["t"], metrics["tv_pinn"], color=colors_6set[1], label="PINN-MLP")
+    plt.plot(metrics["t"], metrics["tv_pinngmm"], color=colors_6set[0], label="PINN-GMM")
     plt.legend(loc="upper left", ncol=2)
     plt.xlabel("t")
     plt.ylabel("total variation %")
@@ -571,19 +560,19 @@ def plot_pdf_metrics(metrics):
     plt.figure()
     print(metrics["t"])
     print(metrics["g_kl_pinn"])
-    plt.plot(metrics["t"], metrics["g_kl_lp"], color=colors[3], label="GA")
-    plt.plot(metrics["t"], metrics["g_kl_ut"], color=colors[4], label="UT")
-    plt.plot(metrics["t"], metrics["g_kl_gmm"], color=colors[5], label="GMM")
-    plt.plot(metrics["t"], metrics["g_kl_pinn"], color=colors[1], label="PINN-MLP")
-    plt.plot(metrics["t"], metrics["g_kl_pinngmm"], color=colors[0], label="PINN-GMM")
-    # plt.plot(metrics["t"], metrics["g_kl_pinngmm(uniform)"], color=colors[0], linestyle=":", label="PINN-GMM (uniform)")
-    # plt.plot(metrics["t"], metrics["g_kl_pinngmm(no-imp)"], color=colors[0], linestyle="--", label="PINN-GMM (uniform + p0)")
+    plt.plot(metrics["t"], metrics["g_kl_lp"], color=colors_6set[3], label="GA")
+    plt.plot(metrics["t"], metrics["g_kl_ut"], color=colors_6set[4], label="UT")
+    plt.plot(metrics["t"], metrics["g_kl_gmm"], color=colors_6set[5], label="GMM")
+    plt.plot(metrics["t"], metrics["g_kl_pinn"], color=colors_6set[1], label="PINN-MLP")
+    plt.plot(metrics["t"], metrics["g_kl_pinngmm"], color=colors_6set[0], label="PINN-GMM")
+    # plt.plot(metrics["t"], metrics["g_kl_pinngmm(uniform)"], color=colors_6set[0], linestyle=":", label="PINN-GMM (uniform)")
+    # plt.plot(metrics["t"], metrics["g_kl_pinngmm(no-imp)"], color=colors_6set[0], linestyle="--", label="PINN-GMM (uniform + p0)")
     plt.legend()
     plt.grid(True)
     plt.xlabel("t")
     plt.ylabel("General KL")
-    ymin, ymax = plt.ylim()
-    plt.ylim(ymin, 1.5*np.array(metrics["g_kl_pinngmm"]).max())
+    # ymin, ymax = plt.ylim()
+    # plt.ylim(ymin, 1.5*np.array(metrics["g_kl_pinngmm"]).max())
 
     plt.show()
 

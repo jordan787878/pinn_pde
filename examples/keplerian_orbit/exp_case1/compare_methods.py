@@ -6,21 +6,22 @@ from tqdm import tqdm
 from exp_utilities.constants import Case1_6D_Constants
 from exp_utilities.plot_util import plt, plot_full_corner, plot_corner_elem, plot_pdf_metrics
 from run_baseline import SAVE_PATH_LINEAR_PROPAGATE, SAVE_PATH_UNSCENT_PROPAGATE, SAVE_PATH_GMM_PROPAGATE
+from monte import p_init
 
 import sys
 from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]   # repo_root
 sys.path.insert(0, str(ROOT))
 from utilities._General.astrodynamics import *
-from utilities._General.neuralnetworks import PNet, PNet_XL_Sphere, load_trained_model
-from utilities._General.neuralnetworks import TimeToGMM6D, TimeToGMM6D_V0
-from utilities._General.util import compute_volume, save_metrics_npz, load_metrics_npz, p_total_variation
+from utilities._General.neuralnetworks import PNet_XL, ENet_XL, TimeToGMM_V0, load_trained_model
+from utilities._General.util import (compute_volume, save_metrics_npz, load_metrics_npz, 
+                                     p_total_variation, plot_training_history)
 from utilities._General.baseline_methods import PropagationData
 from utilities._General.classic_gmm import GMMWhitenedModel, make_gmm_pdf
 
 
 COMPUTE = False
-NBATCH: int = 2000
+NBATCH: int = 1000
 
 
 constants = Case1_6D_Constants()
@@ -44,29 +45,16 @@ def _helper_p_normalize_const(constants, p1):
     """
     """
     bounds = np.array([
-        constants.X1_RANGE,
-        constants.X2_RANGE,
-        constants.X3_RANGE,
-        constants.X4_RANGE,
-        constants.X5_RANGE,
-        constants.X6_RANGE,
+        constants.N_X1_RANGE,
+        constants.N_X2_RANGE,
+        constants.N_X3_RANGE,
+        constants.N_X4_RANGE,
+        constants.N_X5_RANGE,
+        constants.N_X6_RANGE,
     ])
     vol_est = compute_volume(bounds)
     p1 = p1.reshape(-1,)
     return np.mean(p1) * vol_est
-
-
-def _get_uniform_Xsamples_numpy(N_samples=None):
-    global constants
-    X = np.column_stack([
-        np.random.uniform(constants.X1_RANGE[0], constants.X1_RANGE[1], N_samples),
-        np.random.uniform(constants.X2_RANGE[0], constants.X2_RANGE[1], N_samples),
-        np.random.uniform(constants.X3_RANGE[0], constants.X3_RANGE[1], N_samples),
-        np.random.uniform(constants.X4_RANGE[0], constants.X4_RANGE[1], N_samples),
-        np.random.uniform(constants.X5_RANGE[0], constants.X5_RANGE[1], N_samples),
-        np.random.uniform(constants.X6_RANGE[0], constants.X6_RANGE[1], N_samples),
-    ])
-    return X
 
 
 def compute_generalKL(t, X, p_data_normal=None, p_net=None, key=None):
@@ -159,7 +147,7 @@ def print_metrics_block(metrics, idx, colw=12, prec=6):
 def compute_pdf_variations(data_mc=None, p_net=None, p_net_gmm=None,
                            p_net_gmm_noimp=None, p_net_gmm_uniform=None,
                            data_lp=None, data_ut=None, data_gmm=None,
-                           e1_net=None, save_path=None):
+                           e1_net=None, e1_net_gmm=None, save_path=None):
     global constants
     metrics = {
         "rel_error_lp": [],
@@ -183,7 +171,8 @@ def compute_pdf_variations(data_mc=None, p_net=None, p_net_gmm=None,
         # "g_kl_pinngmm(no-imp)": [],
         # "g_kl_pinngmm(uniform)": [],
 
-        # "B1_pinn": [],
+        "B1_pinn": [],
+        "B1_pinngmm": [],
 
         "t": constants.T_PRIME_SPAN,
     } 
@@ -191,12 +180,12 @@ def compute_pdf_variations(data_mc=None, p_net=None, p_net_gmm=None,
     print("evaluate metrics over times: ", metrics["t"])
     N_batch = NBATCH
     bounds = np.array([
-        constants.X1_RANGE,
-        constants.X2_RANGE,
-        constants.X3_RANGE,
-        constants.X4_RANGE,
-        constants.X5_RANGE,
-        constants.X6_RANGE,
+        constants.N_X1_RANGE,
+        constants.N_X2_RANGE,
+        constants.N_X3_RANGE,
+        constants.N_X4_RANGE,
+        constants.N_X5_RANGE,
+        constants.N_X6_RANGE,
     ])
     vol_est = compute_volume(bounds)
 
@@ -227,13 +216,21 @@ def compute_pdf_variations(data_mc=None, p_net=None, p_net_gmm=None,
 
         # additional data for pinn
         e1_pinn_max = 0.0
+        e1_pinngmm_max = 0.0
         Z_pinn = 0.0
         
         # --- choose the source 'true' gmm pdf ---
-        gmm = GMMWhitenedModel.load(data_mc+"gmm_whitened_t{:.2f}.npz".format(t))
+        # gmm = GMMWhitenedModel.load(data_mc+"gmm_whitened_t{:.2f}.npz".format(t))
+        data_path_list = []
+        for data_idx in range(1, 1+1):
+            data_path = data_mc+"run"+str(data_idx)+"/"+"gmm_whitened_t{:.2f}.npz".format(t)
+            data_path_list.append(data_path)
+        gmm = GMMWhitenedModel.load_multiple(data_path_list)
 
         # --- compute general KL without normalizing constant ---
-        filename_mc = data_mc+"xsamples_t{:.3f}.npy".format(t)
+        # filename_mc = data_mc+"xsamples_t{:.3f}.npy".format(t)
+        filename_mc = data_mc+"run1/"+"xsamples_t{:.3f}.npy".format(t) #[temp]
+
         X_mc = np.load(filename_mc)
         if(p_net is not None):
             g_kl_pinn = compute_generalKL(t, X_mc, p_net=p_net)
@@ -252,7 +249,7 @@ def compute_pdf_variations(data_mc=None, p_net=None, p_net_gmm=None,
 
         # --- compute rel. error and tv by batch-procesing ---
         for j in tqdm(range(1, N_batch+1), desc="Propagating batches"):
-            X = _get_uniform_Xsamples_numpy(N_samples=100000) # samples from random uniform
+            X = constants.sample_x_uniform(N_samples=100000) # samples from random uniform
             pdf_ref = gmm.pdf(X).reshape(-1,)
             pdf_ref_max = max(pdf_ref_max, np.max(pdf_ref).item())
             
@@ -267,6 +264,10 @@ def compute_pdf_variations(data_mc=None, p_net=None, p_net_gmm=None,
                 _tv = p_total_variation(pdf_pinn, pdf_ref, vol_est)
                 tv_pinn += _tv/N_batch
                 del pdf_pinn
+            if(e1_net is not None):
+                e1_pinn = e1_net(_x_tensor, _t_tensor).detach().cpu().numpy().reshape(-1,)
+                e1_pinn_max = max(e1_pinn_max, np.max(np.abs(e1_pinn)).item())
+                del e1_pinn
 
             if(p_net_gmm is not None):
                 pdf_pinngmm = p_net_gmm(_x_tensor, _t_tensor).detach().cpu().numpy().reshape(-1,)
@@ -275,6 +276,11 @@ def compute_pdf_variations(data_mc=None, p_net=None, p_net_gmm=None,
                 _tv = p_total_variation(pdf_pinngmm, pdf_ref, vol_est)
                 tv_pinngmm += _tv/N_batch
                 del pdf_pinngmm
+            if(e1_net_gmm is not None):
+                e1_pinngmm = e1_net_gmm(_x_tensor, _t_tensor).detach().cpu().numpy().reshape(-1,)
+                e1_pinngmm_max = max(e1_pinngmm_max, np.max(np.abs(e1_pinngmm)).item())
+                del e1_pinngmm
+            del _x_tensor, _t, _t_tensor
 
             # if(p_net_gmm_noimp is not None):
             #     _gkl = compute_generalKL(t, X_mc, p_net=p_net_gmm_noimp)
@@ -342,6 +348,11 @@ def compute_pdf_variations(data_mc=None, p_net=None, p_net_gmm=None,
         metrics["rel_error_pinngmm"].append(100.*delta_p_pinngmm_max/pdf_ref_max)
         metrics["tv_pinngmm"].append(tv_pinngmm)
         metrics["g_kl_pinngmm"].append(g_kl_pinngmm)
+
+        metrics["B1_pinngmm"].append(100. * 2. * e1_pinngmm_max/pdf_ref_max)
+        # print("[debug] B1_pinngmm: ", e1_pinngmm_max, pdf_ref_max)
+        metrics["B1_pinn"].append(100. * 2. * e1_pinn_max/pdf_ref_max)
+        # print("[debug] B1_pinn: ", e1_pinn_max, pdf_ref_max)
             
         print_metrics_block(metrics, idx)
 
@@ -364,16 +375,16 @@ def compare_corner_plots(data_mc=None, data_lp=None, data_ut=None, data_gmm=None
     t_show = [constants.T_PRIME_SPAN[0], constants.T_PRIME_SPAN[-1]]
     for idx, t in enumerate(t_show):
         print("\ntime {:.4f}".format(t))
-        if(data_mc is None):
-            continue
-        # print("[info] ref")
-        # load samples from MC
-        filename_mc = data_mc+"xsamples_t{:.3f}.npy".format(t)
+
+        # filename_mc = data_mc+"xsamples_t{:.3f}.npy".format(t)
+        filename_mc = data_mc+"run1/"+"xsamples_t{:.3f}.npy".format(t)
+        print(filename_mc)
         if(os.path.exists(filename_mc)):
             X_ref = np.load(filename_mc)
-            # _print_min_max_per_dim(X_ref)
         else:
-            continue
+            print("[error] file ", filename_mc, " not found")
+            return
+
         # Full corner plot
         plot_full_corner(constants, t, X_ref, 
                          PNet_XL_PATH=None,
@@ -467,31 +478,61 @@ def compare_corner_plots_XYZ(data_mc=None, data_lp=None, data_ut=None, save_path
         plt.show()
 
 
+def config_trained_models():
+    trained_models = {
+        "PINN-XL_bias": "output/pinn-xl_bias",
+        # "PINN-XL_bias-test": "output/pinn-xl_bias-test",
+        "PINN-GMM_bias" : "output/pinn-gmm_bias",
+    }
+    return trained_models
+
+
+def load_model_by_key(trained_models, key=""):
+    if key not in trained_models:
+        raise KeyError(f"Missing key {key!r}. Available: {list(trained_models.keys())}")
+
+    # Scale of p0 max
+    scale = p_init(constants, [constants.N_MEAN_I]).item()
+    scale_torch = torch.tensor(scale, dtype=torch.float32); print(scale_torch)
+
+    KEY_PATH = trained_models[key]
+
+    if(key == "PINN-XL_bias"):
+        p_net = PNet_XL(constants, scale=scale_torch, input_feature=7)
+        p_net = load_trained_model(p_net, path=KEY_PATH+"/p_net.pth"); p_net.eval()
+        e1_net = ENet_XL(constants, scale=scale_torch, normalize=scale_torch*0.02)
+        e1_net = load_trained_model(e1_net, path=KEY_PATH+"/e1_net.pth"); e1_net.eval()
+        rar_samples = None
+        return p_net, e1_net, rar_samples
+    
+    if(key == "PINN-GMM_bias"):
+        p_net = TimeToGMM_V0(constants, K=11, alpha_floor=0.01)
+        p_net = load_trained_model(p_net, path=KEY_PATH+"/p_net.pth"); p_net.eval()
+        e1_net = ENet_XL(constants, scale=scale_torch, normalize=scale_torch*0.02)
+        e1_net = load_trained_model(e1_net, path=KEY_PATH+"/e1_net.pth"); e1_net.eval()
+        _p = Path(KEY_PATH) / "p_net-RARsamples.npz"
+        if _p.is_file(): 
+            rar_samples = np.load(_p)
+        else:
+            rar_samples = None
+        del _p
+        return p_net, e1_net, rar_samples
+
+
 def main():
-    data_mc = "dataset/run1/"
     global constants
 
-    # mlp
-    PNet_XL_PATH = "output/v0"
-    p_net = PNet_XL_Sphere(constants)
-    p_net = load_trained_model(p_net, path=PNet_XL_PATH+"/p_net.pth"); p_net.eval()
+    # data_mc = "dataset/run1/"
+    data_mc = "dataset/"
 
-    # # pinn-gmm
-    # PNet_GMM_PATH = "output/pinn-gmm"
-    # p_net_gmm = TimeToGMM6D(constants, K=11)
-    # p_net_gmm = load_trained_model(p_net_gmm, path=PNet_GMM_PATH+"/p_net.pth"); p_net_gmm.eval()
+    # setup trained models dictionary
+    trained_models = config_trained_models()
 
-    # PNet_GMM_PATH = "output/pinn-gmm(no-imp)"
-    # p_net_gmm_noimp = TimeToGMM6D(constants, K=11)
-    # p_net_gmm_noimp = load_trained_model(p_net_gmm_noimp, path=PNet_GMM_PATH+"/p_net.pth"); p_net_gmm_noimp.eval()
+    # load pinn-mlp
+    p_net, e1_net, _ = load_model_by_key(trained_models, key="PINN-XL_bias")
 
-    # PNet_GMM_PATH = "output/pinn-gmm(uniform)"
-    # p_net_gmm_uniform = TimeToGMM6D(constants, K=11)
-    # p_net_gmm_uniform = load_trained_model(p_net_gmm_uniform, path=PNet_GMM_PATH+"/p_net.pth"); p_net_gmm_uniform.eval()
-
-    PNet_GMM_PATH = "output/pinn-gmm(V0)"
-    p_net_gmm_v0 = TimeToGMM6D_V0(constants, K=11)
-    p_net_gmm_v0 = load_trained_model(p_net_gmm_v0, path=PNet_GMM_PATH+"/p_net.pth"); p_net_gmm_v0.eval()
+    # load pinn-gmm
+    p_net_gmm, e1_net_gmm, rar_samples = load_model_by_key(trained_models, key="PINN-GMM_bias")
 
     # baseline methods
     data_lp = PropagationData(SAVE_PATH_LINEAR_PROPAGATE)
@@ -502,8 +543,9 @@ def main():
     metrics_path = "output/metric_NB="+str(NBATCH)+".npz"
     if(COMPUTE):
         compute_pdf_variations(data_mc=data_mc, 
-            p_net=p_net, p_net_gmm=p_net_gmm_v0,#p_net_gmm, 
+            p_net=p_net, p_net_gmm=p_net_gmm,
             data_lp=data_lp, data_ut=data_ut, data_gmm=data_gmm,
+            e1_net=e1_net, e1_net_gmm=e1_net_gmm,
             save_path=metrics_path)
     metrics = load_metrics_npz(metrics_path)
     plot_pdf_metrics(metrics)
@@ -512,10 +554,12 @@ def main():
     compare_corner_plots(data_mc, 
                          data_lp=data_lp, data_ut=data_ut, data_gmm=data_gmm,
                          PNet_XL_PATH=None,
-                         p_net_gmm_N1=None,
-                         p_net_gmm=p_net_gmm_v0, #p_net_gmm,
+                         p_net_gmm=p_net_gmm
                          )
     # compare_corner_plots_XYZ(MC_FOLDER)
+
+    # --- plot training history ---
+    # plot_training_history(trained_models)
 
 
 if __name__ == "__main__":
