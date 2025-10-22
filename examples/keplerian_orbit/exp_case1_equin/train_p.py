@@ -6,7 +6,6 @@ x = [r, th, phi, vr, vth, vphi]
 import numpy as np
 import torch
 import argparse
-from functools import partial
 from monte import p_init, p_init_scaled, p_sol, p_sol_scaled, print_mc_time
 from exp_utilities.constants import Case1_6D_Constants_Equin
 
@@ -14,8 +13,7 @@ import sys
 from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]   # repo_root
 sys.path.insert(0, str(ROOT))
-from utilities._General.neuralnetworks import PNet_XL, load_trained_model
-from utilities._General.neuralnetworks import TimeToGMM6D_V0
+from utilities._General.neuralnetworks import PNet_XL, TimeToGMM_V0, load_trained_model
 import utilities._General.train_pinn as PINN
 from utilities._General.util import RunLogger, save_config_human
 
@@ -169,7 +167,7 @@ def config_training(constants, option=""):
         "iterations": 60000,
         "sample_ic": constants.sample_init_points_scaled,
         "sample_res": constants.sample_res_points_scaled_uniform,
-        "p_ic": partial(p_init_scaled, constants),
+        "p_ic": constants.p_init_torch,
         "res_func": diff_opt_scaled,
         "res_weight": 1.0,
         "save_path": "output/" + option,
@@ -187,33 +185,33 @@ def config_training(constants, option=""):
         "bias_fac": 0.,
     }
 
-    if option == "pinn-xl":
-        configuration["training_fcn"] = PINN.train_pinn_expcase1equin
-        p_net = PNet_XL(constants, scale=scale_torch, input_feature=7)
-
-    # if option == "pinn-xl_bias":
-    #     configuration["training_fcn"] = PINN.train_pinn_expcase1equin
-    #     configuration["sample_res"] = constants.sample_res_points_scaled
+    # if option == "pinn-xl":
+    #     configuration["training_fcn"] = PINN.train_pinn
     #     p_net = PNet_XL(constants, scale=scale_torch, input_feature=7)
 
-    if option == "pinn-gmm":
-        configuration["training_fcn"] = PINN.train_pinngmm_expcase1equin
-        p_net = TimeToGMM6D_V0(constants, K=11)
+    if option == "pinn-xl_bias":
+        configuration["training_fcn"] = PINN.train_pinn
+        p_net = PNet_XL(constants, scale=scale_torch, input_feature=7)
+        configuration["sample_res"] = constants.sample_res_points_scaled_bias
 
-    if option == "pinn-gmm_double-samples":
-        configuration["training_fcn"] = PINN.train_pinngmm_expcase1equin
-        p_net = TimeToGMM6D_V0(constants, K=11)
-        configuration["N0_samples_initial"] = 8000
-        configuration["Nr_samples_initial"] = 8000
-        configuration["N_RAR_TO_ADD"] = 64
-        configuration["N_RAR"] = 60000
-        configuration["N_RAR_CAP"] = 8000
+    if option == "pinn-gmm":
+        configuration["training_fcn"] = PINN.train_pinngmm
+        p_net = TimeToGMM_V0(constants, K=11)
+
+    # if option == "pinn-gmm_double-samples":
+    #     configuration["training_fcn"] = PINN.train_pinngmm
+    #     p_net = TimeToGMM_V0(constants, K=11)
+    #     configuration["N0_samples_initial"] = 8000
+    #     configuration["Nr_samples_initial"] = 8000
+    #     configuration["N_RAR_TO_ADD"] = 64
+    #     configuration["N_RAR"] = 60000
+    #     configuration["N_RAR_CAP"] = 8000
 
     if option == "pinn-gmm_bias":
-        configuration["training_fcn"] = PINN.train_pinngmm_expcase1equin
+        configuration["training_fcn"] = PINN.train_pinngmm
         configuration["bias_fac"] = 0.5
         # configuration["reg_tv"] = torch.tensor(0.0)
-        p_net = TimeToGMM6D_V0(constants, K=11)
+        p_net = TimeToGMM_V0(constants, K=11)
 
     return configuration, p_net
 
@@ -224,7 +222,7 @@ def main():
     torch.manual_seed(0); np.random.seed(0)
 
     # Setup config
-    config, p_net = config_training(constants, option="pinn-gmm_double-samples")
+    config, p_net = config_training(constants, option="pinn-gmm")
     save_config_human(config, model_name="p_net")
 
     # Train & log

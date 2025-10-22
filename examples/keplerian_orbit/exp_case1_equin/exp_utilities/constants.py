@@ -87,6 +87,19 @@ class Case1_6D_Constants_Equin:
 
     _T_PRIME_END_FIX = (0.3*_T)/_T
 
+    _N_MEAN_I_TENSOR = torch.as_tensor(_N_MEAN_I, dtype=torch.float32, device="cpu")
+    _N_COV_I_TENSOR = torch.as_tensor(_N_COV_I, dtype=torch.float32, device="cpu")
+    _D = 6
+    _COV_INV_TENSOR = torch.linalg.inv(_N_COV_I_TENSOR)
+    _COV_DET_TENSOR = torch.linalg.det(_N_COV_I_TENSOR)
+    _NORM_CONST = 1.0 / torch.sqrt((2 * torch.pi) ** _D * _COV_DET_TENSOR)
+
+    def p_init_torch(self, x):
+        diff = x - self._N_MEAN_I_TENSOR
+        mahal = torch.einsum("ni,ij,nj->n", diff, self._COV_INV_TENSOR, diff)
+        pdf_eval = self._NORM_CONST * torch.exp(-0.5 * mahal)
+        return pdf_eval.view(-1, 1)
+
     @property
     def NX_RANGE(self):
         return self._NX_RANGE
@@ -317,7 +330,7 @@ class Case1_6D_Constants_Equin:
         t_bc = (torch.ones(len(x_bc), 1, dtype=torch.float32) * self.TI)
         return x_bc, t_bc
     
-    def sample_res_points_scaled(self, N_samples):
+    def sample_res_points_scaled_bias(self, N_samples):
         N_nor = int(0.5 * N_samples)
         N_uni = N_samples - N_nor
         _x_normal = np.random.multivariate_normal(self.N_MEAN_I, self.N_COV_I, size=N_nor).astype(np.float32)

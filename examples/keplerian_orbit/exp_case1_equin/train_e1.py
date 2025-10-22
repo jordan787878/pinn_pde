@@ -5,17 +5,15 @@ import numpy as np
 import torch
 import argparse
 from tqdm import tqdm
-from functools import partial
 from monte import p_init_scaled, p_sol
 from train_p import diff_opt_scaled
-# from exp_utilities.plot_util import plot_e1_pinn_validation
 from exp_utilities.constants import Case1_6D_Constants_Equin
 
 import sys
 from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]   # repo_root
 sys.path.insert(0, str(ROOT))
-from utilities._General.neuralnetworks import PNet_XL, ENet_XL, TimeToGMM6D_V0, load_trained_model
+from utilities._General.neuralnetworks import PNet_XL, ENet_XL, TimeToGMM_V0, load_trained_model
 import utilities._General.train_pinn as PINN
 from utilities._General.util import RunLogger, save_config_human
 
@@ -134,7 +132,7 @@ def config_training_ENet_XL(constants, fac=0.02, option=""):
         "iterations": 40000,
         "sample_ic": constants.sample_init_points_scaled,
         "sample_res": constants.sample_res_points_scaled_uniform,
-        "p_ic": p_init_scaled,
+        "p_ic": constants.p_init_torch,
         "res_func": diff_opt_scaled,
         "res_weight": 1.0,
         "save_path": "output/" + option,
@@ -142,7 +140,7 @@ def config_training_ENet_XL(constants, fac=0.02, option=""):
         "fac": fac,
         "loss_normalize": scale_torch*fac,
         "reg_tv": None,
-        "training_fcn": PINN.train_pinn_error_expcase1equin,
+        "training_fcn": PINN.train_pinn_error,
         "N0_samples_initial": 4000,
         "Nr_samples_initial": 4000,
         "iterations_per_decay" : 1000,
@@ -154,19 +152,25 @@ def config_training_ENet_XL(constants, fac=0.02, option=""):
         "bias_fac": 0.
     }
 
-    if option == "pinn-xl":
+    # if option == "pinn-xl":
+    #     e1_net = ENet_XL(constants, scale=scale_torch, normalize=fac*scale_torch, input_feature=7)
+    #     p_net = PNet_XL(constants, scale=scale_torch, input_feature=7)
+    #     p_net = load_trained_model(p_net, path=configuration["save_path"]+"/p_net.pth"); p_net.eval()
+
+    if option == "pinn-xl_bias":
         e1_net = ENet_XL(constants, scale=scale_torch, normalize=fac*scale_torch, input_feature=7)
         p_net = PNet_XL(constants, scale=scale_torch, input_feature=7)
         p_net = load_trained_model(p_net, path=configuration["save_path"]+"/p_net.pth"); p_net.eval()
+        configuration["sample_res"] = constants.sample_res_points_scaled_bias
 
     if option == "pinn-gmm":
         e1_net = ENet_XL(constants, scale=scale_torch, normalize=fac*scale_torch, input_feature=7)
-        p_net = TimeToGMM6D_V0(constants, K=11)
+        p_net = TimeToGMM_V0(constants, K=11)
         p_net = load_trained_model(p_net, path=configuration["save_path"]+"/p_net.pth"); p_net.eval()
 
-    if option == "pinn-gmm_bias-test":
+    if option == "pinn-gmm_bias":
         e1_net = ENet_XL(constants, scale=scale_torch, normalize=fac*scale_torch, input_feature=7)
-        p_net = TimeToGMM6D_V0(constants, K=11)
+        p_net = TimeToGMM_V0(constants, K=11)
         p_net = load_trained_model(p_net, path=configuration["save_path"]+"/p_net.pth"); p_net.eval()
         configuration["bias_fac"] = 0.5
 

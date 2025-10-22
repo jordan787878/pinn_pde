@@ -12,15 +12,14 @@ import sys
 from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]   # repo_root
 sys.path.insert(0, str(ROOT))
-from utilities._General.neuralnetworks import PNet, PNet_Scaled, PNet_XL, E1Net_Scaled, ENet_XL, load_trained_model
+from utilities._General.neuralnetworks import PNet_XL, ENet_XL, TimeToGMM_V0, load_trained_model
 from utilities._General.util import compute_volume, save_metrics_npz, load_metrics_npz, p_total_variation, plot_training_history
-from utilities._General.neuralnetworks import TimeToGMM6D, TimeToGMM6D_V0
 from utilities._General.baseline_methods import PropagationData
 from utilities._General.classic_gmm import make_gmm_pdf
 
 
 COMPUTE: bool = False
-NBATCH: int = 2000
+NBATCH: int = 1000
 constants = Case1_6D_Constants_Equin()
 
 
@@ -400,13 +399,10 @@ def compare_corner_plots(OUTPUT_PATH=None, data_lp=None, data_ut=None, data_gmm=
 
 
 def config_trained_models():
-    """
-    use standard training to replace V0 models
-    """
     trained_models = {
         "PINN-XL": "output/pinn-xl",
+        "PINN-XL_bias": "output/pinn-xl_bias",
         "PINN-GMM" : "output/pinn-gmm",
-        "PINN-GMM_2xsamples": "output/pinn-gmm_double-samples",
         "PINN-GMM_bias" : "output/pinn-gmm_bias",
     }
     return trained_models
@@ -431,22 +427,16 @@ def load_model_by_key(trained_models, key=""):
         rar_samples = None
         return p_net, e1_net, rar_samples
     
-    if(key == "PINN-GMM"):
-        p_net = TimeToGMM6D_V0(constants, K=11)
+    if(key == "PINN-XL_bias"):
+        p_net = PNet_XL(constants, scale=scale_torch, input_feature=7)
         p_net = load_trained_model(p_net, path=KEY_PATH+"/p_net.pth"); p_net.eval()
-        e1_net = None
-        # e1_net = ENet_XL(constants, scale=scale_torch, normalize=scale_torch*0.02)
-        # e1_net = load_trained_model(e1_net, path=KEY_PATH+"/e1_net.pth"); e1_net.eval()
-        _p = Path(KEY_PATH) / "p_net-RARsamples.npz"
-        if _p.is_file(): 
-            rar_samples = np.load(_p)
-        else:
-            rar_samples = None
-        del _p
+        e1_net = ENet_XL(constants, scale=scale_torch, normalize=scale_torch*0.02)
+        e1_net = load_trained_model(e1_net, path=KEY_PATH+"/e1_net.pth"); e1_net.eval()
+        rar_samples = None
         return p_net, e1_net, rar_samples
     
-    if(key == "PINN-GMM_2xsamples"):
-        p_net = TimeToGMM6D_V0(constants, K=11)
+    if(key == "PINN-GMM"):
+        p_net = TimeToGMM_V0(constants, K=11)
         p_net = load_trained_model(p_net, path=KEY_PATH+"/p_net.pth"); p_net.eval()
         e1_net = None
         # e1_net = ENet_XL(constants, scale=scale_torch, normalize=scale_torch*0.02)
@@ -460,7 +450,7 @@ def load_model_by_key(trained_models, key=""):
         return p_net, e1_net, rar_samples
     
     if(key == "PINN-GMM_bias"):
-        p_net = TimeToGMM6D_V0(constants, K=11)
+        p_net = TimeToGMM_V0(constants, K=11)
         p_net = load_trained_model(p_net, path=KEY_PATH+"/p_net.pth"); p_net.eval()
         e1_net = ENet_XL(constants, scale=scale_torch, normalize=scale_torch*0.02)
         e1_net = load_trained_model(e1_net, path=KEY_PATH+"/e1_net.pth"); e1_net.eval()
@@ -473,14 +463,14 @@ def load_model_by_key(trained_models, key=""):
         return p_net, e1_net, rar_samples
 
 
-def compare_methods():
+def main():
     global constants
 
     # setup trained models dictionary
     trained_models = config_trained_models()
 
     # load pinn-mlp
-    p_net, e1_net, _ = load_model_by_key(trained_models, key="PINN-XL")
+    p_net, e1_net, _ = load_model_by_key(trained_models, key="PINN-XL_bias")
 
     # load pinn-gmm
     p_net_gmm, e1_net_gmm, rar_samples = load_model_by_key(trained_models, key="PINN-GMM_bias")
@@ -507,10 +497,6 @@ def compare_methods():
     # --- plot training history ---
     plot_training_history(trained_models)
         
-
-def main():
-    compare_methods()
-
 
 if __name__ == "__main__":
     args = parse_args()
