@@ -1,9 +1,34 @@
 import numpy as np
+import matplotlib as mpl
 import matplotlib.pyplot as plt
+import matplotlib.ticker as mticker
 import seaborn as sns
 import torch
 from pathlib import Path
 import sys, time
+from cycler import cycler
+
+
+colors_6set = sns.color_palette([
+    "#000000",  
+    "#8C00FF",  
+    "#00FF1E",  # orange
+    "#FF008C",  # purple
+    "#00FBFF",  # green
+    "#FF8400",  # brown
+    "#999999",  # gray
+])
+
+# 6 high-contrast linestyle/marker pairs (index-bound)
+linestyles_6set = [
+    (0, (5, 2)),        # custom medium dashes
+    (0, (7, 2, 3, 2)),  # custom long–short dash
+    "--",               # dashed
+    "-.",               # dash-dot
+    "-",                # solid
+    ":",                # dotted
+]
+markers_6set = ['o', 's', '^', 'D', 'None', 'X']  # circle, square, up-tri, diamond, down-tri, bold X
 
 
 def compute_volume(bounds):
@@ -54,10 +79,16 @@ def load_metrics_npz(path):
     return {k: data[k] for k in data.files}
 
 
-def set_publication_plot_style(font_family='Times New Roman', font_size=18):
+def set_publication_plot_style(font_family='Times New Roman', font_size=18,
+                               sci_power=(-2, 2), tick_pad=6,
+                               legend_loc='upper left', legend_frame=True,
+                               pair_line_marker_cycle=False):
     """
-    Publication-ready Matplotlib defaults with safe spacing to prevent label/tick overlap.
+    Publication-ready Matplotlib defaults with consistent tick formatting.
     """
+    mpl.rcdefaults()       # reset rcParams to built-in defaults
+    plt.style.use('default')  # ensure default style (no external style lingering)
+    
     plt.rcParams.update({
         # Typography
         'font.family': font_family,
@@ -69,24 +100,154 @@ def set_publication_plot_style(font_family='Times New Roman', font_size=18):
         'legend.fontsize': font_size,
         'figure.titlesize': font_size,
         'lines.linewidth': 2,
+        'lines.markersize': 7,
+        'lines.markeredgewidth': 1.5,
+        'lines.markerfacecolor': 'none',   # hollow markers = great contrast
 
-        # Spacing (the important bits)
-        'figure.constrained_layout.use': True,     # auto-avoid overlaps
-        'figure.constrained_layout.h_pad': 0.05,   # inch padding between rows
-        'figure.constrained_layout.w_pad': 0.05,   # inch padding between cols
-        'figure.constrained_layout.hspace': 0.10,  # additional height space
-        'figure.constrained_layout.wspace': 0.10,  # additional width space
+        # Tick appearance & alignment
+        'xtick.direction': 'in',
+        'ytick.direction': 'in',
+        'xtick.major.pad': tick_pad,
+        'ytick.major.pad': tick_pad,
+        'xtick.top': False,     # corner/pair plots usually cleaner without top/right ticks
+        'ytick.right': False,
 
-        # Extra padding around text/ticks
-        'axes.labelpad': 8,        # space between axis and its label (pts)
-        'axes.titlepad': 10,       # space between axes and title (pts)
-        'xtick.major.pad': 6,      # tick label padding (pts)
-        'ytick.major.pad': 6,
+        # ---------- Legend defaults ----------
+        'legend.loc': legend_loc,
+        'legend.frameon': legend_frame,
+        'legend.borderaxespad': 0.4,   # padding between legend and axes
+        'legend.borderpad': 0.3,       # padding inside the legend box
+        'legend.handlelength': 1.8,    # line handle length
+        'legend.handletextpad': 0.6,   # space between handle and text
+        'legend.columnspacing': 0.8,
+        'legend.labelspacing': 0.4,
+        'legend.markerscale': 2.0,     # scale marker size in legend
+        # 'legend.numpoints': 1,        # uncomment for single-point line legends
 
-        # When saving, keep the tight layout
+        # Scientific notation like the helper used
+        'axes.formatter.use_mathtext': True,
+        'axes.formatter.limits': sci_power,  # switch to sci notation outside these powers
+        'axes.formatter.useoffset': False,   # avoid confusing 1eN offsets on axes
+        'axes.unicode_minus': False,         # minus sign renders consistently with mathtext
+
+        # Spacing / layout
+        'figure.constrained_layout.use': True,
+        'figure.constrained_layout.h_pad': 0.05,
+        'figure.constrained_layout.w_pad': 0.05,
+        'figure.constrained_layout.hspace': 0.10,
+        'figure.constrained_layout.wspace': 0.10,
+        'axes.labelpad': 8,
+        'axes.titlepad': 10,
+
+        # ---------- Grid defaults ----------
+        'axes.grid': True,            # turn grid on by default
+        'axes.grid.axis': 'both',     # x and y
+        'axes.grid.which': 'major',   # grid for major ticks (change to 'both' if desired)
+        'grid.linewidth': 0.5,
+        'grid.alpha': 0.5,
+
+        # Save tight
         'savefig.bbox': 'tight',
         'savefig.pad_inches': 0.05,
+
+        # Figure size
+        'figure.figsize': (10, 8),
     })
+
+    if pair_line_marker_cycle:
+        plt.rc('axes', prop_cycle=cycler(linestyle=linestyles_6set) + cycler(marker=markers_6set))
+
+
+def apply_default_locators(ax_or_fig, max_ticks=4):
+    """
+    Apply MaxNLocator(max_ticks) + ScalarFormatter(useMathText, powerlimits from rcParams)
+    to all axes in a Figure or a single Axes. Call once after plotting.
+    """
+    axes = []
+    if hasattr(ax_or_fig, 'get_axes'):  # Figure
+        axes = [a for a in ax_or_fig.get_axes() if a.name == 'axes']
+    else:  # single Axes
+        axes = [ax_or_fig]
+
+    for ax in axes:
+        # Major tick density
+        ax.xaxis.set_major_locator(mticker.MaxNLocator(max_ticks))
+        ax.yaxis.set_major_locator(mticker.MaxNLocator(max_ticks))
+
+        # Formatter consistent with rcParams (mathtext + powerlimits)
+        xf = mticker.ScalarFormatter(useMathText=plt.rcParams['axes.formatter.use_mathtext'])
+        yf = mticker.ScalarFormatter(useMathText=plt.rcParams['axes.formatter.use_mathtext'])
+        xf.set_powerlimits(plt.rcParams['axes.formatter.limits'])
+        yf.set_powerlimits(plt.rcParams['axes.formatter.limits'])
+        xf.set_useOffset(plt.rcParams['axes.formatter.useoffset'])
+        yf.set_useOffset(plt.rcParams['axes.formatter.useoffset'])
+        ax.xaxis.set_major_formatter(xf)
+        ax.yaxis.set_major_formatter(yf)
+
+
+def custom_save_plot(save_plot, save_path):
+    if(save_plot):
+        plt.savefig(save_path, format="pdf", dpi=300)
+        print("[info] save fig to path: ", save_path)
+
+
+def tidy_corner_axes(fig, axes, labels=None, max_ticks=4, labelsize=9, pad=2, sci_power=(-2, 2)):
+    """
+    Make axes and labels/ticks line up nicely on a corner/pair plot.
+
+    Parameters
+    ----------
+    fig : matplotlib.figure.Figure
+    axes : 2D numpy array of Axes (e.g., from plt.subplots / PairGrid / corner.corner)
+    labels : list[str] or None
+        If given, sets x-labels on bottom row and y-labels on left column.
+    max_ticks : int
+        Max number of ticks on each axis.
+    labelsize : int
+        Tick label size.
+    pad : float
+        Tick label pad.
+    sci_power : tuple[int, int]
+        Power limits for switching to scientific notation (ScalarFormatter).
+    """
+    n, m = axes.shape
+
+    # Share tick formatters/locators
+    for i in range(n):
+        for j in range(m):
+            ax = axes[i, j]
+            if ax is None:
+                continue
+
+            # show tick labels only on outer axes
+            ax.label_outer()
+
+            # consistent tick density & style
+            ax.xaxis.set_major_locator(mticker.MaxNLocator(max_ticks))
+            ax.yaxis.set_major_locator(mticker.MaxNLocator(max_ticks))
+            xf = mticker.ScalarFormatter(useMathText=True)
+            yf = mticker.ScalarFormatter(useMathText=True)
+            xf.set_powerlimits(sci_power)
+            yf.set_powerlimits(sci_power)
+            ax.xaxis.set_major_formatter(xf)
+            ax.yaxis.set_major_formatter(yf)
+
+            ax.tick_params(axis="both", direction="in", pad=pad, labelsize=labelsize)
+
+    # put labels only where they align visually
+    if labels:
+        for j in range(m):
+            axes[-1, j].set_xlabel(labels[j])
+        for i in range(n):
+            axes[i, 0].set_ylabel(labels[i])
+
+    # tighten spacing & align label baselines
+    try:
+        fig.align_labels()        # matplotlib ≥3.4 aligns across subplots
+    except Exception:
+        pass
+    fig.set_constrained_layout_pads(w_pad=0.02, h_pad=0.02, wspace=0.0, hspace=0.0)
+    fig.canvas.draw_idle()
 
 
 def p_rel_worst_error(p1, p2):
@@ -109,17 +270,6 @@ def p_total_variation(p1, p2, vol_est, verbose=False, eps=np.finfo(np.float32).t
     diff[diff < eps] = 0.0 # Set values below threshold to zero
     tv = 0.5 * np.mean(diff) * vol_est
     return 100. *tv.item()
-
-
-colors_6set = sns.color_palette([
-    "#000000",  
-    "#8C00FF",  
-    "#00FF1E",  # orange
-    "#FF008C",  # purple
-    "#00FBFF",  # green
-    "#FF8400",  # brown
-    "#999999",  # gray
-])
 
 
 def plot_training_history(model_paths: dict, palette: str = "husl", model="p_net.pth"):

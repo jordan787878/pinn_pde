@@ -211,7 +211,7 @@ def config_training(constants, option=""):
         configuration["training_fcn"] = PINN.train_pinngmm
         configuration["bias_fac"] = 0.5
         # configuration["reg_tv"] = torch.tensor(0.0)
-        p_net = TimeToGMM_V0(constants, K=11)
+        p_net = TimeToGMM_V0(constants, K=5, alpha_floor=0.01)
 
     return configuration, p_net
 
@@ -222,7 +222,7 @@ def main():
     torch.manual_seed(0); np.random.seed(0)
 
     # Setup config
-    config, p_net = config_training(constants, option="pinn-gmm")
+    config, p_net = config_training(constants, option="pinn-gmm_bias")
     save_config_human(config, model_name="p_net")
 
     # Train & log

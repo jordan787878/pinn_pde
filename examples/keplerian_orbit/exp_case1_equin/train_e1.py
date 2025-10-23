@@ -170,7 +170,7 @@ def config_training_ENet_XL(constants, fac=0.02, option=""):
 
     if option == "pinn-gmm_bias":
         e1_net = ENet_XL(constants, scale=scale_torch, normalize=fac*scale_torch, input_feature=7)
-        p_net = TimeToGMM_V0(constants, K=11)
+        p_net = TimeToGMM_V0(constants, K=5, alpha_floor=0.01)
         p_net = load_trained_model(p_net, path=configuration["save_path"]+"/p_net.pth"); p_net.eval()
         configuration["bias_fac"] = 0.5
 
@@ -185,7 +185,7 @@ def main():
 
     # Setup config
     fac = 0.02
-    config, p_net, e1_net = config_training_ENet_XL(constants, fac=fac, option="pinn-gmm")
+    config, p_net, e1_net = config_training_ENet_XL(constants, fac=fac, option="pinn-gmm_bias")
     save_config_human(config, model_name="e1_net")
 
     # Train & log

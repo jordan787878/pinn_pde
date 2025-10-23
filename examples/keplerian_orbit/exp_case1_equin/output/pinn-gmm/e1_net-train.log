@@ -1,0 +1,14 @@
+
+===== logging start 2025-10-22 11:17:23 =====
+--- Save Epoch 1, Loss=3.4254e+00, IC=7.5985e-01, Res=2.6656e+00, Beta=0.00 ---
+... RAR IC , Max IC error: 5.3439, t: tensor(0.)
+... RAR RES, Max residual error: 24.2171, t: tensor([[0.0547],
+        [0.2572],
+        [0.0089]])
+--- Save Epoch 3, Loss=1.9061e+00, IC=6.3858e-01, Res=1.2675e+00, Beta=0.02 ---
+--- Save Epoch 4, Loss=8.4948e-01, IC=5.3857e-01, Res=3.1091e-01, Beta=0.04 ---
+--- Save Epoch 6, Loss=7.1265e-01, IC=4.9437e-01, Res=2.1828e-01, Beta=0.06 ---
+--- Save Epoch 8, Loss=5.7528e-01, IC=4.2528e-01, Res=1.4999e-01, Beta=0.08 ---
+--- Save Epoch 16, Loss=5.4549e-01, IC=4.3356e-01, Res=1.1193e-01, Beta=0.10 ---
+--- Save Epoch 25, Loss=4.9931e-01, IC=4.0854e-01, Res=9.0771e-02, Beta=0.12 ---
+===== logging end   2025-10-22 11:17:33 =====

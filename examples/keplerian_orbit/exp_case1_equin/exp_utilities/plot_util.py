@@ -10,12 +10,15 @@ from mpl_toolkits.mplot3d import Axes3D  # noqa: F401  (needed for 3D projection
 import pandas as pd
 from matplotlib.colors import LogNorm, Normalize
 from matplotlib.ticker import MaxNLocator, ScalarFormatter
+from matplotlib.patches import Patch
 
 import sys
 from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]   # repo_root
 sys.path.insert(0, str(ROOT))
-from utilities._General.util import set_publication_plot_style, colors_6set
+from utilities._General.util import (set_publication_plot_style, colors_6set, 
+                                     tidy_corner_axes, apply_default_locators, custom_save_plot,
+                                     linestyles_6set, markers_6set)
 from utilities._General.classic_gmm import make_gmm_pdf
 
 
@@ -491,15 +494,15 @@ def densify_between(v, n_between=1):
     return np.concatenate(pieces + [v[-1:]])
 
 
-def plot_pdf_metrics(metrics):
-    set_publication_plot_style()
+def plot_pdf_metrics(metrics, save_plot=False):
+    set_publication_plot_style(pair_line_marker_cycle=True)
 
     plt.figure()
     print(metrics["t"])
-    plt.plot(metrics["t"], metrics["rel_error_lp"], color=colors_6set[3],   label="GA")
-    plt.plot(metrics["t"], metrics["rel_error_ut"], color=colors_6set[4],   label="UT")
-    plt.plot(metrics["t"], metrics["rel_error_gmm"], color=colors_6set[5],   label="GMM")
-    plt.plot(metrics["t"], metrics["rel_error_pinn"], color=colors_6set[1], label="PINN-MLP")
+    plt.plot(metrics["t"], metrics["rel_error_lp"], color=colors_6set[3])
+    plt.plot(metrics["t"], metrics["rel_error_ut"], color=colors_6set[4])
+    plt.plot(metrics["t"], metrics["rel_error_gmm"], color=colors_6set[5])
+    plt.plot(metrics["t"], metrics["rel_error_pinn"], color=colors_6set[1])
     all_zeros = not np.any(metrics["B1_pinn"])
     if(all_zeros is False):
         plt.fill_between(
@@ -508,9 +511,8 @@ def plot_pdf_metrics(metrics):
             metrics["B1_pinn"],
             color=colors_6set[1],
             alpha=0.2,
-            label="Error Bound"
         )
-    plt.plot(metrics["t"], metrics["rel_error_pinngmm"], color=colors_6set[0], label="PINN-GMM")
+    plt.plot(metrics["t"], metrics["rel_error_pinngmm"], color=colors_6set[0])
     all_zeros = not np.any(metrics["B1_pinngmm"])
     if(all_zeros is False):
         plt.fill_between(
@@ -519,12 +521,41 @@ def plot_pdf_metrics(metrics):
             metrics["B1_pinngmm"],
             color=colors_6set[0],
             alpha=0.2,
-            label="Error Bound"
+            hatch='//',                 # tilt/density: '/', '//', '///', etc.
+            linewidth=0.0               # hide polygon outline
         )
-    plt.legend(loc="upper left", ncol=2)
+    # manual legend
+    spacer = Line2D([0], [0], linestyle='None', marker=None, alpha=0.0, label='')
+    handles = [
+        Line2D([0], [0], color=colors_6set[3], lw=2, 
+               linestyle=linestyles_6set[0], marker=markers_6set[0], 
+               label='GA'),
+        Line2D([0], [0], color=colors_6set[4], lw=2, 
+               linestyle=linestyles_6set[1], marker=markers_6set[1], 
+               label='UT'),
+        Line2D([0], [0], color=colors_6set[5], lw=2, 
+               linestyle=linestyles_6set[2], marker=markers_6set[2], 
+               label='GMM'),
+        spacer,
+
+        Line2D([0], [0], color=colors_6set[1], lw=2, 
+               linestyle=linestyles_6set[3], marker=markers_6set[3], 
+               label='PINN-MLP'),
+        Patch(facecolor=colors_6set[1], edgecolor='none',
+              alpha=0.20, label='Error Bound'),
+
+        Line2D([0], [0], color=colors_6set[0], lw=2, 
+               linestyle=linestyles_6set[4], marker=markers_6set[4], 
+               label='PINN-GMM'),
+        Patch(facecolor=colors_6set[0], edgecolor=colors_6set[0],
+                        hatch='//', linewidth=0.0, alpha=0.2,
+                        label='Error Bound')
+    ]
+    plt.legend(handles=handles, ncol=2)
     plt.xlabel("t")
-    plt.ylabel("norm. worst error %")
-    plt.grid(True)
+    plt.ylabel("Worst Normalized Error %")
+    save_path = "figs/metric-WNE.pdf"
+    custom_save_plot(save_plot, save_path)
 
     plt.figure()
     plt.plot(metrics["t"], metrics["tv_lp"], color=colors_6set[3],   label="GA")
@@ -532,10 +563,11 @@ def plot_pdf_metrics(metrics):
     plt.plot(metrics["t"], metrics["tv_gmm"], color=colors_6set[5],   label="GMM")
     plt.plot(metrics["t"], metrics["tv_pinn"], color=colors_6set[1], label="PINN-MLP")
     plt.plot(metrics["t"], metrics["tv_pinngmm"], color=colors_6set[0], label="PINN-GMM")
-    plt.legend(loc="upper left", ncol=2)
+    plt.legend(ncol=2)
     plt.xlabel("t")
-    plt.ylabel("total variation %")
-    plt.grid(True)
+    plt.ylabel("Total Variation %")
+    save_path = "figs/metric-TV.pdf"
+    custom_save_plot(save_plot, save_path)
 
     # metric 3: negative log liklihood (relative KL)
     plt.figure()
@@ -544,12 +576,17 @@ def plot_pdf_metrics(metrics):
     plt.plot(metrics["t"], metrics["g_kl_gmm"], color=colors_6set[5],   label="GMM")
     plt.plot(metrics["t"], metrics["g_kl_pinn"], color=colors_6set[1], label="PINN-MLP")
     plt.plot(metrics["t"], metrics["g_kl_pinngmm"], color=colors_6set[0], label="PINN-GMM")
-    plt.legend(loc="upper left", ncol=2)
+    plt.legend(ncol=2)
     plt.xlabel("t")
-    plt.ylabel("General KL")
-    plt.grid(True)
+    plt.ylabel("Relative Divergence")
+    save_path = "figs/metric-RD.pdf"
+    custom_save_plot(save_plot, save_path)
 
     plt.show()
+
+
+x_axis_labels=[r"$a$", r"$P_1$", r"$P_2$", 
+               r"$Q_1$", r"$Q_2$", r"$\lambda$"]
 
 
 def plot_corner_elem(
@@ -557,7 +594,7 @@ def plot_corner_elem(
     *,
     bins=256,
     labels=None,
-    ranges="fixed",     # "fixed" (from constants) or "auto"
+    ranges="auto",     # "fixed" (from constants) or "auto"
     pad_frac=0.03,
     cmap="bwr",
     log_counts=True,
@@ -568,13 +605,13 @@ def plot_corner_elem(
     data_lp=None,
     data_ut=None,
     data_gmm=None,
+    save_plot=False,
 ):
     """
     dims = (i,) -> 1D histogram for x_i with model overlays (same colors as full plot)
     dims = (i,j) -> 2D heatmap for (x_i, x_j) with model contour overlays
     Indices in dims are 1-based.
     """
-    set_publication_plot_style()
 
     X = np.asarray(X_samples)
     N, D = X.shape
@@ -600,8 +637,9 @@ def plot_corner_elem(
     if len(idx) == 1:
         k = idx[0]
         lo, hi = (_fixed_range(k) if ranges == "fixed" else _auto_range(X[:, k]))
-        fig, ax = plt.subplots(figsize=(4, 3))
-
+        fig, ax = plt.subplots()
+        apply_default_locators(ax)
+        set_publication_plot_style()
         ax.hist(
             X[:, k], bins=bins, range=(lo, hi),
             histtype="stepfilled", alpha=1.0, density=True,
@@ -665,7 +703,9 @@ def plot_corner_elem(
                                range=[(xlo, xhi), (ylo, yhi)])
     H = H.T
 
-    fig, ax = plt.subplots(figsize=(4, 4))
+    fig, ax = plt.subplots()
+    apply_default_locators(ax)
+    set_publication_plot_style()
     if log_counts:
         pos = H[H > 0]
         vmin = float(pos.min()) if pos.size else 1.0
@@ -809,14 +849,6 @@ def plot_corner_elem(
                           covs.detach().cpu().numpy(),
                           colors_6set[0])
 
-    # p_net_gmm (train in scaled x)
-    if p_net_gmm is not None:
-        ws, mus, covs = p_net_gmm.weights_means_covs_at(t)
-        _plot_gmm_contour(ws.detach().cpu().numpy(),
-                          mus.detach().cpu().numpy(),
-                          covs.detach().cpu().numpy(),
-                          colors_6set[0], scaled_x=True, rar_samples=rar_samples)
-
     # linear prop (Gaussian)
     if data_lp is not None:
         _, w, mu6, P6 = data_lp.get(t)
@@ -836,25 +868,58 @@ def plot_corner_elem(
         _, ws, mus, covs = data_gmm.get(t)
         _plot_gmm_contour(ws, mus, covs, colors_6set[5])
 
-    ax.set_xlabel(labels[i]); ax.set_ylabel(labels[j])
-    ax.set_xlim(xlo, xhi); ax.set_ylim(ylo, yhi)
-    return fig, ax
+    # p_net_gmm (train in scaled x)
+    if p_net_gmm is not None:
+        ws, mus, covs = p_net_gmm.weights_means_covs_at(t)
+        _plot_gmm_contour(ws.detach().cpu().numpy(),
+                          mus.detach().cpu().numpy(),
+                          covs.detach().cpu().numpy(),
+                          colors_6set[0], scaled_x=True, rar_samples=rar_samples)
 
+    ax.set_xlabel(x_axis_labels[i]); ax.set_ylabel(x_axis_labels[j])
+    ax.set_xlim(xlo, xhi); ax.set_ylim(ylo, yhi)
+
+    # manual legends
+    cmap = plt.get_cmap('bwr')
+    c_low  = cmap(0.08)   # low density
+    c_high = cmap(0.92)   # high density
+    spacer = Line2D([0], [0], linestyle='None', marker=None, alpha=0.0, label='')
+    handles = [
+        Line2D([0], [0], color=colors_6set[3], lw=2, label='GA'),
+        Line2D([0], [0], color=colors_6set[4], lw=2, label='UT'),
+        Line2D([0], [0], color=colors_6set[5], lw=2, label='GMM'),
+        Line2D([0], [0], color=colors_6set[0], lw=2, label='PINN-GMM'),
+        
+       # Density legend entries (marker-only squares)
+        Line2D([0],[0], linestyle='None', marker='s', markersize=12,
+            markerfacecolor=c_low, markeredgecolor=c_low,
+            alpha=0.8, label='Ref. PDF, low  density'),
+        Line2D([0],[0], linestyle='None', marker='s', markersize=12,
+            markerfacecolor=c_high, markeredgecolor=c_high,
+            alpha=0.8, label='Ref. PDF, high density'),
+        spacer,
+        spacer
+    ]
+    ax.legend(handles=handles, ncol=2)
+    save_path = "figs/corner_element_t{:.2f}.pdf".format(t)
+    custom_save_plot(save_plot, save_path)
+    
 
 def plot_full_corner(constants, t,
     X_samples,
-    bins=200,
+    bins=256,
     labels=None,
     figsize_per_dim=1.5,
     max_points=500_000,
     mode="heatmap",            # "scatter" or "heatmap"
-    cmap="cividis",
+    cmap="bwr",
     alpha=0.4,
     point_size=2,
     ranges=None,               # list of (lo,hi) per dim; if None -> data-driven
     log_counts=True,           # log color scale for heatmap
     OUTPUT_PATH=None,
     p_net_gmm=None,
+    save_plot=False,
 ):
     set_publication_plot_style(font_size=14)
 
@@ -888,7 +953,6 @@ def plot_full_corner(constants, t,
         (constants.X6_RANGE[0],constants.X6_RANGE[1]),
     ]
 
-    sns_colors = sns.color_palette("husl", 3)
     fig, axes = plt.subplots(
         D, D,
         figsize=(figsize_per_dim*D, figsize_per_dim*D),
@@ -905,7 +969,7 @@ def plot_full_corner(constants, t,
         if(data_marginal_pinn is not None):
             pdf_values = data_marginal_pinn['pdf']
             X_grid = data_marginal_pinn["X_grid"]
-            ax.plot(X_grid, pdf_values, color=sns_colors[0])
+            ax.plot(X_grid, pdf_values, color=colors_6set[1])
         # pdf_max = np.max(pdf_values[pdf_values > 0])
         # Define levels as percentages of the maximum value
         # For example, levels at 5%, 25%, 50%, 75%, and 95% of the max
@@ -918,21 +982,20 @@ def plot_full_corner(constants, t,
     for d in range(D):
         ax = axes[d, d]
         lo, hi = ranges[d]
+        hist_color = plt.cm.bwr(0.35)          # keep your diagonal histogram color
+        hist_edge  = plt.cm.bwr(0.35)
         ax.hist(
-            X[:, d],
-            bins=bins,
-            range=(lo, hi),
-            histtype="stepfilled",
-            alpha=0.85,
-            color="steelblue",
-            density=True,
+            X[:, d], bins=bins, range=(lo, hi),
+            histtype="stepfilled", alpha=1.0, density=True,
+            color=hist_color, edgecolor=hist_edge
         )
+        ax.yaxis.set_major_locator(MaxNLocator(nbins=4, prune="both"))
         ax.set_xlim(lo, hi)
         ax.yaxis.set_major_locator(MaxNLocator(nbins=4, prune="both"))
-        if d == D - 1: ax.set_xlabel(labels[d])
+        if d == D - 1: ax.set_xlabel(x_axis_labels[d])
         else: ax.set_xticklabels([])
         if d != 0: ax.set_yticklabels([])
-        if d == 0: ax.set_ylabel(labels[d])
+        if d == 0: ax.set_ylabel(x_axis_labels[d])
         # hide upper triangle in row d
         for k in range(d + 1, D):
             axes[d, k].axis("off")
@@ -964,55 +1027,40 @@ def plot_full_corner(constants, t,
             plot_axes = d
             ws, mus, covs = p_net_gmm.weights_means_covs_at(t)
             ws = ws.detach().cpu().numpy()
-            print("GMM weights: ", ws, np.sum(ws))
+            # print("GMM weights: ", ws, np.sum(ws))
             mus = mus.detach().cpu().numpy()
             covs = covs.detach().cpu().numpy()
-            _plot_pinn_gmm_1d(ws, mus, covs, plot_axes, sns_colors[0])
+            _plot_pinn_gmm_1d(ws, mus, covs, plot_axes, colors_6set[0])
 
     # Off-diagonals: scatter or heatmap (counts)
     for i in range(1, D):
         for j in range(i):
             ax = axes[i, j]
             (xlo, xhi), (ylo, yhi) = ranges[j], ranges[i]
+            H, xedges, yedges = np.histogram2d(
+                X[:, j], X[:, i],
+                bins=bins,
+                range=[(xlo, xhi), (ylo, yhi)],
+            )
+            H = H.T
+            if log_counts:
+                pos = H[H > 0]
+                vmax = float(pos.max()) if pos.size else 1.0
+                vmin = float(pos.min()) if pos.size else 1.0  # >=1 to avoid zeros in LogNorm
+                norm = LogNorm(vmin=vmin, vmax=vmax)
+            else:
+                norm = None
+            H_ma = np.ma.masked_invalid(H)           # handle NaNs/Infs
+            alpha = np.clip(norm(H_ma).filled(0), 0, 1)  # normalize to [0,1]
+            ax.imshow(
+                H, origin="lower",
+                extent=(xlo, xhi, ylo, yhi),
+                aspect="auto", cmap=cmap, norm=norm, interpolation="nearest",
+                # alpha=alpha
+                alpha=0.5,
+            )                
 
-            if mode == "scatter":
-                idx = np.arange(N)
-                if max_points is not None and N > max_points:
-                    idx = np.random.default_rng(0).choice(N, size=max_points, replace=False)
-                ax.scatter(
-                    X[idx, j], X[idx, i],
-                    s=point_size, alpha=alpha, edgecolors="none"
-                )
-            else:  # heatmap of counts
-                H, xedges, yedges = np.histogram2d(
-                    X[:, j], X[:, i],
-                    bins=bins,
-                    range=[(xlo, xhi), (ylo, yhi)],
-                )
-                H = H.T
-                if log_counts:
-                    pos = H[H > 0]
-                    vmax = float(pos.max()) if pos.size else 1.0
-                    vmin = float(pos.min()) if pos.size else 1.0  # >=1 to avoid zeros in LogNorm
-                    norm = LogNorm(vmin=vmin, vmax=vmax)
-                else:
-                    norm = None
-                H_ma = np.ma.masked_invalid(H)           # handle NaNs/Infs
-                alpha = np.clip(norm(H_ma).filled(0), 0, 1)  # normalize to [0,1]
-                ax.imshow(
-                    H, origin="lower",
-                    extent=(xlo, xhi, ylo, yhi),
-                    aspect="auto", cmap=cmap, norm=norm, interpolation="nearest",
-                    alpha=alpha
-                    # alpha=0.5,
-                )                
-                # ax.imshow(
-                #     H, origin="lower",
-                #     extent=(xlo, xhi, ylo, yhi),
-                #     aspect="auto", cmap=cmap, norm=norm, interpolation="nearest"
-                # )
-
-            relative_levels = np.array([0.01, 0.05, 0.25, 0.50, 0.75, 0.95])
+            relative_levels = np.array([0.01, 0.05, 0.50, 0.95])
 
             def _plot_pinn_contour(x_coords):
                 filename = f"{OUTPUT_PATH}/pre_compute/marginal_pdfpinn_x{x_coords[0]}_x{x_coords[1]}_t{t:.3f}.npz"
@@ -1025,7 +1073,7 @@ def plot_full_corner(constants, t,
                     # For example, levels at 5%, 25%, 50%, 75%, and 95% of the max
                     levels = relative_levels * pdf_max
                     # Draw the contour lines with the custom levels
-                    ax.contour(X_grid, Y_grid, pdf_values, levels=levels, colors=[sns_colors[0]], linewidths=0.5)
+                    ax.contour(X_grid, Y_grid, pdf_values, levels=levels, colors=[colors_6set[1]], linewidths=1.0)
                 # else:
                 #     print(x_coords)
 
@@ -1074,15 +1122,18 @@ def plot_full_corner(constants, t,
                 x_coords = (j+1, i+1)
                 ws, mus, covs = p_net_gmm.weights_means_covs_at(t)
                 ws = ws.detach().cpu().numpy()
-                print("GMM weights: ", ws, np.sum(ws))
+                # print("GMM weights: ", ws, np.sum(ws))
                 mus = mus.detach().cpu().numpy()
                 covs = covs.detach().cpu().numpy()
-                _plot_pinn_gmm_contour(ws, mus, covs, x_coords, sns_colors[0])
+                _plot_pinn_gmm_contour(ws, mus, covs, x_coords, colors_6set[0])
 
             ax.set_xlim(xlo, xhi); ax.set_ylim(ylo, yhi)
-            if i == D - 1: ax.set_xlabel(labels[j])
+            if i == D - 1: ax.set_xlabel(x_axis_labels[j])
             else: ax.set_xticklabels([])
-            if j == 0: ax.set_ylabel(labels[i])
+            if j == 0: ax.set_ylabel(x_axis_labels[i])
             else: ax.set_yticklabels([])
     
     plt.tick_params(axis='both', which='major', labelsize=8)
+    tidy_corner_axes(fig, axes, labels=x_axis_labels)
+    save_path = "figs/full_corner_t{:.2f}.pdf".format(t)
+    custom_save_plot(save_plot, save_path)

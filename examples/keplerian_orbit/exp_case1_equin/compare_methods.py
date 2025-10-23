@@ -20,6 +20,7 @@ from utilities._General.classic_gmm import make_gmm_pdf
 
 COMPUTE: bool = False
 NBATCH: int = 1000
+SAVEPLOT: bool = False
 constants = Case1_6D_Constants_Equin()
 
 
@@ -34,6 +35,7 @@ def parse_args():
     p = argparse.ArgumentParser()
     p.add_argument("--compute", type=_str2bool, default=COMPUTE,  help="Run compute stage (True/False)")
     p.add_argument("--Nbatch",  type=int, default=NBATCH,   help="Batch size (int)")
+    p.add_argument("--saveplot", type=_str2bool, default=SAVEPLOT,   help="save plot (bool)")
     return p.parse_args()
 
 
@@ -382,6 +384,10 @@ def compare_corner_plots(OUTPUT_PATH=None, data_lp=None, data_ut=None, data_gmm=
         #     data_marginal_pinn = np.load(
         #         f"{OUTPUT_PATH}/pre_compute/marginal_pdfpinn_x{x_coords[0]}_x{x_coords[1]}_t{t:.3f}.npz")
 
+        plot_full_corner(constants, t, X_ref, OUTPUT_PATH=OUTPUT_PATH, 
+                         p_net_gmm=p_net_gmm,
+                         save_plot=SAVEPLOT)
+
         # Single element plot 1D (x6,)
         # plot_corner_elem(constants, t, X_ref, (6,),
         #                  data_lp=data_lp, data_ut=data_ut, data_gmm=data_gmm,
@@ -390,10 +396,8 @@ def compare_corner_plots(OUTPUT_PATH=None, data_lp=None, data_ut=None, data_gmm=
         # Single element plot 2D (x1, x6)
         plot_corner_elem(constants, t, X_ref, (1, 6),
                          data_lp=data_lp, data_ut=data_ut, data_gmm=data_gmm,
-                         PNet_XL_PATH=OUTPUT_PATH, p_net_gmm=p_net_gmm, rar_samples=rar_samples)
-
-        # Full corner plot NOTE: need updates
-        # plot_full_corner(constants, t, X_ref, OUTPUT_PATH=OUTPUT_PATH, p_net_gmm=p_net_gmm)
+                         PNet_XL_PATH=OUTPUT_PATH, p_net_gmm=p_net_gmm, rar_samples=rar_samples,
+                         save_plot=SAVEPLOT)
 
         plt.show()
 
@@ -450,10 +454,12 @@ def load_model_by_key(trained_models, key=""):
         return p_net, e1_net, rar_samples
     
     if(key == "PINN-GMM_bias"):
-        p_net = TimeToGMM_V0(constants, K=11)
+        p_net = TimeToGMM_V0(constants, K=5, alpha_floor=0.01)
         p_net = load_trained_model(p_net, path=KEY_PATH+"/p_net.pth"); p_net.eval()
+        # e1_net = None
         e1_net = ENet_XL(constants, scale=scale_torch, normalize=scale_torch*0.02)
         e1_net = load_trained_model(e1_net, path=KEY_PATH+"/e1_net.pth"); e1_net.eval()
+        # rar_samples = None
         _p = Path(KEY_PATH) / "p_net-RARsamples.npz"
         if _p.is_file(): 
             rar_samples = np.load(_p)
@@ -465,6 +471,7 @@ def load_model_by_key(trained_models, key=""):
 
 def main():
     global constants
+    print(SAVEPLOT)
 
     # setup trained models dictionary
     trained_models = config_trained_models()
@@ -485,13 +492,15 @@ def main():
         compute_pdf_variations(N_batch=NBATCH, p_net=p_net, p_net_gmm=p_net_gmm, 
             data_lp=data_lp, data_ut=data_ut, data_gmm=data_gmm,
             e1_net=e1_net, e1_net_gmm=e1_net_gmm, save_path=metrics_path)
-    metrics = load_metrics_npz(metrics_path); plot_pdf_metrics(metrics)
+    metrics = load_metrics_npz(metrics_path); plot_pdf_metrics(metrics, save_plot=SAVEPLOT)
 
     # Visualize marginal PDF
+    # [temp] don't view the adaptive pools
+    rar_samples = None
     compare_corner_plots(
         OUTPUT_PATH=None,
-        data_lp=data_lp, data_ut=None, data_gmm=None,
-        p_net_gmm=p_net_gmm, rar_samples=rar_samples
+        data_lp=data_lp, data_ut=data_ut, data_gmm=data_gmm,
+        p_net_gmm=p_net_gmm, rar_samples=rar_samples,
     )
     
     # --- plot training history ---
@@ -502,4 +511,5 @@ if __name__ == "__main__":
     args = parse_args()
     COMPUTE   = bool(args.compute)
     NBATCH    = int(args.Nbatch)
+    SAVEPLOT = bool(args.saveplot)
     main()
