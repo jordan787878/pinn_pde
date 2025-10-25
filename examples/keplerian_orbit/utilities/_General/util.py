@@ -19,6 +19,7 @@ colors_6set = sns.color_palette([
     "#999999",  # gray
 ])
 
+
 # 6 high-contrast linestyle/marker pairs (index-bound)
 linestyles_6set = [
     (0, (5, 2)),        # custom medium dashes
@@ -29,6 +30,10 @@ linestyles_6set = [
     ":",                # dotted
 ]
 markers_6set = ['o', 's', '^', 'D', 'None', 'X']  # circle, square, up-tri, diamond, down-tri, bold X
+
+
+lower_color = plt.cm.bwr(0.2)          
+upper_color  = plt.cm.bwr(0.8)
 
 
 def compute_volume(bounds):
@@ -362,4 +367,3 @@ class RunLogger:
         self.stop()
         # don't suppress exceptions
         return False
-

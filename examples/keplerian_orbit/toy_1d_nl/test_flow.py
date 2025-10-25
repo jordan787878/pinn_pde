@@ -24,8 +24,8 @@ class PDF_Flow(nn.Module):
         t_dim: int = 1,
         scale: float = 1.0,
         neurons: int = 64,
-        num_layers: int = 10,
-        bins: int = 8,
+        num_layers: int = 5,
+        bins: int = 5,
     ):
         super().__init__()
         self.x_dim = x_dim
@@ -40,7 +40,7 @@ class PDF_Flow(nn.Module):
             context=t_dim,
             transforms=num_layers,
             bins=bins,
-            hidden_features=[neurons, neurons, neurons],
+            hidden_features=[neurons, neurons],
         )
 
     @staticmethod
