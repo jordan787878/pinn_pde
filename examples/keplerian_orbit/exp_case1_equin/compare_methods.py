@@ -199,6 +199,7 @@ def compute_pdf_variations(N_batch=1, p_net=None, p_net_gmm=None, data_lp=None, 
         "g_kl_pinngmm": [],
         "B1_pinn": [],
         "B1_pinngmm": [],
+        "B1_pinngmm_raw": [],
         "t": np.round(np.arange(0.0, 0.3+0.05, 0.05, dtype=np.float32),2)
     } 
     print("evaluate metrics over times: ", metrics["t"])
@@ -353,6 +354,10 @@ def compute_pdf_variations(N_batch=1, p_net=None, p_net_gmm=None, data_lp=None, 
         metrics["g_kl_gmm"].append(gkl_gmm)
         metrics["B1_pinn"].append(100. * 2. * e1_pinn_max/pdf_ref_max)
         metrics["B1_pinngmm"].append(100. * 2. * e1_pinngmm_max/pdf_ref_max)
+
+        B1_pinngmm_raw = 2. * e1_pinngmm_max / constants.SCALING_PDF
+        metrics["B1_pinngmm_raw"].append(B1_pinngmm_raw)
+        print("[debug] B1_pinngmm_raw: ", B1_pinngmm_raw)
         
         print_metrics_block(metrics, idx)
 
@@ -406,6 +411,7 @@ def config_trained_models():
     trained_models = {
         "PINN-XL": "output/pinn-xl",
         "PINN-XL_bias": "output/pinn-xl_bias",
+        "PINN-XL_bias_reg": "output/pinn-xl_bias_reg",
         "PINN-GMM" : "output/pinn-gmm",
         "PINN-GMM_bias" : "output/pinn-gmm_bias",
     }
@@ -432,6 +438,14 @@ def load_model_by_key(trained_models, key=""):
         return p_net, e1_net, rar_samples
     
     if(key == "PINN-XL_bias"):
+        p_net = PNet_XL(constants, scale=scale_torch, input_feature=7)
+        p_net = load_trained_model(p_net, path=KEY_PATH+"/p_net.pth"); p_net.eval()
+        e1_net = ENet_XL(constants, scale=scale_torch, normalize=scale_torch*0.02)
+        e1_net = load_trained_model(e1_net, path=KEY_PATH+"/e1_net.pth"); e1_net.eval()
+        rar_samples = None
+        return p_net, e1_net, rar_samples
+    
+    if(key == "PINN-XL_bias_reg"):
         p_net = PNet_XL(constants, scale=scale_torch, input_feature=7)
         p_net = load_trained_model(p_net, path=KEY_PATH+"/p_net.pth"); p_net.eval()
         e1_net = ENet_XL(constants, scale=scale_torch, normalize=scale_torch*0.02)
@@ -477,7 +491,7 @@ def main():
     trained_models = config_trained_models()
 
     # load pinn-mlp
-    p_net, e1_net, _ = load_model_by_key(trained_models, key="PINN-XL_bias")
+    p_net, e1_net, _ = load_model_by_key(trained_models, key="PINN-XL_bias_reg")
 
     # load pinn-gmm
     p_net_gmm, e1_net_gmm, rar_samples = load_model_by_key(trained_models, key="PINN-GMM_bias")
@@ -496,15 +510,15 @@ def main():
 
     # Visualize marginal PDF
     # [temp] don't view the adaptive pools
-    rar_samples = None
-    compare_corner_plots(
-        OUTPUT_PATH=None,
-        data_lp=data_lp, data_ut=data_ut, data_gmm=data_gmm,
-        p_net_gmm=p_net_gmm, rar_samples=rar_samples,
-    )
+    # rar_samples = None
+    # compare_corner_plots(
+    #     OUTPUT_PATH=None,
+    #     data_lp=data_lp, data_ut=data_ut, data_gmm=data_gmm,
+    #     p_net_gmm=p_net_gmm, rar_samples=rar_samples,
+    # )
     
     # --- plot training history ---
-    plot_training_history(trained_models)
+    # plot_training_history(trained_models)
         
 
 if __name__ == "__main__":

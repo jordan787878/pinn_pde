@@ -163,6 +163,12 @@ def config_training_ENet_XL(constants, fac=0.02, option=""):
         p_net = load_trained_model(p_net, path=configuration["save_path"]+"/p_net.pth"); p_net.eval()
         configuration["sample_res"] = constants.sample_res_points_scaled_bias
 
+    if option == "pinn-xl_bias_reg":
+        e1_net = ENet_XL(constants, scale=scale_torch, normalize=fac*scale_torch, input_feature=7)
+        p_net = PNet_XL(constants, scale=scale_torch, input_feature=7)
+        p_net = load_trained_model(p_net, path=configuration["save_path"]+"/p_net.pth"); p_net.eval()
+        configuration["sample_res"] = constants.sample_res_points_scaled_bias
+
     if option == "pinn-gmm":
         e1_net = ENet_XL(constants, scale=scale_torch, normalize=fac*scale_torch, input_feature=7)
         p_net = TimeToGMM_V0(constants, K=11)
@@ -185,7 +191,7 @@ def main():
 
     # Setup config
     fac = 0.02
-    config, p_net, e1_net = config_training_ENet_XL(constants, fac=fac, option="pinn-gmm_bias")
+    config, p_net, e1_net = config_training_ENet_XL(constants, fac=fac, option="pinn-xl_bias_reg")
     save_config_human(config, model_name="e1_net")
 
     # Train & log

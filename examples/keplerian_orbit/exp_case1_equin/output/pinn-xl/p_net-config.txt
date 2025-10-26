@@ -1,9 +1,9 @@
-constants: <exp_utilities.constants.Case1_6D_Constants_Equin object at 0x306adf2c0>
+constants: <exp_utilities.constants.Case1_6D_Constants_Equin object at 0x152cb8c80>
 iterations: 60000
-sample_ic: <bound method Case1_6D_Constants_Equin.sample_init_points_scaled of <exp_utilities.constants.Case1_6D_Constants_Equin object at 0x306adf2c0>>
-sample_res: <bound method Case1_6D_Constants_Equin.sample_res_points_scaled_uniform of <exp_utilities.constants.Case1_6D_Constants_Equin object at 0x306adf2c0>>
-p_ic: functools.partial(<function p_init_scaled at 0x306bc7a60>, <exp_utilities.constants.Case1_6D_Constants_Equin object at 0x306adf2c0>)
-res_func: <function diff_opt_scaled at 0x307908680>
+sample_ic: <bound method Case1_6D_Constants_Equin.sample_init_points_scaled of <exp_utilities.constants.Case1_6D_Constants_Equin object at 0x152cb8c80>>
+sample_res: <bound method Case1_6D_Constants_Equin.sample_res_points_scaled_uniform of <exp_utilities.constants.Case1_6D_Constants_Equin object at 0x152cb8c80>>
+p_ic: <bound method Case1_6D_Constants_Equin.p_init_torch of <exp_utilities.constants.Case1_6D_Constants_Equin object at 0x152cb8c80>>
+res_func: <function diff_opt_scaled at 0x152cfec00>
 res_weight: 1.0
 save_path: output/pinn-xl
 beta_incre: 0.02
@@ -17,4 +17,5 @@ N_RAR_TO_ADD: 32
 N_RAR_CAP: 4000
 iterations_per_rar: 100
 RAR_eps: 0.01
-training_fcn: <function train_pinn_expcase1equin at 0x306bd7f60>
+bias_fac: 0.0
+training_fcn: <function train_pinn at 0x152cfe660>

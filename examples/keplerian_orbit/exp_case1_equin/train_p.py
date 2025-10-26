@@ -185,18 +185,24 @@ def config_training(constants, option=""):
         "bias_fac": 0.,
     }
 
-    # if option == "pinn-xl":
-    #     configuration["training_fcn"] = PINN.train_pinn
-    #     p_net = PNet_XL(constants, scale=scale_torch, input_feature=7)
+    if option == "pinn-xl":
+        configuration["training_fcn"] = PINN.train_pinn
+        p_net = PNet_XL(constants, scale=scale_torch, input_feature=7)
 
     if option == "pinn-xl_bias":
         configuration["training_fcn"] = PINN.train_pinn
         p_net = PNet_XL(constants, scale=scale_torch, input_feature=7)
         configuration["sample_res"] = constants.sample_res_points_scaled_bias
 
+    if option == "pinn-xl_bias_reg":
+        configuration["training_fcn"] = PINN.train_pinn
+        p_net = PNet_XL(constants, scale=scale_torch, input_feature=7)
+        configuration["sample_res"] = constants.sample_res_points_scaled_bias
+        configuration["reg_tv"] = torch.tensor(1e-2)
+
     if option == "pinn-gmm":
         configuration["training_fcn"] = PINN.train_pinngmm
-        p_net = TimeToGMM_V0(constants, K=11)
+        p_net = TimeToGMM_V0(constants, K=5, alpha_floor=0.01)
 
     # if option == "pinn-gmm_double-samples":
     #     configuration["training_fcn"] = PINN.train_pinngmm
@@ -222,7 +228,7 @@ def main():
     torch.manual_seed(0); np.random.seed(0)
 
     # Setup config
-    config, p_net = config_training(constants, option="pinn-gmm_bias")
+    config, p_net = config_training(constants, option="pinn-xl_bias_reg")
     save_config_human(config, model_name="p_net")
 
     # Train & log
