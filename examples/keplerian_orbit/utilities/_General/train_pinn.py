@@ -142,6 +142,215 @@ def rar_append_with_cap(x_buf, t_buf, x_new, t_new, cap: int):
 
 ### Standard Training ###
 
+def train_pinn_vanilla(p_net, config):
+    p_net.train()
+    p_net.to(device)
+    iterations = config["iterations"]
+    sample_ic = config["sample_ic"]
+    sample_res = config["sample_res"]
+    p_init = config["p_ic"]
+    res_func = config["res_func"]
+    res_weight = config["res_weight"]
+    save_path = config["save_path"]
+    normalize = config["loss_normalize"]
+    N0_samples_initial = config["N0_samples_initial"]
+    Nr_samples_initial = config["Nr_samples_initial"]
+    iterations_per_decay = config["iterations_per_decay"]
+    optimizer = torch.optim.Adam(p_net.parameters(), lr=1e-3)
+    scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.95)
+    
+    min_loss = np.inf
+    loss_history = []
+    best_state = None
+    best_epoch = -1
+    min_loss = float("inf")
+    
+    start_time = time.time()
+    for epoch in range(1, iterations+1):
+        optimizer.zero_grad(set_to_none=True)    
+        
+        # Sample new points at each epoch for better generalization
+        x_bc_new, t_bc_new = sample_ic(N0_samples_initial)
+        # np.testing.assert_equal(x_bc_new.shape[0], N0_samples_initial)
+        x_res_new, t_res_new = sample_res(Nr_samples_initial)
+        # np.testing.assert_equal(x_res_new.shape[0], Nr_samples_initial)
+        
+        # Combine with RAR points and ensure they are on the correct device
+        x_bc = x_bc_new.detach()
+        t_bc = t_bc_new.detach()
+        x_res = x_res_new.detach().requires_grad_(True)
+        t_res = t_res_new.detach().requires_grad_(True)
+        del x_bc_new, t_bc_new, x_res_new, t_res_new
+        
+        # --- Loss based on initial conditions ---
+        with torch.no_grad():
+            p_i = p_init(x_bc)
+        phat_i = p_net(x_bc, t_bc)
+        mse_u = (phat_i/normalize - p_i/normalize).pow(2).mean()
+        # --- Loss based on PDE ---
+        res_p = res_func(x_res, t_res, p_net, beta=1.0)
+        mse_res = (res_p / normalize).pow(2).mean()
+
+        # --- Total Loss ---
+        loss = mse_u + res_weight * mse_res
+
+        # --- Optimize ---
+        if not torch.isfinite(loss):
+            print("[NaN] loss blew up; skipping update")
+            optimizer.zero_grad(set_to_none=True)
+            continue
+        loss.backward()
+        loss_history.append(loss.item())
+        # guard bad grads
+        bad_grad = False
+        for p in p_net.parameters():
+            if p.grad is not None and not torch.isfinite(p.grad).all():
+                bad_grad = True; break
+        if bad_grad:
+            print("[NaN] gradient non-finite; skipping update")
+            optimizer.zero_grad(set_to_none=True)
+            continue
+        torch.nn.utils.clip_grad_norm_(p_net.parameters(), max_norm=1.0)
+        optimizer.step()
+        del p_i, phat_i, res_p
+        
+        # --- Learning rate decay ---
+        # if (epoch % 100 == 0): print(epoch) #[debug]
+        if (epoch) % iterations_per_decay == 0:
+            scheduler.step()
+            print(f"[info] Training epoch: {epoch}, LR: {optimizer.param_groups[0]['lr']:.2e}")
+
+        # --- Save min loss model and update beta ---
+        if loss.data < min_loss:
+            train_time = time.time() - start_time
+            print(f"--- Best Epoch: {epoch}, Loss: {loss.item():.4e}, IC: {mse_u.item():.4e}, Res: {mse_res.item():.4e} ---")
+            min_loss = loss.item()
+            FLAG = True
+            best_epoch = epoch
+            best_state = copy.deepcopy(p_net.state_dict())
+            if save_path is not None and best_state is not None:
+                torch.save({
+                    'epoch': best_epoch,
+                    'model_state_dict': best_state,
+                    'loss_history': loss_history,
+                    'train_time': train_time,
+                }, save_path + "/p_net.pth")
+
+def train_pinn_error_vanilla(networks, config):
+    """
+    Improved training loop for the error network e1_net.
+    Uses same structure as train_pinn_sol_v0_scaled_improved.
+    """
+    # --- Unpack ---
+    p_net, e1_net = networks
+    e1_net.train().to(device)
+    p_net.eval().to(device)   # frozen reference
+    # Freeze p_net parameters
+    for p in p_net.parameters():
+        p.requires_grad_(False)
+
+    # -------- SAFETY CHECK 1: all p_net params frozen --------
+    assert all(p.requires_grad is False for p in p_net.parameters()), "p_net has trainable params!"
+
+    # --- Config ---
+    iterations = config["iterations"]
+    p_init   = config["p_ic"]
+    diff_opt = config["res_func"]
+    e1_path  = config["save_path"] + "/e1_net.pth"
+    # e1_path_inter = configs.get("save_path_inter", None)
+    sample_ic = config["sample_ic"]
+    sample_res = config["sample_res"]
+    normalize = config["loss_normalize"]
+    N0_samples_initial = config["N0_samples_initial"]
+    Nr_samples_initial = config["Nr_samples_initial"]
+    iterations_per_decay = config["iterations_per_decay"]
+    
+    # --- Optimizer ---
+    mse = torch.nn.MSELoss()
+    optimizer = torch.optim.Adam(e1_net.parameters(), lr=1e-3)
+    scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.95)
+
+    # -------- SAFETY CHECK 2: optimizer only sees e1_net params --------
+    e1_param_ids = {id(p) for p in e1_net.parameters()}
+    opt_param_ids = {id(p) for g in optimizer.param_groups for p in g["params"]}
+    assert opt_param_ids <= e1_param_ids, "Optimizer includes non-e1_net parameters!"
+    
+    # --- Inits ---
+    min_loss = float("inf")
+    loss_history = []
+    beta = np.float32(1.0)
+    # Best model dict
+    best_model_dict = {
+        "epoch": -1,
+        "model_state_dict": None,
+        "optimizer_state_dict": None,
+        "loss_history": None,
+        "train_time": None,
+    }
+
+    start_time = time.time()
+    for epoch in range(1, iterations+1):
+        optimizer.zero_grad()
+        
+        # Sample new points at each epoch for better generalization
+        x_bc_new, t_bc_new = sample_ic(N0_samples_initial)
+        # np.testing.assert_equal(x_bc_new.shape[0], N0_samples_initial)
+        x_res_new, t_res_new = sample_res(Nr_samples_initial)
+        # np.testing.assert_equal(x_res_new.shape[0], Nr_samples_initial)
+        
+        x_bc = x_bc_new.detach()
+        t_bc = t_bc_new.detach()
+        x_res = x_res_new.detach().requires_grad_(True)
+        t_res = t_res_new.detach().requires_grad_(True)
+        del x_bc_new, t_bc_new, x_res_new, t_res_new
+        
+        # --- IC loss: ehat ~ (p_init - p_net) ---
+        with torch.no_grad():
+            p_i = p_init(x_bc)
+            phat_i = p_net(x_bc, t_bc)
+            e_i = p_i - phat_i
+        ehat_i = e1_net(x_bc, t_bc)
+        mse_ic = mse(ehat_i / normalize, e_i / normalize)
+        
+        # --- PDE loss: diff_opt[e1] ~ -diff_opt[p] ---
+        res_p = diff_opt(x_res, t_res, p_net, beta=beta).detach()
+        res_e = diff_opt(x_res, t_res, e1_net, beta=beta)
+        mse_res = mse(res_e / normalize, (-res_p) / normalize)
+        
+        # --- Total loss ---
+        loss = mse_ic + mse_res
+        loss_history.append(loss.item())
+        
+        # --- Backward ---
+        loss.backward(retain_graph=False)
+        torch.nn.utils.clip_grad_norm_(e1_net.parameters(), max_norm=1.0)
+        optimizer.step()
+
+        # # -------- SAFETY CHECK 5: verify p_net weights unchanged after step --------
+        # _assert_pnet_unchanged(f"epoch {epoch+1}/post-step")
+        
+        # --- LR decay ---
+        if (epoch) % iterations_per_decay == 0:
+            scheduler.step()
+            print(f"[info] epoch {epoch}, lr={optimizer.param_groups[0]['lr']:.2e}")
+        
+        # --- Save best ---
+        if loss.item() < 0.95 * min_loss:
+            train_time = time.time() - start_time
+            print(f"--- Save Epoch {epoch}, Loss={loss.item():.4e}, "
+                  f"IC={mse_ic.item():.4e}, Res={mse_res.item():.4e} ---")
+            # Res={mse_res.item():.4f}
+            
+            best_model_dict.update({
+                "epoch": epoch,
+                "model_state_dict": e1_net.state_dict(),
+                "optimizer_state_dict": optimizer.state_dict(),
+                "loss_history": loss_history,
+                "train_time": train_time,
+            })
+            torch.save(best_model_dict, e1_path)
+            min_loss = loss.item()
+
 def train_pinn(p_net, config):
     p_net.train()
     p_net.to(device)

@@ -9,12 +9,18 @@ from matplotlib.lines import Line2D
 from matplotlib.colors import LogNorm
 from matplotlib.ticker import MaxNLocator
 from mpl_toolkits.mplot3d import Axes3D  # noqa: F401  (needed for 3D projection)
+from matplotlib.patches import Patch
 
 import sys
 from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]   # repo_root
 sys.path.insert(0, str(ROOT))
-from utilities._General.util import set_publication_plot_style, colors_6set
+from utilities._General.util import (set_publication_plot_style, colors_6set, 
+                                     tidy_corner_axes, apply_default_locators, custom_save_plot,
+                                     linestyles_6set, markers_6set)
+
+
+x_axis_labels=[r"$r'$", r"$\theta'$", r"$\phi'$", r"$v'_r$", r"$v'_{\theta}$", r"$v'_{\phi}$"]
 
 
 def plot_full_corner(constants, t, X_samples,
@@ -35,6 +41,7 @@ def plot_full_corner(constants, t, X_samples,
     data_lp=None,
     data_ut=None,
     data_gmm=None,
+    save_plot=False,
 ):
     set_publication_plot_style(font_size=14)
 
@@ -112,7 +119,7 @@ def plot_full_corner(constants, t, X_samples,
         
         # ax.set_xlim(lo, hi)
         ax.yaxis.set_major_locator(MaxNLocator(nbins=4, prune="both"))
-        if d == D - 1: ax.set_xlabel(labels[d])
+        if d == D - 1: ax.set_xlabel(x_axis_labels[d])
         else: ax.set_xticklabels([])
         if d != 0: ax.set_yticklabels([])
         # hide upper triangle in row d
@@ -302,12 +309,15 @@ def plot_full_corner(constants, t, X_samples,
 
             # _set_axis_limits_with_buffer(ax, (xlo, xhi), (ylo, yhi))
             # ax.set_xlim(xlo, xhi); ax.set_ylim(ylo, yhi)
-            if i == D - 1: ax.set_xlabel(labels[j])
+            if i == D - 1: ax.set_xlabel(x_axis_labels[j])
             else: ax.set_xticklabels([])
-            if j == 0: ax.set_ylabel(labels[i])
+            if j == 0: ax.set_ylabel(x_axis_labels[i])
             else: ax.set_yticklabels([])
     
     plt.tick_params(axis='both', which='major', labelsize=8)
+    tidy_corner_axes(fig, axes, labels=x_axis_labels)
+    save_path = "figs/full_corner_t{:.2f}.pdf".format(t)
+    custom_save_plot(save_plot, save_path)
 
 
 def plot_corner_elem(
@@ -325,6 +335,7 @@ def plot_corner_elem(
     data_lp=None,
     data_ut=None,
     data_gmm=None,
+    save_plot=False,
 ):
     """
     dims = (i,) -> 1D histogram for x_i with model overlays (same colors_6set as full plot)
@@ -356,7 +367,7 @@ def plot_corner_elem(
     if len(idx) == 1:
         k = idx[0]
         lo, hi = (_fixed_range(k) if ranges == "fixed" else _auto_range(X[:, k]))
-        fig, ax = plt.subplots(figsize=(4, 3))
+        fig, ax = plt.subplots()
 
         ax.hist(
             X[:, k], bins=bins, range=(lo, hi),
@@ -364,7 +375,7 @@ def plot_corner_elem(
             color=hist_color, edgecolor=hist_edge
         )
         ax.yaxis.set_major_locator(MaxNLocator(nbins=4, prune="both"))
-        ax.set_xlabel(labels[k]); ax.set_ylabel("density")
+        ax.set_xlabel(x_axis_labels[k]); ax.set_ylabel("density")
         ax.set_xlim(lo, hi)
 
         # ---- overlays (keep same colors_6set/logic as your full function) ----
@@ -419,7 +430,9 @@ def plot_corner_elem(
                                range=[(xlo, xhi), (ylo, yhi)])
     H = H.T
 
-    fig, ax = plt.subplots(figsize=(4, 4))
+    fig, ax = plt.subplots()
+    apply_default_locators(ax)
+    set_publication_plot_style()
     if log_counts:
         pos = H[H > 0]
         vmin = float(pos.min()) if pos.size else 1.0
@@ -503,21 +516,44 @@ def plot_corner_elem(
         _, ws, mus, covs = data_gmm.get(t)
         _plot_gmm_contour(ws, mus, covs, colors_6set[5])
 
-    ax.set_xlabel(labels[i]); ax.set_ylabel(labels[j])
+    # manual legends
+    cmap = plt.get_cmap('bwr')
+    c_low  = cmap(0.08)   # low density
+    c_high = cmap(0.92)   # high density
+    spacer = Line2D([0], [0], linestyle='None', marker=None, alpha=0.0, label='')
+    handles = [
+        Line2D([0], [0], color=colors_6set[3], lw=2, label='GA'),
+        Line2D([0], [0], color=colors_6set[4], lw=2, label='UT'),
+        Line2D([0], [0], color=colors_6set[5], lw=2, label='GMM'),
+        Line2D([0], [0], color=colors_6set[0], lw=2, label='PINN-GMM'),
+        
+       # Density legend entries (marker-only squares)
+        Line2D([0],[0], linestyle='None', marker='s', markersize=12,
+            markerfacecolor=c_low, markeredgecolor=c_low,
+            alpha=0.8, label='Ref. PDF, low  density'),
+        Line2D([0],[0], linestyle='None', marker='s', markersize=12,
+            markerfacecolor=c_high, markeredgecolor=c_high,
+            alpha=0.8, label='Ref. PDF, high density'),
+        spacer,
+        spacer
+    ]
+    ax.legend(handles=handles, ncol=2)
+
+    ax.set_xlabel(x_axis_labels[i]); ax.set_ylabel(x_axis_labels[j])
     ax.set_xlim(xlo, xhi); ax.set_ylim(ylo, yhi)
-    return fig, ax
+    save_path = "figs/corner_element_t{:.2f}.pdf".format(t)
+    custom_save_plot(save_plot, save_path)
 
 
-def plot_pdf_metrics(metrics):    
-    set_publication_plot_style()
+def plot_pdf_metrics(metrics, save_plot=False):
+    set_publication_plot_style(pair_line_marker_cycle=True)
 
-    # metric 1
     plt.figure()
     print(metrics["t"])
-    plt.plot(metrics["t"], metrics["rel_error_lp"], color=colors_6set[3],   label="LP")
-    plt.plot(metrics["t"], metrics["rel_error_ut"], color=colors_6set[4],   label="UT")
-    plt.plot(metrics["t"], metrics["rel_error_gmm"], color=colors_6set[5],   label="GMM")
-    plt.plot(metrics["t"], metrics["rel_error_pinn"], color=colors_6set[1], label="PINN-MLP")
+    plt.plot(metrics["t"], metrics["rel_error_lp"], color=colors_6set[3])
+    plt.plot(metrics["t"], metrics["rel_error_ut"], color=colors_6set[4])
+    plt.plot(metrics["t"], metrics["rel_error_gmm"], color=colors_6set[5])
+    plt.plot(metrics["t"], metrics["rel_error_pinn"], color=colors_6set[1])
     # all_zeros = not np.any(metrics["B1_pinn"])
     # if(all_zeros is False):
     #     plt.fill_between(
@@ -526,9 +562,8 @@ def plot_pdf_metrics(metrics):
     #         metrics["B1_pinn"],
     #         color=colors_6set[1],
     #         alpha=0.2,
-    #         label="PINN Error Bound"
     #     )
-    plt.plot(metrics["t"], metrics["rel_error_pinngmm"], color=colors_6set[0], label="PINN-GMM")
+    plt.plot(metrics["t"], metrics["rel_error_pinngmm"], color=colors_6set[0])
     all_zeros = not np.any(metrics["B1_pinngmm"])
     if(all_zeros is False):
         plt.fill_between(
@@ -537,42 +572,66 @@ def plot_pdf_metrics(metrics):
             metrics["B1_pinngmm"],
             color=colors_6set[0],
             alpha=0.2,
-            label="PINN-GMM Error Bound"
+            hatch='//',                 # tilt/density: '/', '//', '///', etc.
+            linewidth=0.0               # hide polygon outline
         )
-    plt.legend(loc="upper left", ncol=2)
-    plt.xlabel("t")
-    plt.ylabel("norm. worst error %")
-    plt.grid(True)
+    # manual legend
+    spacer = Line2D([0], [0], linestyle='None', marker=None, alpha=0.0, label='')
+    handles = [
+        Line2D([0], [0], color=colors_6set[3], lw=2, 
+               linestyle=linestyles_6set[0], marker=markers_6set[0], 
+               label='GA'),
+        Line2D([0], [0], color=colors_6set[4], lw=2, 
+               linestyle=linestyles_6set[1], marker=markers_6set[1], 
+               label='UT'),
+        Line2D([0], [0], color=colors_6set[5], lw=2, 
+               linestyle=linestyles_6set[2], marker=markers_6set[2], 
+               label='GMM'),
+        spacer,
 
-    # metric 2
+        Line2D([0], [0], color=colors_6set[1], lw=2, 
+               linestyle=linestyles_6set[3], marker=markers_6set[3], 
+               label='PINN-MLP'),
+        Patch(facecolor=colors_6set[1], edgecolor='none',
+              alpha=0.20, label='Error Bound'),
+
+        Line2D([0], [0], color=colors_6set[0], lw=2, 
+               linestyle=linestyles_6set[4], marker=markers_6set[4], 
+               label='PINN-GMM'),
+        Patch(facecolor=colors_6set[0], edgecolor=colors_6set[0],
+                        hatch='//', linewidth=0.0, alpha=0.2,
+                        label='Error Bound')
+    ]
+    plt.legend(handles=handles, ncol=2)
+    plt.xlabel("t")
+    plt.ylabel("Worst Normalized Error %")
+    save_path = "figs/metric-WNE.pdf"
+    custom_save_plot(save_plot, save_path)
+
     plt.figure()
-    plt.plot(metrics["t"], metrics["tv_lp"], color=colors_6set[3],   label="LP")
+    plt.plot(metrics["t"], metrics["tv_lp"], color=colors_6set[3],   label="GA")
     plt.plot(metrics["t"], metrics["tv_ut"], color=colors_6set[4],   label="UT")
     plt.plot(metrics["t"], metrics["tv_gmm"], color=colors_6set[5],   label="GMM")
     plt.plot(metrics["t"], metrics["tv_pinn"], color=colors_6set[1], label="PINN-MLP")
     plt.plot(metrics["t"], metrics["tv_pinngmm"], color=colors_6set[0], label="PINN-GMM")
-    plt.legend(loc="upper left", ncol=2)
+    plt.legend(ncol=2)
     plt.xlabel("t")
-    plt.ylabel("total variation %")
-    plt.grid(True)
+    plt.ylabel("Total Variation %")
+    save_path = "figs/metric-TV.pdf"
+    custom_save_plot(save_plot, save_path)
 
-    # metric 3: negative log liklihood (general KL)
+    # metric 3: negative log liklihood (relative KL)
     plt.figure()
-    print(metrics["t"])
-    print(metrics["g_kl_pinn"])
-    plt.plot(metrics["t"], metrics["g_kl_lp"], color=colors_6set[3], label="GA")
-    plt.plot(metrics["t"], metrics["g_kl_ut"], color=colors_6set[4], label="UT")
-    plt.plot(metrics["t"], metrics["g_kl_gmm"], color=colors_6set[5], label="GMM")
+    plt.plot(metrics["t"], metrics["g_kl_lp"], color=colors_6set[3],   label="GA")
+    plt.plot(metrics["t"], metrics["g_kl_ut"], color=colors_6set[4],   label="UT")
+    plt.plot(metrics["t"], metrics["g_kl_gmm"], color=colors_6set[5],   label="GMM")
     plt.plot(metrics["t"], metrics["g_kl_pinn"], color=colors_6set[1], label="PINN-MLP")
     plt.plot(metrics["t"], metrics["g_kl_pinngmm"], color=colors_6set[0], label="PINN-GMM")
-    # plt.plot(metrics["t"], metrics["g_kl_pinngmm(uniform)"], color=colors_6set[0], linestyle=":", label="PINN-GMM (uniform)")
-    # plt.plot(metrics["t"], metrics["g_kl_pinngmm(no-imp)"], color=colors_6set[0], linestyle="--", label="PINN-GMM (uniform + p0)")
-    plt.legend()
-    plt.grid(True)
+    plt.legend(ncol=2)
     plt.xlabel("t")
-    plt.ylabel("General KL")
-    # ymin, ymax = plt.ylim()
-    # plt.ylim(ymin, 1.5*np.array(metrics["g_kl_pinngmm"]).max())
+    plt.ylabel("Relative Divergence")
+    save_path = "figs/metric-RD.pdf"
+    custom_save_plot(save_plot, save_path)
 
     plt.show()
 

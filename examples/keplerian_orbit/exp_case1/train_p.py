@@ -126,6 +126,10 @@ def config_training(constants, option=""):
         "bias_fac": 0.,
     }
 
+    if option == "pinn-xl_vanilla":
+        configuration["training_fcn"] = PINN.train_pinn_vanilla
+        p_net = PNet_XL(constants, scale=scale_torch, input_feature=7)
+
     if option == "pinn-xl":
         configuration["training_fcn"] = PINN.train_pinn
         p_net = PNet_XL(constants, scale=scale_torch, input_feature=7)
@@ -160,7 +164,7 @@ def main():
     torch.manual_seed(0); np.random.seed(0)  # Set a fixed seed for reproducibility
 
     # Setup config
-    config, p_net = config_training(constants, option="pinn-xl")
+    config, p_net = config_training(constants, option="pinn-xl_vanilla")
     save_config_human(config, model_name="p_net")
 
     # Train & log

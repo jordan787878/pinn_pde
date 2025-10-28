@@ -9,6 +9,8 @@ import inspect
 from typing import Sequence, Union
 from scipy.stats import norm, multivariate_normal
 from scipy.special import logsumexp
+from statsmodels.sandbox.distributions.extras import mvnormcdf
+from scipy.stats import norm  # for the 1D closed-form
 
 
 # --------- small helpers ----------
@@ -567,3 +569,92 @@ def plot_1d_true_vs_gmm_marginals_model(model,
     if save_path:
         fig.savefig(save_path, dpi=150, bbox_inches="tight")
     plt.show()
+
+
+def integrate_gmm_over_box_whitened(
+    weights, means, covariances, problem,
+    *, scale="auto", abseps=1e-6, releps=1e-6, maxpts=1_000_000
+):
+    """
+    Integrate a full-covariance GMM over an axis-aligned box with diagonal pre-whitening.
+
+    Returns
+    -------
+    total_prob : float
+    per_component : (K,) ndarray
+    scale_used : (D,) ndarray
+    """
+    w   = np.asarray(weights, dtype=float)
+    mus = np.asarray(means, dtype=float)
+    Sig = np.asarray(covariances, dtype=float)
+
+    if w.ndim != 1 or mus.ndim != 2 or Sig.ndim != 3:
+        raise ValueError("weights (K,), means (K,D), covariances (K,D,D) required")
+    K, D = mus.shape
+    if Sig.shape != (K, D, D):
+        raise ValueError("covariances must have shape (K,D,D)")
+    if np.any(w < 0) or w.sum() <= 0:
+        raise ValueError("weights must be nonnegative with positive sum")
+    w = w / w.sum()
+
+    X_event = np.asarray(problem["X_event"], dtype=float)
+    if X_event.shape != (D, 2):
+        raise ValueError('problem["X_event"] must have shape (D,2)')
+    lower = X_event[:, 0]
+    upper = X_event[:, 1]
+    if np.any(upper < lower):
+        raise ValueError("Each upper bound must be >= lower bound")
+
+    # ----- diagonal scaling D = diag(s) -----
+    if isinstance(scale, str):
+        if scale != "auto":
+            raise ValueError('scale must be "auto" or a length-D vector')
+        widths = upper - lower
+        stds   = np.sqrt(np.clip(np.diagonal(Sig, axis1=1, axis2=2), 0.0, np.inf))  # (K,D)
+        med_std = np.median(stds, axis=0) if K > 0 else np.ones(D)
+        s = np.maximum(widths, med_std)
+        s = np.where(s <= 0.0, 1.0, s)
+    else:
+        s = np.asarray(scale, dtype=float)
+        if s.shape != (D,) or np.any(s <= 0):
+            raise ValueError("scale must be positive, shape (D,)")
+
+    Dinv = np.diag(1.0 / s)
+    lower_w = Dinv @ lower
+    upper_w = Dinv @ upper
+    mus_w   = (Dinv @ mus.T).T
+
+    Sig_w = np.empty_like(Sig)
+    for k in range(K):
+        Sk = Dinv @ Sig[k] @ Dinv
+        Sig_w[k] = 0.5 * (Sk + Sk.T)  # symmetrize
+
+    # ----- integrator budget (Genz guidance) -----
+    if maxpts is None:
+        maxpts = int(1000 * max(D, 1))  # sensible default for D>=2 per docs
+
+    probs = np.empty(K, float)
+
+    if D == 1:
+        # robust 1D path: Φ((h-μ)/σ) - Φ((l-μ)/σ)
+        for k in range(K):
+            mu = mus_w[k, 0]
+            var = Sig_w[k, 0, 0]
+            if var <= 0:
+                raise ValueError("Covariance must be positive in 1D.")
+            sd = np.sqrt(var)
+            probs[k] = float(norm.cdf(upper_w[0], loc=mu, scale=sd)
+                             - norm.cdf(lower_w[0], loc=mu, scale=sd))
+    else:
+        # D >= 2: call statsmodels mvnormcdf (Genz) on whitened params
+        for k in range(K):
+            probs[k] = mvnormcdf(
+                upper=np.asarray(upper_w),  # ensure 1-D arrays
+                mu=np.asarray(mus_w[k]),
+                cov=np.asarray(Sig_w[k]),
+                lower=np.asarray(lower_w),
+                abseps=abseps, releps=releps, maxpts=maxpts
+            )
+
+    total = float(np.dot(w, probs))
+    return total

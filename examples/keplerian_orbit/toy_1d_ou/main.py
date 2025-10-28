@@ -11,10 +11,42 @@ from scipy.linalg import expm, cholesky
 from matplotlib.lines import Line2D
 from scipy.stats import multivariate_normal
 import seaborn as sns
+
 import sys
-sys.path.insert(0, '../utilities/')
-from _General.baseline_methods import PropagationData, linear_propagation_master, unscent_propagation_master
-from _General.util import set_publication_plot_style
+from pathlib import Path
+import seaborn as sns
+ROOT = Path(__file__).resolve().parents[1]   # repo_root
+sys.path.insert(0, str(ROOT))
+from utilities._General.baseline_methods import PropagationData, linear_propagation_master, unscent_propagation_master
+from utilities._General.util import set_publication_plot_style, apply_default_locators, custom_save_plot
+
+
+colors_set = sns.color_palette([
+    "#FF008C",  # GA
+    "#00FBFF",  # UT
+    # "#00FF1E",  # prior
+    "#8C00FF",  # PINN-MLP
+    # "#0066FF",  # PINN-Flow  ←
+])
+
+# 7 high-contrast linestyle/marker pairs (index-bound)
+linestyles_set = [
+    (0, (5, 2)),        # GA
+    (0, (7, 2, 3, 2)),  # UT
+    "--",               # GMM
+    # (0, (9, 2, 1, 2)),  # prior  ←
+    "-.",               # PINN-MLP
+    # "-",                # PINN-GMM
+    # ":",                # PINN-Flow
+]
+markers_set = ['o', # GA
+                's', # UT
+                '^', # GMM
+                # 'v', # prior  ←
+                'D', # PINN-MLP
+                # 'None', # PINN-GMM
+                # 'X'  # PINN-Flow
+                ] 
 
 
 # --------------------------
@@ -281,6 +313,30 @@ def ou_dyn(x):
     return f1
 
 
+def sample_x_from_exact(t, N=100000, *, seed=None, dtype=np.float32):
+    """
+    Reproducible samples from the 1D OU exact solution at time t.
+    Returns a NumPy array of shape (N,).
+
+    Mean:  mu(t) = x0 * exp(-alpha * t)
+    Var:   s2(t) = (D / alpha) * (1 - exp(-2 * alpha * t))
+
+    Args:
+      t     : scalar time
+      N     : number of samples
+      seed  : int or None. If set, results are reproducible.
+      dtype : optional dtype for output
+    """
+    t = float(np.asarray(t).item())
+    mu  = x0 * np.exp(-alpha * t)
+    s2  = (D / alpha) * (1.0 - np.exp(-2.0 * alpha * t))
+    std = np.sqrt(max(s2, 0.0))
+
+    gen = np.random.default_rng(seed)  # same seed ⇒ same samples
+    x = gen.normal(loc=mu, scale=std, size=N)
+    return x.astype(dtype) if dtype is not None else x
+
+
 def p_total_variation(p1, p2):
     vol_est = x_hig - x_low
     p1 = p1.reshape(-1,)
@@ -295,6 +351,15 @@ def p_rel_worst_error(p1, p2):
     # print(np.max(p1), np.max(p2))
     rel_error = np.max(np.abs(p1-p2)) / np.max(p2)
     return 100.*rel_error.item()
+
+
+def p_rel_divergence(p_eval, Zq=None):
+    vol = 12
+    if Zq == None:
+        Zq = np.mean(p_eval) * vol
+        return Zq + np.mean(-np.log(p_eval))
+    else:
+        return Zq + np.mean(-np.log(p_eval))
 
 
 def run_baseline(lp_path, ut_path):
@@ -362,6 +427,7 @@ def main(TRAIN_FLAG=False, RUN_BASELINE=False):
     x = np.linspace(x_low, x_hig, num=300, endpoint=True, dtype=np.float32)
     x_tensor = torch.from_numpy(x.reshape(-1,1)).to(device)
     t_span = data_lp.data["times"].astype(x.dtype)
+    t_span = t_span[::20]
     idx_show = 0
 
     metrics = {
@@ -371,99 +437,138 @@ def main(TRAIN_FLAG=False, RUN_BASELINE=False):
         "tv_lp": [],
         "tv_ut": [],
         "tv_pinn": [],
+        "rd_lp": [],
+        "rd_ut": [],
+        "rd_pinn": [],
         "t": t_span
     }
 
-    set_publication_plot_style()
-    colors = sns.color_palette([
-        "#000000",  
-        "#8C00FF",  
-        "#00FF1E",  # orange
-        "#FF008C",  # purple
-        "#00FBFF",  # green
-        "#FF8400",  # brown
-        "#999999",  # gray
-    ])
-
-    fig = plt.figure(figsize=(12, 8))
+    set_publication_plot_style(font_size=24)
+    fig = plt.figure()
     ax = fig.add_subplot(111, projection="3d")
     for t in t_span:
+        Xsamples = sample_x_from_exact(t, seed=0)
         _, _, _mu_lp, _cov_lp = data_lp.get(t)
         pdf_func = multivariate_normal(mean=_mu_lp, cov=_cov_lp)
         pdf_lp = pdf_func.pdf(x).reshape(-1,).astype(x.dtype)
+        pdf_eval_lp = pdf_func.pdf(Xsamples).reshape(-1,).astype(x.dtype)
 
         _, _, _mu_ut, _cov_ut = data_ut.get(t)
         pdf_func = multivariate_normal(mean=_mu_ut, cov=_cov_ut)
         pdf_ut = pdf_func.pdf(x).reshape(-1,).astype(x.dtype)
+        pdf_eval_ut= pdf_func.pdf(Xsamples).reshape(-1,).astype(x.dtype)
 
         pdf_sol = p_exact(x, t)
 
         _t = np.ones(x.shape[0], dtype=x.dtype)*t
         t_tensor = torch.from_numpy(_t.reshape(-1,1)).to(device)
         pdf_pinn = p_net(x_tensor, t_tensor).detach().cpu().numpy().reshape(pdf_sol.shape)
+        
+        Xsamples_tensor = torch.from_numpy(Xsamples.reshape(-1, 1)).to(device)
+        _t = np.ones(Xsamples.shape[0], dtype=x.dtype)*t
+        t_tensor = torch.from_numpy(_t.reshape(-1,1)).to(device)
+        pdf_eval_pinn = p_net(Xsamples_tensor, t_tensor).detach().cpu().numpy().reshape(-1,)
 
         rel_error_lp = p_rel_worst_error(pdf_lp, pdf_sol)
         tv_lp = p_total_variation(pdf_lp, pdf_sol)
+        rd_lp = p_rel_divergence(pdf_eval_lp, Zq=1.)
+
         rel_error_ut = p_rel_worst_error(pdf_ut, pdf_sol)
         tv_ut = p_total_variation(pdf_ut, pdf_sol)
+        rd_ut = p_rel_divergence(pdf_eval_ut, Zq=1.)
+
         rel_error_pinn = p_rel_worst_error(pdf_pinn, pdf_sol)
         tv_pinn = p_total_variation(pdf_pinn, pdf_sol)
-        if(idx_show % 25 == 0):
+        rd_pinn = p_rel_divergence(pdf_eval_pinn)
+
+        gap = 1
+        if(idx_show % 1 == 0):
             print("time {:.2f} total variation,  PINN: {:.3f} %,  LP: {:.3f} %,  UT: {:.3f} %".format(
             t, tv_pinn, tv_lp, tv_ut
             ))
             print("time {:.2f} worst rel. error, PINN: {:.3f} %,  LP: {:.3f} %,  UT: {:.3f} %".format(
                 t, rel_error_pinn, rel_error_lp, rel_error_ut
             ))
-            ax.plot(np.full_like(x, t), x, pdf_sol,
+            print("time {:.2f} relative diverge, PINN: {:.3f} %,  LP: {:.3f} %,  UT: {:.3f} %".format(
+                t, rd_pinn, rd_lp, rd_ut,
+            ))
+            ax.plot(np.full_like(x[::gap], t), x[::gap], pdf_sol[::gap],
                     color="black", linestyle="-")
-            ax.plot(np.full_like(x, t), x, pdf_lp,
-                    color=colors[3], linestyle="--")
-            ax.plot(np.full_like(x, t), x, pdf_ut,
-                    color=colors[4], linestyle=":", lw=3)
-            ax.plot(np.full_like(x, t), x, pdf_pinn,
-                    color=colors[1], linestyle="-", lw=1)
+            ax.plot(np.full_like(x[::gap], t), x[::gap], pdf_lp[::gap],
+                    color=colors_set[0], linestyle=linestyles_set[0])#, marker=markers_set[0])
+            ax.plot(np.full_like(x[::gap], t), x[::gap], pdf_ut[::gap],
+                    color=colors_set[1], linestyle=linestyles_set[1])#, marker=markers_set[1])
+            ax.plot(np.full_like(x[::gap], t), x[::gap], pdf_pinn[::gap],
+                    color=colors_set[2], linestyle=linestyles_set[2])#, marker=markers_set[2])
         metrics["rel_error_lp"].append(rel_error_lp)
         metrics["rel_error_ut"].append(rel_error_ut)
         metrics["rel_error_pinn"].append(rel_error_pinn)
         metrics["tv_lp"].append(tv_lp)
         metrics["tv_ut"].append(tv_ut)
         metrics["tv_pinn"].append(tv_pinn)
+        metrics["rd_lp"].append(rd_lp)
+        metrics["rd_ut"].append(rd_ut)
+        metrics["rd_pinn"].append(rd_pinn)
         idx_show += 1
 
-    legend_labels = ["Aanly", "LP", "UT", "PINN-MLP"]        
+    legend_labels = [r"$p$ (Analytical)", "GA", "UT", "PINN-MLP"]        
     legend_elements = [
         Line2D([0], [0], color="black", linestyle="-", label=legend_labels[0]),
-        Line2D([0], [0], color=colors[3], linestyle="--",  label=legend_labels[1]),
-        Line2D([0], [0], color=colors[4], linestyle=":", lw=3, label=legend_labels[2]),
-        Line2D([0], [0], color=colors[1], linestyle="-", label=legend_labels[3]),
+        Line2D([0], [0], color=colors_set[0], linestyle=linestyles_set[0], marker=markers_set[0], label=legend_labels[1]),
+        Line2D([0], [0], color=colors_set[1], linestyle=linestyles_set[1], marker=markers_set[1], label=legend_labels[2]),
+        Line2D([0], [0], color=colors_set[2], linestyle=linestyles_set[2], marker=markers_set[2], label=legend_labels[3]),
     ]
-    ax.set_xlabel("t")
-    ax.set_ylabel("x")
+    ax.set_xlabel("\nt")
+    ax.set_ylabel("\nx")
+    ax.set_zlabel("\nPDF")
+    apply_default_locators(ax)
     ax.legend(handles=legend_elements, loc="best", frameon=True)
-    plt.title("1D OU Process")
+    custom_save_plot(True, "figs/pdfs.pdf")
 
+    # Plot metrics
+    set_publication_plot_style(font_size=24)
     plt.figure()
-    plt.plot(metrics["t"], metrics["rel_error_lp"], color=colors[3], linestyle="--", label=legend_labels[1]),
-    plt.plot(metrics["t"], metrics["rel_error_ut"], color=colors[4], linestyle=":", lw=3, label=legend_labels[2]),
-    plt.plot(metrics["t"], metrics["rel_error_pinn"], color=colors[1], label=legend_labels[3]),
-    plt.legend(loc="upper left")
-    plt.grid(True)
+    plt.plot(metrics["t"], metrics["rel_error_lp"], 
+             color=colors_set[0], linestyle=linestyles_set[0], marker=markers_set[0], label=legend_labels[1]),
+    plt.plot(metrics["t"], metrics["rel_error_ut"], 
+             color=colors_set[1], linestyle=linestyles_set[1], marker=markers_set[1], label=legend_labels[2]),
+    plt.plot(metrics["t"], metrics["rel_error_pinn"], 
+             color=colors_set[2], linestyle=linestyles_set[2], marker=markers_set[2], label=legend_labels[3]),
+    plt.legend()
     plt.xlabel("t")
-    plt.ylabel("worst rel. error %")
+    plt.ylabel("Worst Normalized Error %")
+    custom_save_plot(True, "figs/metric-WNE.pdf")
 
+
+    set_publication_plot_style(font_size=24)
     plt.figure()
-    plt.plot(metrics["t"], metrics["tv_lp"], color=colors[3], linestyle="--", label=legend_labels[1]),
-    plt.plot(metrics["t"], metrics["tv_ut"], color=colors[4], linestyle=":", lw=3, label=legend_labels[2]),
-    plt.plot(metrics["t"], metrics["tv_pinn"], color=colors[1], label=legend_labels[3]),
-    plt.legend(loc="upper left")
-    plt.grid(True)
+    plt.plot(metrics["t"], metrics["tv_lp"], 
+             color=colors_set[0], linestyle=linestyles_set[0], marker=markers_set[0], label=legend_labels[1]),
+    plt.plot(metrics["t"], metrics["tv_ut"], 
+             color=colors_set[1], linestyle=linestyles_set[1], marker=markers_set[1], label=legend_labels[2]),
+    plt.plot(metrics["t"], metrics["tv_pinn"], 
+             color=colors_set[2], linestyle=linestyles_set[2], marker=markers_set[2], label=legend_labels[3]),
+    plt.legend()
     plt.xlabel("t")
-    plt.ylabel("total variation %")
+    plt.ylabel("Total Variation %")
+    custom_save_plot(True, "figs/metric-TV.pdf")
+
+    set_publication_plot_style(font_size=24)
+    plt.figure()
+    plt.plot(metrics["t"], metrics["rd_lp"], 
+             color=colors_set[0], linestyle=linestyles_set[0], marker=markers_set[0], label=legend_labels[1]),
+    plt.plot(metrics["t"], metrics["rd_ut"], 
+             color=colors_set[1], linestyle=linestyles_set[1], marker=markers_set[1], label=legend_labels[2]),
+    plt.plot(metrics["t"], metrics["rd_pinn"], 
+             color=colors_set[2], linestyle=linestyles_set[2], marker=markers_set[2], label=legend_labels[3]),
+    plt.legend()
+    plt.xlabel("t")
+    plt.ylabel("Relative Divergence")
+    custom_save_plot(True, "figs/metric-RD.pdf")
 
     plt.show()
 
 
 if __name__ == "__main__":
     main(TRAIN_FLAG=False,
-         RUN_BASELINE=True)
+         RUN_BASELINE=False)

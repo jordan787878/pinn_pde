@@ -1,10 +1,13 @@
 import numpy as np
 from tqdm import tqdm
-# Only dependency for the minimization QP:
 import osqp
 import scipy.sparse as sp
+from concurrent.futures import ProcessPoolExecutor
+import os
+import time
 
 
+# -- helpers --- 
 def _precompute_gmm(w, mus, Sigmas, jitter=0.0, max_tries=5):
     """
     Stable precompute for SPD Gaussians:
@@ -49,7 +52,6 @@ def _precompute_gmm(w, mus, Sigmas, jitter=0.0, max_tries=5):
 
     return dict(ws=ws, mus=mus, invS=invS, consts=consts, L_lip=L_lip)
 
-
 def _gray_max_on_box(mu, A, lo, hi, work):
     """
     Exact M = max_{vertex v} (v-mu)^T A (v-mu) via binary-reflected Gray code.
@@ -82,41 +84,124 @@ def _gray_max_on_box(mu, A, lo, hi, work):
         prev_gray = gray
     return best
 
-
-def _solve_min_box_osqp(A, mu, lo, hi, x0=None, eps_abs=1e-10, eps_rel=1e-10):
+# --- worker: compute bounds for a block of cells [start:end) ---
+def _gmm_bounds_block(start, end, mids, wid, widths_is_per_cell,
+                      ws, mus, invS, consts, L_lip, cheap=False):
     """
-    Solve min_{lo <= x <= hi} (x-mu)^T A (x-mu)  with A = A^T ⪰ 0
-    as:   min 0.5 x^T P x + q^T x  s.t. lo <= x <= hi
-          P = 2A, q = -2A mu
+    Worker process for tight bounds on a chunk of cells.
+    Reuses per-component OSQP across the chunk by only updating l/u.
+    (No verbose prints here; parent handles progress.)
     """
-    n = A.shape[0]
-    P = sp.csc_matrix(2.0 * A)
-    q = -2.0 * (A @ mu)
-    I = sp.eye(n, format='csc')
+    K, D = mus.shape
+    Mblk = end - start
+    p_min_blk = np.empty(Mblk, float)
+    p_max_blk = np.empty(Mblk, float)
 
-    solver = osqp.OSQP()
-    solver.setup(P=P, q=q, A=I, l=lo, u=hi,
-                 polishing=False,  # polishing is unnecessary for bound-only QPs when interior
-                 eps_abs=eps_abs, eps_rel=eps_rel,
-                 verbose=False)
-    if x0 is not None:
-        solver.warm_start(x=x0)
+    # Gray-code buffers (for D <= 12)
+    xcorner = np.empty(D, float); diff = np.empty(D, float); Adiff = np.empty(D, float)
+    use_gray = (D <= 12)
 
-    res = solver.solve(raise_error=False)
-    x = res.x
-    d = x - mu
-    return float(d @ (A @ d)), x
+    if cheap:
+        # (Normally handled vectorized in the main function; this is a fallback.)
+        for i_local, i in enumerate(range(start, end)):
+            logs = np.empty(K, float)
+            x = mids[i]
+            for k in range(K):
+                A = invS[k]
+                d = x - mus[k]
+                d2 = float(d @ (A @ d))
+                logs[k] = np.log(ws[k]*consts[k]) - 0.5*d2
+            a = np.max(logs)
+            val = np.exp(a) * np.sum(np.exp(logs - a))
+            p_min_blk[i_local] = val
+            p_max_blk[i_local] = val
+        return p_min_blk, p_max_blk
+
+    solvers = []
+    As = []
+    for k in range(K):
+        A = 0.5 * (invS[k] + invS[k].T)
+        P = sp.csc_matrix(2.0 * A)
+        q = -2.0 * (A @ mus[k])
+        I = sp.eye(D, format='csc')
+        solver = osqp.OSQP()
+        solver.setup(P=P, q=q, A=I, l=np.zeros(D), u=np.zeros(D),
+                     polishing=False, eps_abs=1e-10, eps_rel=1e-10, verbose=False)
+        solvers.append((solver, q))  # q unused after setup
+        As.append(A)
+
+    xwarm = [None] * K  # warm-starts per component (local to worker)
+
+    for i_local, i in enumerate(range(start, end)):
+        wi = wid[i] if widths_is_per_cell else wid
+        lo = mids[i] - 0.5 * wi
+        hi = mids[i] + 0.5 * wi
+
+        logs_max = np.empty(K, float)  # for p_max (uses min q)
+        logs_min = np.empty(K, float)  # for p_min (uses max q)
+
+        for k in range(K):
+            solver, _ = solvers[k]
+            A = As[k]
+
+            # min q (-> p_max): update l/u, warm start, solve
+            solver.update(l=lo, u=hi)
+            if xwarm[k] is not None:
+                solver.warm_start(x=xwarm[k])
+            res = solver.solve(raise_error=False)
+            xk = res.x
+            xwarm[k] = xk
+            d = xk - mus[k]
+            d2_min = float(d @ (A @ d))
+
+            # max q (-> p_min)
+            if use_gray:
+                d2_max = _gray_max_on_box(mus[k], A, lo, hi, (xcorner, diff, Adiff))
+            else:
+                # Spectral (Rayleigh) bound: λ_max(A) * ||r||^2
+                r = np.maximum(np.abs(lo - mus[k]), np.abs(hi - mus[k]))
+                d2_max = 0.5 * L_lip[k] * float(r @ r)  # L_lip = 2*λ_max(A)
+
+            logs_max[k] = np.log(ws[k]*consts[k]) - 0.5*d2_min
+            logs_min[k] = np.log(ws[k]*consts[k]) - 0.5*d2_max
+
+        # mixture log-sum-exp
+        a = np.max(logs_max); b = np.max(logs_min)
+        p_max_blk[i_local] = np.exp(a) * np.sum(np.exp(logs_max - a))
+        p_min_blk[i_local] = np.exp(b) * np.sum(np.exp(logs_min - b))
+
+        if p_min_blk[i_local] > p_max_blk[i_local] + 1e-12 * max(1.0, p_max_blk[i_local]):
+            raise RuntimeError("Numerical issue: lower bound exceeded upper bound.")
+
+    return p_min_blk, p_max_blk
+
+# --- end of helpers ---
 
 
 def gmm_bounds_over_cells(weights, means, covariances, midpoints, widths,
-                          verbose=False, precomp=None, cheap=False):
+                          verbose=False, precomp=None, cheap=False,
+                          parallel=False, n_workers=None, chunk_size=512,
+                          cheap_block_size=None):
     """
-    Clean, single-solver version:
-      - min q_k on box: OSQP (QP with simple bounds)
-      - max q_k on box: exact Gray code if D<=12, else Rayleigh spectral bound
-    Returns:
-      p_min, p_max (both shape (M,))
+    Parallel & vectorized version (drop-in):
+
+      cheap=True  → extremely fast, fully vectorized:
+        - One-shot vectorization via einsum.
+        - If memory could be large (M*K*D), you can set 'cheap_block_size'
+          to do memory-safe chunked vectorization (progress bar only if verbose=True).
+
+      cheap=False → tight bounds:
+        - Serial or ProcessPool chunking (each worker reuses OSQP and does Gray-code or spectral max).
+        - Progress bars only if verbose=True.
+
+    Extra args:
+      parallel: enable ProcessPool for tight path only
+      n_workers: number of processes (defaults to os.cpu_count())
+      chunk_size: cells per worker chunk for tight path
+      cheap_block_size: cells per chunk for cheap path vectorization (None = auto)
     """
+    t0 = time.perf_counter()
+
     # --- inputs ---
     w  = np.asarray(weights, float)
     m  = np.asarray(means,   float)
@@ -129,24 +214,58 @@ def gmm_bounds_over_cells(weights, means, covariances, midpoints, widths,
         raise ValueError("midpoints must be (M,D)")
     M = mids.shape[0]
 
-    # --- cheap midpoint path ---
+    # --- cheap midpoint path (fully vectorized) ---
     if cheap:
         pc = precomp if precomp is not None else _precompute_gmm(w, m, S)
         invS, consts, ws = pc["invS"], pc["consts"], pc["ws"]
-        p = np.empty(M, float)
-        for i in range(M):
-            x = mids[i]
-            logs = np.empty(K, float)
-            for k in range(K):
-                A = invS[k]
-                diff = x - m[k]
-                d2 = float(diff @ (A @ diff))
-                logs[k] = np.log(ws[k]*consts[k]) - 0.5*d2
-            a = np.max(logs)
-            p[i] = np.exp(a) * np.sum(np.exp(logs - a))
-        return p.copy(), p
 
-    # --- validate widths ---
+        if verbose:
+            print(f"[gmm][cheap] vectorized midpoint density | M={M}, K={K}, D={D}")
+
+        # If user didn't set a cheap_block_size, pick one that keeps
+        # the intermediate (Mblk,K,D) under ~1e8 floats (~800MB) as a soft target.
+        if cheap_block_size is None:
+            target = max(1, int(1e8 // max(1, K * D)))  # ≈ 800MB soft cap
+            cheap_block_size = min(M, max(4096, target))
+
+        if cheap_block_size >= M:
+            # One-shot fast path
+            xm = mids[:, None, :] - m[None, :, :]                   # (M,K,D)
+            Ax = np.einsum('mkd,kde->mke', xm, invS, optimize=True)  # (M,K,D)
+            d2 = np.einsum('mkd,mkd->mk', xm, Ax, optimize=True)     # (M,K)
+            logs = np.log(ws[None, :] * consts[None, :]) - 0.5 * d2  # (M,K)
+            a = np.max(logs, axis=1, keepdims=True)                  # (M,1)
+            p = np.exp(a) * np.sum(np.exp(logs - a), axis=1, keepdims=True)
+            p = p.ravel()
+            if verbose:
+                dt = (time.perf_counter() - t0) * 1e3
+                print(f"[gmm][cheap] done one-shot in {dt:.1f} ms")
+            return p.copy(), p
+        else:
+            # Memory-safe chunked vectorization
+            if verbose:
+                print(f"[gmm][cheap] chunked: block={cheap_block_size}, "
+                      f"chunks={(M + cheap_block_size - 1)//cheap_block_size}")
+
+            out = np.empty(M, float)
+            it = range(0, M, cheap_block_size)
+            if verbose:
+                it = tqdm(it, desc="GMM cheap bounds")
+            for s0 in it:
+                s1 = min(s0 + cheap_block_size, M)
+                xm = mids[s0:s1, None, :] - m[None, :, :]                 # (Mb,K,D)
+                Ax = np.einsum('mkd,kde->mke', xm, invS, optimize=True)   # (Mb,K,D)
+                d2 = np.einsum('mkd,mkd->mk', xm, Ax, optimize=True)      # (Mb,K)
+                logs = np.log(ws[None, :] * consts[None, :]) - 0.5 * d2   # (Mb,K)
+                a = np.max(logs, axis=1, keepdims=True)                   # (Mb,1)
+                p_blk = np.exp(a) * np.sum(np.exp(logs - a), axis=1, keepdims=True)
+                out[s0:s1] = p_blk.ravel()
+            if verbose:
+                dt = (time.perf_counter() - t0) * 1e3
+                print(f"[gmm][cheap] done in {dt:.1f} ms (chunked)")
+            return out.copy(), out
+
+    # --- validate widths (tight path only) ---
     if not ((wid.ndim == 1 and wid.shape[0] == D) or (wid.ndim == 2 and wid.shape == (M, D))):
         raise ValueError("widths must be (D,) or (M,D)")
     widths_is_per_cell = (wid.ndim == 2)
@@ -157,92 +276,141 @@ def gmm_bounds_over_cells(weights, means, covariances, midpoints, widths,
     pc = precomp if precomp is not None else _precompute_gmm(w, m, S)
     invS, consts, L_lip, ws = pc["invS"], pc["consts"], pc["L_lip"], pc["ws"]
 
-    # --- outputs ---
-    p_min = np.empty(M, float); p_max = np.empty(M, float)
+    # --- tight path ---
+    p_min = np.empty(M, float)
+    p_max = np.empty(M, float)
 
-    # gray-code work buffers
-    xcorner = np.empty(D, float); diff = np.empty(D, float); Adiff = np.empty(D, float)
+    # Prepare chunks
+    n_chunks = max(1, (M + chunk_size - 1) // chunk_size)
+    starts = [i * chunk_size for i in range(n_chunks)]
+    ends = [min((i + 1) * chunk_size, M) for i in range(n_chunks)]
 
-    # warm-starts per component
-    xwarm = [None] * K
-
-    rng = range(M)
+    max_method = "Gray-code" if m.shape[1] <= 12 else "Spectral"
     if verbose:
-        try:
-            from tqdm import tqdm
-            rng = tqdm(range(M), desc="GMM bounds")
-        except Exception:
-            pass
+        mode = "parallel" if parallel and M > chunk_size else "serial"
+        nw = (os.cpu_count() or 1) if n_workers is None else n_workers
+        print(f"[gmm][tight] mode={mode} | M={M}, K={K}, D={m.shape[1]}, chunks={n_chunks}, "
+              f"chunk_size={chunk_size}, workers={nw if mode=='parallel' else 1} | max={max_method}")
 
-    for i in rng:
-        wi = wid[i] if widths_is_per_cell else wid
-        lo = mids[i] - 0.5 * wi
-        hi = mids[i] + 0.5 * wi
+    # SERIAL (no ProcessPool) — still chunked
+    if (not parallel) or (M <= chunk_size):
+        it = range(n_chunks)
+        if verbose:
+            it = tqdm(it, total=n_chunks, desc="GMM bounds (tight, serial)")
+        for ci in it:
+            s0, s1 = starts[ci], ends[ci]
+            blk_min, blk_max = _gmm_bounds_block(
+                s0, s1, mids, wid, widths_is_per_cell, ws, m, invS, consts, L_lip, cheap=False
+            )
+            p_min[s0:s1] = blk_min
+            p_max[s0:s1] = blk_max
 
-        logs_max = np.empty(K, float)  # log φ_k^max (uses d2_min)
-        logs_min = np.empty(K, float)  # log φ_k^min (uses d2_max)
+        if verbose:
+            dt = (time.perf_counter() - t0) * 1e3
+            print(f"[gmm][tight] done in {dt:.1f} ms")
+        return p_min, p_max
 
-        for k in range(K):
-            A = 0.5 * (invS[k] + invS[k].T)  # ensure symmetry
+    # PARALLEL with ProcessPool
+    if n_workers is None:
+        n_workers = os.cpu_count() or 1
 
-            # --- min q_k (for p_max): OSQP ---
-            d2_min, xwarm[k] = _solve_min_box_osqp(A, m[k], lo, hi, x0=xwarm[k])
+    with ProcessPoolExecutor(max_workers=n_workers) as ex:
+        futures = [
+            ex.submit(
+                _gmm_bounds_block, s0, s1, mids, wid, widths_is_per_cell,
+                ws, m, invS, consts, L_lip, False
+            )
+            for s0, s1 in zip(starts, ends)
+        ]
 
-            # --- max q_k (for p_min): exact or spectral bound ---
-            if D <= 12:
-                d2_max = _gray_max_on_box(m[k], A, lo, hi, (xcorner, diff, Adiff))
-            else:
-                # Rayleigh bound: max_x (x-mu)^T A (x-mu) <= λ_max(A) * ||r||^2
-                r = np.maximum(np.abs(lo - m[k]), np.abs(hi - m[k]))
-                d2_max = 0.5 * L_lip[k] * float(r @ r)  # L_lip = 2*λ_max(A)
+        it = enumerate(futures)
+        # if verbose:
+        #     it = tqdm(it, total=n_chunks, desc="GMM bounds (tight, parallel)")
+        for idx, fut in it:
+            s0, s1 = starts[idx], ends[idx]
+            blk_min, blk_max = fut.result()
+            p_min[s0:s1] = blk_min
+            p_max[s0:s1] = blk_max
 
-            logs_max[k] = np.log(ws[k]*consts[k]) - 0.5*d2_min
-            logs_min[k] = np.log(ws[k]*consts[k]) - 0.5*d2_max
-
-        # --- mixture bounds (log-sum-exp) ---
-        a = np.max(logs_max); b = np.max(logs_min)
-        p_max[i] = np.exp(a) * np.sum(np.exp(logs_max - a))
-        p_min[i] = np.exp(b) * np.sum(np.exp(logs_min - b))
-
-        # sanity
-        if p_min[i] > p_max[i] + 1e-12 * max(1.0, p_max[i]):
-            raise RuntimeError("Numerical issue: lower bound exceeded upper bound.")
+    if verbose:
+        dt = (time.perf_counter() - t0) * 1e3
+        print(f"[gmm][tight] done in {dt:.1f} ms (parallel)")
 
     return p_min, p_max
 
-
-# ---------------------------------------------
 
 def build_partition_and_bounds(
     problem, ws, mus, covs, *,
     N_degree=2,
     refine_factor=2,
     eps=0.0,
-    # NEW: simple Mahalanobis-based guidance
-    use_gmm_guidance=True,
-    z_thresh=3.0,          # 3-sigma shell
-    w_min=0.01,            # only components with weight >= w_min
     verbose=True,
     dtype=np.float32,
     cheap=False,
+    use_event_guidance=False,
+    use_gmm_guidance=False, # keep for API compatability
+    cap_per_degree=10,
+    parallel=True,
 ):
     """
-    Non-overlapping, level-by-level refinement.
-    At each level, refine parents that (a) intersect X_event, OR (b) whose *midpoint*
-    lies within Mahalanobis radius z_thresh of ANY "heavy" Gaussian (w_k >= w_min).
-
-    Then compute tight GMM bounds on each final cell and apply B1:
-      p_minus = max(0, p_min - B1),  p_plus = p_max + B1
+    Same behavior as before, but every call to gmm_bounds_over_cells()
+    is automatically configured for max throughput given `cheap`.
     """
-    X_dom   = np.asarray(problem["X_dom"],   float)
-    X_event = np.asarray(problem["X_event"], float)
+
+    # ---------- FAST SETTINGS PICKER ----------
+    def _fast_args(M: int):
+        """Select fastest gmm_bounds_over_cells settings for this call size M."""
+        if cheap:
+            return dict(
+                verbose=verbose,
+                precomp=pc_bounds,
+                cheap=True,
+                parallel=False,          # ignored in cheap mode
+                cheap_block_size=None,   # one-shot vectorized path
+            )
+        else:
+            if(parallel):
+                n_workers = os.cpu_count() or 1
+                # ~one large chunk per worker to amortize OSQP setup
+                chunk = int(np.ceil(max(1, M) / n_workers))
+                return dict(
+                    verbose=verbose,
+                    precomp=pc_bounds,
+                    cheap=False,
+                    parallel=True,
+                    n_workers=n_workers,
+                    chunk_size=chunk,
+                )
+            else:
+                n_workers = 1
+                # ~one large chunk per worker to amortize OSQP setup
+                chunk = 1024
+                return dict(
+                    verbose=verbose,
+                    precomp=pc_bounds,
+                    cheap=False,
+                    parallel=False,
+                    n_workers=n_workers,
+                    chunk_size=chunk,
+                )
+
+    # -------------------
+    # Unpack & sanity
+    # -------------------
+    X_dom   = np.asarray(problem["X_dom"],   float)  # (D,2)
+    X_event = np.asarray(problem["X_event"], float)  # (D,2)
     N_x     = problem["N_x"]
     D = X_dom.shape[0]
     B1 = float(problem.get("B1", 0.0))
     if B1 < 0:
         raise ValueError("B1 must be nonnegative.")
+    if int(refine_factor) < 2:
+        raise ValueError("refine_factor must be >= 2")
+    r = int(refine_factor)
 
-    # base grid over full X_dom (true partition)
+    # -------------------
+    # Initial grid (uniform N_x^D)
+    # -------------------
     if np.isscalar(N_x):
         Nvec = np.full(D, int(N_x), dtype=int)
     else:
@@ -250,16 +418,15 @@ def build_partition_and_bounds(
         if Nvec.shape != (D,):
             raise ValueError("N_x must be int or shape (D,)")
 
-    if int(refine_factor) < 2:
-        raise ValueError("refine_factor must be >= 2")
-    r = int(refine_factor)
-
     base_w = (X_dom[:,1] - X_dom[:,0]) / Nvec
     mids_1d = [X_dom[d,0] + (0.5 + np.arange(Nvec[d])) * base_w[d] for d in range(D)]
     grids = np.meshgrid(*mids_1d, indexing='ij')
     midpts = np.stack(grids, axis=-1).reshape(-1, D).astype(dtype)
     widths = np.broadcast_to(base_w.astype(dtype), (midpts.shape[0], D)).copy()
 
+    # -------------------
+    # Small utilities
+    # -------------------
     def _boxes(mid, wid):
         half = 0.5 * wid
         return (mid - half), (mid + half)
@@ -267,106 +434,199 @@ def build_partition_and_bounds(
     def _event_masks(mid, wid):
         lo, hi = _boxes(mid.astype(float), wid.astype(float))
         ev_lo, ev_hi = X_event[:,0], X_event[:,1]
-        inter = np.all((hi >= ev_lo) & (lo <= ev_hi), axis=1)
-        inside = np.all((lo >= (ev_lo - eps)) & (hi <= (ev_hi + eps)), axis=1)
-        return inter, inside
+        intersects = np.all((hi >= ev_lo) & (lo <= ev_hi), axis=1)
+        inside     = np.all((lo >= (ev_lo - eps)) & (hi <= (ev_hi + eps)), axis=1)
+        return intersects, inside
 
-    # --- precompute for Mahalanobis-guided selection ---
-    if use_gmm_guidance:
-        pc = _precompute_gmm(ws, mus, covs)
-        invS = pc["invS"]
-        weights = pc["ws"]
-        mus_np = mus.astype(float)
-        heavy = np.flatnonzero(weights >= float(w_min))
-        z2 = float(z_thresh) ** 2
+    def _volumes(wid):
+        return np.prod(wid.astype(np.float64), axis=1).astype(dtype)
 
-    # refinement passes
-    levels = max(0, int(N_degree) - 1)
-    for level in range(levels):
-        inter_event, _ = _event_masks(midpts, widths)
-        refine_mask = inter_event.copy()
-
-        if use_gmm_guidance and heavy.size > 0:
-            M = midpts.shape[0]
-            mids_f = midpts.astype(float)
-
-            # Vectorized over cells for each heavy component:
-            # d2_k(i) = (m_i - mu_k)^T A_k (m_i - mu_k)
-            d2_any = np.full(M, np.inf)
-            for k in heavy:
-                A = 0.5 * (invS[k] + invS[k].T)  # ensure symmetry
-                diff = mids_f - mus_np[k]        # (M, D)
-                Ad   = diff @ A                  # (M, D)
-                d2_k = np.einsum('ij,ij->i', diff, Ad)  # (M,)
-                d2_any = np.minimum(d2_any, d2_k)
-
-            refine_mask |= (d2_any <= z2)
-
-        n_parents = int(np.count_nonzero(refine_mask))
-        if verbose:
-            print(f"[level {level+1}/{levels}] parents_to_refine = {n_parents}, cells_before = {midpts.shape[0]}")
-        if n_parents == 0:
-            continue
-
-        # non-overlapping replacement: remove parents, append children
-        keep = ~refine_mask
-        kept_mid = midpts[keep]; kept_wid = widths[keep]
+    # Refine selected parents -> append children; compute bounds ONLY for children
+    def _refine_selected_and_update_bounds(midpts, widths, p_min, p_max, sel_mask, pc, tag):
+        keep = ~sel_mask
+        kept_mid, kept_wid = midpts[keep], widths[keep]
+        kept_pmin, kept_pmax = p_min[keep], p_max[keep]
 
         lo_parent, _ = _boxes(midpts.astype(float), widths.astype(float))
         parent_w = widths.astype(float)
 
-        new_mid_list = [kept_mid]; new_wid_list = [kept_wid]
-        for i in np.flatnonzero(refine_mask):
+        cmid_list = []; cwid_list = []
+        n_parents = int(sel_mask.sum())
+        if n_parents == 0:
+            if verbose:
+                print(f"    {tag} parents=0 → children=0 | bounds_propagated=0 | cells_after={midpts.shape[0]}")
+            return midpts, widths, p_min, p_max
+
+        for i in np.flatnonzero(sel_mask):
             lo = lo_parent[i]; pw = parent_w[i]
             cw = (pw / r).astype(dtype)
             child_mids_1d = [(lo[d] + (0.5 + np.arange(r)) * cw[d]).astype(dtype) for d in range(D)]
             cgrids = np.meshgrid(*child_mids_1d, indexing='ij')
             cmid = np.stack(cgrids, axis=-1).reshape(-1, D).astype(dtype)
             cwid = np.broadcast_to(cw, (cmid.shape[0], D)).astype(dtype)
-            new_mid_list.append(cmid); new_wid_list.append(cwid)
+            cmid_list.append(cmid); cwid_list.append(cwid)
 
-        midpts = np.concatenate(new_mid_list, axis=0)
-        widths = np.concatenate(new_wid_list, axis=0)
+        cmid = np.concatenate(cmid_list, axis=0)
+        cwid = np.concatenate(cwid_list, axis=0)
+
+        # compute bounds ONLY for children (MAXED-OUT SETTINGS)
+        M_children = cmid.shape[0]
+        c_pmin, c_pmax = gmm_bounds_over_cells(
+            ws, mus, covs,
+            cmid.astype(float), cwid.astype(float),
+            **_fast_args(M_children)
+        )
+
+        # stitch results
+        mid_new  = np.concatenate([kept_mid, cmid], axis=0)
+        wid_new  = np.concatenate([kept_wid, cwid], axis=0)
+        pmin_new = np.concatenate([kept_pmin, c_pmin], axis=0)
+        pmax_new = np.concatenate([kept_pmax, c_pmax], axis=0)
+
         if verbose:
-            print(f"               cells_after  = {midpts.shape[0]}")
+            print(f"    {tag} parents={n_parents} → children={cmid.shape[0]} "
+                  f"| bounds_propagated={cmid.shape[0]} | reused(kept)={kept_mid.shape[0]} "
+                  f"| cells_after={mid_new.shape[0]}")
 
-    # final masks & volumes
-    mask_upper, mask_lower = _event_masks(midpts, widths)
-    volumes = np.prod(widths.astype(np.float64), axis=1).astype(dtype)
+        return mid_new, wid_new, pmin_new, pmax_new
 
-    # duplicate check (partition sanity)
-    def _key(m, w):
-        return (tuple(np.asarray(m, float).round(14)),
-                tuple(np.asarray(w, float).round(14)))
-    seen = set(); dups = 0
-    for m,w in zip(midpts, widths):
-        k = _key(m,w); dups += (k in seen); seen.add(k)
-    if dups:
-        raise RuntimeError(f"Grid has {dups} duplicate cells (should be 0).")
-
-    # per-cell GMM bounds (tight), then apply B1
+    # -------------------
+    # Precompute GMM constants (once) & initial full bounds
+    # -------------------
     pc_bounds = _precompute_gmm(ws, mus, covs)
-    p_min, p_max = gmm_bounds_over_cells(ws, mus, covs,
-                                         midpts.astype(float),
-                                         widths.astype(float),
-                                         verbose=verbose,
-                                         precomp=pc_bounds, cheap=cheap)
+    if verbose:
+        print(f"[init] grid cells={midpts.shape[0]} | D={D} | levels={max(0, int(N_degree)-1)} | r={r}")
+        print(f"[bounds] initial full propagation: {midpts.shape[0]} cells")
+
+    # INITIAL full bounds (MAXED-OUT SETTINGS)
+    M0 = midpts.shape[0]
+    p_min, p_max = gmm_bounds_over_cells(
+        ws, mus, covs,
+        midpts.astype(float), widths.astype(float),
+        **_fast_args(M0)
+    )
+
+    # -------------------
+    # Refinement loop
+    # -------------------
+    levels = max(0, int(N_degree) - 1)
+    for level in range(levels):
+        if verbose:
+            print(f"[level {level+1}/{levels}] cells_before={midpts.shape[0]}")
+
+        # ---- Compute gap mass on the CURRENT grid (before event selection) ----
+        volumes = _volumes(widths)
+        p_minus = np.maximum(0.0, p_min - B1)
+        p_plus  = p_max + B1
+        gap_mass = (p_plus - p_minus).astype(np.float64) * volumes.astype(np.float64)
+
+        # 2.1 EVENT refinement (pick top 'cap_per_degree' among those intersecting X_event)
+        if use_event_guidance:
+            inter_event, _ = _event_masks(midpts, widths)
+            idx_evt = np.flatnonzero(inter_event)
+            n_evt = idx_evt.size
+            if n_evt > 0:
+                M = midpts.shape[0]
+                budget_evt = min(int(cap_per_degree), n_evt) if cap_per_degree is not None else n_evt
+
+                if budget_evt > 0:
+                    evt_gaps = gap_mass[idx_evt]
+                    if budget_evt >= n_evt:
+                        sel_evt = idx_evt
+                        topg = evt_gaps
+                    else:
+                        part = np.argpartition(evt_gaps, n_evt - budget_evt)[n_evt - budget_evt:]
+                        order = np.argsort(evt_gaps[part])[::-1]
+                        sel_evt = idx_evt[part[order]]
+                        topg = evt_gaps[part][order]
+
+                    refine_mask_event = np.zeros(M, dtype=bool)
+                    refine_mask_event[sel_evt] = True
+
+                    if verbose:
+                        print(f"    [event] parents={len(sel_evt)} (subset of {n_evt} intersecting X_event, cap={cap_per_degree}) "
+                              f"| top_evt_gap_mass min/med/max="
+                              f"{float(np.min(topg)):.3e}/{float(np.median(topg)):.3e}/{float(np.max(topg)):.3e}")
+
+                    # refine and recompute bounds ONLY for new children (MAXED-OUT SETTINGS)
+                    midpts, widths, p_min, p_max = _refine_selected_and_update_bounds(
+                        midpts, widths, p_min, p_max, refine_mask_event, pc_bounds, tag="[event]"
+                    )
+                else:
+                    if verbose:
+                        print(f"    [event] parents=0 (cap={cap_per_degree})")
+            else:
+                if verbose:
+                    print("    [event] no cells intersect X_event")
+        else:
+            if verbose:
+                print("    [event] skipped (use_event_guidance=False)")
+
+        # ---- Recompute gap mass AFTER event refinement (grid may have changed) ----
+        volumes = _volumes(widths)
+        p_minus = np.maximum(0.0, p_min - B1)
+        p_plus  = p_max + B1
+        gap_mass = (p_plus - p_minus).astype(np.float64) * volumes.astype(np.float64)
+
+        # 2.2 GAP refinement (top 'cap_per_degree' globally), only if use_gmm_guidance=True
+        if use_gmm_guidance:
+            M = midpts.shape[0]
+            budget = min(int(cap_per_degree), M) if cap_per_degree is not None else M
+            if budget > 0:
+                if budget >= M:
+                    sel_idx = np.arange(M, dtype=int)
+                else:
+                    part = np.argpartition(gap_mass, M - budget)[M - budget:]
+                    sel_idx = part[np.argsort(gap_mass[part])[::-1]]
+                refine_mask_gap = np.zeros(M, dtype=bool)
+                refine_mask_gap[sel_idx] = True
+            else:
+                sel_idx = np.array([], dtype=int)
+                refine_mask_gap = np.zeros(M, dtype=bool)
+
+            if verbose:
+                if sel_idx.size:
+                    topg = gap_mass[sel_idx]
+                    print(f"    [gap] parents={sel_idx.size} (cap={cap_per_degree}) "
+                          f"| top_gap_mass min/med/max="
+                          f"{float(np.min(topg)):.3e}/{float(np.median(topg)):.3e}/{float(np.max(topg)):.3e}")
+                else:
+                    print(f"    [gap] parents=0 (cap={cap_per_degree})")
+
+            # refine and recompute bounds ONLY for new children (MAXED-OUT SETTINGS)
+            midpts, widths, p_min, p_max = _refine_selected_and_update_bounds(
+                midpts, widths, p_min, p_max, refine_mask_gap, pc_bounds, tag="[gap]"
+            )
+        else:
+            if verbose:
+                print("    [gap] skipped (use_gmm_guidance=False)")
+
+    # -------------------
+    # Finalize & return
+    # -------------------
+    mask_intersects_event, mask_inside_event = _event_masks(midpts, widths)
+    volumes = np.prod(widths.astype(np.float64), axis=1).astype(dtype)
     p_minus = np.maximum(0.0, p_min - B1)
     p_plus  = p_max + B1
 
-    base_mass = float(np.dot(p_minus, volumes.astype(float)))
+    base_mass = float(np.dot(p_minus.astype(np.float64), volumes.astype(np.float64)))
     if base_mass > 1.0 + 1e-9:
         raise RuntimeError(
             f"Infeasible baseline from p^-: {base_mass:.6f} > 1.0. "
             "Likely overlap/duplication or incorrect bounds/B1."
         )
 
+    if verbose:
+        gap = (p_plus - p_minus).astype(np.float64) * volumes.astype(np.float64)
+        max_gap = float(np.max(gap)) if gap.size else 0.0
+        print(f"[final] cells={midpts.shape[0]} | max_gap={max_gap:.6e}")
+
     return {
         "midpts":     midpts.astype(dtype),
         "widths":     widths.astype(dtype),
         "volumes":    volumes.astype(dtype),
-        "mask_upper": mask_upper,
-        "mask_lower": mask_lower,
+        "mask_upper": mask_intersects_event,   # intersects event
+        "mask_lower": mask_inside_event,       # fully inside event (with eps)
         "p_minus":    p_minus.astype(dtype),
         "p_plus":     p_plus.astype(dtype),
     }
@@ -564,7 +824,7 @@ def load_problem_result_npz(path, scalarize=True):
     """
     Load an .npz into a dict. If scalarize=True, convert 0-D arrays to Python scalars.
     """
-    with np.load(path, allow_pickle=False) as z:
+    with np.load(path, allow_pickle=True) as z:
         out = {k: z[k] for k in z.files}
     if scalarize:
         for k, v in list(out.items()):

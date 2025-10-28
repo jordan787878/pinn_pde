@@ -22,8 +22,7 @@ from utilities._General.classic_gmm import GMMWhitenedModel, make_gmm_pdf
 
 COMPUTE = False
 NBATCH: int = 1000
-
-
+SAVEPLOT: bool = False
 constants = Case1_6D_Constants()
 
 
@@ -36,8 +35,9 @@ def parse_args():
         if v in ("n", "no", "f", "false", "0", "off"): return False
         raise argparse.ArgumentTypeError("Expected a boolean value.")
     p = argparse.ArgumentParser()
-    p.add_argument("--compute",   type=_str2bool, default=COMPUTE,  help="compute metric (True/False)")
+    p.add_argument("--compute", type=_str2bool, default=COMPUTE,  help="Run compute stage (True/False)")
     p.add_argument("--Nbatch",  type=int, default=NBATCH,   help="Batch size (int)")
+    p.add_argument("--saveplot", type=_str2bool, default=SAVEPLOT,   help="save plot (bool)")
     return p.parse_args()
 
 
@@ -57,7 +57,7 @@ def _helper_p_normalize_const(constants, p1):
     return np.mean(p1) * vol_est
 
 
-def compute_generalKL(t, X, p_data_normal=None, p_net=None, key=None):
+def compute_generalKL(t, X, p_data_normal=None, p_net=None):
     global constants
     eps = np.finfo(np.float32).tiny   # machine precision of np.float32 ≈ 1.175e-38
     if(p_net is not None):
@@ -173,6 +173,7 @@ def compute_pdf_variations(data_mc=None, p_net=None, p_net_gmm=None,
 
         "B1_pinn": [],
         "B1_pinngmm": [],
+        "B1_pinngmm_raw": [],
 
         "t": constants.T_PRIME_SPAN,
     } 
@@ -218,6 +219,7 @@ def compute_pdf_variations(data_mc=None, p_net=None, p_net_gmm=None,
         e1_pinn_max = 0.0
         e1_pinngmm_max = 0.0
         Z_pinn = 0.0
+        Z_pinn_gmm = 0.0
         
         # --- choose the source 'true' gmm pdf ---
         # gmm = GMMWhitenedModel.load(data_mc+"gmm_whitened_t{:.2f}.npz".format(t))
@@ -229,23 +231,24 @@ def compute_pdf_variations(data_mc=None, p_net=None, p_net_gmm=None,
 
         # --- compute general KL without normalizing constant ---
         # filename_mc = data_mc+"xsamples_t{:.3f}.npy".format(t)
-        filename_mc = data_mc+"run1/"+"xsamples_t{:.3f}.npy".format(t) #[temp]
+        N_datarun = 10
+        for data_idx in range(1, 1+N_datarun):
+            filename_mc = data_mc+"run"+str(data_idx)+"/"+"xsamples_t{:.3f}.npy".format(t) #[temp]
+            X_mc = np.load(filename_mc)
+            if(p_net is not None):
+                g_kl_pinn += (compute_generalKL(t, X_mc, p_net=p_net))/N_datarun
 
-        X_mc = np.load(filename_mc)
-        if(p_net is not None):
-            g_kl_pinn = compute_generalKL(t, X_mc, p_net=p_net)
+            if(p_net_gmm is not None):
+                g_kl_pinngmm += (compute_generalKL(t, X_mc, p_net=p_net_gmm))/N_datarun
 
-        if(p_net_gmm is not None):
-            g_kl_pinngmm = compute_generalKL(t, X_mc, p_net=p_net_gmm)
+            if(data_lp is not None):
+                g_kl_lp += (compute_generalKL(t, X_mc, p_data_normal=data_lp))/N_datarun
+            
+            if(data_ut is not None):
+                g_kl_ut += (compute_generalKL(t, X_mc, p_data_normal=data_ut))/N_datarun
 
-        if(data_lp is not None):
-            g_kl_lp = compute_generalKL(t, X_mc, p_data_normal=data_lp)
-        
-        if(data_ut is not None):
-            g_kl_ut = compute_generalKL(t, X_mc, p_data_normal=data_ut)
-
-        if(data_gmm is not None):
-            g_kl_gmm = compute_generalKL(t, X_mc, p_data_normal=data_gmm)
+            if(data_gmm is not None):
+                g_kl_gmm += (compute_generalKL(t, X_mc, p_data_normal=data_gmm))/N_datarun
 
         # --- compute rel. error and tv by batch-procesing ---
         for j in tqdm(range(1, N_batch+1), desc="Propagating batches"):
@@ -263,6 +266,7 @@ def compute_pdf_variations(data_mc=None, p_net=None, p_net_gmm=None,
                 delta_p_pinn_max = max(delta_p_pinn_max, _delta_p)
                 _tv = p_total_variation(pdf_pinn, pdf_ref, vol_est)
                 tv_pinn += _tv/N_batch
+                Z_pinn += (np.mean(pdf_pinn) * vol_est)/N_batch
                 del pdf_pinn
             if(e1_net is not None):
                 e1_pinn = e1_net(_x_tensor, _t_tensor).detach().cpu().numpy().reshape(-1,)
@@ -275,6 +279,7 @@ def compute_pdf_variations(data_mc=None, p_net=None, p_net_gmm=None,
                 delta_p_pinngmm_max = max(delta_p_pinngmm_max, _delta_p)
                 _tv = p_total_variation(pdf_pinngmm, pdf_ref, vol_est)
                 tv_pinngmm += _tv/N_batch
+                Z_pinn_gmm += (np.mean(pdf_pinngmm) * vol_est)/N_batch
                 del pdf_pinngmm
             if(e1_net_gmm is not None):
                 e1_pinngmm = e1_net_gmm(_x_tensor, _t_tensor).detach().cpu().numpy().reshape(-1,)
@@ -329,6 +334,9 @@ def compute_pdf_variations(data_mc=None, p_net=None, p_net_gmm=None,
             # del _t, _t_tensor, X_scaled, _x_tensor
         
         # After all batch
+        g_kl_lp += 1; g_kl_ut += 1; g_kl_gmm += 1; g_kl_pinngmm += 1
+        g_kl_pinn += Z_pinn
+
         metrics["rel_error_lp"].append(100.*delta_p_lp_max/pdf_ref_max)
         metrics["tv_lp"].append(tv_lp)
         metrics["g_kl_lp"].append(g_kl_lp)
@@ -353,8 +361,11 @@ def compute_pdf_variations(data_mc=None, p_net=None, p_net_gmm=None,
         # print("[debug] B1_pinngmm: ", e1_pinngmm_max, pdf_ref_max)
         metrics["B1_pinn"].append(100. * 2. * e1_pinn_max/pdf_ref_max)
         # print("[debug] B1_pinn: ", e1_pinn_max, pdf_ref_max)
+        metrics["B1_pinngmm_raw"].append(2. * e1_pinngmm_max)
             
         print_metrics_block(metrics, idx)
+        print("[debug] B1_pinngmm_raw: ", 2. * e1_pinngmm_max)
+        print("[debug] Z_pinn: ", Z_pinn, Z_pinn_gmm)
 
     # save metrics
     save_metrics_npz(metrics, save_path)
@@ -393,18 +404,21 @@ def compare_corner_plots(data_mc=None, data_lp=None, data_ut=None, data_gmm=None
                         #  data_lp=data_lp, 
                         #  data_ut=data_ut,
                         #  data_gmm=data_gmm,
-                         ranges="fixed"
+                         ranges="fixed",
+                         save_plot=SAVEPLOT
                          )
         
         # Single element plot 1D (x6,)
         plot_corner_elem(constants, t, X_ref, (6,),
                          data_lp=data_lp, data_ut=data_ut, data_gmm=data_gmm,
-                         p_net_gmm=p_net_gmm)
+                         p_net_gmm=p_net_gmm,
+                         save_plot=SAVEPLOT)
 
         # Single element plot 2D (x1, x6)
         plot_corner_elem(constants, t, X_ref, (1, 6),
                          data_lp=data_lp, data_ut=data_ut, data_gmm=data_gmm,
-                         p_net_gmm=p_net_gmm)
+                         p_net_gmm=p_net_gmm,
+                         save_plot=SAVEPLOT)
 
         plt.show()
 
@@ -480,6 +494,7 @@ def compare_corner_plots_XYZ(data_mc=None, data_lp=None, data_ut=None, save_path
 
 def config_trained_models():
     trained_models = {
+        "PINN-XL_vanilla": "output/pinn-xl_vanilla",
         "PINN-XL_bias": "output/pinn-xl_bias",
         # "PINN-XL_bias-test": "output/pinn-xl_bias-test",
         "PINN-GMM_bias" : "output/pinn-gmm_bias",
@@ -496,6 +511,13 @@ def load_model_by_key(trained_models, key=""):
     scale_torch = torch.tensor(scale, dtype=torch.float32); print(scale_torch)
 
     KEY_PATH = trained_models[key]
+
+    if(key == "PINN-XL_vanilla"):
+        p_net = PNet_XL(constants, scale=scale_torch, input_feature=7)
+        p_net = load_trained_model(p_net, path=KEY_PATH+"/p_net.pth"); p_net.eval()
+        e1_net = None
+        rar_samples = None
+        return p_net, e1_net, rar_samples
 
     if(key == "PINN-XL_bias"):
         p_net = PNet_XL(constants, scale=scale_torch, input_feature=7)
@@ -529,7 +551,7 @@ def main():
     trained_models = config_trained_models()
 
     # load pinn-mlp
-    p_net, e1_net, _ = load_model_by_key(trained_models, key="PINN-XL_bias")
+    p_net, e1_net, _ = load_model_by_key(trained_models, key="PINN-XL_vanilla")
 
     # load pinn-gmm
     p_net_gmm, e1_net_gmm, rar_samples = load_model_by_key(trained_models, key="PINN-GMM_bias")
@@ -548,7 +570,8 @@ def main():
             e1_net=e1_net, e1_net_gmm=e1_net_gmm,
             save_path=metrics_path)
     metrics = load_metrics_npz(metrics_path)
-    plot_pdf_metrics(metrics)
+    print(metrics["B1_pinngmm_raw"])
+    plot_pdf_metrics(metrics, save_plot=SAVEPLOT)
     
     # --- plots ---
     compare_corner_plots(data_mc, 
@@ -566,4 +589,5 @@ if __name__ == "__main__":
     args = parse_args()
     COMPUTE  = bool(args.compute)
     NBATCH    = int(args.Nbatch)
+    SAVEPLOT = bool(args.saveplot)
     main()
