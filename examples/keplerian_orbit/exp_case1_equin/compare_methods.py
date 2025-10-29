@@ -77,22 +77,6 @@ def get_uniform_Xsamples_numpy(N_samples=None):
     return X
 
 
-def p_normalize_constant(constants, p1):
-    """
-    """
-    bounds = np.array([
-        constants.X1_RANGE,
-        constants.X2_RANGE,
-        constants.X3_RANGE,
-        constants.X4_RANGE,
-        constants.X5_RANGE,
-        constants.X6_RANGE,
-    ])
-    vol_est = compute_volume(bounds)
-    p1 = p1.reshape(-1,)
-    return np.mean(p1) * vol_est
-
-
 def compute_generalKL(t, X, p_data_normal=None, p_net=None, key=None):
     global constants
     eps = np.finfo(np.float32).tiny   # machine precision of np.float32 ≈ 1.175e-38
@@ -147,7 +131,7 @@ def print_metrics_block(metrics, idx, colw=12, prec=6):
         return (f"{x:.1e}{suf}")[-width:].rjust(width)
 
     # column headers (fixed widths)
-    name_w = 10
+    name_w = 20
     header = (
         f"\n=== t = {t:.3f} ===\n"
         f"{'Model':<{name_w}}"
@@ -166,6 +150,7 @@ def print_metrics_block(metrics, idx, colw=12, prec=6):
         ("GMM",       get("rel_error_gmm"),     get("tv_gmm"),     get("g_kl_gmm"),     None),
         ("PINN",      get("rel_error_pinn"),    get("tv_pinn"),    get("g_kl_pinn"),    get("B1_pinn")),
         ("PINN-GMM",  get("rel_error_pinngmm"), get("tv_pinngmm"), get("g_kl_pinngmm"), get("B1_pinngmm")),
+        ("PINN-GMM(vanilla)",  get("rel_error_pinngmm_vanilla"), get("tv_pinngmm_vanilla"), get("g_kl_pinngmm_vanilla"), None),
     ]
 
     for name, rel, tv, gkl, b1 in rows:
@@ -178,7 +163,8 @@ def print_metrics_block(metrics, idx, colw=12, prec=6):
         )
 
 
-def compute_pdf_variations(N_batch=1, p_net=None, p_net_gmm=None, data_lp=None, data_ut=None, data_gmm=None,
+def compute_pdf_variations(N_batch=1, p_net=None, p_net_gmm=None, p_net_gmm_vanilla= None,
+                           data_lp=None, data_ut=None, data_gmm=None,
                            e1_net=None,  e1_net_gmm=None, save_path=None):
     global constants
     metrics = {
@@ -187,16 +173,19 @@ def compute_pdf_variations(N_batch=1, p_net=None, p_net_gmm=None, data_lp=None, 
         "rel_error_gmm": [],
         "rel_error_pinn": [],
         "rel_error_pinngmm": [],
+        "rel_error_pinngmm_vanilla": [],
         "tv_lp": [],
         "tv_ut": [],
         "tv_gmm": [],
         "tv_pinn": [],
         "tv_pinngmm": [],
+        "tv_pinngmm_vanilla": [],
         "g_kl_lp": [],
         "g_kl_ut": [],
         "g_kl_gmm": [],
         "g_kl_pinn": [],
         "g_kl_pinngmm": [],
+        "g_kl_pinngmm_vanilla": [],
         "B1_pinn": [],
         "B1_pinngmm": [],
         "B1_pinngmm_raw": [],
@@ -218,21 +207,31 @@ def compute_pdf_variations(N_batch=1, p_net=None, p_net_gmm=None, data_lp=None, 
     for idx, t in enumerate(metrics["t"]):
         print("\ntime {:.4f}".format(t))
         pdf_ref_max = 0.0
+
         delta_p_pinn_max = 0.0
         tv_pinn = 0.0
         gkl_pinn = 0.0
+
         delta_p_pinngmm_max = 0.0
         tv_pinngmm = 0.0
         gkl_pinngmm = 0.0
+
+        delta_p_pinngmm_vanilla_max = 0.0
+        tv_pinngmm_vanilla = 0.0
+        gkl_pinngmm_vanilla = 0.0
+
         delta_p_lp_max = 0.0
         tv_lp = 0.0
         gkl_lp = 0.0
+
         delta_p_ut_max = 0.0
         tv_ut = 0.0
         gkl_ut = 0.0
+
         delta_p_gmm_max = 0.0
         tv_gmm = 0.0
         gkl_gmm = 0.0
+
         # additional data for pinn
         e1_pinn_max = 0.0
         Z_pinn = 0.0
@@ -268,7 +267,7 @@ def compute_pdf_variations(N_batch=1, p_net=None, p_net_gmm=None, data_lp=None, 
             tv_pinn += _tv/N_batch
             _gkl = compute_generalKL(t, X_mc, p_net=p_net)
             gkl_pinn += _gkl/N_batch
-            _Z_pinn = p_normalize_constant(constants, pdf_pinn)
+            _Z_pinn = np.mean(pdf_pinn) * vol_est
             Z_pinn += _Z_pinn/N_batch
             del pdf_pinn
             if(e1_net is not None):
@@ -289,9 +288,18 @@ def compute_pdf_variations(N_batch=1, p_net=None, p_net_gmm=None, data_lp=None, 
                 e1_pinngmm = constants.SCALING_PDF * e1_net_gmm(_x_tensor, _t_tensor).detach().cpu().numpy().reshape(-1,)
                 e1_pinngmm_max = max(e1_pinngmm_max, np.max(np.abs(e1_pinngmm)).item())
                 del e1_pinngmm
-            del _t, _t_tensor, X_scaled, _x_tensor    
+
+            # pinn-gmm_vanilla
+            pdf_pinn = constants.SCALING_PDF * p_net_gmm_vanilla(_x_tensor, _t_tensor).detach().cpu().numpy().reshape(-1,)
+            _delta_p = np.max(np.abs(pdf_pinn - pdf_ref)).item()
+            delta_p_pinngmm_vanilla_max = max(delta_p_pinngmm_max, _delta_p)
+            _tv = p_total_variation(pdf_pinn, pdf_ref, vol_est)
+            tv_pinngmm_vanilla += _tv/N_batch
+            _gkl = compute_generalKL(t, X_mc, p_net=p_net_gmm_vanilla)
+            gkl_pinngmm_vanilla += _gkl/N_batch
+            del pdf_pinn, _t, _t_tensor, X_scaled, _x_tensor  
             
-            # print("[info] pdf LP")
+            # LP
             _, _, _mu_lp, _cov_lp = data_lp.get(t)
             _mu_lp = np.float32(_mu_lp)
             _cov_lp = np.float32(_cov_lp)
@@ -305,7 +313,7 @@ def compute_pdf_variations(N_batch=1, p_net=None, p_net_gmm=None, data_lp=None, 
             gkl_lp += _gkl/N_batch
             del pdf_lp, _pdf_lp_func
 
-            # print("[info] pdf UT")
+            # UT
             _, _, _mu_ut, _cov_ut = data_ut.get(t)
             _mu_ut = np.float32(_mu_ut)
             _cov_ut = np.float32(_cov_ut)
@@ -319,7 +327,7 @@ def compute_pdf_variations(N_batch=1, p_net=None, p_net_gmm=None, data_lp=None, 
             gkl_ut += _gkl/N_batch
             del pdf_ut, _pdf_ut_func
 
-            # gmm
+            # GMM
             _, _w, _mu, _cov = data_gmm.get(t)
             _pdf_gmm_func = make_gmm_pdf(_w, _mu, _cov)
             pdf_gmm = _pdf_gmm_func(X).reshape(-1,)
@@ -333,31 +341,41 @@ def compute_pdf_variations(N_batch=1, p_net=None, p_net_gmm=None, data_lp=None, 
         
         # After all batch
         gkl_pinn += Z_pinn
-        gkl_pinngmm += 1
+        gkl_pinngmm += 1; gkl_pinngmm_vanilla += 1
         gkl_lp += 1
         gkl_ut += 1
         gkl_gmm += 1
         metrics["rel_error_pinn"].append(100.*delta_p_pinn_max/pdf_ref_max)
         metrics["tv_pinn"].append(tv_pinn)
         metrics["g_kl_pinn"].append(gkl_pinn)
+
         metrics["rel_error_pinngmm"].append(100.*delta_p_pinngmm_max/pdf_ref_max)
         metrics["tv_pinngmm"].append(tv_pinngmm)
         metrics["g_kl_pinngmm"].append(gkl_pinngmm)
+
+        metrics["rel_error_pinngmm_vanilla"].append(100.*delta_p_pinngmm_vanilla_max/pdf_ref_max)
+        metrics["tv_pinngmm_vanilla"].append(tv_pinngmm_vanilla)
+        metrics["g_kl_pinngmm_vanilla"].append(gkl_pinngmm_vanilla)
+
         metrics["rel_error_lp"].append(100.*delta_p_lp_max/pdf_ref_max)
         metrics["tv_lp"].append(tv_lp)
         metrics["g_kl_lp"].append(gkl_lp)
+
         metrics["rel_error_ut"].append(100.*delta_p_ut_max/pdf_ref_max)
         metrics["tv_ut"].append(tv_ut)
         metrics["g_kl_ut"].append(gkl_ut)
+
         metrics["rel_error_gmm"].append(100.*delta_p_gmm_max/pdf_ref_max)
         metrics["tv_gmm"].append(tv_gmm)
         metrics["g_kl_gmm"].append(gkl_gmm)
+
         metrics["B1_pinn"].append(100. * 2. * e1_pinn_max/pdf_ref_max)
         metrics["B1_pinngmm"].append(100. * 2. * e1_pinngmm_max/pdf_ref_max)
 
         B1_pinngmm_raw = 2. * e1_pinngmm_max / constants.SCALING_PDF
         metrics["B1_pinngmm_raw"].append(B1_pinngmm_raw)
         print("[debug] B1_pinngmm_raw: ", B1_pinngmm_raw)
+        print("[debug]: ", metrics["rel_error_pinngmm_vanilla"])
         
         print_metrics_block(metrics, idx)
 
@@ -409,10 +427,12 @@ def compare_corner_plots(OUTPUT_PATH=None, data_lp=None, data_ut=None, data_gmm=
 
 def config_trained_models():
     trained_models = {
-        "PINN-XL": "output/pinn-xl",
-        "PINN-XL_bias": "output/pinn-xl_bias",
-        "PINN-XL_bias_reg": "output/pinn-xl_bias_reg",
-        "PINN-GMM" : "output/pinn-gmm",
+        "PINN-MLP_vanilla": "output/pinn-xl_vanilla",
+        # "PINN-MLP": "output/pinn-xl",
+        # "PINN-MLP_bias": "output/pinn-xl_bias",
+        # "PINN-MLP_bias_reg": "output/pinn-xl_bias_reg",
+        "PINN-GMM_vanilla" : "output/pinn-gmm_vanilla",
+        # "PINN-GMM" : "output/pinn-gmm",
         "PINN-GMM_bias" : "output/pinn-gmm_bias",
     }
     return trained_models
@@ -429,7 +449,15 @@ def load_model_by_key(trained_models, key=""):
 
     KEY_PATH = trained_models[key]
 
-    if(key == "PINN-XL"):
+    if(key == "PINN-MLP_vanilla"):
+        p_net = PNet_XL(constants, scale=scale_torch, input_feature=7)
+        p_net = load_trained_model(p_net, path=KEY_PATH+"/p_net.pth"); p_net.eval()
+        e1_net = ENet_XL(constants, scale=scale_torch, normalize=scale_torch*0.02)
+        e1_net = load_trained_model(e1_net, path=KEY_PATH+"/e1_net.pth"); e1_net.eval()
+        rar_samples = None
+        return p_net, e1_net, rar_samples
+
+    if(key == "PINN-MLP"):
         p_net = PNet_XL(constants, scale=scale_torch, input_feature=7)
         p_net = load_trained_model(p_net, path=KEY_PATH+"/p_net.pth"); p_net.eval()
         e1_net = ENet_XL(constants, scale=scale_torch, normalize=scale_torch*0.02)
@@ -437,7 +465,7 @@ def load_model_by_key(trained_models, key=""):
         rar_samples = None
         return p_net, e1_net, rar_samples
     
-    if(key == "PINN-XL_bias"):
+    if(key == "PINN-MLP_bias"):
         p_net = PNet_XL(constants, scale=scale_torch, input_feature=7)
         p_net = load_trained_model(p_net, path=KEY_PATH+"/p_net.pth"); p_net.eval()
         e1_net = ENet_XL(constants, scale=scale_torch, normalize=scale_torch*0.02)
@@ -445,16 +473,30 @@ def load_model_by_key(trained_models, key=""):
         rar_samples = None
         return p_net, e1_net, rar_samples
     
-    if(key == "PINN-XL_bias_reg"):
+    if(key == "PINN-MLP_bias_reg"):
         p_net = PNet_XL(constants, scale=scale_torch, input_feature=7)
         p_net = load_trained_model(p_net, path=KEY_PATH+"/p_net.pth"); p_net.eval()
         e1_net = ENet_XL(constants, scale=scale_torch, normalize=scale_torch*0.02)
         e1_net = load_trained_model(e1_net, path=KEY_PATH+"/e1_net.pth"); e1_net.eval()
         rar_samples = None
+        return p_net, e1_net, rar_samples
+    
+    if(key == "PINN-GMM_vanilla"):
+        p_net = TimeToGMM_V0(constants, K=5, alpha_floor=0.01)
+        p_net = load_trained_model(p_net, path=KEY_PATH+"/p_net.pth"); p_net.eval()
+        e1_net = None
+        # e1_net = ENet_XL(constants, scale=scale_torch, normalize=scale_torch*0.02)
+        # e1_net = load_trained_model(e1_net, path=KEY_PATH+"/e1_net.pth"); e1_net.eval()
+        _p = Path(KEY_PATH) / "p_net-RARsamples.npz"
+        if _p.is_file(): 
+            rar_samples = np.load(_p)
+        else:
+            rar_samples = None
+        del _p
         return p_net, e1_net, rar_samples
     
     if(key == "PINN-GMM"):
-        p_net = TimeToGMM_V0(constants, K=11)
+        p_net = TimeToGMM_V0(constants, K=5, alpha_floor=0.01)
         p_net = load_trained_model(p_net, path=KEY_PATH+"/p_net.pth"); p_net.eval()
         e1_net = None
         # e1_net = ENet_XL(constants, scale=scale_torch, normalize=scale_torch*0.02)
@@ -491,9 +533,10 @@ def main():
     trained_models = config_trained_models()
 
     # load pinn-mlp
-    p_net, e1_net, _ = load_model_by_key(trained_models, key="PINN-XL_bias_reg")
+    p_net, e1_net, _ = load_model_by_key(trained_models, key="PINN-MLP_vanilla")
 
     # load pinn-gmm
+    p_net_gmm_vanilla, _, _ = load_model_by_key(trained_models, key="PINN-GMM_vanilla")
     p_net_gmm, e1_net_gmm, rar_samples = load_model_by_key(trained_models, key="PINN-GMM_bias")
 
     # load baseline methods
@@ -504,12 +547,13 @@ def main():
     metrics_path = "output/metric_NB="+str(NBATCH)+".npz"
     if(COMPUTE):
         compute_pdf_variations(N_batch=NBATCH, p_net=p_net, p_net_gmm=p_net_gmm, 
+            p_net_gmm_vanilla=p_net_gmm_vanilla,
             data_lp=data_lp, data_ut=data_ut, data_gmm=data_gmm,
             e1_net=e1_net, e1_net_gmm=e1_net_gmm, save_path=metrics_path)
-    metrics = load_metrics_npz(metrics_path); plot_pdf_metrics(metrics, save_plot=SAVEPLOT)
+    # metrics = load_metrics_npz(metrics_path); plot_pdf_metrics(metrics, save_plot=SAVEPLOT)
 
-    # Visualize marginal PDF
-    # [temp] don't view the adaptive pools
+    # # Visualize marginal PDF
+    # # [temp] don't view the adaptive pools
     # rar_samples = None
     # compare_corner_plots(
     #     OUTPUT_PATH=None,

@@ -140,7 +140,7 @@ def rar_append_with_cap(x_buf, t_buf, x_new, t_new, cap: int):
 ### End of helper functions ###
 
 
-### Standard Training ###
+### Vanilla PINN Training ###
 
 def train_pinn_vanilla(p_net, config):
     p_net.train()
@@ -165,7 +165,7 @@ def train_pinn_vanilla(p_net, config):
     best_epoch = -1
     min_loss = float("inf")
     
-    start_time = time.time()
+    start_time = time.time(); train_time = start_time
     for epoch in range(1, iterations+1):
         optimizer.zero_grad(set_to_none=True)    
         
@@ -225,16 +225,15 @@ def train_pinn_vanilla(p_net, config):
             train_time = time.time() - start_time
             print(f"--- Best Epoch: {epoch}, Loss: {loss.item():.4e}, IC: {mse_u.item():.4e}, Res: {mse_res.item():.4e} ---")
             min_loss = loss.item()
-            FLAG = True
             best_epoch = epoch
             best_state = copy.deepcopy(p_net.state_dict())
-            if save_path is not None and best_state is not None:
-                torch.save({
-                    'epoch': best_epoch,
-                    'model_state_dict': best_state,
-                    'loss_history': loss_history,
-                    'train_time': train_time,
-                }, save_path + "/p_net.pth")
+    if save_path is not None and best_state is not None:
+        torch.save({
+            'epoch': best_epoch,
+            'model_state_dict': best_state,
+            'loss_history': loss_history,
+            'train_time': train_time,
+        }, save_path + "/p_net.pth")
 
 def train_pinn_error_vanilla(networks, config):
     """
@@ -350,6 +349,8 @@ def train_pinn_error_vanilla(networks, config):
             })
             torch.save(best_model_dict, e1_path)
             min_loss = loss.item()
+
+### Proposed Training ###
 
 def train_pinn(p_net, config):
     p_net.train()

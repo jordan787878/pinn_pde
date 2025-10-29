@@ -9,28 +9,35 @@ import sys, time
 from cycler import cycler
 
 
-colors_6set = sns.color_palette([
-    "#000000",  
-    "#8C00FF",  
-    "#00FF1E",  # orange
-    "#FF008C",  # purple
-    "#00FBFF",  # green
-    "#FF8400",  # brown
-    "#999999",  # gray
+colors_4set = sns.color_palette([
+    "#FF008C",  # GA
+    "#00FBFF",  # UT
+    "#FF8400",  # GMM
+    # "#00FF1E",  # prior
+    # "#8C00FF",  # PINN-MLP
+    "#000000",  # PINN-GMM
+    # "#0066FF",  # PINN-Flow  ←
 ])
 
-
-# 6 high-contrast linestyle/marker pairs (index-bound)
-linestyles_6set = [
-    (0, (5, 2)),        # custom medium dashes
-    (0, (7, 2, 3, 2)),  # custom long–short dash
-    "--",               # dashed
-    "-.",               # dash-dot
-    "-",                # solid
-    ":",                # dotted
+# 7 high-contrast linestyle/marker pairs (index-bound)
+linestyles_4set = [
+    (0, (5, 2)),        # GA
+    (0, (7, 2, 3, 2)),  # UT
+    "--",               # GMM
+    # (0, (9, 2, 1, 2)),  # prior  ←
+    # "-.",               # PINN-MLP
+    "-",                # PINN-GMM
+    # ":",                # PINN-Flow
 ]
-markers_6set = ['o', 's', '^', 'D', 'None', 'X']  # circle, square, up-tri, diamond, down-tri, bold X
 
+markers_4set = ['o', # GA
+                's', # UT
+                '^', # GMM
+                # 'v', # prior  ←
+                # 'D', # PINN-MLP
+                'None', # PINN-GMM
+                # 'X'  # PINN-Flow
+                ] 
 
 lower_color = plt.cm.bwr(0.2)          
 upper_color  = plt.cm.bwr(0.8)
@@ -85,7 +92,7 @@ def load_metrics_npz(path):
 
 
 def set_publication_plot_style(font_family='Times New Roman', font_size=18,
-                               sci_power=(-2, 2), tick_pad=6,
+                               sci_power=(-3, 3), tick_pad=6,
                                legend_loc='upper left', legend_frame=True,
                                pair_line_marker_cycle=False):
     """
@@ -153,14 +160,14 @@ def set_publication_plot_style(font_family='Times New Roman', font_size=18,
 
         # Save tight
         'savefig.bbox': 'tight',
-        'savefig.pad_inches': 0.05,
+        'savefig.pad_inches': 0.03,
 
         # Figure size
-        'figure.figsize': (10, 8),
+        'figure.figsize': (8, 6),
     })
 
     if pair_line_marker_cycle:
-        plt.rc('axes', prop_cycle=cycler(linestyle=linestyles_6set) + cycler(marker=markers_6set))
+        plt.rc('axes', prop_cycle=cycler(color=colors_4set) + cycler(linestyle=linestyles_4set) + cycler(marker=markers_4set))
 
 
 def apply_default_locators(ax_or_fig, max_ticks=4):

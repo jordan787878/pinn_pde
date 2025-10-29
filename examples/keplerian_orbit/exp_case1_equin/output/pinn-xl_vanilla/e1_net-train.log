@@ -1,0 +1,111 @@
+
+===== logging start 2025-10-26 15:47:31 =====
+--- Save Epoch 1, Loss=4.3254e+00, IC=3.0785e-01, Res=4.0175e+00, Beta=1.00 ---
+--- Save Epoch 4, Loss=1.1458e+00, IC=1.4181e-01, Res=1.0040e+00, Beta=1.00 ---
+--- Save Epoch 5, Loss=6.2787e-01, IC=1.4958e-01, Res=4.7829e-01, Beta=1.00 ---
+--- Save Epoch 6, Loss=3.4834e-01, IC=1.4474e-01, Res=2.0360e-01, Beta=1.00 ---
+--- Save Epoch 7, Loss=2.1353e-01, IC=1.1795e-01, Res=9.5579e-02, Beta=1.00 ---
+--- Save Epoch 10, Loss=9.8022e-02, IC=5.5709e-02, Res=4.2314e-02, Beta=1.00 ---
+--- Save Epoch 11, Loss=9.1115e-02, IC=4.9965e-02, Res=4.1150e-02, Beta=1.00 ---
+--- Save Epoch 12, Loss=5.2927e-02, IC=2.5485e-02, Res=2.7442e-02, Beta=1.00 ---
+--- Save Epoch 14, Loss=2.6803e-02, IC=5.0698e-03, Res=2.1733e-02, Beta=1.00 ---
+--- Save Epoch 17, Loss=2.4396e-02, IC=6.5916e-03, Res=1.7804e-02, Beta=1.00 ---
+--- Save Epoch 21, Loss=2.2227e-02, IC=1.1071e-02, Res=1.1156e-02, Beta=1.00 ---
+--- Save Epoch 28, Loss=1.1104e-02, IC=3.6794e-03, Res=7.4245e-03, Beta=1.00 ---
+--- Save Epoch 33, Loss=9.5106e-03, IC=6.1967e-03, Res=3.3139e-03, Beta=1.00 ---
+--- Save Epoch 39, Loss=8.9283e-03, IC=5.2442e-03, Res=3.6841e-03, Beta=1.00 ---
+--- Save Epoch 56, Loss=8.1428e-03, IC=2.4146e-03, Res=5.7282e-03, Beta=1.00 ---
+--- Save Epoch 57, Loss=5.2292e-03, IC=4.5827e-03, Res=6.4650e-04, Beta=1.00 ---
+--- Save Epoch 69, Loss=3.3481e-03, IC=1.0869e-03, Res=2.2612e-03, Beta=1.00 ---
+--- Save Epoch 87, Loss=3.0688e-03, IC=2.6316e-03, Res=4.3718e-04, Beta=1.00 ---
+--- Save Epoch 91, Loss=2.3280e-03, IC=1.9635e-03, Res=3.6445e-04, Beta=1.00 ---
+===== logging end   2025-10-26 15:48:48 =====
+
+===== logging start 2025-10-26 15:48:53 =====
+--- Save Epoch 1, Loss=4.3254e+00, IC=3.0785e-01, Res=4.0175e+00 ---
+--- Save Epoch 4, Loss=1.1458e+00, IC=1.4181e-01, Res=1.0040e+00 ---
+--- Save Epoch 5, Loss=6.2787e-01, IC=1.4958e-01, Res=4.7829e-01 ---
+--- Save Epoch 6, Loss=3.4834e-01, IC=1.4474e-01, Res=2.0360e-01 ---
+--- Save Epoch 7, Loss=2.1353e-01, IC=1.1795e-01, Res=9.5579e-02 ---
+--- Save Epoch 10, Loss=9.8022e-02, IC=5.5709e-02, Res=4.2314e-02 ---
+--- Save Epoch 11, Loss=9.1115e-02, IC=4.9965e-02, Res=4.1150e-02 ---
+--- Save Epoch 12, Loss=5.2927e-02, IC=2.5485e-02, Res=2.7442e-02 ---
+--- Save Epoch 14, Loss=2.6803e-02, IC=5.0698e-03, Res=2.1733e-02 ---
+--- Save Epoch 17, Loss=2.4396e-02, IC=6.5916e-03, Res=1.7804e-02 ---
+--- Save Epoch 21, Loss=2.2227e-02, IC=1.1071e-02, Res=1.1156e-02 ---
+--- Save Epoch 28, Loss=1.1104e-02, IC=3.6794e-03, Res=7.4245e-03 ---
+--- Save Epoch 33, Loss=9.5106e-03, IC=6.1967e-03, Res=3.3139e-03 ---
+--- Save Epoch 39, Loss=8.9283e-03, IC=5.2442e-03, Res=3.6841e-03 ---
+--- Save Epoch 56, Loss=8.1428e-03, IC=2.4146e-03, Res=5.7282e-03 ---
+--- Save Epoch 57, Loss=5.2292e-03, IC=4.5827e-03, Res=6.4650e-04 ---
+--- Save Epoch 69, Loss=3.3481e-03, IC=1.0869e-03, Res=2.2612e-03 ---
+--- Save Epoch 87, Loss=3.0688e-03, IC=2.6316e-03, Res=4.3718e-04 ---
+--- Save Epoch 91, Loss=2.3280e-03, IC=1.9635e-03, Res=3.6445e-04 ---
+--- Save Epoch 309, Loss=2.1977e-03, IC=1.9284e-03, Res=2.6925e-04 ---
+--- Save Epoch 311, Loss=1.6129e-03, IC=1.4685e-03, Res=1.4448e-04 ---
+--- Save Epoch 313, Loss=1.2881e-03, IC=1.0026e-03, Res=2.8551e-04 ---
+--- Save Epoch 315, Loss=9.0692e-04, IC=7.4931e-04, Res=1.5762e-04 ---
+--- Save Epoch 317, Loss=6.9360e-04, IC=5.8607e-04, Res=1.0754e-04 ---
+--- Save Epoch 321, Loss=5.8430e-04, IC=4.0427e-04, Res=1.8002e-04 ---
+--- Save Epoch 325, Loss=4.8717e-04, IC=3.2453e-04, Res=1.6264e-04 ---
+--- Save Epoch 329, Loss=3.5085e-04, IC=2.4638e-04, Res=1.0447e-04 ---
+--- Save Epoch 345, Loss=3.3250e-04, IC=1.6029e-04, Res=1.7220e-04 ---
+--- Save Epoch 350, Loss=2.9245e-04, IC=2.0435e-04, Res=8.8101e-05 ---
+--- Save Epoch 351, Loss=2.2802e-04, IC=1.6570e-04, Res=6.2322e-05 ---
+--- Save Epoch 368, Loss=2.0884e-04, IC=1.4839e-04, Res=6.0457e-05 ---
+--- Save Epoch 400, Loss=1.8328e-04, IC=1.4589e-04, Res=3.7389e-05 ---
+--- Save Epoch 429, Loss=1.6906e-04, IC=1.4223e-04, Res=2.6830e-05 ---
+--- Save Epoch 878, Loss=1.5298e-04, IC=1.3514e-04, Res=1.7841e-05 ---
+[info] epoch 1000, lr=9.50e-04
+[info] epoch 2000, lr=9.02e-04
+[info] epoch 3000, lr=8.57e-04
+--- Save Epoch 3759, Loss=1.4362e-04, IC=1.3863e-04, Res=4.9985e-06 ---
+[info] epoch 4000, lr=8.15e-04
+--- Save Epoch 4937, Loss=1.3601e-04, IC=1.3177e-04, Res=4.2341e-06 ---
+[info] epoch 5000, lr=7.74e-04
+[info] epoch 6000, lr=7.35e-04
+[info] epoch 7000, lr=6.98e-04
+[info] epoch 8000, lr=6.63e-04
+[info] epoch 9000, lr=6.30e-04
+[info] epoch 10000, lr=5.99e-04
+[info] epoch 11000, lr=5.69e-04
+[info] epoch 12000, lr=5.40e-04
+--- Save Epoch 12322, Loss=1.2588e-04, IC=1.2285e-04, Res=3.0219e-06 ---
+[info] epoch 13000, lr=5.13e-04
+--- Save Epoch 13761, Loss=1.1779e-04, IC=1.1558e-04, Res=2.2121e-06 ---
+[info] epoch 14000, lr=4.88e-04
+[info] epoch 15000, lr=4.63e-04
+[info] epoch 16000, lr=4.40e-04
+[info] epoch 17000, lr=4.18e-04
+[info] epoch 18000, lr=3.97e-04
+[info] epoch 19000, lr=3.77e-04
+[info] epoch 20000, lr=3.58e-04
+[info] epoch 21000, lr=3.41e-04
+[info] epoch 22000, lr=3.24e-04
+--- Save Epoch 22185, Loss=1.1119e-04, IC=1.0486e-04, Res=6.3337e-06 ---
+--- Save Epoch 22577, Loss=1.0241e-04, IC=9.8797e-05, Res=3.6117e-06 ---
+[info] epoch 23000, lr=3.07e-04
+[info] epoch 24000, lr=2.92e-04
+[info] epoch 25000, lr=2.77e-04
+[info] epoch 26000, lr=2.64e-04
+--- Save Epoch 26477, Loss=9.6855e-05, IC=8.9555e-05, Res=7.2998e-06 ---
+--- Save Epoch 26976, Loss=8.7184e-05, IC=8.4208e-05, Res=2.9758e-06 ---
+[info] epoch 27000, lr=2.50e-04
+[info] epoch 28000, lr=2.38e-04
+[info] epoch 29000, lr=2.26e-04
+[info] epoch 30000, lr=2.15e-04
+[info] epoch 31000, lr=2.04e-04
+[info] epoch 32000, lr=1.94e-04
+[info] epoch 33000, lr=1.84e-04
+[info] epoch 34000, lr=1.75e-04
+[info] epoch 35000, lr=1.66e-04
+[info] epoch 36000, lr=1.58e-04
+--- Save Epoch 36150, Loss=8.2692e-05, IC=7.7736e-05, Res=4.9557e-06 ---
+[info] epoch 37000, lr=1.50e-04
+--- Save Epoch 37844, Loss=7.8269e-05, IC=7.3775e-05, Res=4.4940e-06 ---
+[info] epoch 38000, lr=1.42e-04
+--- Save Epoch 38150, Loss=7.3485e-05, IC=6.9176e-05, Res=4.3088e-06 ---
+--- Save Epoch 38172, Loss=6.8941e-05, IC=6.5855e-05, Res=3.0861e-06 ---
+[info] epoch 39000, lr=1.35e-04
+[info] epoch 40000, lr=1.29e-04
+===== logging end   2025-10-26 18:32:38 =====

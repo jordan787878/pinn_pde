@@ -152,6 +152,12 @@ def config_training_ENet_XL(constants, fac=0.02, option=""):
         "bias_fac": 0.
     }
 
+    if option == "pinn-xl_vanilla":
+        e1_net = ENet_XL(constants, scale=scale_torch, normalize=fac*scale_torch, input_feature=7)
+        configuration["training_fcn"] = PINN.train_pinn_error_vanilla
+        p_net = PNet_XL(constants, scale=scale_torch, input_feature=7)
+        p_net = load_trained_model(p_net, path=configuration["save_path"]+"/p_net.pth"); p_net.eval()
+
     # if option == "pinn-xl":
     #     e1_net = ENet_XL(constants, scale=scale_torch, normalize=fac*scale_torch, input_feature=7)
     #     p_net = PNet_XL(constants, scale=scale_torch, input_feature=7)
@@ -191,7 +197,7 @@ def main():
 
     # Setup config
     fac = 0.02
-    config, p_net, e1_net = config_training_ENet_XL(constants, fac=fac, option="pinn-xl_bias_reg")
+    config, p_net, e1_net = config_training_ENet_XL(constants, fac=fac, option="pinn-xl_vanilla")
     save_config_human(config, model_name="e1_net")
 
     # Train & log

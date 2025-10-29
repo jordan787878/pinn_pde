@@ -1,0 +1,170 @@
+
+===== logging start 2025-10-29 07:01:09 =====
+--- Best Epoch: 1, Loss: 4.4035e-02, IC: 2.3618e-02, Res: 2.0417e-02 ---
+--- Best Epoch: 2, Loss: 1.8982e-02, IC: 1.8945e-02, Res: 3.6899e-05 ---
+--- Best Epoch: 4, Loss: 1.7508e-02, IC: 1.1978e-02, Res: 5.5301e-03 ---
+--- Best Epoch: 6, Loss: 1.2799e-02, IC: 9.8991e-03, Res: 2.9001e-03 ---
+--- Best Epoch: 10, Loss: 1.1111e-02, IC: 9.5764e-03, Res: 1.5350e-03 ---
+--- Best Epoch: 18, Loss: 7.8683e-03, IC: 7.5247e-03, Res: 3.4365e-04 ---
+--- Best Epoch: 226, Loss: 7.2498e-03, IC: 7.0022e-03, Res: 2.4758e-04 ---
+--- Best Epoch: 230, Loss: 6.5620e-03, IC: 6.0509e-03, Res: 5.1112e-04 ---
+--- Best Epoch: 231, Loss: 5.9005e-03, IC: 5.7649e-03, Res: 1.3554e-04 ---
+--- Best Epoch: 232, Loss: 5.8602e-03, IC: 5.7063e-03, Res: 1.5390e-04 ---
+--- Best Epoch: 402, Loss: 5.6066e-03, IC: 4.8746e-03, Res: 7.3197e-04 ---
+--- Best Epoch: 406, Loss: 4.6976e-03, IC: 4.4568e-03, Res: 2.4080e-04 ---
+--- Best Epoch: 407, Loss: 4.3462e-03, IC: 4.3017e-03, Res: 4.4442e-05 ---
+--- Best Epoch: 409, Loss: 4.1260e-03, IC: 4.0925e-03, Res: 3.3461e-05 ---
+--- Best Epoch: 971, Loss: 3.8513e-03, IC: 3.2805e-03, Res: 5.7073e-04 ---
+[info] Training epoch: 1000, LR: 9.50e-04
+--- Best Epoch: 1032, Loss: 3.8300e-03, IC: 3.7238e-03, Res: 1.0622e-04 ---
+--- Best Epoch: 1141, Loss: 3.6287e-03, IC: 3.4655e-03, Res: 1.6323e-04 ---
+--- Best Epoch: 1142, Loss: 3.4932e-03, IC: 3.4092e-03, Res: 8.4019e-05 ---
+--- Best Epoch: 1147, Loss: 3.0989e-03, IC: 3.0528e-03, Res: 4.6033e-05 ---
+--- Best Epoch: 1378, Loss: 2.9531e-03, IC: 2.9102e-03, Res: 4.2902e-05 ---
+--- Best Epoch: 1383, Loss: 2.6661e-03, IC: 2.5629e-03, Res: 1.0319e-04 ---
+--- Best Epoch: 1437, Loss: 2.6415e-03, IC: 2.5305e-03, Res: 1.1092e-04 ---
+--- Best Epoch: 1514, Loss: 2.4820e-03, IC: 2.3290e-03, Res: 1.5298e-04 ---
+--- Best Epoch: 1824, Loss: 2.4442e-03, IC: 2.3925e-03, Res: 5.1769e-05 ---
+--- Best Epoch: 1849, Loss: 2.4290e-03, IC: 2.3791e-03, Res: 4.9984e-05 ---
+--- Best Epoch: 1850, Loss: 2.3442e-03, IC: 2.2692e-03, Res: 7.5084e-05 ---
+--- Best Epoch: 1855, Loss: 2.3238e-03, IC: 2.1678e-03, Res: 1.5597e-04 ---
+--- Best Epoch: 1859, Loss: 2.3086e-03, IC: 2.1626e-03, Res: 1.4606e-04 ---
+--- Best Epoch: 1861, Loss: 2.2322e-03, IC: 2.1526e-03, Res: 7.9642e-05 ---
+--- Best Epoch: 1872, Loss: 2.0404e-03, IC: 2.0042e-03, Res: 3.6232e-05 ---
+--- Best Epoch: 1943, Loss: 2.0251e-03, IC: 1.9003e-03, Res: 1.2486e-04 ---
+--- Best Epoch: 1944, Loss: 2.0072e-03, IC: 1.8802e-03, Res: 1.2702e-04 ---
+--- Best Epoch: 1946, Loss: 1.9115e-03, IC: 1.7753e-03, Res: 1.3622e-04 ---
+--- Best Epoch: 1949, Loss: 1.7563e-03, IC: 1.5918e-03, Res: 1.6445e-04 ---
+--- Best Epoch: 1950, Loss: 1.7068e-03, IC: 1.6677e-03, Res: 3.9143e-05 ---
+--- Best Epoch: 1954, Loss: 1.6829e-03, IC: 1.6343e-03, Res: 4.8652e-05 ---
+[info] Training epoch: 2000, LR: 9.02e-04
+--- Best Epoch: 2121, Loss: 1.5940e-03, IC: 1.5114e-03, Res: 8.2590e-05 ---
+--- Best Epoch: 2155, Loss: 1.4278e-03, IC: 1.3954e-03, Res: 3.2340e-05 ---
+--- Best Epoch: 2433, Loss: 1.3822e-03, IC: 1.3545e-03, Res: 2.7727e-05 ---
+--- Best Epoch: 2438, Loss: 1.3133e-03, IC: 1.2731e-03, Res: 4.0248e-05 ---
+--- Best Epoch: 2776, Loss: 1.2521e-03, IC: 1.2065e-03, Res: 4.5584e-05 ---
+--- Best Epoch: 2787, Loss: 1.2473e-03, IC: 1.1680e-03, Res: 7.9391e-05 ---
+--- Best Epoch: 2822, Loss: 1.1751e-03, IC: 1.1340e-03, Res: 4.1036e-05 ---
+--- Best Epoch: 2845, Loss: 1.1672e-03, IC: 1.1415e-03, Res: 2.5759e-05 ---
+--- Best Epoch: 2847, Loss: 1.1203e-03, IC: 1.0729e-03, Res: 4.7419e-05 ---
+--- Best Epoch: 2950, Loss: 1.0491e-03, IC: 1.0172e-03, Res: 3.1922e-05 ---
+[info] Training epoch: 3000, LR: 8.57e-04
+--- Best Epoch: 3581, Loss: 1.0138e-03, IC: 9.6390e-04, Res: 4.9869e-05 ---
+--- Best Epoch: 3588, Loss: 9.1505e-04, IC: 8.9483e-04, Res: 2.0219e-05 ---
+--- Best Epoch: 3977, Loss: 8.8652e-04, IC: 8.5678e-04, Res: 2.9747e-05 ---
+[info] Training epoch: 4000, LR: 8.15e-04
+--- Best Epoch: 4089, Loss: 8.7591e-04, IC: 8.3661e-04, Res: 3.9300e-05 ---
+--- Best Epoch: 4094, Loss: 7.9414e-04, IC: 7.7466e-04, Res: 1.9483e-05 ---
+--- Best Epoch: 4121, Loss: 7.6804e-04, IC: 7.3492e-04, Res: 3.3127e-05 ---
+--- Best Epoch: 4124, Loss: 6.3664e-04, IC: 6.2575e-04, Res: 1.0887e-05 ---
+--- Best Epoch: 4129, Loss: 6.2879e-04, IC: 6.1711e-04, Res: 1.1680e-05 ---
+--- Best Epoch: 4133, Loss: 5.8599e-04, IC: 5.5880e-04, Res: 2.7191e-05 ---
+--- Best Epoch: 4514, Loss: 5.8373e-04, IC: 5.3549e-04, Res: 4.8240e-05 ---
+--- Best Epoch: 4515, Loss: 5.5184e-04, IC: 5.4824e-04, Res: 3.6041e-06 ---
+--- Best Epoch: 4535, Loss: 5.2411e-04, IC: 5.1446e-04, Res: 9.6490e-06 ---
+--- Best Epoch: 4548, Loss: 5.0667e-04, IC: 4.8563e-04, Res: 2.1040e-05 ---
+--- Best Epoch: 4555, Loss: 5.0548e-04, IC: 4.9455e-04, Res: 1.0925e-05 ---
+--- Best Epoch: 4571, Loss: 4.9035e-04, IC: 4.8368e-04, Res: 6.6706e-06 ---
+--- Best Epoch: 4577, Loss: 4.7041e-04, IC: 4.5780e-04, Res: 1.2608e-05 ---
+[info] Training epoch: 5000, LR: 7.74e-04
+[info] Training epoch: 6000, LR: 7.35e-04
+[info] Training epoch: 7000, LR: 6.98e-04
+--- Best Epoch: 7202, Loss: 4.5608e-04, IC: 4.4529e-04, Res: 1.0787e-05 ---
+--- Best Epoch: 7215, Loss: 4.4482e-04, IC: 4.2274e-04, Res: 2.2081e-05 ---
+--- Best Epoch: 7218, Loss: 4.2511e-04, IC: 4.0774e-04, Res: 1.7372e-05 ---
+--- Best Epoch: 7222, Loss: 4.1315e-04, IC: 4.0665e-04, Res: 6.4996e-06 ---
+--- Best Epoch: 7232, Loss: 4.0678e-04, IC: 3.9931e-04, Res: 7.4757e-06 ---
+--- Best Epoch: 7233, Loss: 3.9069e-04, IC: 3.7107e-04, Res: 1.9626e-05 ---
+--- Best Epoch: 7249, Loss: 3.8632e-04, IC: 3.7260e-04, Res: 1.3727e-05 ---
+--- Best Epoch: 7251, Loss: 3.8104e-04, IC: 3.6107e-04, Res: 1.9967e-05 ---
+--- Best Epoch: 7253, Loss: 3.5671e-04, IC: 3.4811e-04, Res: 8.6063e-06 ---
+[info] Training epoch: 8000, LR: 6.63e-04
+--- Best Epoch: 8127, Loss: 3.4553e-04, IC: 3.1459e-04, Res: 3.0946e-05 ---
+--- Best Epoch: 8132, Loss: 3.2796e-04, IC: 3.0633e-04, Res: 2.1634e-05 ---
+--- Best Epoch: 8133, Loss: 2.9705e-04, IC: 2.8639e-04, Res: 1.0653e-05 ---
+[info] Training epoch: 9000, LR: 6.30e-04
+[info] Training epoch: 10000, LR: 5.99e-04
+--- Best Epoch: 10669, Loss: 2.8806e-04, IC: 2.8088e-04, Res: 7.1822e-06 ---
+--- Best Epoch: 10681, Loss: 2.8531e-04, IC: 2.7043e-04, Res: 1.4881e-05 ---
+--- Best Epoch: 10690, Loss: 2.8024e-04, IC: 2.7661e-04, Res: 3.6222e-06 ---
+--- Best Epoch: 10778, Loss: 2.6705e-04, IC: 2.5880e-04, Res: 8.2423e-06 ---
+--- Best Epoch: 10786, Loss: 2.5510e-04, IC: 2.4148e-04, Res: 1.3624e-05 ---
+--- Best Epoch: 10793, Loss: 2.5386e-04, IC: 2.4465e-04, Res: 9.2072e-06 ---
+--- Best Epoch: 10808, Loss: 2.4755e-04, IC: 2.4257e-04, Res: 4.9829e-06 ---
+--- Best Epoch: 10816, Loss: 2.4440e-04, IC: 2.3840e-04, Res: 5.9969e-06 ---
+--- Best Epoch: 10855, Loss: 2.2893e-04, IC: 2.2528e-04, Res: 3.6525e-06 ---
+--- Best Epoch: 10856, Loss: 2.1137e-04, IC: 2.0924e-04, Res: 2.1248e-06 ---
+--- Best Epoch: 10899, Loss: 2.0512e-04, IC: 1.9754e-04, Res: 7.5748e-06 ---
+--- Best Epoch: 10903, Loss: 2.0455e-04, IC: 2.0262e-04, Res: 1.9246e-06 ---
+[info] Training epoch: 11000, LR: 5.69e-04
+[info] Training epoch: 12000, LR: 5.40e-04
+[info] Training epoch: 13000, LR: 5.13e-04
+--- Best Epoch: 13151, Loss: 2.0269e-04, IC: 1.9018e-04, Res: 1.2504e-05 ---
+--- Best Epoch: 13169, Loss: 2.0212e-04, IC: 1.9700e-04, Res: 5.1207e-06 ---
+--- Best Epoch: 13212, Loss: 1.9854e-04, IC: 1.9109e-04, Res: 7.4466e-06 ---
+--- Best Epoch: 13213, Loss: 1.9651e-04, IC: 1.9194e-04, Res: 4.5759e-06 ---
+--- Best Epoch: 13216, Loss: 1.9071e-04, IC: 1.8094e-04, Res: 9.7708e-06 ---
+--- Best Epoch: 13219, Loss: 1.7500e-04, IC: 1.6782e-04, Res: 7.1754e-06 ---
+--- Best Epoch: 13244, Loss: 1.7405e-04, IC: 1.6953e-04, Res: 4.5221e-06 ---
+--- Best Epoch: 13249, Loss: 1.6174e-04, IC: 1.5483e-04, Res: 6.9096e-06 ---
+[info] Training epoch: 14000, LR: 4.88e-04
+[info] Training epoch: 15000, LR: 4.63e-04
+[info] Training epoch: 16000, LR: 4.40e-04
+[info] Training epoch: 17000, LR: 4.18e-04
+[info] Training epoch: 18000, LR: 3.97e-04
+--- Best Epoch: 18556, Loss: 1.5972e-04, IC: 1.5705e-04, Res: 2.6702e-06 ---
+--- Best Epoch: 18612, Loss: 1.5559e-04, IC: 1.5214e-04, Res: 3.4460e-06 ---
+--- Best Epoch: 18615, Loss: 1.5009e-04, IC: 1.4899e-04, Res: 1.0945e-06 ---
+[info] Training epoch: 19000, LR: 3.77e-04
+[info] Training epoch: 20000, LR: 3.58e-04
+[info] Training epoch: 21000, LR: 3.41e-04
+--- Best Epoch: 21104, Loss: 1.4301e-04, IC: 1.4130e-04, Res: 1.7146e-06 ---
+[info] Training epoch: 22000, LR: 3.24e-04
+--- Best Epoch: 22435, Loss: 1.4127e-04, IC: 1.3716e-04, Res: 4.1159e-06 ---
+[info] Training epoch: 23000, LR: 3.07e-04
+[info] Training epoch: 24000, LR: 2.92e-04
+[info] Training epoch: 25000, LR: 2.77e-04
+[info] Training epoch: 26000, LR: 2.64e-04
+--- Best Epoch: 26975, Loss: 1.3864e-04, IC: 1.3634e-04, Res: 2.2954e-06 ---
+--- Best Epoch: 26999, Loss: 1.2876e-04, IC: 1.2699e-04, Res: 1.7680e-06 ---
+[info] Training epoch: 27000, LR: 2.50e-04
+[info] Training epoch: 28000, LR: 2.38e-04
+--- Best Epoch: 28470, Loss: 1.2766e-04, IC: 1.2313e-04, Res: 4.5225e-06 ---
+[info] Training epoch: 29000, LR: 2.26e-04
+--- Best Epoch: 29236, Loss: 1.2667e-04, IC: 1.2392e-04, Res: 2.7566e-06 ---
+--- Best Epoch: 29248, Loss: 1.2136e-04, IC: 1.1947e-04, Res: 1.8942e-06 ---
+--- Best Epoch: 29298, Loss: 1.2051e-04, IC: 1.1808e-04, Res: 2.4321e-06 ---
+--- Best Epoch: 29370, Loss: 1.1735e-04, IC: 1.1325e-04, Res: 4.1007e-06 ---
+[info] Training epoch: 30000, LR: 2.15e-04
+[info] Training epoch: 31000, LR: 2.04e-04
+[info] Training epoch: 32000, LR: 1.94e-04
+[info] Training epoch: 33000, LR: 1.84e-04
+[info] Training epoch: 34000, LR: 1.75e-04
+--- Best Epoch: 34114, Loss: 1.0722e-04, IC: 1.0652e-04, Res: 6.9924e-07 ---
+[info] Training epoch: 35000, LR: 1.66e-04
+[info] Training epoch: 36000, LR: 1.58e-04
+[info] Training epoch: 37000, LR: 1.50e-04
+[info] Training epoch: 38000, LR: 1.42e-04
+[info] Training epoch: 39000, LR: 1.35e-04
+[info] Training epoch: 40000, LR: 1.29e-04
+[info] Training epoch: 41000, LR: 1.22e-04
+[info] Training epoch: 42000, LR: 1.16e-04
+[info] Training epoch: 43000, LR: 1.10e-04
+[info] Training epoch: 44000, LR: 1.05e-04
+[info] Training epoch: 45000, LR: 9.94e-05
+[info] Training epoch: 46000, LR: 9.45e-05
+[info] Training epoch: 47000, LR: 8.97e-05
+[info] Training epoch: 48000, LR: 8.53e-05
+[info] Training epoch: 49000, LR: 8.10e-05
+[info] Training epoch: 50000, LR: 7.69e-05
+[info] Training epoch: 51000, LR: 7.31e-05
+[info] Training epoch: 52000, LR: 6.94e-05
+[info] Training epoch: 53000, LR: 6.60e-05
+[info] Training epoch: 54000, LR: 6.27e-05
+[info] Training epoch: 55000, LR: 5.95e-05
+[info] Training epoch: 56000, LR: 5.66e-05
+[info] Training epoch: 57000, LR: 5.37e-05
+[info] Training epoch: 58000, LR: 5.10e-05
+[info] Training epoch: 59000, LR: 4.85e-05
+[info] Training epoch: 60000, LR: 4.61e-05
+===== logging end   2025-10-29 08:08:09 =====
