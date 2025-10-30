@@ -146,8 +146,6 @@ class Case2_4D_Constants:
         print("R: ", self.R)
         print("THETA: ", self.THETA)
         print("PHI: ", self.PHI)
-        print("TI: ", self.TI)
-        print("TF: ", self.TF)
         print("N_MEAN_I: ", self.N_MEAN_I)
         print("N_COV_I: ", self.N_COV_I)
         print("N X1_RANGE: ", self.N_X1_RANGE)
