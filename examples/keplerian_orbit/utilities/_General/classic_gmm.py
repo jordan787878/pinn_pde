@@ -572,7 +572,7 @@ def plot_1d_true_vs_gmm_marginals_model(model,
 
 
 def integrate_gmm_over_box_whitened(
-    weights, means, covariances, problem,
+    weights, means, covariances, X_event,
     *, scale="auto", abseps=1e-6, releps=1e-6, maxpts=1_000_000
 ):
     """
@@ -597,7 +597,6 @@ def integrate_gmm_over_box_whitened(
         raise ValueError("weights must be nonnegative with positive sum")
     w = w / w.sum()
 
-    X_event = np.asarray(problem["X_event"], dtype=float)
     if X_event.shape != (D, 2):
         raise ValueError('problem["X_event"] must have shape (D,2)')
     lower = X_event[:, 0]

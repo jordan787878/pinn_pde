@@ -44,8 +44,8 @@ x_low = -6
 x_hig = 6
 t0 = 0.0
 T_end = 5.0
-# t1s = np.arange(0.0, 5.0 + 0.5, 0.5)
-t1s = np.arange(0.0, 5.0 + 1.0, 1.0)
+t1s = np.arange(0.0, 5.0 + 0.5, 0.5)
+# t1s = np.arange(0.0, 5.0 + 1.0, 1.0)
 
 # --- helper ---
 const_mu_tensor = torch.tensor(const_mu, dtype=torch.float32)

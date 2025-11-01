@@ -290,7 +290,7 @@ def gmm_bounds_over_cells(weights, means, covariances, midpoints, widths,
         mode = "parallel" if parallel and M > chunk_size else "serial"
         nw = (os.cpu_count() or 1) if n_workers is None else n_workers
         print(f"[gmm][tight] mode={mode} | M={M}, K={K}, D={m.shape[1]}, chunks={n_chunks}, "
-              f"chunk_size={chunk_size}, workers={nw if mode=='parallel' else 1} | max={max_method}")
+              f"chunk_size={chunk_size}, workers={nw if mode=='parallel' else 1}")
 
     # SERIAL (no ProcessPool) — still chunked
     if (not parallel) or (M <= chunk_size):
@@ -347,52 +347,17 @@ def build_partition_and_bounds(
     verbose=True,
     dtype=np.float32,
     cheap=False,
-    use_event_guidance=False,
-    use_gmm_guidance=False, # keep for API compatability
+    use_event_guidance=False,   
+    use_gmm_guidance=False,
     cap_per_degree=10,
-    parallel=True,
+    parallel=True,  
 ):
     """
-    Same behavior as before, but every call to gmm_bounds_over_cells()
-    is automatically configured for max throughput given `cheap`.
+    Vectorized and flat. Core process:
+      (1) Event-volume coverage refinement (boundary-only) until epsilon-close.
+      (2) Gap-based refinement over X_dom.
+    Structure preserved; loops are clean and short.
     """
-
-    # ---------- FAST SETTINGS PICKER ----------
-    def _fast_args(M: int):
-        """Select fastest gmm_bounds_over_cells settings for this call size M."""
-        if cheap:
-            return dict(
-                verbose=verbose,
-                precomp=pc_bounds,
-                cheap=True,
-                parallel=False,          # ignored in cheap mode
-                cheap_block_size=None,   # one-shot vectorized path
-            )
-        else:
-            if(parallel):
-                n_workers = os.cpu_count() or 1
-                # ~one large chunk per worker to amortize OSQP setup
-                chunk = int(np.ceil(max(1, M) / n_workers))
-                return dict(
-                    verbose=verbose,
-                    precomp=pc_bounds,
-                    cheap=False,
-                    parallel=True,
-                    n_workers=n_workers,
-                    chunk_size=chunk,
-                )
-            else:
-                n_workers = 1
-                # ~one large chunk per worker to amortize OSQP setup
-                chunk = 1024
-                return dict(
-                    verbose=verbose,
-                    precomp=pc_bounds,
-                    cheap=False,
-                    parallel=False,
-                    n_workers=n_workers,
-                    chunk_size=chunk,
-                )
 
     # -------------------
     # Unpack & sanity
@@ -400,212 +365,220 @@ def build_partition_and_bounds(
     X_dom   = np.asarray(problem["X_dom"],   float)  # (D,2)
     X_event = np.asarray(problem["X_event"], float)  # (D,2)
     N_x     = problem["N_x"]
-    D = X_dom.shape[0]
-    B1 = float(problem.get("B1", 0.0))
-    if B1 < 0:
-        raise ValueError("B1 must be nonnegative.")
-    if int(refine_factor) < 2:
-        raise ValueError("refine_factor must be >= 2")
+    D       = int(X_dom.shape[0])
+    B1      = float(problem.get("B1", 0.0))
+    if B1 < 0: raise ValueError("B1 must be nonnegative.")
     r = int(refine_factor)
+    if r < 2: raise ValueError("refine_factor must be >= 2")
 
     # -------------------
-    # Initial grid (uniform N_x^D)
+    # Helpers
     # -------------------
-    if np.isscalar(N_x):
-        Nvec = np.full(D, int(N_x), dtype=int)
-    else:
+    def _fast_args(M: int):
+        if cheap:
+            return dict(verbose=verbose, precomp=pc_bounds, cheap=True,
+                        parallel=False, cheap_block_size=None)
+        if parallel:
+            n_workers = os.cpu_count() or 1
+            chunk = int(np.ceil(max(1, M) / n_workers))
+            return dict(verbose=verbose, precomp=pc_bounds, cheap=False,
+                        parallel=True, n_workers=n_workers, chunk_size=chunk)
+        return dict(verbose=verbose, precomp=pc_bounds, cheap=False,
+                    parallel=False, n_workers=1, chunk_size=1024)
+
+    def _as_Nvec(N_x):
+        if np.isscalar(N_x): return np.full(D, int(N_x), dtype=int)
         Nvec = np.asarray(N_x, int)
-        if Nvec.shape != (D,):
-            raise ValueError("N_x must be int or shape (D,)")
+        if Nvec.shape != (D,): raise ValueError("N_x must be int or shape (D,)")
+        return Nvec
 
-    base_w = (X_dom[:,1] - X_dom[:,0]) / Nvec
-    mids_1d = [X_dom[d,0] + (0.5 + np.arange(Nvec[d])) * base_w[d] for d in range(D)]
-    grids = np.meshgrid(*mids_1d, indexing='ij')
-    midpts = np.stack(grids, axis=-1).reshape(-1, D).astype(dtype)
-    widths = np.broadcast_to(base_w.astype(dtype), (midpts.shape[0], D)).copy()
+    def _make_uniform_grid(X_dom, Nvec):
+        w = (X_dom[:, 1] - X_dom[:, 0]) / Nvec
+        mids_1d = [X_dom[d, 0] + (0.5 + np.arange(Nvec[d])) * w[d] for d in range(D)]
+        grids = np.meshgrid(*mids_1d, indexing="ij")
+        midpts = np.stack(grids, axis=-1).reshape(-1, D)
+        widths = np.broadcast_to(w, (midpts.shape[0], D)).copy()
+        return midpts, widths
 
-    # -------------------
-    # Small utilities
-    # -------------------
     def _boxes(mid, wid):
         half = 0.5 * wid
-        return (mid - half), (mid + half)
+        return mid - half, mid + half
 
-    def _event_masks(mid, wid):
-        lo, hi = _boxes(mid.astype(float), wid.astype(float))
-        ev_lo, ev_hi = X_event[:,0], X_event[:,1]
-        intersects = np.all((hi >= ev_lo) & (lo <= ev_hi), axis=1)
-        inside     = np.all((lo >= (ev_lo - eps)) & (hi <= (ev_hi + eps)), axis=1)
+    # bind event bounds once
+    ev_lo, ev_hi = X_event[:, 0], X_event[:, 1]
+    def _event_masks(midpts, widths):
+        """
+        Half-open cells: [lo, hi) in each dim.
+        After align_grid_to_event_faces(...), intersects == inside (up to eps).
+        intersects: non-empty intersection with closed X_event
+        inside:     cell ⊆ closed X_event
+        """
+        half = 0.5 * widths
+        lo   = midpts - half
+        hi   = midpts + half
+        # Intersection with closed box, using half-open cells:
+        #   [lo,hi) ∩ [ev_lo,ev_hi] ≠ ∅  ⇔  hi > ev_lo  and  lo < ev_hi  (per dim)
+        # eps provides a tiny tolerance.
+        intersects = np.all((hi > ev_lo) & (lo < ev_hi), axis=1)
+        # Containment in closed box (boundary allowed):
+        #   [lo,hi) ⊆ [ev_lo,ev_hi]  ⇔  lo ≥ ev_lo  and  hi ≤ ev_hi  (per dim)
+        inside = np.all((lo >= ev_lo) & (hi <= ev_hi), axis=1)
+
         return intersects, inside
 
-    def _volumes(wid):
-        return np.prod(wid.astype(np.float64), axis=1).astype(dtype)
+    def _volumes(wid, out_dtype=dtype):
+        return np.prod(wid.astype(np.float64), axis=1).astype(out_dtype)
 
-    # Refine selected parents -> append children; compute bounds ONLY for children
-    def _refine_selected_and_update_bounds(midpts, widths, p_min, p_max, sel_mask, pc, tag):
-        keep = ~sel_mask
-        kept_mid, kept_wid = midpts[keep], widths[keep]
-        kept_pmin, kept_pmax = p_min[keep], p_max[keep]
+    def _gap_mass(p_min, p_max, widths):
+        # identical to log10((p_max - p_min) * volume)
+        return np.log10((p_max - p_min).astype(np.float64)) + np.log10(_volumes(widths, out_dtype=np.float64))
 
-        lo_parent, _ = _boxes(midpts.astype(float), widths.astype(float))
-        parent_w = widths.astype(float)
+    def _top_k_desc(scores, k):
+        n = scores.size
+        if k <= 0: return np.empty(0, dtype=int)
+        if k >= n: return np.argsort(scores)[::-1]
+        part = np.argpartition(scores, n - k)[n - k:]
+        return part[np.argsort(scores[part])[::-1]]
 
-        cmid_list = []; cwid_list = []
-        n_parents = int(sel_mask.sum())
-        if n_parents == 0:
-            if verbose:
-                print(f"    {tag} parents=0 → children=0 | bounds_propagated=0 | cells_after={midpts.shape[0]}")
-            return midpts, widths, p_min, p_max
+    def _budget(cap, total):
+        return total if cap is None else min(int(cap), total)
+    
+    def _split_along_face(midpts, widths, dim, face, tiny=0.0):
+        mid = midpts; wid = widths
+        half = 0.5 * wid
+        lo = mid - half; hi = mid + half
 
-        for i in np.flatnonzero(sel_mask):
-            lo = lo_parent[i]; pw = parent_w[i]
-            cw = (pw / r).astype(dtype)
-            child_mids_1d = [(lo[d] + (0.5 + np.arange(r)) * cw[d]).astype(dtype) for d in range(D)]
-            cgrids = np.meshgrid(*child_mids_1d, indexing='ij')
-            cmid = np.stack(cgrids, axis=-1).reshape(-1, D).astype(dtype)
-            cwid = np.broadcast_to(cw, (cmid.shape[0], D)).astype(dtype)
-            cmid_list.append(cmid); cwid_list.append(cwid)
+        straddle = (lo[:, dim] < face) & (hi[:, dim] > face)
+        if not np.any(straddle): return mid, wid
 
-        cmid = np.concatenate(cmid_list, axis=0)
-        cwid = np.concatenate(cwid_list, axis=0)
+        keep = ~straddle
+        mid_keep, wid_keep = mid[keep], wid[keep]
 
-        # compute bounds ONLY for children (MAXED-OUT SETTINGS)
-        M_children = cmid.shape[0]
+        mid_s, wid_s = mid[straddle], wid[straddle]
+        lo_s,  hi_s  = lo[straddle],  hi[straddle]
+
+        # lower child: [lo, face)
+        wid_low        = wid_s.copy()
+        wid_low[:, dim] = np.maximum(face - lo_s[:, dim], tiny)
+        mid_low        = mid_s.copy()
+        mid_low[:, dim] = lo_s[:, dim] + 0.5 * wid_low[:, dim]
+
+        # upper child: [face, hi)
+        wid_up         = wid_s.copy()
+        wid_up[:, dim] = np.maximum(hi_s[:, dim] - face, tiny)
+        mid_up         = mid_s.copy()
+        mid_up[:, dim]  = face + 0.5 * wid_up[:, dim]
+
+        mid_new = np.concatenate([mid_keep, mid_low, mid_up], axis=0)
+        wid_new = np.concatenate([wid_keep, wid_low, wid_up], axis=0)
+        return mid_new, wid_new
+
+    def align_grid_to_event_faces(midpts, widths, X_event, eps=0.0, verbose=False):
+        ev_lo = X_event[:, 0]; ev_hi = X_event[:, 1]
+        for d in range(X_event.shape[0]):
+            face = float(ev_lo[d])
+            midpts, widths = _split_along_face(midpts, widths, d, face)
+            if verbose: print(f"    [align] after split at dim {d} low={face:.6g}: cells={midpts.shape[0]}")
+            face = float(ev_hi[d])
+            midpts, widths = _split_along_face(midpts, widths, d, face)
+            if verbose: print(f"    [align] after split at dim {d} high={face:.6g}: cells={midpts.shape[0]}")
+        return midpts, widths
+
+    # Precompute child placement (reused)
+    s_1d  = [(0.5 + np.arange(r)) / r for _ in range(D)]
+    sgrid = np.stack(np.meshgrid(*s_1d, indexing="ij"), axis=-1).reshape(-1, D)  # (C,D)
+    C     = int(sgrid.shape[0])
+
+    def _refine(midpts, widths, p_min, p_max, sel_mask, tag):
+        if not np.any(sel_mask): return midpts, widths, p_min, p_max
+        keep_mask  = ~sel_mask
+        kept_mid   = midpts[keep_mask]
+        kept_wid   = widths[keep_mask]
+        kept_pmin  = p_min[keep_mask]
+        kept_pmax  = p_max[keep_mask]
+
+        parent_mid = midpts[sel_mask]
+        parent_wid = widths[sel_mask]
+        parent_lo, _ = _boxes(parent_mid, parent_wid)
+
+        P = int(parent_lo.shape[0])
+        child_mid = parent_lo[:, None, :] + parent_wid[:, None, :] * sgrid[None, :, :]
+        child_wid = (parent_wid / r)[:, None, :]
+        child_mid = child_mid.reshape(P * C, D)
+        child_wid = np.broadcast_to(child_wid, (P, C, D)).reshape(P * C, D)
+
         c_pmin, c_pmax = gmm_bounds_over_cells(
             ws, mus, covs,
-            cmid.astype(float), cwid.astype(float),
-            **_fast_args(M_children)
+            child_mid.astype(np.float64), child_wid.astype(np.float64),
+            **_fast_args(child_mid.shape[0])
         )
 
-        # stitch results
-        mid_new  = np.concatenate([kept_mid, cmid], axis=0)
-        wid_new  = np.concatenate([kept_wid, cwid], axis=0)
-        pmin_new = np.concatenate([kept_pmin, c_pmin], axis=0)
-        pmax_new = np.concatenate([kept_pmax, c_pmax], axis=0)
+        mid_new  = np.concatenate([kept_mid,  child_mid], axis=0)
+        wid_new  = np.concatenate([kept_wid,  child_wid], axis=0)
+        pmin_new = np.concatenate([kept_pmin, c_pmin],   axis=0)
+        pmax_new = np.concatenate([kept_pmax, c_pmax],   axis=0)
 
         if verbose:
-            print(f"    {tag} parents={n_parents} → children={cmid.shape[0]} "
-                  f"| bounds_propagated={cmid.shape[0]} | reused(kept)={kept_mid.shape[0]} "
-                  f"| cells_after={mid_new.shape[0]}")
-
+            print(f"    {tag} parents={P} → children={child_mid.shape[0]} | kept={kept_mid.shape[0]} | cells_after={mid_new.shape[0]}")
         return mid_new, wid_new, pmin_new, pmax_new
 
     # -------------------
-    # Precompute GMM constants (once) & initial full bounds
+    # Initial grid & bounds
     # -------------------
+    Nvec = _as_Nvec(N_x)
+    midpts, widths = _make_uniform_grid(X_dom, Nvec)
+
     pc_bounds = _precompute_gmm(ws, mus, covs)
+    levels = max(0, int(N_degree) - 1)
     if verbose:
-        print(f"[init] grid cells={midpts.shape[0]} | D={D} | levels={max(0, int(N_degree)-1)} | r={r}")
+        print(f"[init] grid cells={midpts.shape[0]} | D={D} | levels={levels} | r={r}")
         print(f"[bounds] initial full propagation: {midpts.shape[0]} cells")
 
-    # INITIAL full bounds (MAXED-OUT SETTINGS)
-    M0 = midpts.shape[0]
     p_min, p_max = gmm_bounds_over_cells(
         ws, mus, covs,
-        midpts.astype(float), widths.astype(float),
-        **_fast_args(M0)
+        midpts.astype(np.float64), widths.astype(np.float64),
+        **_fast_args(midpts.shape[0])
     )
 
-    # -------------------
-    # Refinement loop
-    # -------------------
-    levels = max(0, int(N_degree) - 1)
+    # --- One-shot event alignment (direct method; linear growth) ---
+    if use_event_guidance:
+        if verbose: print("[event-align] aligning grid to X_event faces (one shot)")
+        midpts, widths = align_grid_to_event_faces(midpts, widths, X_event, eps=eps, verbose=verbose)
+
+        # Recompute bounds only for the new grid once
+        p_min, p_max = gmm_bounds_over_cells(
+            ws, mus, covs,
+            midpts.astype(np.float64), widths.astype(np.float64),
+            **_fast_args(midpts.shape[0])
+        )
+    else:
+        if verbose: print("[event-align] skipped (use_event_guidance=False)")
+
+    # ============================================================
+    # (2) Gap-based refinement loop — over entire X_dom
+    # ============================================================
     for level in range(levels):
+        if verbose: print(f"[gap {level+1}/{levels}] cells_before={midpts.shape[0]}")
+        gap_mass = _gap_mass(p_min, p_max, widths)
+        if not use_gmm_guidance:
+            if verbose: print("    [gap] skipped (use_gmm_guidance=False)")
+            continue
+        M = midpts.shape[0]
+        k = _budget(cap_per_degree, M)
+        sel = _top_k_desc(gap_mass, k) if k > 0 else np.empty(0, int)
+        if sel.size == 0:
+            if verbose: print(f"    [gap] parents=0 (cap={cap_per_degree})")
+            continue
         if verbose:
-            print(f"[level {level+1}/{levels}] cells_before={midpts.shape[0]}")
-
-        # ---- Compute gap mass on the CURRENT grid (before event selection) ----
-        volumes = _volumes(widths)
-        p_minus = np.maximum(0.0, p_min - B1)
-        p_plus  = p_max + B1
-        gap_mass = (p_plus - p_minus).astype(np.float64) * volumes.astype(np.float64)
-
-        # 2.1 EVENT refinement (pick top 'cap_per_degree' among those intersecting X_event)
-        if use_event_guidance:
-            inter_event, _ = _event_masks(midpts, widths)
-            idx_evt = np.flatnonzero(inter_event)
-            n_evt = idx_evt.size
-            if n_evt > 0:
-                M = midpts.shape[0]
-                budget_evt = min(int(cap_per_degree), n_evt) if cap_per_degree is not None else n_evt
-
-                if budget_evt > 0:
-                    evt_gaps = gap_mass[idx_evt]
-                    if budget_evt >= n_evt:
-                        sel_evt = idx_evt
-                        topg = evt_gaps
-                    else:
-                        part = np.argpartition(evt_gaps, n_evt - budget_evt)[n_evt - budget_evt:]
-                        order = np.argsort(evt_gaps[part])[::-1]
-                        sel_evt = idx_evt[part[order]]
-                        topg = evt_gaps[part][order]
-
-                    refine_mask_event = np.zeros(M, dtype=bool)
-                    refine_mask_event[sel_evt] = True
-
-                    if verbose:
-                        print(f"    [event] parents={len(sel_evt)} (subset of {n_evt} intersecting X_event, cap={cap_per_degree}) "
-                              f"| top_evt_gap_mass min/med/max="
-                              f"{float(np.min(topg)):.3e}/{float(np.median(topg)):.3e}/{float(np.max(topg)):.3e}")
-
-                    # refine and recompute bounds ONLY for new children (MAXED-OUT SETTINGS)
-                    midpts, widths, p_min, p_max = _refine_selected_and_update_bounds(
-                        midpts, widths, p_min, p_max, refine_mask_event, pc_bounds, tag="[event]"
-                    )
-                else:
-                    if verbose:
-                        print(f"    [event] parents=0 (cap={cap_per_degree})")
-            else:
-                if verbose:
-                    print("    [event] no cells intersect X_event")
-        else:
-            if verbose:
-                print("    [event] skipped (use_event_guidance=False)")
-
-        # ---- Recompute gap mass AFTER event refinement (grid may have changed) ----
-        volumes = _volumes(widths)
-        p_minus = np.maximum(0.0, p_min - B1)
-        p_plus  = p_max + B1
-        gap_mass = (p_plus - p_minus).astype(np.float64) * volumes.astype(np.float64)
-
-        # 2.2 GAP refinement (top 'cap_per_degree' globally), only if use_gmm_guidance=True
-        if use_gmm_guidance:
-            M = midpts.shape[0]
-            budget = min(int(cap_per_degree), M) if cap_per_degree is not None else M
-            if budget > 0:
-                if budget >= M:
-                    sel_idx = np.arange(M, dtype=int)
-                else:
-                    part = np.argpartition(gap_mass, M - budget)[M - budget:]
-                    sel_idx = part[np.argsort(gap_mass[part])[::-1]]
-                refine_mask_gap = np.zeros(M, dtype=bool)
-                refine_mask_gap[sel_idx] = True
-            else:
-                sel_idx = np.array([], dtype=int)
-                refine_mask_gap = np.zeros(M, dtype=bool)
-
-            if verbose:
-                if sel_idx.size:
-                    topg = gap_mass[sel_idx]
-                    print(f"    [gap] parents={sel_idx.size} (cap={cap_per_degree}) "
-                          f"| top_gap_mass min/med/max="
-                          f"{float(np.min(topg)):.3e}/{float(np.median(topg)):.3e}/{float(np.max(topg)):.3e}")
-                else:
-                    print(f"    [gap] parents=0 (cap={cap_per_degree})")
-
-            # refine and recompute bounds ONLY for new children (MAXED-OUT SETTINGS)
-            midpts, widths, p_min, p_max = _refine_selected_and_update_bounds(
-                midpts, widths, p_min, p_max, refine_mask_gap, pc_bounds, tag="[gap]"
-            )
-        else:
-            if verbose:
-                print("    [gap] skipped (use_gmm_guidance=False)")
+            print(f"    [gap] parents={sel.size} (cap={cap_per_degree}) | top_gap_mass(log10) max={float(np.max(gap_mass[sel])):.3e}")
+        mask = np.zeros(M, dtype=bool); mask[sel] = True
+        midpts, widths, p_min, p_max = _refine(midpts, widths, p_min, p_max, mask, "[gap]")
 
     # -------------------
     # Finalize & return
     # -------------------
     mask_intersects_event, mask_inside_event = _event_masks(midpts, widths)
-    volumes = np.prod(widths.astype(np.float64), axis=1).astype(dtype)
+    volumes = _volumes(widths)
     p_minus = np.maximum(0.0, p_min - B1)
     p_plus  = p_max + B1
 
@@ -617,21 +590,21 @@ def build_partition_and_bounds(
         )
 
     if verbose:
-        gap = (p_plus - p_minus).astype(np.float64) * volumes.astype(np.float64)
-        max_gap = float(np.max(gap)) if gap.size else 0.0
-        print(f"[final] cells={midpts.shape[0]} | max_gap={max_gap:.6e}")
+        gap_abs = (p_max - p_min).astype(np.float64) * volumes.astype(np.float64)
+        print(f"[final] cells={midpts.shape[0]} | max_gap_mass={float(np.max(gap_abs)):.6e}")
 
     return {
-        "midpts":     midpts.astype(dtype),
-        "widths":     widths.astype(dtype),
-        "volumes":    volumes.astype(dtype),
+        "midpts":     midpts.astype(dtype, copy=False),
+        "widths":     widths.astype(dtype, copy=False),
+        "volumes":    volumes.astype(dtype, copy=False),
         "mask_upper": mask_intersects_event,   # intersects event
         "mask_lower": mask_inside_event,       # fully inside event (with eps)
-        "p_minus":    p_minus.astype(dtype),
-        "p_plus":     p_plus.astype(dtype),
+        "p_minus":    p_minus.astype(dtype, copy=False),
+        "p_plus":     p_plus.astype(dtype, copy=False),
     }
 
 
+# LP algorithms
 def waterfill_upper(problem, total_mass=1.0, objective="mass"):
     """
     Upper bound LP (max event probability):
@@ -807,8 +780,9 @@ def print_list(ls):
 
 
 def save_problem_result_npz(path, data, 
-    keys = ("D","N_x","X_dom", "X_event","time_points_ref","time_points","Pr_ref","Pr_opt_upper", "Pr_opt_lower",
-            "N_degree", "use_gmm_guidance", "cheap"),
+    keys=("D", "N_x", "X_dom", "X_event", "time_points_ref", "time_points",
+          "Pr_ref", "Pr_keys", "Pr_keys_labels", "Pr_opt_upper", "Pr_opt_lower",
+          "Pr_lp", "Pr_ut", "Pr_gmm", "Pr_pinngmm"),
     dtype=None, compress=False):
     """Save only selected keys from `data` as arrays to an NPZ."""
     out = {}

@@ -265,6 +265,29 @@ class Case1_6D_Constants_Equin:
             _xi_scaled = (x[:,i] - self.MEAN_I[i])/ self.COV_I[i,i]**0.5
             _x_scaled[:, i] = _xi_scaled
         return _x_scaled
+    
+    def unscale_box(self, X_box_scaled):
+        """
+        X_box_scaled: (D, 2) array with [lo, hi] in scaled coords.
+        Returns: (D, 2) array with [lo, hi] in original coords.
+        """
+        X_box_scaled = np.asarray(X_box_scaled, dtype=np.float32)          # (D,2)
+        s = np.sqrt(np.diag(self.COV_I)).astype(np.float32)                # (D,)
+        m = np.asarray(self.MEAN_I, dtype=np.float32)                      # (D,)
+        X_box = m[:, None] + s[:, None] * X_box_scaled                     # (D,2)
+        return X_box
+    
+    def scale_box(self, X_box):
+        """
+        Inverse of `unscale_box`.
+        X_box: (D, 2) array with [lo, hi] in original coords.
+        Returns: (D, 2) array with [lo, hi] in scaled coords.
+        """
+        X_box = np.asarray(X_box, dtype=np.float32)                # (D,2)
+        s = np.sqrt(np.diag(self.COV_I)).astype(np.float32)        # (D,)
+        m = np.asarray(self.MEAN_I, dtype=np.float32)              # (D,)
+        X_box_scaled = (X_box - m[:, None]) / s[:, None]           # (D,2)
+        return X_box_scaled
 
     def sample_init_points(self, N_samples):
         _x_bc_normal = np.random.multivariate_normal(self.MEAN_I, self.COV_I, size=N_samples).astype(np.float32)

@@ -9,15 +9,16 @@ from matplotlib.lines import Line2D
 from matplotlib.colors import LogNorm
 from matplotlib.ticker import MaxNLocator
 from mpl_toolkits.mplot3d import Axes3D  # noqa: F401  (needed for 3D projection)
-from matplotlib.patches import Patch
+from matplotlib.patches import Patch, Rectangle
 
 import sys
 from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]   # repo_root
 sys.path.insert(0, str(ROOT))
-from utilities._General.util import (set_publication_plot_style, colors_6set, 
+from utilities._General.util import (set_publication_plot_style,
                                      tidy_corner_axes, apply_default_locators, custom_save_plot,
-                                     linestyles_6set, markers_6set)
+                                     colors_4set, linestyles_4set, markers_4set)
+from utilities._General.classic_gmm import make_gmm_pdf
 
 
 x_axis_labels=[r"$r'$", r"$\theta'$", r"$\phi'$", r"$v'_r$", r"$v'_{\theta}$", r"$v'_{\phi}$"]
@@ -93,13 +94,13 @@ def plot_full_corner(constants, t, X_samples,
     # Optional: trim outer margins further (constrained_layout respects these)
     fig.set_constrained_layout_pads(w_pad=0.02, h_pad=0.02, wspace=0.02, hspace=0.02)
 
-    def _plot_pinn_1d_marginal(x_coords):
-        filename = f"{PNet_XL_PATH}/pre_compute/marginal_pdfpinn_x{x_coords}_t{t:.3f}.npz"
-        if(os.path.exists(filename)):
-            data_marginal_pinn = np.load(filename)
-            pdf_values = data_marginal_pinn['pdf']
-            X_grid = data_marginal_pinn["X_grid"]
-            ax.plot(X_grid, pdf_values, color=colors_6set[-1])
+    # def _plot_pinn_1d_marginal(x_coords):
+    #     filename = f"{PNet_XL_PATH}/pre_compute/marginal_pdfpinn_x{x_coords}_t{t:.3f}.npz"
+    #     if(os.path.exists(filename)):
+    #         data_marginal_pinn = np.load(filename)
+    #         pdf_values = data_marginal_pinn['pdf']
+    #         X_grid = data_marginal_pinn["X_grid"]
+    #         ax.plot(X_grid, pdf_values, color=colors_4set[-1])
 
     # Diagonals: 1D histograms (counts)
     for d in range(D):
@@ -128,8 +129,8 @@ def plot_full_corner(constants, t, X_samples,
         if d == 0:
             ax.set_ylabel(labels[d])
         
-        if(PNet_XL_PATH is not None):
-            _plot_pinn_1d_marginal(d+1)
+        # if(PNet_XL_PATH is not None):
+        #     _plot_pinn_1d_marginal(d+1)
         
         if(p_net_gmm is not None):
             x_vals = np.linspace(lo, hi, num=128)
@@ -144,7 +145,7 @@ def plot_full_corner(constants, t, X_samples,
                 pdf_func = multivariate_normal(mean=mus[k,d], cov=covs[k,d,d])
                 p_k = pdf_func.pdf(x_vals).reshape(x_vals.shape)
                 pdf_values += ws[k] * p_k
-            ax.plot(x_vals, pdf_values, color=colors_6set[0])
+            ax.plot(x_vals, pdf_values, color=colors_4set[3])
 
         if(data_lp is not None):
             x_vals = np.linspace(lo, hi, num=128)
@@ -152,7 +153,7 @@ def plot_full_corner(constants, t, X_samples,
             pdf_values = np.copy(x_vals) * 0.0
             pdf_func = multivariate_normal(mean=mu_6d[d], cov=cov_6d[d,d])
             pdf_values = pdf_func.pdf(x_vals).reshape(x_vals.shape)
-            ax.plot(x_vals, pdf_values, color=colors_6set[3])
+            ax.plot(x_vals, pdf_values, color=colors_4set[0])
 
         if(data_ut is not None):
             x_vals = np.linspace(lo, hi, num=128)
@@ -160,7 +161,7 @@ def plot_full_corner(constants, t, X_samples,
             pdf_values = np.copy(x_vals) * 0.0
             pdf_func = multivariate_normal(mean=mu_6d[d], cov=cov_6d[d,d])
             pdf_values = pdf_func.pdf(x_vals).reshape(x_vals.shape)
-            ax.plot(x_vals, pdf_values, color=colors_6set[4])
+            ax.plot(x_vals, pdf_values, color=colors_4set[1])
 
     # Off-diagonals: scatter or heatmap (counts)
     for i in range(1, D):
@@ -201,24 +202,24 @@ def plot_full_corner(constants, t, X_samples,
                 )
 
             relative_levels = np.array([0.01, 0.05, 0.50, 0.95])
-            def _plot_pinn_contour(x_coords):
-                filename = f"{PNet_XL_PATH}/pre_compute/marginal_pdfpinn_x{x_coords[0]}_x{x_coords[1]}_t{t:.3f}.npz"
-                if(os.path.isfile(filename)):
-                    data_marginal_pinn = np.load(filename)
-                    pdf_values = data_marginal_pinn['pdf']
-                    X_grid, Y_grid = data_marginal_pinn["X_grid"], data_marginal_pinn["Y_grid"], 
-                    pdf_max = np.max(pdf_values[pdf_values > 0])
-                    # Define levels as percentages of the maximum value
-                    # For example, levels at 5%, 25%, 50%, 75%, and 95% of the max
-                    # relative_levels = np.array([0.01, 0.05, 0.50, 0.95])
-                    levels = relative_levels * pdf_max
-                    # Draw the contour lines with the custom levels
-                    ax.contour(X_grid, Y_grid, pdf_values, levels=levels, colors=[colors_6set[1]], linewidths=1.)
-                    return levels
+            # def _plot_pinn_contour(x_coords):
+            #     filename = f"{PNet_XL_PATH}/pre_compute/marginal_pdfpinn_x{x_coords[0]}_x{x_coords[1]}_t{t:.3f}.npz"
+            #     if(os.path.isfile(filename)):
+            #         data_marginal_pinn = np.load(filename)
+            #         pdf_values = data_marginal_pinn['pdf']
+            #         X_grid, Y_grid = data_marginal_pinn["X_grid"], data_marginal_pinn["Y_grid"], 
+            #         pdf_max = np.max(pdf_values[pdf_values > 0])
+            #         # Define levels as percentages of the maximum value
+            #         # For example, levels at 5%, 25%, 50%, 75%, and 95% of the max
+            #         # relative_levels = np.array([0.01, 0.05, 0.50, 0.95])
+            #         levels = relative_levels * pdf_max
+            #         # Draw the contour lines with the custom levels
+            #         ax.contour(X_grid, Y_grid, pdf_values, levels=levels, colors=[colors_4set[1]], linewidths=1.)
+            #         return levels
 
-            if(PNet_XL_PATH is not None):
-                x_coords = (j+1, i+1)
-                pinn_levels = _plot_pinn_contour(x_coords)
+            # if(PNet_XL_PATH is not None):
+            #     x_coords = (j+1, i+1)
+            #     pinn_levels = _plot_pinn_contour(x_coords)
 
             def _plot_pinn_gmm_contour(ws, mus, covs, x_coords, color):
                 # print(ws.shape, mus.shape, covs.shape)
@@ -256,7 +257,7 @@ def plot_full_corner(constants, t, X_samples,
                 ws = ws.detach().cpu().numpy()
                 mus = mus.detach().cpu().numpy()
                 covs = covs.detach().cpu().numpy()
-                _plot_pinn_gmm_contour(ws, mus, covs, x_coords, colors_6set[0])
+                _plot_pinn_gmm_contour(ws, mus, covs, x_coords, colors_4set[0])
                             
             if(p_net_gmm is not None):
                 x_coords = (j+1, i+1)
@@ -264,7 +265,7 @@ def plot_full_corner(constants, t, X_samples,
                 ws = ws.detach().cpu().numpy()
                 mus = mus.detach().cpu().numpy()
                 covs = covs.detach().cpu().numpy()
-                _plot_pinn_gmm_contour(ws, mus, covs, x_coords, colors_6set[0])
+                _plot_pinn_gmm_contour(ws, mus, covs, x_coords, colors_4set[3])
 
             if(data_lp is not None):
                 x_coords = (j+1, i+1)
@@ -281,7 +282,7 @@ def plot_full_corner(constants, t, X_samples,
                 pdf_max = np.max(pdf_values).item()
                 levels = relative_levels * pdf_max
                 # Draw the contour lines with the custom levels
-                ax.contour(X_grid, Y_grid, pdf_values, levels=levels, colors=[colors_6set[3]], 
+                ax.contour(X_grid, Y_grid, pdf_values, levels=levels, colors=[colors_4set[0]], 
                            linewidths=1.)
                 
             if(data_ut is not None):
@@ -299,13 +300,13 @@ def plot_full_corner(constants, t, X_samples,
                 pdf_max = np.max(pdf_values).item()
                 levels = relative_levels * pdf_max
                 # Draw the contour lines with the custom levels
-                ax.contour(X_grid, Y_grid, pdf_values, levels=levels, colors=[colors_6set[4]], 
+                ax.contour(X_grid, Y_grid, pdf_values, levels=levels, colors=[colors_4set[1]], 
                            linewidths=1.)
 
             if(data_gmm is not None):
                 x_coords = (j+1, i+1)
                 _, ws, mus, covs = data_gmm.get(t)
-                _plot_pinn_gmm_contour(ws, mus, covs, x_coords, colors_6set[4])
+                _plot_pinn_gmm_contour(ws, mus, covs, x_coords, colors_4set[2])
 
             # _set_axis_limits_with_buffer(ax, (xlo, xhi), (ylo, yhi))
             # ax.set_xlim(xlo, xhi); ax.set_ylim(ylo, yhi)
@@ -338,7 +339,7 @@ def plot_corner_elem(
     save_plot=False,
 ):
     """
-    dims = (i,) -> 1D histogram for x_i with model overlays (same colors_6set as full plot)
+    dims = (i,) -> 1D histogram for x_i with model overlays (same colors_4set as full plot)
     dims = (i,j) -> 2D heatmap for (x_i, x_j) with model contour overlays
     Indices in dims are 1-based.
     """
@@ -378,16 +379,15 @@ def plot_corner_elem(
         ax.set_xlabel(x_axis_labels[k]); ax.set_ylabel("density")
         ax.set_xlim(lo, hi)
 
-        # ---- overlays (keep same colors_6set/logic as your full function) ----
+        # ---- overlays (keep same colors_4set/logic as your full function) ----
         # PINN precomputed 1D
-        def _plot_pinn_1d_marginal(k1b):  # k1b = 1-based
-            if PNet_XL_PATH is None: return
-            fn = f"{PNet_XL_PATH}/pre_compute/marginal_pdfpinn_x{k1b}_t{t:.3f}.npz"
-            if os.path.exists(fn):
-                data = np.load(fn)
-                ax.plot(data["X_grid"], data["pdf"], color=colors_6set[-1])
-
-        _plot_pinn_1d_marginal(k+1)
+        # def _plot_pinn_1d_marginal(k1b):  # k1b = 1-based
+        #     if PNet_XL_PATH is None: return
+        #     fn = f"{PNet_XL_PATH}/pre_compute/marginal_pdfpinn_x{k1b}_t{t:.3f}.npz"
+        #     if os.path.exists(fn):
+        #         data = np.load(fn)
+        #         ax.plot(data["X_grid"], data["pdf"], color=colors_4set[-1])
+        # _plot_pinn_1d_marginal(k+1)
 
         # p_net_gmm (mixture’s 1D marginal)
         x_vals = np.linspace(lo, hi, 256)
@@ -400,24 +400,24 @@ def plot_corner_elem(
             pdf = np.zeros_like(x_vals)
             for c in range(ws.shape[0]):
                 pdf += ws[c] * multivariate_normal(mean=mus[c, k], cov=covs[c, k, k]).pdf(x_vals)
-            ax.plot(x_vals, pdf, color=colors_6set[0])
+            ax.plot(x_vals, pdf, color=colors_4set[3])
 
         # linear prop (Gaussian)
         if data_lp is not None:
             _, _, mu6, P6 = data_lp.get(t)
-            ax.plot(x_vals, multivariate_normal(mu6[k], P6[k, k]).pdf(x_vals), color=colors_6set[3])
+            ax.plot(x_vals, multivariate_normal(mu6[k], P6[k, k]).pdf(x_vals), color=colors_4set[0])
 
         # UT (Gaussian)
         if data_ut is not None:
             _, _, mu6, P6 = data_ut.get(t)
-            ax.plot(x_vals, multivariate_normal(mu6[k], P6[k, k]).pdf(x_vals), color=colors_6set[4])
+            ax.plot(x_vals, multivariate_normal(mu6[k], P6[k, k]).pdf(x_vals), color=colors_4set[1])
 
         if data_gmm is not None:
             _, ws, mus, covs = data_gmm.get(t)
             pdf = np.zeros_like(x_vals)
             for c in range(ws.shape[0]):
                 pdf += ws[c] * multivariate_normal(mean=mus[c, k], cov=covs[c, k, k]).pdf(x_vals)
-            ax.plot(x_vals, pdf, color=colors_6set[5])
+            ax.plot(x_vals, pdf, color=colors_4set[2])
 
         return fig, ax
 
@@ -448,19 +448,19 @@ def plot_corner_elem(
         alpha=0.5
     )
 
-    # contour helpers (same levels/colors_6set as your full function)
+    # contour helpers (same levels/colors_4set as your full function)
     relative_levels = np.array([0.01, 0.05, 0.50, 0.95])
 
-    def _plot_pinn_2d_contour(i1b, j1b):
-        if PNet_XL_PATH is None: return
-        fn = f"{PNet_XL_PATH}/pre_compute/marginal_pdfpinn_x{i1b}_x{j1b}_t{t:.3f}.npz"
-        if os.path.isfile(fn):
-            data = np.load(fn)
-            pdf = data["pdf"]
-            Xg, Yg = data["X_grid"], data["Y_grid"]
-            pdf_max = float(np.max(pdf[pdf > 0])) if np.any(pdf > 0) else 1.0
-            levels = relative_levels * pdf_max
-            ax.contour(Xg, Yg, pdf, levels=levels, colors=[colors_6set[1]], linewidths=1.0)
+    # def _plot_pinn_2d_contour(i1b, j1b):
+    #     if PNet_XL_PATH is None: return
+    #     fn = f"{PNet_XL_PATH}/pre_compute/marginal_pdfpinn_x{i1b}_x{j1b}_t{t:.3f}.npz"
+    #     if os.path.isfile(fn):
+    #         data = np.load(fn)
+    #         pdf = data["pdf"]
+    #         Xg, Yg = data["X_grid"], data["Y_grid"]
+    #         pdf_max = float(np.max(pdf[pdf > 0])) if np.any(pdf > 0) else 1.0
+    #         levels = relative_levels * pdf_max
+    #         ax.contour(Xg, Yg, pdf, levels=levels, colors=[colors_4set[1]], linewidths=1.0)
 
     def _plot_gmm_contour(ws, mus, covs, color):
         xs = np.linspace(xlo, xhi, 256)
@@ -477,15 +477,15 @@ def plot_corner_elem(
         ax.contour(Xg, Yg, pdf, levels=levels, colors=[color], linewidths=1.0)
 
     # PINN 2D
-    _plot_pinn_2d_contour(i+1, j+1)
+    # _plot_pinn_2d_contour(i+1, j+1)
 
-    # p_net_gmm_N1
-    if p_net_gmm_N1 is not None:
-        ws, mus, covs = p_net_gmm_N1.weights_means_covs_at(t)
-        _plot_gmm_contour(ws.detach().cpu().numpy(),
-                          mus.detach().cpu().numpy(),
-                          covs.detach().cpu().numpy(),
-                          colors_6set[0])
+    # # p_net_gmm_N1
+    # if p_net_gmm_N1 is not None:
+    #     ws, mus, covs = p_net_gmm_N1.weights_means_covs_at(t)
+    #     _plot_gmm_contour(ws.detach().cpu().numpy(),
+    #                       mus.detach().cpu().numpy(),
+    #                       covs.detach().cpu().numpy(),
+    #                       colors_4set[0])
 
     # p_net_gmm
     if p_net_gmm is not None:
@@ -493,7 +493,7 @@ def plot_corner_elem(
         _plot_gmm_contour(ws.detach().cpu().numpy(),
                           mus.detach().cpu().numpy(),
                           covs.detach().cpu().numpy(),
-                          colors_6set[0])
+                          colors_4set[3])
 
     # linear prop (Gaussian)
     if data_lp is not None:
@@ -501,7 +501,7 @@ def plot_corner_elem(
         ws = np.array([1.0])
         mus = np.array([mu6])
         covs = np.array([P6])
-        _plot_gmm_contour(ws, mus, covs, colors_6set[3])
+        _plot_gmm_contour(ws, mus, covs, colors_4set[0])
 
     # UT (Gaussian)
     if data_ut is not None:
@@ -509,12 +509,12 @@ def plot_corner_elem(
         ws = np.array([1.0])
         mus = np.array([mu6])
         covs = np.array([P6])
-        _plot_gmm_contour(ws, mus, covs, colors_6set[4])
+        _plot_gmm_contour(ws, mus, covs, colors_4set[1])
 
     # external GMM provider (same color as UT in your full code)
     if data_gmm is not None:
         _, ws, mus, covs = data_gmm.get(t)
-        _plot_gmm_contour(ws, mus, covs, colors_6set[5])
+        _plot_gmm_contour(ws, mus, covs, colors_4set[2])
 
     # manual legends
     cmap = plt.get_cmap('bwr')
@@ -522,22 +522,22 @@ def plot_corner_elem(
     c_high = cmap(0.92)   # high density
     spacer = Line2D([0], [0], linestyle='None', marker=None, alpha=0.0, label='')
     handles = [
-        Line2D([0], [0], color=colors_6set[3], lw=2, label='GA'),
-        Line2D([0], [0], color=colors_6set[4], lw=2, label='UT'),
-        Line2D([0], [0], color=colors_6set[5], lw=2, label='GMM'),
-        Line2D([0], [0], color=colors_6set[0], lw=2, label='PINN-GMM'),
+        Line2D([0], [0], color=colors_4set[0], lw=2, label='GA'),
+        Line2D([0], [0], color=colors_4set[1], lw=2, label='UT'),
+        Line2D([0], [0], color=colors_4set[2], lw=2, label='GMM'),
+        Line2D([0], [0], color=colors_4set[3], lw=2, label='PINN-GMM'),
         
-       # Density legend entries (marker-only squares)
-        Line2D([0],[0], linestyle='None', marker='s', markersize=12,
-            markerfacecolor=c_low, markeredgecolor=c_low,
-            alpha=0.8, label='Ref. PDF, low  density'),
-        Line2D([0],[0], linestyle='None', marker='s', markersize=12,
-            markerfacecolor=c_high, markeredgecolor=c_high,
-            alpha=0.8, label='Ref. PDF, high density'),
-        spacer,
-        spacer
+        # # Density legend entries (marker-only squares)
+        # Line2D([0],[0], linestyle='None', marker='s', markersize=12,
+        #     markerfacecolor=c_low, markeredgecolor=c_low,
+        #     alpha=0.8, label='Ref. PDF, low  density'),
+        # Line2D([0],[0], linestyle='None', marker='s', markersize=12,
+        #     markerfacecolor=c_high, markeredgecolor=c_high,
+        #     alpha=0.8, label='Ref. PDF, high density'),
+        # spacer,
+        # spacer
     ]
-    ax.legend(handles=handles, ncol=2)
+    ax.legend(handles=handles, ncol=2, loc="best")
 
     ax.set_xlabel(x_axis_labels[i]); ax.set_ylabel(x_axis_labels[j])
     ax.set_xlim(xlo, xhi); ax.set_ylim(ylo, yhi)
@@ -547,93 +547,228 @@ def plot_corner_elem(
 
 def plot_pdf_metrics(metrics, save_plot=False):
     set_publication_plot_style(pair_line_marker_cycle=True)
-
     plt.figure()
     print(metrics["t"])
-    plt.plot(metrics["t"], metrics["rel_error_lp"], color=colors_6set[3])
-    plt.plot(metrics["t"], metrics["rel_error_ut"], color=colors_6set[4])
-    plt.plot(metrics["t"], metrics["rel_error_gmm"], color=colors_6set[5])
-    plt.plot(metrics["t"], metrics["rel_error_pinn"], color=colors_6set[1])
+    plt.plot(metrics["t"], metrics["rel_error_lp"])
+    plt.plot(metrics["t"], metrics["rel_error_ut"])
+    plt.plot(metrics["t"], metrics["rel_error_gmm"])
+    # plt.plot(metrics["t"], metrics["rel_error_pinn"], color=colors_4set[1])
     # all_zeros = not np.any(metrics["B1_pinn"])
     # if(all_zeros is False):
     #     plt.fill_between(
     #         metrics["t"],
     #         metrics["rel_error_pinn"],
     #         metrics["B1_pinn"],
-    #         color=colors_6set[1],
+    #         color=colors_4set[1],
     #         alpha=0.2,
     #     )
-    plt.plot(metrics["t"], metrics["rel_error_pinngmm"], color=colors_6set[0])
+    plt.plot(metrics["t"], metrics["rel_error_pinngmm"])
     all_zeros = not np.any(metrics["B1_pinngmm"])
     if(all_zeros is False):
         plt.fill_between(
             metrics["t"],
             metrics["rel_error_pinngmm"],
             metrics["B1_pinngmm"],
-            color=colors_6set[0],
-            alpha=0.2,
-            hatch='//',                 # tilt/density: '/', '//', '///', etc.
-            linewidth=0.0               # hide polygon outline
+            alpha=0.3,
+            color=colors_4set[3],
+            # hatch='//',                 # tilt/density: '/', '//', '///', etc.
+            # linewidth=0.0               # hide polygon outline
         )
     # manual legend
     spacer = Line2D([0], [0], linestyle='None', marker=None, alpha=0.0, label='')
     handles = [
-        Line2D([0], [0], color=colors_6set[3], lw=2, 
-               linestyle=linestyles_6set[0], marker=markers_6set[0], 
+        Line2D([0], [0], color=colors_4set[0], lw=2, 
+               linestyle=linestyles_4set[0], marker=markers_4set[0], 
                label='GA'),
-        Line2D([0], [0], color=colors_6set[4], lw=2, 
-               linestyle=linestyles_6set[1], marker=markers_6set[1], 
+        Line2D([0], [0], color=colors_4set[1], lw=2, 
+               linestyle=linestyles_4set[1], marker=markers_4set[1], 
                label='UT'),
-        Line2D([0], [0], color=colors_6set[5], lw=2, 
-               linestyle=linestyles_6set[2], marker=markers_6set[2], 
+        Line2D([0], [0], color=colors_4set[2], lw=2, 
+               linestyle=linestyles_4set[2], marker=markers_4set[2], 
                label='GMM'),
-        spacer,
 
-        Line2D([0], [0], color=colors_6set[1], lw=2, 
-               linestyle=linestyles_6set[3], marker=markers_6set[3], 
-               label='PINN-MLP'),
-        Patch(facecolor=colors_6set[1], edgecolor='none',
-              alpha=0.20, label='Error Bound'),
+        # Line2D([0], [0], color=colors_4set[1], lw=2, 
+        #        linestyle=linestyles_6set[3], marker=markers_6set[3], 
+        #        label='PINN-MLP'),
+        # Patch(facecolor=colors_4set[1], edgecolor='none',
+        #       alpha=0.20, label='Error Bound'),
 
-        Line2D([0], [0], color=colors_6set[0], lw=2, 
-               linestyle=linestyles_6set[4], marker=markers_6set[4], 
+        Line2D([0], [0], color=colors_4set[3], lw=2, 
+               linestyle=linestyles_4set[3], marker=markers_4set[3], 
                label='PINN-GMM'),
-        Patch(facecolor=colors_6set[0], edgecolor=colors_6set[0],
-                        hatch='//', linewidth=0.0, alpha=0.2,
+        Patch(facecolor=colors_4set[3], edgecolor=colors_4set[3],
+                        alpha=0.3,
                         label='Error Bound')
     ]
     plt.legend(handles=handles, ncol=2)
     plt.xlabel("t")
     plt.ylabel("Worst Normalized Error %")
+    ymin = np.min(np.array([metrics["rel_error_lp"].min().item(),
+                            metrics["rel_error_ut"].min().item(),
+                            metrics["rel_error_gmm"].min().item(),
+                            ]))
+    ymax = np.max(np.array([metrics["rel_error_lp"].max().item(),
+                            metrics["rel_error_ut"].max().item(),
+                            metrics["rel_error_gmm"].max().item(),
+                            ]))
+    # print(ymin, ymax)
+    plt.ylim([ymin, ymax])
     save_path = "figs/metric-WNE.pdf"
     custom_save_plot(save_plot, save_path)
 
     plt.figure()
-    plt.plot(metrics["t"], metrics["tv_lp"], color=colors_6set[3],   label="GA")
-    plt.plot(metrics["t"], metrics["tv_ut"], color=colors_6set[4],   label="UT")
-    plt.plot(metrics["t"], metrics["tv_gmm"], color=colors_6set[5],   label="GMM")
-    plt.plot(metrics["t"], metrics["tv_pinn"], color=colors_6set[1], label="PINN-MLP")
-    plt.plot(metrics["t"], metrics["tv_pinngmm"], color=colors_6set[0], label="PINN-GMM")
+    plt.plot(metrics["t"], metrics["tv_lp"],   label="GA")
+    plt.plot(metrics["t"], metrics["tv_ut"], label="UT")
+    plt.plot(metrics["t"], metrics["tv_gmm"], label="GMM")
+    # plt.plot(metrics["t"], metrics["tv_pinn"], color=colors_4set[1], label="PINN-MLP")
+    plt.plot(metrics["t"], metrics["tv_pinngmm"], label="PINN-GMM")
     plt.legend(ncol=2)
     plt.xlabel("t")
     plt.ylabel("Total Variation %")
+    ymin = np.min(np.array([metrics["tv_lp"].min().item(),
+                            metrics["tv_ut"].min().item(),
+                            metrics["tv_gmm"].min().item(),
+                            ]))
+    ymax = np.max(np.array([metrics["tv_lp"].max().item(),
+                            metrics["tv_ut"].max().item(),
+                            metrics["tv_gmm"].max().item(),
+                            ]))
+    # print(ymin, ymax)
+    plt.ylim([ymin, ymax])
     save_path = "figs/metric-TV.pdf"
     custom_save_plot(save_plot, save_path)
 
     # metric 3: negative log liklihood (relative KL)
     plt.figure()
-    plt.plot(metrics["t"], metrics["g_kl_lp"], color=colors_6set[3],   label="GA")
-    plt.plot(metrics["t"], metrics["g_kl_ut"], color=colors_6set[4],   label="UT")
-    plt.plot(metrics["t"], metrics["g_kl_gmm"], color=colors_6set[5],   label="GMM")
-    plt.plot(metrics["t"], metrics["g_kl_pinn"], color=colors_6set[1], label="PINN-MLP")
-    plt.plot(metrics["t"], metrics["g_kl_pinngmm"], color=colors_6set[0], label="PINN-GMM")
+    plt.plot(metrics["t"], metrics["g_kl_lp"], label="GA")
+    plt.plot(metrics["t"], metrics["g_kl_ut"], label="UT")
+    plt.plot(metrics["t"], metrics["g_kl_gmm"], label="GMM")
+    # plt.plot(metrics["t"], metrics["g_kl_pinn"], color=colors_4set[1], label="PINN-MLP")
+    plt.plot(metrics["t"], metrics["g_kl_pinngmm"], label="PINN-GMM")
     plt.legend(ncol=2)
     plt.xlabel("t")
     plt.ylabel("Relative Divergence")
+    ymin = np.min(np.array([metrics["g_kl_lp"].min().item(),
+                            metrics["g_kl_ut"].min().item(),
+                            metrics["g_kl_gmm"].min().item(),
+                            ]))
+    ymax = np.max(np.array([metrics["g_kl_lp"].max().item(),
+                            metrics["g_kl_ut"].max().item(),
+                            metrics["g_kl_gmm"].max().item(),
+                            ]))
+    # print(ymin, ymax)
+    plt.ylim([ymin, ymax])
     save_path = "figs/metric-RD.pdf"
     custom_save_plot(save_plot, save_path)
 
     plt.show()
+
+
+def plot_event_triptych_simple(constants, X_event, t, p_net_gmm=None, 
+        data_lp=None, data_ut=None, data_gmm=None):
+    """
+    X_event: (D,2) array for x = [a, P1, P2, Q1, Q2, lambda], D>=6.
+    Shows 1x3 panels for (a,lambda), (P1,P2), (Q1,Q2).
+    """    
+    def _plot_pinn_gmm_contour(x_ranges, ws, mus, covs, plot_axes, color):
+        xlo = x_ranges[plot_axes[0], 0]
+        xhi = x_ranges[plot_axes[0], 1]
+        ylo = x_ranges[plot_axes[1], 0]
+        yhi = x_ranges[plot_axes[1], 1]
+        relative_levels = np.array([0.01, 0.05, 0.50, 0.95])
+        xs = np.linspace(xlo, xhi, num=256, endpoint=True)
+        ys = np.linspace(ylo, yhi, num=256, endpoint=True)
+        X_grid, Y_grid = np.meshgrid(xs, ys, indexing="ij")
+        grid_pts = np.vstack([X_grid.ravel(), Y_grid.ravel()]).T
+        pdf_values = np.copy(X_grid) * 0.0
+        for k in range(ws.shape[0]):
+            ws_k = ws[k]
+            mus_k = mus[k, :]
+            covs_k = covs[k, :, :]
+            marginal_mu = mus_k[list(plot_axes)]
+            marginal_cov = covs_k[np.ix_(list(plot_axes), list(plot_axes))]
+            pdf_func = make_gmm_pdf(1., marginal_mu, marginal_cov)
+            p_k = pdf_func(grid_pts).reshape(X_grid.shape)
+            pdf_values = pdf_values + ws_k * p_k
+        pdf_max = np.max(pdf_values).item()
+        levels = relative_levels * pdf_max
+        ax.contour(X_grid, Y_grid, pdf_values, levels=levels, colors=[color], 
+                    linewidths=1.)
+        
+    def _plot_gmm_contour(x_ranges, ws, mus, covs, plot_axes, color):
+        xlo = x_ranges[plot_axes[0], 0]
+        xhi = x_ranges[plot_axes[0], 1]
+        ylo = x_ranges[plot_axes[1], 0]
+        yhi = x_ranges[plot_axes[1], 1]
+        relative_levels = np.array([0.01, 0.05, 0.50, 0.95])
+        xs = np.linspace(xlo, xhi, num=256, endpoint=True)
+        ys = np.linspace(ylo, yhi, num=256, endpoint=True)
+        X_grid, Y_grid = np.meshgrid(xs, ys, indexing="ij")
+        grid_pts = np.vstack([X_grid.ravel(), Y_grid.ravel()]).T
+        pdf_values = np.copy(X_grid) * 0.0
+        for k in range(ws.shape[0]):
+            ws_k = ws[k]
+            mus_k = mus[k, :]
+            covs_k = covs[k, :, :]
+            marginal_mu = mus_k[list(plot_axes)]
+            marginal_cov = covs_k[np.ix_(list(plot_axes), list(plot_axes))]
+            pdf_func = make_gmm_pdf(1., marginal_mu, marginal_cov)
+            p_k = pdf_func(grid_pts).reshape(X_grid.shape)
+            pdf_values = pdf_values + ws_k * p_k
+        pdf_max = np.max(pdf_values).item()
+        levels = relative_levels * pdf_max
+        ax.contour(X_grid, Y_grid, pdf_values, levels=levels, colors=[color], 
+                   linewidths=1.)
+
+    x_ranges = constants._NX_RANGE_NP
+          
+    pairs  = [(0, 3), (1, 4), (2, 5)]
+    labels = ['r', 'th', 'ph', 'r_dot', 'th_dot', 'phi_dot']
+
+    set_publication_plot_style()
+    fig, axs = plt.subplots(1, 3, figsize=(9, 3), constrained_layout=True)
+
+    for ax, (ix, iy) in zip(axs, pairs):
+        x0, x1 = X_event[ix]
+        y0, y1 = X_event[iy]
+        print(x0, x1, y0, y1)
+        # simple 5% padding (fallback 1.0 if zero-width)
+        px = 0.05 * (x1 - x0 if x1 > x0 else 1.0)
+        py = 0.05 * (y1 - y0 if y1 > y0 else 1.0)
+
+        # ax.set_xlim(x0 - px, x1 + px)
+        # ax.set_ylim(y0 - py, y1 + py)
+        ax.set_xlabel(labels[ix])
+        ax.set_ylabel(labels[iy])
+
+        ax.add_patch(Rectangle((x0, y0), x1 - x0, y1 - y0,
+                               fill=False, edgecolor='tab:green',
+                               linewidth=2.0, linestyle='--'))
+        
+        if(p_net_gmm is not None):
+            ws, mus, covs = p_net_gmm.weights_means_covs_at(t)
+            ws = ws.detach().cpu().numpy()
+            mus = mus.detach().cpu().numpy()
+            covs = covs.detach().cpu().numpy()
+            _plot_pinn_gmm_contour(x_ranges, ws, mus, covs, [ix, iy], color=colors_4set[3])
+
+        if(data_lp is not None):
+            _, ws, mus, covs = data_lp.get(t)
+            mus = mus.reshape((-1, 6))
+            covs = covs.reshape((-1, 6, 6))
+            _plot_gmm_contour(x_ranges, ws, mus, covs, [ix, iy], color=colors_4set[0])
+
+        if(data_ut is not None):
+            _, ws, mus, covs = data_ut.get(t)
+            mus = mus.reshape((-1, 6))
+            covs = covs.reshape((-1, 6, 6))
+            _plot_gmm_contour(x_ranges, ws, mus, covs, [ix, iy], color=colors_4set[1])
+
+        if(data_gmm is not None):
+            _, ws, mus, covs = data_gmm.get(t)
+            mus = mus.reshape((-1, 6))
+            covs = covs.reshape((-1, 6, 6))
+            _plot_gmm_contour(x_ranges, ws, mus, covs, [ix, iy], color=colors_4set[2])
 
 
 # --- Helper functions ---

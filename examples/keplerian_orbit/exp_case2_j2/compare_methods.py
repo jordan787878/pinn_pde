@@ -273,7 +273,7 @@ def compute_pdf_variations(data_mc=None, p_net=None, p_net_gmm=None, p_net_gmm_v
             if(p_net_gmm_vanilla is not None):
                 pdf_pinn = p_net_gmm_vanilla(_x_tensor, _t_tensor).detach().cpu().numpy().reshape(-1,)
                 _delta_p = np.max(np.abs(pdf_pinn - pdf_ref)).item()
-                delta_p_pinngmm_vanilla_max = max(delta_p_pinngmm_max, _delta_p)
+                delta_p_pinngmm_vanilla_max = max(delta_p_pinngmm_vanilla_max, _delta_p)
                 _tv = p_total_variation(pdf_pinn, pdf_ref, vol_est)
                 tv_pinngmm_vanilla += _tv/N_batch
                 del pdf_pinn, _t, _t_tensor, _x_tensor

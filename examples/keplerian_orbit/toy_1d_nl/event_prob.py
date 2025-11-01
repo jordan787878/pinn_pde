@@ -127,9 +127,10 @@ def estimate_event_probability(problem, Pr_key):
 
 def plot_summary(problem):
     set_publication_plot_style()
-    print_list(problem["Pr_opt_lower"])
-    print_list(problem["Pr_ref"])
-    print_list(problem["Pr_opt_upper"])
+    print("\n")
+    print("Pr lower: ", end="\t"); print_list(problem["Pr_opt_lower"])
+    print("Pr ref  : ", end="\t"); print_list(problem["Pr_ref"])
+    print("Pr upper: ", end="\t"); print_list(problem["Pr_opt_upper"])
 
     fig, axs = plt.subplots()
     tspan_ref = problem["time_points_ref"]
@@ -370,10 +371,10 @@ def main():
     # Setup problem
     problem = {
         "D": 1,
-        "N_x": 500,
-        "N_degree": 1, 
+        "N_x": 1,
+        "N_degree": 20, 
         "use_event_guidance": True, "use_gmm_guidance": True, 
-        "cap_per_degree" : 10,
+        "cap_per_degree" : 64,
         "cheap": False,
         "X_dom": np.array([[x_low, x_hig]]),
         "time_points_ref": t1s,
@@ -387,7 +388,7 @@ def main():
     problem["Pr_ref"] = []
     for _t in problem["time_points_ref"]:
         problem["Pr_ref"].append(true_event_probability(problem, _t))
-    print("[debug] Pr ref"); print_list(problem["Pr_ref"])
+    # print("[debug] Pr ref"); print_list(problem["Pr_ref"])
 
     # Compute event probability estimates
     problem["Pr_keys"] = ["Pr_lp", "Pr_ut", "Pr_gmm", "Pr_pinngmm"]
@@ -420,16 +421,17 @@ def main():
             use_gmm_guidance=problem["use_gmm_guidance"], 
             cap_per_degree = problem["cap_per_degree"],
             cheap=problem["cheap"],
-            parallel=False
+            parallel=False,
+            verbose=False,
         )
         problem.update(grid)
-        print(problem["midpts"].shape[0])
-        print(sum(problem["mask_lower"]), sum(problem["mask_upper"]))
+        # print(problem["midpts"].shape[0])
+        print("[debug] number of inside & intersect cells: ", sum(problem["mask_lower"]), sum(problem["mask_upper"]))
 
         Pr_upper, Pr_lower, _, _ = run_solver(problem)
         problem["Pr_opt_upper"].append(Pr_upper)
         problem["Pr_opt_lower"].append(Pr_lower)
-        print(Pr_lower, problem["Pr_ref"][idx], Pr_upper)
+        # print(Pr_lower, problem["Pr_ref"][idx], Pr_upper)
         # np.testing.assert_array_less(Pr_lower, problem["Pr_ref"][idx])
         # np.testing.assert_array_less(problem["Pr_ref"][idx], Pr_upper)
     plot_summary(problem)
@@ -443,7 +445,6 @@ def main():
 
     # visualize_setup(problem, Pr_upper, Pr_lower, p_eval_upper, p_eval_lower)
     plt.show()
-
 
 
 if __name__ == "__main__":

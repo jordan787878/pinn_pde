@@ -16,10 +16,11 @@ from utilities._General.neuralnetworks import PNet_XL, ENet_XL, TimeToGMM_V0, lo
 from utilities._General.util import compute_volume, save_metrics_npz, load_metrics_npz, p_total_variation, plot_training_history
 from utilities._General.baseline_methods import PropagationData
 from utilities._General.classic_gmm import make_gmm_pdf
+from utilities._General.generalsolvers import load_problem_result_npz
 
 
 COMPUTE: bool = False
-NBATCH: int = 1000
+NBATCH: int = 10000
 SAVEPLOT: bool = False
 constants = Case1_6D_Constants_Equin()
 
@@ -292,7 +293,7 @@ def compute_pdf_variations(N_batch=1, p_net=None, p_net_gmm=None, p_net_gmm_vani
             # pinn-gmm_vanilla
             pdf_pinn = constants.SCALING_PDF * p_net_gmm_vanilla(_x_tensor, _t_tensor).detach().cpu().numpy().reshape(-1,)
             _delta_p = np.max(np.abs(pdf_pinn - pdf_ref)).item()
-            delta_p_pinngmm_vanilla_max = max(delta_p_pinngmm_max, _delta_p)
+            delta_p_pinngmm_vanilla_max = max(delta_p_pinngmm_vanilla_max, _delta_p)
             _tv = p_total_variation(pdf_pinn, pdf_ref, vol_est)
             tv_pinngmm_vanilla += _tv/N_batch
             _gkl = compute_generalKL(t, X_mc, p_net=p_net_gmm_vanilla)
@@ -417,10 +418,11 @@ def compare_corner_plots(OUTPUT_PATH=None, data_lp=None, data_ut=None, data_gmm=
         #                  PNet_XL_PATH=OUTPUT_PATH, p_net_gmm=p_net_gmm)
 
         # Single element plot 2D (x1, x6)
-        plot_corner_elem(constants, t, X_ref, (1, 6),
-                         data_lp=data_lp, data_ut=data_ut, data_gmm=data_gmm,
-                         PNet_XL_PATH=OUTPUT_PATH, p_net_gmm=p_net_gmm, rar_samples=rar_samples,
-                         save_plot=SAVEPLOT)
+        # plot_corner_elem(constants, t, X_ref, (1, 6),
+        #                  data_lp=data_lp, data_ut=data_ut, data_gmm=data_gmm,
+        #                  PNet_XL_PATH=OUTPUT_PATH, p_net_gmm=p_net_gmm, rar_samples=rar_samples,
+        #                  ranges="auto",
+        #                  save_plot=SAVEPLOT)
 
         plt.show()
 
@@ -550,16 +552,16 @@ def main():
             p_net_gmm_vanilla=p_net_gmm_vanilla,
             data_lp=data_lp, data_ut=data_ut, data_gmm=data_gmm,
             e1_net=e1_net, e1_net_gmm=e1_net_gmm, save_path=metrics_path)
-    # metrics = load_metrics_npz(metrics_path); plot_pdf_metrics(metrics, save_plot=SAVEPLOT)
+    metrics = load_metrics_npz(metrics_path); plot_pdf_metrics(metrics, save_plot=SAVEPLOT)
 
-    # # Visualize marginal PDF
-    # # [temp] don't view the adaptive pools
-    # rar_samples = None
-    # compare_corner_plots(
-    #     OUTPUT_PATH=None,
-    #     data_lp=data_lp, data_ut=data_ut, data_gmm=data_gmm,
-    #     p_net_gmm=p_net_gmm, rar_samples=rar_samples,
-    # )
+    # Visualize marginal PDF
+    # [temp] don't view the adaptive pools
+    rar_samples = None
+    compare_corner_plots(
+        OUTPUT_PATH=None,
+        data_lp=data_lp, data_ut=data_ut, data_gmm=data_gmm,
+        p_net_gmm=p_net_gmm, rar_samples=rar_samples,
+    )
     
     # --- plot training history ---
     # plot_training_history(trained_models)

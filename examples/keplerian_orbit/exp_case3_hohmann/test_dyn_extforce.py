@@ -9,6 +9,10 @@ import numpy as np
 from numpy import sqrt, sin, cos
 from scipy.integrate import solve_ivp
 import matplotlib.pyplot as plt
+from exp_utilities.constants import Case2_Planar_Transfer
+
+
+constants = Case2_Planar_Transfer()
 
 
 # ----------------------------
@@ -123,33 +127,38 @@ def rhs_rot_norm(tau: float, yp: np.ndarray, p: Params, s: Scale) -> np.ndarray:
     Normalized rotating polar dynamics integrated in normalized time tau = t / S_T.
     yp = [rho, phi, rhodot, phidot], where rhodot = d(rho)/d(tau), phidot = d(phi)/d(tau).
     """
-    rho, phi, rhod, phid = yp
-    SR, ST, SW, STi = s.R, s.THETA, s.W, s.T
-    mu = p.mu_km3s2
-    aT = p.accel_along_v()  # [km/s^2]
+    x = yp.reshape((-1, 4))
+    dy1 = constants.dyn_f1(x)[0]
+    dy2 = constants.dyn_f2(x)[0]
+    dy3 = constants.dyn_f3(x)[0]
+    dy4 = constants.dyn_f4(x)[0]
+    # rho, phi, rhod, phid = yp
+    # SR, ST, SW, STi = s.R, s.THETA, s.W, s.T
+    # mu = p.mu_km3s2
+    # aT = p.accel_along_v()  # [km/s^2]
 
-    # Map normalized state (tau-based rates) -> physical kinematics (t-based)
-    r      = SR * rho
-    rdot   = (SR / STi) * rhod
-    thetadot = SW + (ST / STi) * phid
+    # # Map normalized state (tau-based rates) -> physical kinematics (t-based)
+    # r      = SR * rho
+    # rdot   = (SR / STi) * rhod
+    # thetadot = SW + (ST / STi) * phid
 
-    # Physical speed magnitude
-    V = np.sqrt(rdot*rdot + (r*thetadot)**2)
-    V = max(V, 1e-16)
+    # # Physical speed magnitude
+    # V = np.sqrt(rdot*rdot + (r*thetadot)**2)
 
-    # Thrust components (physical)
-    a_r     = aT * (rdot / V)
-    a_theta = aT * (r * thetadot / V)
+    # # Thrust components (physical)
+    # a_r     = aT * (rdot / V)
+    # a_theta = aT * (r * thetadot / V)
 
-    # Physical dynamics
-    rddot      = r * thetadot**2 - mu / (r*r) + a_r
-    thetaddot  = (a_theta - 2.0 * rdot * thetadot) / r
+    # # Physical dynamics
+    # rddot      = r * thetadot**2 - mu / (r*r) + a_r
+    # thetaddot  = (a_theta - 2.0 * rdot * thetadot) / r
 
-    # Map physical second derivatives -> tau-second-derivatives
-    rhodd = (STi**2 / SR) * rddot
-    phidd = (STi**2 / ST) * thetaddot
+    # # Map physical second derivatives -> tau-second-derivatives
+    # rhodd = (STi**2 / SR) * rddot
+    # phidd = (STi**2 / ST) * thetaddot
+    # print(rhod.shape, phid.shape, rhodd.shape, phidd.shape)
 
-    return np.array([rhod, phid, rhodd, phidd], dtype=float)
+    return np.array([dy1, dy2, dy3, dy4], dtype=float)
 
 
 # --- Forward & inverse transforms (now consistent with tau-scaling) -----------
@@ -201,8 +210,10 @@ def simulate_rot_norm(p: Params,
       Y_phys_back       : (T,4) back-transformed physical polar state
     """
     # Initial state in polar (physical) -> normalized (tau-based)
+    print(r0_xy, v0_xy)
     y0_phys = cart2polar_state(np.asarray(r0_xy, float), np.asarray(v0_xy, float))
     yp0 = to_rot_norm(t0, y0_phys, s)
+    print(yp0)
 
     # Physical sampling grid, mapped to tau
     t_eval = np.arange(t0, tf + 0.5*dt_out, dt_out)
@@ -374,6 +385,96 @@ def monte_carlo_planar(p: Params,
     }
 
 
+def monte_carlo_rot_norm(p: Params,
+                         s: Scale,
+                         r0_xy: np.ndarray,
+                         v0_xy: np.ndarray,
+                         t0: float,
+                         tf: float,
+                         dt_out: float = 10.0,
+                         N: int = 100,
+                         std_diag=(1.0, 1.0, 1e-3, 1e-3),  # [km, km, km/s, km/s]
+                         seed: int | None = 0,
+                         rtol: float = 1e-9,
+                         atol: float = 1e-9,
+                         return_normalized: bool = False):
+    """
+    Monte Carlo propagation using the normalized rotating system:
+      d/dτ [rho, phi, rhod, phid] = rhs_rot_norm(τ, ·).
+    Each sample perturbs the initial Cartesian state, converts to polar,
+    maps to normalized rotating coordinates at t0, integrates in τ on a
+    shared τ-grid, and is back-transformed to physical polar state over t.
+
+    Returns
+    -------
+    out : dict
+        't'            : (T,) physical time grid
+        'samples_phys' : (N, T, 4) back-transformed physical polar states
+        'mean_phys'    : (T, 4) timewise mean (physical)
+        'std_phys'     : (T, 4) timewise std (physical, ddof=1)
+        'x0_cart'      : (4,) nominal Cartesian initial state
+        'std_diag'     : (4,) std used for IC sampling
+        # if return_normalized:
+        'samples_norm' : (N, T, 4) normalized rotating states [rho,phi,rhod,phid]
+    """
+    rng = np.random.default_rng(seed)
+
+    # Physical sampling grid and aligned τ-grid
+    t_eval = np.arange(t0, tf + 0.5 * dt_out, dt_out)
+    T = t_eval.size
+    tau0, tauf = t0 / s.T, tf / s.T
+    tau_eval = t_eval / s.T
+
+    # Nominal Cartesian initial state (x, y, vx, vy)
+    x0_cart = np.array([r0_xy[0], r0_xy[1], v0_xy[0], v0_xy[1]], dtype=float)
+    std_diag = np.asarray(std_diag, dtype=float)
+
+    samples_phys = np.empty((N, T, 4), dtype=float)
+    samples_norm = np.empty((N, T, 4), dtype=float) if return_normalized else None
+
+    for i in range(N):
+        # 1) Sample ICs in Cartesian, then to polar
+        delta = rng.standard_normal(4) * std_diag
+        x0_i = x0_cart + delta
+        y0_phys = cart2polar_state(x0_i[:2], x0_i[2:])  # [r, θ, rdot, θdot]
+
+        # 2) Polar (physical) -> normalized rotating (τ-derivative rates) at t0
+        yp0 = to_rot_norm(t0, y0_phys, s)
+
+        # 3) Integrate normalized system in τ on the common τ-grid
+        sol = solve_ivp(lambda tau, yp: rhs_rot_norm(tau, yp, p, s),
+                        (tau0, tauf), yp0,
+                        t_eval=tau_eval, rtol=rtol, atol=atol, method="RK45")
+        if not sol.success:
+            raise RuntimeError(f"Sample {i} integration failed: {sol.message}")
+
+        # 4) Back-transform to physical polar along the aligned physical time grid
+        Y_phys_i = np.empty((T, 4), dtype=float)
+        for k, tauk in enumerate(tau_eval):
+            tk = tauk * s.T
+            Y_phys_i[k] = from_rot_norm(tk, sol.y[:, k], s)
+
+        samples_phys[i] = Y_phys_i
+        if return_normalized:
+            samples_norm[i] = sol.y.T  # (T,4) in [rho, phi, rhod, phid]
+
+    # Timewise stats in physical space
+    mean_phys = samples_phys.mean(axis=0)
+    std_phys  = samples_phys.std(axis=0, ddof=1)
+
+    out = {
+        "t": t_eval,
+        "samples": samples_phys,
+        "mean_phys": mean_phys,
+        "std_phys": std_phys,
+        "x0_cart": x0_cart,
+        "std_diag": std_diag,
+    }
+    if return_normalized:
+        out["samples_norm"] = samples_norm
+    return out
+
+
 # ----------------------------
 # Utilities for plotting
 # ----------------------------
@@ -513,6 +614,102 @@ def set_initial_state(p, method=0):
     return r0_xy, v0_xy
 
 
+import numpy as np
+
+def _jac_cart_to_polar(x, y, vx, vy, eps=1e-12):
+    """
+    Jacobian of [r, theta, rdot, thetadot] w.r.t. [x, y, vx, vy].
+    """
+    r2 = x*x + y*y
+    r  = np.sqrt(max(r2, eps))
+    r3 = r2 * r
+    r4 = r2 * r2
+
+    # Helpers
+    N = x*vx + y*vy            # for rdot
+    H = x*vy - y*vx            # for thetadot
+
+    J = np.zeros((4,4), dtype=float)
+
+    # r
+    J[0,0] = x / r
+    J[0,1] = y / r
+    # J[0,2] = 0
+    # J[0,3] = 0
+
+    # theta
+    J[1,0] = -y / r2
+    J[1,1] =  x / r2
+
+    # rdot = (x vx + y vy)/r
+    J[2,0] =  vx / r - (N * x) / r3
+    J[2,1] =  vy / r - (N * y) / r3
+    J[2,2] =  x / r
+    J[2,3] =  y / r
+
+    # thetadot = (x vy - y vx)/r^2
+    J[3,0] =  vy / r2 - 2.0 * x * H / r4
+    J[3,1] = -vx / r2 - 2.0 * y * H / r4
+    J[3,2] = -y  / r2
+    J[3,3] =  x  / r2
+
+    return J
+
+def cov_cart_to_rot_norm(x0_cart, Sigma_cart, s: Scale, t0: float):
+    """
+    First-order covariance mapping:
+      (x,y,vx,vy) ~ N(m, Sigma_cart)  -->  (rho,phi,rhod,phid) at t0
+    using the composite Jacobian J = D * J_polar evaluated at the nominal state.
+
+    Parameters
+    ----------
+    x0_cart : (4,) array_like
+        Nominal Cartesian state [x, y, vx, vy] at t0 (km, km/s).
+    Sigma_cart : (4,4) array_like
+        Covariance in Cartesian coordinates.
+    s : Scale
+        Scales (S_R, S_Theta, S_Omega, S_T).
+    t0 : float
+        Physical time for the transform (only affects mean; covariance is unaffected by offsets).
+
+    Returns
+    -------
+    Sigma_rot : (4,4) ndarray
+        Estimated covariance of [rho, phi, rhod, phid] at t0.
+    J : (4,4) ndarray
+        Composite Jacobian used (so you can inspect condition numbers, etc.).
+    mean_rot : (4,) ndarray
+        Mean of [rho, phi, rhod, phid] from the nominal state (useful alongside the covariance).
+    """
+    x, y, vx, vy = np.asarray(x0_cart, dtype=float)
+    Sigma_cart = np.asarray(Sigma_cart, dtype=float)
+
+    # Polar nominal from the given Cartesian nominal
+    # (reuse your existing function to keep definitions consistent)
+    y_polar = cart2polar_state(np.array([x, y]), np.array([vx, vy]))  # [r, theta, rdot, thetadot]
+
+    # Scale/rotate to normalized rotating coords (mean; offsets don’t enter covariance)
+    rho   = y_polar[0] / s.R
+    phi   = (y_polar[1] - s.W * t0) / s.THETA
+    rhod  = (s.T / s.R) * y_polar[2]
+    phid  = (s.T / s.THETA) * (y_polar[3] - s.W)
+    mean_rot = np.array([rho, phi, rhod, phid], dtype=float)
+
+    # Jacobian pieces
+    J_polar = _jac_cart_to_polar(x, y, vx, vy)
+
+    # Linear part of to_rot_norm (affine offsets drop from covariance)
+    D = np.diag([1.0/s.R, 1.0/s.THETA, s.T/s.R, s.T/s.THETA])
+
+    # Composite Jacobian
+    J = D @ J_polar
+
+    # Pushforward covariance
+    Sigma_rot = J @ Sigma_cart @ J.T
+    return Sigma_rot, J, mean_rot
+
+
+
 # ----------------------------
 # Example
 # ----------------------------
@@ -521,26 +718,45 @@ if __name__ == "__main__":
 
     r0_xy, v0_xy = set_initial_state(p)
 
-    t0, tf, dt_out = 0.0, 2.0*3600.0, 60.0
+    n = np.sqrt(p.mu_km3s2 / 7000.0**3)    # mean motion ~ rad/s for circular example
+    T = 2*np.pi/n
+
+    t0, tf, dt_out = 0.0, 1.0*T, 1200.0
     
     # T, Y = simulate_planar(p, r0_xy, v0_xy, t0, tf, dt_out=dt_out)
     # plot_planar(T, Y)
 
-    # Choose scales (e.g., normalize radius by 7000 km and rotate at mean motion)
-    n = 0.5*np.sqrt(p.mu_km3s2 / 7000.0**3)    # mean motion ~ rad/s for circular example
-    s = Scale(R=7000.0, THETA=1.0, W=n, T=3600.0)
+    s = Scale(R=7000.0, THETA=0.01, W=n, T=T)
 
-    report = validate_rot_norm(p, s, r0_xy, v0_xy, t0, tf, dt_out)
-    print("Max abs polar errors [r,theta,rdot,thetadot]:", report["max_abs_polar"])
-    print("Max abs position errors [x,y] (km):         ", report["max_abs_pos_xy"])
-    print("Max abs velocity errors [vx,vy] (km/s):     ", report["max_abs_vel_xy"])
+    x0_cart = np.array([r0_xy[0], r0_xy[1], v0_xy[0], v0_xy[1]])
+    print(x0_cart)
+    Sigma_cart = np.diag([1.0**2, 1.0**2, (1e-4)**2, (1e-4)**2])  # example diag cov
+    Sigma_rot, J, mean_rot = cov_cart_to_rot_norm(x0_cart, Sigma_cart, s, t0)
+    print("mean_rot:", mean_rot)
+    print("Sigma_rot:\n", Sigma_rot, np.linalg.det(Sigma_rot))
 
-    mc = monte_carlo_planar(
-        p, r0_xy, v0_xy,
-        t0=t0, tf=tf, dt_out=dt_out,
-        N=200,
-        std_diag=(1.0, 1.0, 1e-3, 1e-3),  # 1 km pos, 1 m/s vel sigmas
-        seed=123
-    )
+    # report = validate_rot_norm(p, s, r0_xy, v0_xy, t0, tf, dt_out)
+    # print("Max abs polar errors [r,theta,rdot,thetadot]:", report["max_abs_polar"])
+    # print("Max abs position errors [x,y] (km):         ", report["max_abs_pos_xy"])
+    # print("Max abs velocity errors [vx,vy] (km/s):     ", report["max_abs_vel_xy"])
 
-    plot_mc_xy_plane(mc)
+    # mc = monte_carlo_planar(
+    #     p, r0_xy, v0_xy,
+    #     t0=t0, tf=tf, dt_out=dt_out,
+    #     N=1000,
+    #     std_diag=(1.0, 1.0, 1e-3, 1e-3),  # 1 km pos, 1 m/s vel sigmas
+    #     seed=123
+    # )
+
+    # mc = monte_carlo_rot_norm(
+    #     p, s, r0_xy, v0_xy,
+    #     t0=t0, tf=tf, dt_out=dt_out,
+    #     N=1000,
+    #     std_diag=(1.0, 1.0, 1e-3, 1e-3),  # 1 km pos, 1 m/s vel sigmas
+    #     seed=123
+    # )
+
+    # print(mc["t"])
+    # print(mc["samples"].shape)
+
+    # plot_mc_xy_plane(mc)

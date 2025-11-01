@@ -146,6 +146,10 @@ def config_training(constants, option=""):
     #     configuration["bias_fac"] = 0.1
     #     configuration["sample_res"] = partial(constants.sample_res_points_bias, 
     #         bias_fac=configuration["bias_fac"])
+
+    if option == "pinn-gmm_vanilla":
+        configuration["training_fcn"] = PINN.train_pinn_vanilla
+        p_net = TimeToGMM_V0(constants, K=11, alpha_floor=0.01)
         
     # if option == "pinn-gmm":
     #     configuration["training_fcn"] = PINN.train_pinngmm

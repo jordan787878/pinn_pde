@@ -4,49 +4,20 @@ from compare_methods import (config_trained_models, load_model_by_key,
     PropagationData, SAVE_PATH_GMM_PROPAGATE, SAVE_PATH_LINEAR_PROPAGATE, SAVE_PATH_UNSCENT_PROPAGATE)
 import argparse
 import seaborn as sns
+from exp_utilities.plot_util import plot_event_triptych_simple
 
 import sys
 from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]   # repo_root
 sys.path.insert(0, str(ROOT))
 from utilities._General.generalsolvers import *
-from utilities._General.util import (plt, set_publication_plot_style, colors_6set, 
+from utilities._General.util import (plt, set_publication_plot_style, 
+    colors_4set, linestyles_4set, markers_4set,
     lower_color, upper_color, custom_save_plot, load_metrics_npz)
 from utilities._General.classic_gmm import make_gmm_pdf, integrate_gmm_over_box_whitened
 
 
 COMPUTE: bool = False
-
-
-colors_set = sns.color_palette([
-    "#FF008C",  # GA
-    "#00FBFF",  # UT
-    "#FF8400",  # GMM
-    # "#00FF1E",  # prior
-    # "#8C00FF",  # PINN-MLP
-    "#000000",  # PINN-GMM
-    # "#0066FF",  # PINN-Flow  ←
-])
-
-# 7 high-contrast linestyle/marker pairs (index-bound)
-linestyles_set = [
-    (0, (5, 2)),        # GA
-    (0, (7, 2, 3, 2)),  # UT
-    "--",               # GMM
-    # (0, (9, 2, 1, 2)),  # prior  ←
-    # "-.",               # PINN-MLP
-    "-",                # PINN-GMM
-    # ":",                # PINN-Flow
-]
-
-markers_set = ['o', # GA
-                's', # UT
-                '^', # GMM
-                # 'v', # prior  ←
-                # 'D', # PINN-MLP
-                'None', # PINN-GMM
-                # 'X'  # PINN-Flow
-                ] 
 
 
 def parse_args():
@@ -76,13 +47,13 @@ def true_event_probability(problem, t):
 
 
 def get_error_bound_at_time(t, atol=1e-5):
-    metrics = load_metrics_npz("output/metric_NB=100.npz")
+    metrics = load_metrics_npz("output/metric_NB=10000.npz")
     tspan = metrics["t"]
     B1s = metrics["B1_pinngmm_raw"] #; print(B1s)
     idx = np.where(np.isclose(tspan, t, atol=atol))[0]
     if idx.size == 0:
         raise ValueError(f"t={t} not found within atol={atol}. Available times include e.g. {tspan[:5]}...")
-    print("[debug] B1: ", B1s[idx[0]])
+    print("[debug] B1s: ", B1s)
     return B1s[idx[0]]
 
 
@@ -179,31 +150,14 @@ def heaviest_component_mean(ws: np.ndarray, mus: np.ndarray):
 
 def set_static_X_event(problem):
     p_net, _ = problem["networks"]
-    teval = 0.3
+    teval = 0.15
     ws, mus, covs = p_net.weights_means_covs_at(teval)
     ws = ws.detach().numpy()
     mus = mus.detach().numpy()
     covs = covs.detach().numpy()
-    # Define the X_event as a random (0.1 - per dimension of the X_dom)
     _, bias_center, _ = heaviest_component_mean(ws, mus)
-    print(bias_center)
-    bias_center[0] = 18.75#18.86
-    bias_center[1] = 104.7
-    bias_center[2] = -0.25
-    bias_center[3] = -8.0#0.8
-    bias_center[4] = 0.0
-    bias_center[5] = 35.0#32.5
-    problem["X_event"] = sample_event_box(problem["X_dom"], frac=0.22, seed=2, bias=bias_center)
-    # print(problem["X_event"])
+    problem["X_event"] = sample_event_box(problem["X_dom"], seed=2, frac=0.05, bias=bias_center)
     return problem
-    # (Dynamic) set the X_event
-    # _, bias_center, _ = heaviest_component_mean(ws, mus)
-    # problem["X_event"] = sample_event_box(problem["X_dom"], seed=2, bias=bias_center)
-    # print(problem["X_event"])
-    # Compute the reference true Probability
-    # Pr_ref = true_event_probability(problem, _t)
-    # problem["Pr_ref"].append(Pr_ref)
-    # print(_t, Pr_ref)
 
 
 def run_solver(problem):
@@ -227,7 +181,7 @@ def run_solver(problem):
             verbose=problem["verbose_refine"],
         )
         problem.update(grid)
-        print(problem["midpts"].shape[0], sum(problem["mask_lower"]), sum(problem["mask_upper"]))
+        print("[debug] number of inside & intersect cells: ", sum(problem["mask_lower"]), sum(problem["mask_upper"]))
     
         Pr_upper, _ = waterfill_upper(problem)
         Pr_lower, _ = waterfill_lower(problem)
@@ -249,7 +203,7 @@ def estimate_event_probability(problem, Pr_key):
             ws = ws.reshape(-1,)
             mus = mus.reshape((-1, D))
             covs = covs.reshape((-1, D, D))
-            _Pr = integrate_gmm_over_box_whitened(ws, mus, covs, problem)
+            _Pr = integrate_gmm_over_box_whitened(ws, mus, covs, problem["X_event"])
             problem[Pr_key].append(_Pr)
 
     if(Pr_key == "Pr_lp"):
@@ -259,7 +213,7 @@ def estimate_event_probability(problem, Pr_key):
             ws = ws.reshape(-1,)
             mus = mus.reshape((-1, D))
             covs = covs.reshape((-1, D, D))
-            _Pr = integrate_gmm_over_box_whitened(ws, mus, covs, problem)
+            _Pr = integrate_gmm_over_box_whitened(ws, mus, covs, problem["X_event"])
             problem[Pr_key].append(_Pr)
     
     if(Pr_key == "Pr_ut"):
@@ -269,7 +223,7 @@ def estimate_event_probability(problem, Pr_key):
             ws = ws.reshape(-1,)
             mus = mus.reshape((-1, D))
             covs = covs.reshape((-1, D, D))
-            _Pr = integrate_gmm_over_box_whitened(ws, mus, covs, problem)
+            _Pr = integrate_gmm_over_box_whitened(ws, mus, covs, problem["X_event"])
             problem[Pr_key].append(_Pr)
 
     if(Pr_key == "Pr_gmm"):
@@ -279,10 +233,35 @@ def estimate_event_probability(problem, Pr_key):
             ws = ws.reshape(-1,)
             mus = mus.reshape((-1, D))
             covs = covs.reshape((-1, D, D))
-            _Pr = integrate_gmm_over_box_whitened(ws, mus, covs, problem)
+            _Pr = integrate_gmm_over_box_whitened(ws, mus, covs, problem["X_event"])
             problem[Pr_key].append(_Pr)
 
     return problem
+
+
+def plot_est_summary(problem):
+    set_publication_plot_style()
+    fig, axs = plt.subplots()
+    tspan_ref = problem["time_points_ref"]
+    Pr_ref = np.array(problem["Pr_ref"])
+    tspan = problem["time_points"]
+
+    axs.plot(tspan_ref, Pr_ref, label=r'$\mathbb{P}_{\text{ref}}(X)$', 
+         linestyle='None', 
+         marker='o', 
+         markersize=12, 
+         markeredgewidth=2.0,
+         markerfacecolor='white',  # Sets the fill color to white
+         markeredgecolor='black')  # Sets the edge color to white
+    
+    for idx, key in enumerate(problem["Pr_keys"]):
+        axs.plot(tspan, problem[key], linestyle=linestyles_4set[idx],
+                 color=colors_4set[idx], marker=markers_4set[idx], label=problem["Pr_keys_labels"][idx])
+
+    axs.set_xlabel("t")
+    axs.set_ylabel("Probability")
+    plt.legend(ncol=1, loc="best")
+    custom_save_plot(True, "figs/prob_est.pdf")
 
 
 def plot_summary(problem, result_label):
@@ -308,23 +287,35 @@ def plot_summary(problem, result_label):
          markeredgecolor='black')  # Sets the edge color to white
     
     for idx, key in enumerate(problem["Pr_keys"]):
-        axs.plot(tspan, problem[key], linestyle=linestyles_set[idx],
-                 color=colors_set[idx], marker=markers_set[idx], label=problem["Pr_keys_labels"][idx])
+        axs.plot(tspan, problem[key], linestyle=linestyles_4set[idx],
+                 color=colors_4set[idx], marker=markers_4set[idx], label=problem["Pr_keys_labels"][idx])
 
-    axs.fill_between(
-        tspan,
-        Pr_lower, Pr_upper,
-        color='black',
-        alpha=0.3,
-        label=r"Bounds $\mathbb{P}^-, \mathbb{P}^+$"
-    )
+    # axs.fill_between(
+    #     tspan,
+    #     Pr_lower, Pr_upper,
+    #     color='black',
+    #     alpha=0.3,
+    #     label=r"Bounds $\mathbb{P}^-, \mathbb{P}^+$"
+    # )
+
+    # problem_coarse = load_problem_result_npz("output/solver_Nx1_Ndeg10_GMMguide1_Cheap0.npz")
+    # Pr_lower = np.array(problem_coarse["Pr_opt_lower"])
+    # Pr_upper = np.array(problem_coarse["Pr_opt_upper"])
+    # axs.fill_between(
+    #     tspan,
+    #     Pr_lower, Pr_upper,
+    #     color='black',
+    #     alpha=0.1,
+    #     label=r"Bounds $\mathbb{P}^-, \mathbb{P}^+$ (Coarse)"
+    # )
+
     # axs.plot(tspan, Pr_lower, color=lower_color)
     # axs.plot(tspan, Pr_upper, color=upper_color)
+
     axs.set_xlabel("t")
     axs.set_ylabel("Probability")
-    # axs.set_ylim([0, min(1., Pr_upper.max()*1.5)])
-    axs.set_ylim([0, 0.72])
-    plt.legend()
+    axs.set_ylim([-0.01, min(1., Pr_upper.max()*1.5)])
+    plt.legend(ncol=2)
     custom_save_plot(True, "figs/"+result_label+".pdf")
 
 
@@ -334,19 +325,20 @@ def main():
     # p_net, e1_net, _ = load_model_by_key(trained_models, key="PINN-XL_bias")
     p_net_gmm, e1_net_gmm, _ = load_model_by_key(trained_models, key="PINN-GMM_bias")
     networks = (p_net_gmm, e1_net_gmm)
+    data_lp = PropagationData(SAVE_PATH_LINEAR_PROPAGATE)
 
     # Setup problem
     problem = {
         "D": 6,
-        "N_x": 2, 
+        "N_x": 1, 
         "N_degree": 1, 
-        "use_event_guidance": True, "use_gmm_guidance": False, 
-        "cap_per_degree" : 1,
+        "use_event_guidance": False, "use_gmm_guidance": False, 
+        "cap_per_degree" : 256,
         "cheap": False,
         "verbose_refine": True,
         "X_dom": constants._NX_RANGE_NP,
         "time_points_ref": constants.T_PRIME_SPAN,
-        "time_points": constants.T_PRIME_SPAN,
+        "time_points": data_lp.data["times"],
         "networks": networks
     }
     result_label = "solver_Nx{:d}_Ndeg{:d}_GMMguide{:d}_Cheap{:d}".format(
@@ -373,11 +365,26 @@ def main():
         problem = estimate_event_probability(problem, Pr_key=key)
 
     # logout
+    print("time: ", end="\t"); print_list(problem["time_points"])
     print("Pr ref: ", end="\t")
     print_list(problem["Pr_ref"])
     for key in problem["Pr_keys"]:
         print(key, ": ", end="\t",)
         print_list(problem[key])
+
+    # plot probability estimate only
+    plot_est_summary(problem)
+    plt.show()
+    return
+
+    # visualize X_event
+    # data_lp = PropagationData(SAVE_PATH_LINEAR_PROPAGATE)
+    # data_ut = PropagationData(SAVE_PATH_UNSCENT_PROPAGATE)
+    # data_gmm = PropagationData(SAVE_PATH_GMM_PROPAGATE)
+    # plot_event_triptych_simple(constants, problem["X_event"], 0.3, 
+    #         p_net_gmm=p_net_gmm, data_lp=data_lp, data_ut=data_ut, data_gmm=data_gmm)
+    # plt.show()
+    # return
 
     # Solving
     if(COMPUTE):
