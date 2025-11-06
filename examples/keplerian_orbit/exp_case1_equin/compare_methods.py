@@ -12,7 +12,7 @@ import sys
 from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]   # repo_root
 sys.path.insert(0, str(ROOT))
-from utilities._General.neuralnetworks import PNet_XL, ENet_XL, TimeToGMM_V0, load_trained_model
+from utilities._General.neuralnetworks import PNet_XL, ENet_XL, TimeToGMM_V0, TimeToGMM_NoEncoder, load_trained_model
 from utilities._General.util import compute_volume, save_metrics_npz, load_metrics_npz, p_total_variation, plot_training_history
 from utilities._General.baseline_methods import PropagationData
 from utilities._General.classic_gmm import make_gmm_pdf
@@ -435,6 +435,7 @@ def config_trained_models():
         # "PINN-MLP_bias_reg": "output/pinn-xl_bias_reg",
         "PINN-GMM_vanilla" : "output/pinn-gmm_vanilla",
         # "PINN-GMM" : "output/pinn-gmm",
+        "PINN-GMM-noencoder": "output/pinn-gmm-noencoder",
         "PINN-GMM_bias" : "output/pinn-gmm_bias",
     }
     return trained_models
@@ -511,6 +512,19 @@ def load_model_by_key(trained_models, key=""):
         del _p
         return p_net, e1_net, rar_samples
     
+    if(key == "PINN-GMM-noencoder"):
+        p_net = TimeToGMM_NoEncoder(constants, K=5, alpha_floor=0.01)
+        p_net = load_trained_model(p_net, path=KEY_PATH+"/p_net.pth"); p_net.eval()
+        e1_net = None
+        # rar_samples = None
+        _p = Path(KEY_PATH) / "p_net-RARsamples.npz"
+        if _p.is_file(): 
+            rar_samples = np.load(_p)
+        else:
+            rar_samples = None
+        del _p
+        return p_net, e1_net, rar_samples
+    
     if(key == "PINN-GMM_bias"):
         p_net = TimeToGMM_V0(constants, K=5, alpha_floor=0.01)
         p_net = load_trained_model(p_net, path=KEY_PATH+"/p_net.pth"); p_net.eval()
@@ -564,7 +578,7 @@ def main():
     )
     
     # --- plot training history ---
-    # plot_training_history(trained_models)
+    plot_training_history(trained_models)
         
 
 if __name__ == "__main__":

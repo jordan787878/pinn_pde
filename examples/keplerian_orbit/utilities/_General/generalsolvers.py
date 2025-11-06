@@ -354,22 +354,26 @@ def build_partition_and_bounds(
 ):
     """
     Vectorized and flat. Core process:
-      (1) Event-volume coverage refinement (boundary-only) until epsilon-close.
-      (2) Gap-based refinement over X_dom.
-    Structure preserved; loops are clean and short.
+      (1) Event-face alignment (optional, one-shot).
+      (2) Gap-based refinement: event-intersection pass (optional) then global pass (always).
     """
 
     # -------------------
     # Unpack & sanity
     # -------------------
+    import os
+    import numpy as np
+
     X_dom   = np.asarray(problem["X_dom"],   float)  # (D,2)
     X_event = np.asarray(problem["X_event"], float)  # (D,2)
     N_x     = problem["N_x"]
     D       = int(X_dom.shape[0])
     B1      = float(problem.get("B1", 0.0))
-    if B1 < 0: raise ValueError("B1 must be nonnegative.")
+    if B1 < 0:
+        raise ValueError("B1 must be nonnegative.")
     r = int(refine_factor)
-    if r < 2: raise ValueError("refine_factor must be >= 2")
+    if r < 2:
+        raise ValueError("refine_factor must be >= 2")
 
     # -------------------
     # Helpers
@@ -387,9 +391,11 @@ def build_partition_and_bounds(
                     parallel=False, n_workers=1, chunk_size=1024)
 
     def _as_Nvec(N_x):
-        if np.isscalar(N_x): return np.full(D, int(N_x), dtype=int)
+        if np.isscalar(N_x):
+            return np.full(D, int(N_x), dtype=int)
         Nvec = np.asarray(N_x, int)
-        if Nvec.shape != (D,): raise ValueError("N_x must be int or shape (D,)")
+        if Nvec.shape != (D,):
+            raise ValueError("N_x must be int or shape (D,)")
         return Nvec
 
     def _make_uniform_grid(X_dom, Nvec):
@@ -409,7 +415,6 @@ def build_partition_and_bounds(
     def _event_masks(midpts, widths):
         """
         Half-open cells: [lo, hi) in each dim.
-        After align_grid_to_event_faces(...), intersects == inside (up to eps).
         intersects: non-empty intersection with closed X_event
         inside:     cell ⊆ closed X_event
         """
@@ -417,26 +422,24 @@ def build_partition_and_bounds(
         lo   = midpts - half
         hi   = midpts + half
         # Intersection with closed box, using half-open cells:
-        #   [lo,hi) ∩ [ev_lo,ev_hi] ≠ ∅  ⇔  hi > ev_lo  and  lo < ev_hi  (per dim)
-        # eps provides a tiny tolerance.
         intersects = np.all((hi > ev_lo) & (lo < ev_hi), axis=1)
         # Containment in closed box (boundary allowed):
-        #   [lo,hi) ⊆ [ev_lo,ev_hi]  ⇔  lo ≥ ev_lo  and  hi ≤ ev_hi  (per dim)
         inside = np.all((lo >= ev_lo) & (hi <= ev_hi), axis=1)
-
         return intersects, inside
 
     def _volumes(wid, out_dtype=dtype):
         return np.prod(wid.astype(np.float64), axis=1).astype(out_dtype)
 
     def _gap_mass(p_min, p_max, widths):
-        # identical to log10((p_max - p_min) * volume)
+        # log10((p_max - p_min) * volume)
         return np.log10((p_max - p_min).astype(np.float64)) + np.log10(_volumes(widths, out_dtype=np.float64))
 
     def _top_k_desc(scores, k):
         n = scores.size
-        if k <= 0: return np.empty(0, dtype=int)
-        if k >= n: return np.argsort(scores)[::-1]
+        if k <= 0:
+            return np.empty(0, dtype=int)
+        if k >= n:
+            return np.argsort(scores)[::-1]
         part = np.argpartition(scores, n - k)[n - k:]
         return part[np.argsort(scores[part])[::-1]]
 
@@ -449,7 +452,8 @@ def build_partition_and_bounds(
         lo = mid - half; hi = mid + half
 
         straddle = (lo[:, dim] < face) & (hi[:, dim] > face)
-        if not np.any(straddle): return mid, wid
+        if not np.any(straddle):
+            return mid, wid
 
         keep = ~straddle
         mid_keep, wid_keep = mid[keep], wid[keep]
@@ -458,16 +462,16 @@ def build_partition_and_bounds(
         lo_s,  hi_s  = lo[straddle],  hi[straddle]
 
         # lower child: [lo, face)
-        wid_low        = wid_s.copy()
+        wid_low         = wid_s.copy()
         wid_low[:, dim] = np.maximum(face - lo_s[:, dim], tiny)
-        mid_low        = mid_s.copy()
+        mid_low         = mid_s.copy()
         mid_low[:, dim] = lo_s[:, dim] + 0.5 * wid_low[:, dim]
 
         # upper child: [face, hi)
         wid_up         = wid_s.copy()
         wid_up[:, dim] = np.maximum(hi_s[:, dim] - face, tiny)
         mid_up         = mid_s.copy()
-        mid_up[:, dim]  = face + 0.5 * wid_up[:, dim]
+        mid_up[:, dim] = face + 0.5 * wid_up[:, dim]
 
         mid_new = np.concatenate([mid_keep, mid_low, mid_up], axis=0)
         wid_new = np.concatenate([wid_keep, wid_low, wid_up], axis=0)
@@ -478,10 +482,12 @@ def build_partition_and_bounds(
         for d in range(X_event.shape[0]):
             face = float(ev_lo[d])
             midpts, widths = _split_along_face(midpts, widths, d, face)
-            if verbose: print(f"    [align] after split at dim {d} low={face:.6g}: cells={midpts.shape[0]}")
+            if verbose:
+                print(f"    [align] after split at dim {d} low={face:.6g}: cells={midpts.shape[0]}")
             face = float(ev_hi[d])
             midpts, widths = _split_along_face(midpts, widths, d, face)
-            if verbose: print(f"    [align] after split at dim {d} high={face:.6g}: cells={midpts.shape[0]}")
+            if verbose:
+                print(f"    [align] after split at dim {d} high={face:.6g}: cells={midpts.shape[0]}")
         return midpts, widths
 
     # Precompute child placement (reused)
@@ -490,7 +496,9 @@ def build_partition_and_bounds(
     C     = int(sgrid.shape[0])
 
     def _refine(midpts, widths, p_min, p_max, sel_mask, tag):
-        if not np.any(sel_mask): return midpts, widths, p_min, p_max
+        if not np.any(sel_mask):
+            return midpts, widths, p_min, p_max
+
         keep_mask  = ~sel_mask
         kept_mid   = midpts[keep_mask]
         kept_wid   = widths[keep_mask]
@@ -540,39 +548,64 @@ def build_partition_and_bounds(
         **_fast_args(midpts.shape[0])
     )
 
-    # --- One-shot event alignment (direct method; linear growth) ---
+    # --- One-shot event alignment ---
     if use_event_guidance:
-        if verbose: print("[event-align] aligning grid to X_event faces (one shot)")
+        if verbose:
+            print("[event-align] aligning grid to X_event faces (one shot)")
         midpts, widths = align_grid_to_event_faces(midpts, widths, X_event, eps=eps, verbose=verbose)
-
-        # Recompute bounds only for the new grid once
+        # Recompute bounds once on the aligned grid
         p_min, p_max = gmm_bounds_over_cells(
             ws, mus, covs,
             midpts.astype(np.float64), widths.astype(np.float64),
             **_fast_args(midpts.shape[0])
         )
     else:
-        if verbose: print("[event-align] skipped (use_event_guidance=False)")
+        if verbose:
+            print("[event-align] skipped (use_event_guidance=False)")
 
     # ============================================================
-    # (2) Gap-based refinement loop — over entire X_dom
+    # (2) Gap-based refinement loop — event first (optional), then global
     # ============================================================
-    for level in range(levels):
-        if verbose: print(f"[gap {level+1}/{levels}] cells_before={midpts.shape[0]}")
-        gap_mass = _gap_mass(p_min, p_max, widths)
-        if not use_gmm_guidance:
-            if verbose: print("    [gap] skipped (use_gmm_guidance=False)")
-            continue
-        M = midpts.shape[0]
-        k = _budget(cap_per_degree, M)
-        sel = _top_k_desc(gap_mass, k) if k > 0 else np.empty(0, int)
-        if sel.size == 0:
-            if verbose: print(f"    [gap] parents=0 (cap={cap_per_degree})")
-            continue
+    def _select_and_refine(pool_idx, tag):
+        """Pick top-k from pool_idx by gap_mass and refine; returns True if refined."""
+        nonlocal midpts, widths, p_min, p_max, gap_mass
+        if pool_idx.size == 0:
+            if verbose:
+                print(f"    {tag} parents=0 (cap={cap_per_degree}, pool=0)")
+            return False
+        k = _budget(cap_per_degree, pool_idx.size)
+        if k <= 0:
+            if verbose:
+                print(f"    {tag} parents=0 (cap={cap_per_degree}, pool={pool_idx.size})")
+            return False
+        sel_local = _top_k_desc(gap_mass[pool_idx], k)
+        sel = pool_idx[sel_local]
         if verbose:
-            print(f"    [gap] parents={sel.size} (cap={cap_per_degree}) | top_gap_mass(log10) max={float(np.max(gap_mass[sel])):.3e}")
-        mask = np.zeros(M, dtype=bool); mask[sel] = True
-        midpts, widths, p_min, p_max = _refine(midpts, widths, p_min, p_max, mask, "[gap]")
+            print(f"    {tag} parents={sel.size} (cap={cap_per_degree}, pool={pool_idx.size}) | "
+                  f"top_gap_mass(log10) max={float(np.max(gap_mass[sel])):.3e}")
+        mask = np.zeros(midpts.shape[0], dtype=bool); mask[sel] = True
+        midpts, widths, p_min, p_max = _refine(midpts, widths, p_min, p_max, mask, tag)
+        return True
+
+    if use_gmm_guidance:
+        for level in range(levels):
+            if verbose:
+                print(f"[gap {level+1}/{levels}] cells_before={midpts.shape[0]}")
+
+            # # -------- (A) event-intersection pass (optional) --------
+            # if use_event_guidance:
+            #     gap_mass = _gap_mass(p_min, p_max, widths)
+            #     inter_event, _ = _event_masks(midpts, widths)
+            #     pool_idx = np.flatnonzero(inter_event)
+            #     _select_and_refine(pool_idx, "[gap:event]")
+
+            # -------- (B) global pass (always) --------
+            gap_mass = _gap_mass(p_min, p_max, widths)  # recompute after (A)
+            pool_idx = np.arange(midpts.shape[0])       # all cells
+            _select_and_refine(pool_idx, "[gap:global]")
+    else:
+        if verbose:
+            print("[gap] skipped (use_gmm_guidance=False)")
 
     # -------------------
     # Finalize & return
@@ -773,7 +806,7 @@ def waterfill_lower(problem, total_mass=1.0, objective="mass"):
 
 
 def print_list(ls):
-    formatted_numbers = [f"{num:.4f}" for num in ls]
+    formatted_numbers = [f"{num:.4e}" for num in ls]
     # Use str.join() to combine the formatted strings with a comma
     output_string = ', '.join(formatted_numbers)
     print(output_string)

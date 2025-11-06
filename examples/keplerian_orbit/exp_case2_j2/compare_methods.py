@@ -4,7 +4,7 @@ import argparse
 import torch
 from tqdm import tqdm
 from exp_utilities.constants import Case2_4D_Constants
-from exp_utilities.plot_util import plot_pdf_metrics, plot_full_corner, plt
+from exp_utilities.plot_util import plot_pdf_metrics, plot_full_corner, plot_corner_elem, plt
 from run_baseline import SAVE_PATH_LINEAR_PROPAGATE, SAVE_PATH_UNSCENT_PROPAGATE, SAVE_PATH_GMM_PROPAGATE
 from monte import p_init
 
@@ -357,9 +357,9 @@ def compute_pdf_variations(data_mc=None, p_net=None, p_net_gmm=None, p_net_gmm_v
         metrics["B1_pinngmm"].append(100. * 2. * e1_pinngmm_max/pdf_ref_max)
         print("[debug] B1_pinngmm: ", e1_pinngmm_max, pdf_ref_max)
         metrics["B1_pinn"].append(100. * 2. * e1_pinn_max/pdf_ref_max)
-        print("[debug] B1_pinn: ", e1_pinn_max, pdf_ref_max)
-
+        # print("[debug] B1_pinn: ", e1_pinn_max, pdf_ref_max)
         metrics["B1_pinngmm_raw"].append(2. * e1_pinngmm_max)
+        print("[debug] B1_pinngmm_raw: ", 2. * e1_pinngmm_max)
             
         print_metrics_block(metrics, idx)
 
@@ -395,7 +395,7 @@ def compare_corner_plots(data_mc=None, data_lp=None, data_ut=None, data_gmm=None
 
         # Full corner plot
         plot_full_corner(constants, t, X_ref, 
-                         PNet_XL_PATH=PNet_XL_PATH,
+                         PNet_XL_PATH=None,
                          p_net_gmm=p_net_gmm,
                          data_lp=None, 
                          data_ut=None,
@@ -409,10 +409,11 @@ def compare_corner_plots(data_mc=None, data_lp=None, data_ut=None, data_gmm=None
         #                  data_lp=data_lp, data_ut=data_ut, data_gmm=data_gmm,
         #                  p_net_gmm=p_net_gmm)
 
-        # # Single element plot 2D (x1, x6)
-        # plot_corner_elem(constants, t, X_ref, (1, 6),
-        #                  data_lp=data_lp, data_ut=data_ut, data_gmm=data_gmm,
-        #                  p_net_gmm=p_net_gmm)
+        # Single element plot 2D (x1, x6)
+        plot_corner_elem(constants, t, X_ref, (1, 4),
+                         data_lp=data_lp, data_ut=data_ut, data_gmm=data_gmm,
+                         p_net_gmm=p_net_gmm,
+                         save_plot=SAVEPLOT)
 
         plt.show()
 
@@ -424,7 +425,9 @@ def config_trained_models():
         # "PINN-MLP_bias": "output/pinn-xl_bias",
         # "PINN-XL_bias-test": "output/pinn-xl_bias-test",
         "PINN-GMM_vanilla" : "output/pinn-gmm_vanilla",
+        "PINN-GMM-noencoder": "output/pinn-gmm-noencoder",
         "PINN-GMM_bias" : "output/pinn-gmm_bias",
+        # "PINN-GMM_bias-test": "output/pinn-gmm_bias-test",
     }
     return trained_models
 
@@ -473,6 +476,20 @@ def load_model_by_key(trained_models, key=""):
             rar_samples = None
         del _p
         return p_net, e1_net, rar_samples
+    
+    if(key == "PINN-GMM_bias-test"):
+        p_net = TimeToGMM_V0(constants, D=4, K=5, alpha_floor=0.01)
+        p_net = load_trained_model(p_net, path=KEY_PATH+"/p_net.pth"); p_net.eval()
+        # e1_net = ENet_XL(constants, scale=scale_torch, normalize=scale_torch*0.02, input_feature=5)
+        # e1_net = load_trained_model(e1_net, path=KEY_PATH+"/e1_net.pth"); e1_net.eval()
+        e1_net = None
+        _p = Path(KEY_PATH) / "p_net-RARsamples.npz"
+        if _p.is_file(): 
+            rar_samples = np.load(_p)
+        else:
+            rar_samples = None
+        del _p
+        return p_net, e1_net, rar_samples
 
 
 def main():
@@ -508,7 +525,7 @@ def main():
     
     # --- plots ---
     compare_corner_plots(data_mc, 
-                         data_lp=data_lp, data_ut=None, data_gmm=data_gmm,
+                         data_lp=data_lp, data_ut=data_ut, data_gmm=data_gmm,
                          PNet_XL_PATH=None,
                          p_net_gmm=p_net_gmm
                          )

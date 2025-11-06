@@ -560,6 +560,7 @@ def train_pinngmm(p_net, config):
     RAR_eps = config["RAR_eps"]
     beta_incre = config["beta_incre"]
     bias_fac = config["bias_fac"]
+    x_range = config["x_range"]
     
     mean_head_params  = list(p_net.mean_head.parameters())
     tri_head_params   = list(p_net.tri_head.parameters())
@@ -574,6 +575,8 @@ def train_pinngmm(p_net, config):
     scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.95)
     sample_uniform_fn = lambda n: sample_res(n)
 
+    best_state = None
+    best_epoch = -1
     min_loss = np.inf
     loss_history = []
     x_bc_rar = torch.empty(0, x_dim, device=device)
@@ -593,7 +596,7 @@ def train_pinngmm(p_net, config):
         # np.testing.assert_equal(x_bc_new.shape[0], N0_samples_initial)
         x_res_new, t_res_new = rar_candidate_pool_mixed(
                 p_net, constants, N_cand=Nr_samples_initial, 
-                x_range = constants.NX_RANGE,
+                x_range = x_range,
                 bias_fac=bias_fac,
                 sample_uniform_fn=sample_uniform_fn, 
                 device=device)
@@ -662,16 +665,18 @@ def train_pinngmm(p_net, config):
                 print(f"--- Save Epoch: {epoch}, Loss: {loss.item():.4e}, IC: {mse_u.item():.4e}, Res: {mse_res.item():.4e} & {mse_tv.item():.4e}, Beta: {beta:.2f} ---")
             else:
                 print(f"--- Save Epoch: {epoch}, Loss: {loss.item():.4e}, IC: {mse_u.item():.4e}, Res: {mse_res.item():.4e}, Beta: {beta:.2f} ---")
-            if save_path is not None:
-                torch.save({
-                    'epoch': epoch, 'model_state_dict': p_net.state_dict(),
-                    'optimizer_state_dict': optimizer.state_dict(),
-                    'loss_history': loss_history, 'train_time': train_time,
-                }, save_path+"/p_net.pth")
-                np.savez(save_path+"/p_net-RARsamples.npz",
-                         X_BC_RAR=x_bc_rar,
-                         X_RES_RAR=x_res_rar,
-                         T_RES_RAR=t_res_rar)
+            best_epoch = epoch
+            best_state = copy.deepcopy(p_net.state_dict())
+            # if save_path is not None:
+            #     torch.save({
+            #         'epoch': epoch, 'model_state_dict': p_net.state_dict(),
+            #         'optimizer_state_dict': optimizer.state_dict(),
+            #         'loss_history': loss_history, 'train_time': train_time,
+            #     }, save_path+"/p_net.pth")
+            #     np.savez(save_path+"/p_net-RARsamples.npz",
+            #              X_BC_RAR=x_bc_rar,
+            #              X_RES_RAR=x_res_rar,
+            #              T_RES_RAR=t_res_rar)
             min_loss = loss.data
             beta = min(1.0, beta + beta_incre)
             FLAG = True
@@ -705,7 +710,7 @@ def train_pinngmm(p_net, config):
             # Add Residual points
             x_cand, t_cand = rar_candidate_pool_mixed(
                 p_net, constants, N_cand=N_RAR, 
-                x_range = constants.NX_RANGE,
+                x_range = x_range,
                 bias_fac=bias_fac,
                 sample_uniform_fn=sample_uniform_fn, device=device)
             x_cand = x_cand.detach().requires_grad_(True)
@@ -723,6 +728,15 @@ def train_pinngmm(p_net, config):
                 print(f"... RAR RES, Max residual error: {max_err:.4f}, t:", t_res_rar_new[0:3].data)
                 del topk, idx, x_res_rar_new, t_res_rar_new
             del res_vals, res_err, max_err, x_cand, t_cand
+    # After training
+    if save_path is not None and best_state is not None:
+        torch.save({
+            'epoch': best_epoch, 'model_state_dict': best_state,
+            'optimizer_state_dict': optimizer.state_dict(),
+            'loss_history': loss_history, 'train_time': train_time,
+        }, save_path+"/p_net.pth")
+        np.savez(save_path+"/p_net-RARsamples.npz", 
+            X_BC_RAR=x_bc_rar, X_RES_RAR=x_res_rar, T_RES_RAR=t_res_rar)
     
 def train_pinn_error(networks, config):
     """
@@ -761,6 +775,7 @@ def train_pinn_error(networks, config):
     RAR_eps = config["RAR_eps"]
     beta_incre = config["beta_incre"]
     bias_fac = config["bias_fac"]
+    x_range = config["x_range"]
     sample_uniform_fn = lambda n: sample_res(n)
     
     # --- Optimizer ---
@@ -819,7 +834,7 @@ def train_pinn_error(networks, config):
         # x_res_new, t_res_new = constants.sample_res_points_scaled(Nr_samples_initial)
         x_res_new, t_res_new = rar_candidate_pool_mixed(
             p_net, constants, N_cand=Nr_samples_initial, 
-            x_range = constants.NX_RANGE,
+            x_range = x_range,
             bias_fac=bias_fac,
             sample_uniform_fn=sample_uniform_fn, 
             device=device)
@@ -908,7 +923,7 @@ def train_pinn_error(networks, config):
             # xr_chk, tr_chk = constants.sample_res_points_scaled(N_RAR)
             xr_chk, tr_chk = rar_candidate_pool_mixed(
                 p_net, constants, N_cand=N_RAR, 
-                x_range = constants.NX_RANGE,
+                x_range = x_range,
                 bias_fac=bias_fac,
                 sample_uniform_fn=sample_uniform_fn, device=device)
             xr_chk = xr_chk.detach().requires_grad_(True)

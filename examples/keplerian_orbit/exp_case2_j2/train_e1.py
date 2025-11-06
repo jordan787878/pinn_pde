@@ -45,6 +45,7 @@ def config_training_ENet_XL(constants, fac=0.02, option=""):
         "iterations_per_rar": 100,
         "RAR_eps": 0.01,
         "bias_fac": 0.,
+        "x_range": constants.NX_RANGE,
     }
 
     if option == "pinn-xl":

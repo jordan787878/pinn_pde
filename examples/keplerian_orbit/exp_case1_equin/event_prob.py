@@ -147,21 +147,8 @@ def heaviest_component_mean(ws: np.ndarray, mus: np.ndarray):
 
 
 def set_static_X_event(problem):
-    # p_net, _ = problem["networks"]
-    # teval = 0.20
-    # ws, mus, covs = p_net.weights_means_covs_at(teval)
-    # ws = ws.detach().numpy()
-    # mus = mus.detach().numpy()
-    # covs = covs.detach().numpy()
-    # # Define the X_event as a random (0.1 - per dimension of the X_dom)
-    # _, bias_center, _ = heaviest_component_mean(ws, mus)
-    # bias_center = bias_center*1.05
-    # problem["X_event"] = sample_event_box(problem["X_dom"], seed=2, frac=0.16, bias=bias_center)
-    # return problem
-
-    # (Original Static)
     p_net, _ = problem["networks"]
-    teval = 0.30
+    teval = 0.18
     ws, mus, covs = p_net.weights_means_covs_at(teval)
     ws = ws.detach().numpy()
     mus = mus.detach().numpy()
@@ -169,19 +156,8 @@ def set_static_X_event(problem):
     # Define the X_event as a random (0.1 - per dimension of the X_dom)
     _, bias_center, _ = heaviest_component_mean(ws, mus)
     bias_center = bias_center*1.05
-    problem["X_event"] = sample_event_box(problem["X_dom"], seed=2, frac=0.5, bias=bias_center)
-    problem["X_event"][0, :] = np.array([-3.3,   -1.])
-    problem["X_event"][5, :] = np.array([90.0,    110.0])
+    problem["X_event"] = sample_event_box(problem["X_dom"], seed=2, frac=0.2, bias=bias_center)
     return problem
-
-    # (Dynamic) set the X_event
-    # _, bias_center, _ = heaviest_component_mean(ws, mus)
-    # problem["X_event"] = sample_event_box(problem["X_dom"], seed=2, bias=bias_center)
-    # print(problem["X_event"])
-    # Compute the reference true Probability
-    # Pr_ref = true_event_probability(problem, _t)
-    # problem["Pr_ref"].append(Pr_ref)
-    # print(_t, Pr_ref)
 
 
 def run_solver(problem):
@@ -264,6 +240,31 @@ def estimate_event_probability(problem, Pr_key):
     return problem
 
 
+def plot_est_summary(problem):
+    set_publication_plot_style()
+    fig, axs = plt.subplots()
+    tspan_ref = problem["time_points_ref"]
+    Pr_ref = np.array(problem["Pr_ref"])
+    tspan = problem["time_points"]
+
+    axs.plot(tspan_ref, Pr_ref, label=r'$\mathbb{P}_{\text{ref}}(X)$', 
+         linestyle='None', 
+         marker='o', 
+         markersize=12, 
+         markeredgewidth=2.0,
+         markerfacecolor='white',  # Sets the fill color to white
+         markeredgecolor='black')  # Sets the edge color to white
+    
+    for idx, key in enumerate(problem["Pr_keys"]):
+        axs.plot(tspan, problem[key], linestyle=linestyles_4set[idx],
+                 color=colors_4set[idx], marker=markers_4set[idx], label=problem["Pr_keys_labels"][idx])
+
+    axs.set_xlabel("t")
+    axs.set_ylabel("Probability")
+    plt.legend(ncol=1, loc="best")
+    custom_save_plot(True, "figs/prob_est.pdf")
+
+
 def plot_summary(problem, result_label):
     print(problem["X_event"])
     set_publication_plot_style()
@@ -279,7 +280,7 @@ def plot_summary(problem, result_label):
     Pr_lower = np.array(problem["Pr_opt_lower"])
     Pr_upper = np.array(problem["Pr_opt_upper"])
 
-    axs.plot(tspan_ref, Pr_ref, label=r'$\mathbb{P}_{\text{ref}}(X)$', 
+    axs.plot(tspan_ref, Pr_ref, label=r'$\mathbb{P}_{\text{ref}}$', 
          linestyle='None', 
          marker='o', 
          markersize=9, 
@@ -289,22 +290,38 @@ def plot_summary(problem, result_label):
     
     for idx, key in enumerate(problem["Pr_keys"]):
         axs.plot(tspan, problem[key], linestyle=linestyles_4set[idx],
-                 color=colors_4set[idx], marker=markers_4set[idx], label=problem["Pr_keys_labels"][idx])
+                 color=colors_4set[idx], marker=markers_4set[idx], 
+                 markersize=9,
+                 label=problem["Pr_keys_labels"][idx])
 
     axs.fill_between(
         tspan,
         Pr_lower, Pr_upper,
         color='black',
         alpha=0.3,
+        hatch = "//",
+        lw=2,
         label=r"Bounds $\mathbb{P}^-, \mathbb{P}^+$"
     )
+
+    problem_coarse = load_problem_result_npz("output/solver_Nx1_Ndeg10_GMMguide1_Cheap0.npz")
+    Pr_lower = np.array(problem_coarse["Pr_opt_lower"])
+    Pr_upper = np.array(problem_coarse["Pr_opt_upper"])
+    axs.fill_between(
+        tspan,
+        Pr_lower, Pr_upper,
+        color='black',
+        alpha=0.1,
+        label=r"Bounds $\mathbb{P}^-, \mathbb{P}^+$ (Coarse)"
+    )
+
     # axs.plot(tspan, Pr_lower, color=lower_color)
     # axs.plot(tspan, Pr_upper, color=upper_color)
+
     axs.set_xlabel("t")
     axs.set_ylabel("Probability")
-    # axs.set_ylim([0, min(1., Pr_upper.max()*1.5)])
-    axs.set_ylim([-0.05, 1.5*Pr_upper.max()])
-    plt.legend()
+    axs.set_ylim([-0.05, min(1.0, 1.5*Pr_upper.max())])
+    plt.legend(ncol=1)
     custom_save_plot(True, "figs/"+result_label+".pdf")
 
 
@@ -314,19 +331,20 @@ def main():
     # p_net, e1_net, _ = load_model_by_key(trained_models, key="PINN-XL_bias")
     p_net_gmm, e1_net_gmm, _ = load_model_by_key(trained_models, key="PINN-GMM_bias")
     networks = (p_net_gmm, e1_net_gmm)
+    data_lp = PropagationData(SAVE_PATH_LINEAR_PROPAGATE)
 
     # Setup problem
     problem = {
         "D": 6,
         "N_x": 1, 
-        "N_degree": 100, 
+        "N_degree": 500, 
         "use_event_guidance": True, "use_gmm_guidance": True, 
         "cap_per_degree" : 256,
         "cheap": False,
         "verbose_refine": True,
         "X_dom": constants._NX_RANGE_NP,
-        "time_points_ref": np.round(np.arange(0.3, 0.3+0.05, 0.05, dtype=np.float32),2),
-        "time_points": np.round(np.arange(0.3, 0.3+0.05, 0.05, dtype=np.float32),2),
+        "time_points_ref": np.round(np.arange(0., 0.3+0.05, 0.05, dtype=np.float32),2),
+        "time_points": data_lp.data["times"],# np.round(np.arange(0., 0.3+0.05, 0.05, dtype=np.float32),2),
         "networks": networks
     }
     result_label = "solver_Nx{:d}_Ndeg{:d}_GMMguide{:d}_Cheap{:d}".format(
@@ -344,10 +362,10 @@ def main():
     # Compute event probability estimates
     problem["Pr_keys"] = ["Pr_lp", "Pr_ut", "Pr_gmm", "Pr_pinngmm"]
     problem["Pr_keys_labels"] = [
-        r'$\mathbb{P}_{\text{GA}}(X)$',
-        r'$\mathbb{P}_{\text{UT}}(X)$',
-        r'$\mathbb{P}_{\text{GMM}}(X)$',
-        r'$\mathbb{P}_{\text{PINN-GMM}}(X)$'
+        r'$\mathbb{P}_{\text{GA}}$',
+        r'$\mathbb{P}_{\text{UT}}$',
+        r'$\mathbb{P}_{\text{GMM}}$',
+        r'$\mathbb{P}_{\text{PINN-GMM}}$'
     ]
     for key in problem["Pr_keys"]:
         problem = estimate_event_probability(problem, Pr_key=key)
@@ -358,6 +376,9 @@ def main():
     for key in problem["Pr_keys"]:
         print(key, ": ", end="\t",)
         print_list(problem[key])
+    # # plot probability estimate only
+    # plot_est_summary(problem)
+    # plt.show()
     # return
 
     # Solving
@@ -367,6 +388,12 @@ def main():
     
     # I/O
     problem_result = load_problem_result_npz(result_path)
+    problem_result["Pr_keys_labels"] = [
+        r'$\mathbb{P}_{\text{GA}}$',
+        r'$\mathbb{P}_{\text{UT}}$',
+        r'$\mathbb{P}_{\text{GMM}}$',
+        r'$\mathbb{P}_{\text{PINN-GMM}}$'
+    ]
     plot_summary(problem_result, result_label)
 
     # Visualize X_event with PDFs

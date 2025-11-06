@@ -9,7 +9,7 @@ from matplotlib.lines import Line2D
 from matplotlib.colors import LogNorm
 from matplotlib.ticker import MaxNLocator
 from mpl_toolkits.mplot3d import Axes3D  # noqa: F401  (needed for 3D projection)
-from matplotlib.patches import Patch
+from matplotlib.patches import Patch, Rectangle
 
 import sys
 from pathlib import Path
@@ -323,201 +323,228 @@ def plot_full_corner(constants, t, X_samples,
     custom_save_plot(save_plot, save_path)
 
 
-# def plot_corner_elem(constants, t, X_samples, dims,
-#     *,
-#     bins=256,
-#     labels=None,
-#     ranges="auto",     # "fixed" (from constants) or "auto"
-#     pad_frac=0.03,
-#     cmap="bwr",
-#     log_counts=True,
-#     PNet_XL_PATH=None,
-#     p_net_gmm_N1=None,
-#     p_net_gmm=None,
-#     data_lp=None,
-#     data_ut=None,
-#     data_gmm=None,
-# ):
-#     """
-#     dims = (i,) -> 1D histogram for x_i with model overlays (same colors_4set as full plot)
-#     dims = (i,j) -> 2D heatmap for (x_i, x_j) with model contour overlays
-#     Indices in dims are 1-based.
-#     """
-#     set_publication_plot_style()
-#     X = np.asarray(X_samples)
-#     N, D = X.shape
-#     idx = tuple(int(k) - 1 for k in dims)
-#     if labels is None:
-#         labels = [f"x{k+1}" for k in range(D)]
+def plot_corner_elem(
+    constants, t, X_samples, dims,
+    *,
+    bins=256,
+    labels=None,
+    ranges="auto",     # "fixed" (from constants) or "auto"
+    pad_frac=0.03,
+    cmap="bwr",
+    log_counts=True,
+    PNet_XL_PATH=None,
+    p_net_gmm_N1=None,
+    p_net_gmm=None,
+    data_lp=None,
+    data_ut=None,
+    data_gmm=None,
+    save_plot=False,
+):
+    """
+    dims = (i,) -> 1D histogram for x_i with model overlays (same colors_4set as full plot)
+    dims = (i,j) -> 2D heatmap for (x_i, x_j) with model contour overlays
+    Indices in dims are 1-based.
+    """
+    set_publication_plot_style()
+    X = np.asarray(X_samples)
+    N, D = X.shape
+    idx = tuple(int(k) - 1 for k in dims)
+    if labels is None:
+        labels = [f"x{k+1}" for k in range(D)]
 
-#     hist_color = plt.cm.bwr(0.35)          # keep your diagonal histogram color
-#     hist_edge  = plt.cm.bwr(0.35)
+    hist_color = plt.cm.bwr(0.35)          # keep your diagonal histogram color
+    hist_edge  = plt.cm.bwr(0.35)
 
-#     # ---------- range helpers ----------
-#     def _fixed_range(k):
-#         lo, hi = getattr(constants, f"X{k+1}_RANGE")
-#         return float(lo), float(hi)
+    # ---------- range helpers ----------
+    def _fixed_range(k):
+        lo, hi = getattr(constants, f"X{k+1}_RANGE")
+        return float(lo), float(hi)
 
-#     def _auto_range(arr):
-#         lo, hi = float(np.min(arr)), float(np.max(arr))
-#         span = hi - lo
-#         pad = pad_frac * (span if span > 0 else 1.0)
-#         return lo - pad, hi + pad
+    def _auto_range(arr):
+        lo, hi = float(np.min(arr)), float(np.max(arr))
+        span = hi - lo
+        pad = pad_frac * (span if span > 0 else 1.0)
+        return lo - pad, hi + pad
 
-#     # ---------- 1D (diagonal) ----------
-#     if len(idx) == 1:
-#         k = idx[0]
-#         lo, hi = (_fixed_range(k) if ranges == "fixed" else _auto_range(X[:, k]))
-#         fig, ax = plt.subplots(figsize=(4, 3))
+    # ---------- 1D (diagonal) ----------
+    if len(idx) == 1:
+        k = idx[0]
+        lo, hi = (_fixed_range(k) if ranges == "fixed" else _auto_range(X[:, k]))
+        fig, ax = plt.subplots()
 
-#         ax.hist(
-#             X[:, k], bins=bins, range=(lo, hi),
-#             histtype="stepfilled", alpha=1.0, density=True,
-#             color=hist_color, edgecolor=hist_edge
-#         )
-#         ax.yaxis.set_major_locator(MaxNLocator(nbins=4, prune="both"))
-#         ax.set_xlabel(labels[k]); ax.set_ylabel("density")
-#         ax.set_xlim(lo, hi)
+        ax.hist(
+            X[:, k], bins=bins, range=(lo, hi),
+            histtype="stepfilled", alpha=1.0, density=True,
+            color=hist_color, edgecolor=hist_edge
+        )
+        ax.yaxis.set_major_locator(MaxNLocator(nbins=4, prune="both"))
+        ax.set_xlabel(x_axis_labels[k]); ax.set_ylabel("density")
+        ax.set_xlim(lo, hi)
 
-#         # ---- overlays (keep same colors_4set/logic as your full function) ----
-#         # PINN precomputed 1D
-#         def _plot_pinn_1d_marginal(k1b):  # k1b = 1-based
-#             if PNet_XL_PATH is None: return
-#             fn = f"{PNet_XL_PATH}/pre_compute/marginal_pdfpinn_x{k1b}_t{t:.3f}.npz"
-#             if os.path.exists(fn):
-#                 data = np.load(fn)
-#                 ax.plot(data["X_grid"], data["pdf"], color=colors_4set[-1])
+        # ---- overlays (keep same colors_4set/logic as your full function) ----
+        # PINN precomputed 1D
+        # def _plot_pinn_1d_marginal(k1b):  # k1b = 1-based
+        #     if PNet_XL_PATH is None: return
+        #     fn = f"{PNet_XL_PATH}/pre_compute/marginal_pdfpinn_x{k1b}_t{t:.3f}.npz"
+        #     if os.path.exists(fn):
+        #         data = np.load(fn)
+        #         ax.plot(data["X_grid"], data["pdf"], color=colors_4set[-1])
+        # _plot_pinn_1d_marginal(k+1)
 
-#         _plot_pinn_1d_marginal(k+1)
+        # p_net_gmm (mixture’s 1D marginal)
+        x_vals = np.linspace(lo, hi, 256)
 
-#         # p_net_gmm (mixture’s 1D marginal)
-#         x_vals = np.linspace(lo, hi, 256)
+        if p_net_gmm is not None:
+            ws, mus, covs = p_net_gmm.weights_means_covs_at(t)
+            ws, mus, covs = (ws.detach().cpu().numpy(),
+                             mus.detach().cpu().numpy(),
+                             covs.detach().cpu().numpy())
+            pdf = np.zeros_like(x_vals)
+            for c in range(ws.shape[0]):
+                pdf += ws[c] * multivariate_normal(mean=mus[c, k], cov=covs[c, k, k]).pdf(x_vals)
+            ax.plot(x_vals, pdf, color=colors_4set[3])
 
-#         if p_net_gmm is not None:
-#             ws, mus, covs = p_net_gmm.weights_means_covs_at(t)
-#             ws, mus, covs = (ws.detach().cpu().numpy(),
-#                              mus.detach().cpu().numpy(),
-#                              covs.detach().cpu().numpy())
-#             pdf = np.zeros_like(x_vals)
-#             for c in range(ws.shape[0]):
-#                 pdf += ws[c] * multivariate_normal(mean=mus[c, k], cov=covs[c, k, k]).pdf(x_vals)
-#             ax.plot(x_vals, pdf, color=colors_4set[0])
+        # linear prop (Gaussian)
+        if data_lp is not None:
+            _, _, mu6, P6 = data_lp.get(t)
+            ax.plot(x_vals, multivariate_normal(mu6[k], P6[k, k]).pdf(x_vals), color=colors_4set[0])
 
-#         # linear prop (Gaussian)
-#         if data_lp is not None:
-#             _, _, mu6, P6 = data_lp.get(t)
-#             ax.plot(x_vals, multivariate_normal(mu6[k], P6[k, k]).pdf(x_vals), color=colors_4set[3])
+        # UT (Gaussian)
+        if data_ut is not None:
+            _, _, mu6, P6 = data_ut.get(t)
+            ax.plot(x_vals, multivariate_normal(mu6[k], P6[k, k]).pdf(x_vals), color=colors_4set[1])
 
-#         # UT (Gaussian)
-#         if data_ut is not None:
-#             _, _, mu6, P6 = data_ut.get(t)
-#             ax.plot(x_vals, multivariate_normal(mu6[k], P6[k, k]).pdf(x_vals), color=colors_4set[4])
+        if data_gmm is not None:
+            _, ws, mus, covs = data_gmm.get(t)
+            pdf = np.zeros_like(x_vals)
+            for c in range(ws.shape[0]):
+                pdf += ws[c] * multivariate_normal(mean=mus[c, k], cov=covs[c, k, k]).pdf(x_vals)
+            ax.plot(x_vals, pdf, color=colors_4set[2])
 
-#         if data_gmm is not None:
-#             _, ws, mus, covs = data_gmm.get(t)
-#             pdf = np.zeros_like(x_vals)
-#             for c in range(ws.shape[0]):
-#                 pdf += ws[c] * multivariate_normal(mean=mus[c, k], cov=covs[c, k, k]).pdf(x_vals)
-#             ax.plot(x_vals, pdf, color=colors_4set[5])
+        return fig, ax
 
-#         return fig, ax
+    # ---------- 2D (off-diagonal heatmap) ----------
+    i, j = idx
+    xlo, xhi = (_fixed_range(i) if ranges == "fixed" else _auto_range(X[:, i]))
+    ylo, yhi = (_fixed_range(j) if ranges == "fixed" else _auto_range(X[:, j]))
 
-#     # ---------- 2D (off-diagonal heatmap) ----------
-#     i, j = idx
-#     xlo, xhi = (_fixed_range(i) if ranges == "fixed" else _auto_range(X[:, i]))
-#     ylo, yhi = (_fixed_range(j) if ranges == "fixed" else _auto_range(X[:, j]))
+    H, xe, ye = np.histogram2d(X[:, i], X[:, j], bins=bins,
+                               range=[(xlo, xhi), (ylo, yhi)])
+    H = H.T
 
-#     H, xe, ye = np.histogram2d(X[:, i], X[:, j], bins=bins,
-#                                range=[(xlo, xhi), (ylo, yhi)])
-#     H = H.T
+    fig, ax = plt.subplots()
+    apply_default_locators(ax)
+    set_publication_plot_style()
+    if log_counts:
+        pos = H[H > 0]
+        vmin = float(pos.min()) if pos.size else 1.0
+        vmax = float(pos.max()) if pos.size else 1.0
+        norm = LogNorm(vmin=vmin, vmax=vmax)
+    else:
+        norm = None
 
-#     fig, ax = plt.subplots(figsize=(4, 4))
-#     if log_counts:
-#         pos = H[H > 0]
-#         vmin = float(pos.min()) if pos.size else 1.0
-#         vmax = float(pos.max()) if pos.size else 1.0
-#         norm = LogNorm(vmin=vmin, vmax=vmax)
-#     else:
-#         norm = None
+    ax.imshow(
+        H, origin="lower",
+        extent=(xlo, xhi, ylo, yhi),
+        aspect="auto", cmap=cmap, norm=norm, interpolation="nearest",
+        alpha=0.5
+    )
 
-#     ax.imshow(
-#         H, origin="lower",
-#         extent=(xlo, xhi, ylo, yhi),
-#         aspect="auto", cmap=cmap, norm=norm, interpolation="nearest",
-#         alpha=0.5
-#     )
+    # contour helpers (same levels/colors_4set as your full function)
+    relative_levels = np.array([0.01, 0.05, 0.50, 0.95])
 
-#     # contour helpers (same levels/colors_4set as your full function)
-#     relative_levels = np.array([0.01, 0.05, 0.50, 0.95])
+    # def _plot_pinn_2d_contour(i1b, j1b):
+    #     if PNet_XL_PATH is None: return
+    #     fn = f"{PNet_XL_PATH}/pre_compute/marginal_pdfpinn_x{i1b}_x{j1b}_t{t:.3f}.npz"
+    #     if os.path.isfile(fn):
+    #         data = np.load(fn)
+    #         pdf = data["pdf"]
+    #         Xg, Yg = data["X_grid"], data["Y_grid"]
+    #         pdf_max = float(np.max(pdf[pdf > 0])) if np.any(pdf > 0) else 1.0
+    #         levels = relative_levels * pdf_max
+    #         ax.contour(Xg, Yg, pdf, levels=levels, colors=[colors_4set[1]], linewidths=1.0)
 
-#     def _plot_pinn_2d_contour(i1b, j1b):
-#         if PNet_XL_PATH is None: return
-#         fn = f"{PNet_XL_PATH}/pre_compute/marginal_pdfpinn_x{i1b}_x{j1b}_t{t:.3f}.npz"
-#         if os.path.isfile(fn):
-#             data = np.load(fn)
-#             pdf = data["pdf"]
-#             Xg, Yg = data["X_grid"], data["Y_grid"]
-#             pdf_max = float(np.max(pdf[pdf > 0])) if np.any(pdf > 0) else 1.0
-#             levels = relative_levels * pdf_max
-#             ax.contour(Xg, Yg, pdf, levels=levels, colors=[colors_4set[1]], linewidths=1.0)
+    def _plot_gmm_contour(ws, mus, covs, color):
+        xs = np.linspace(xlo, xhi, 256)
+        ys = np.linspace(ylo, yhi, 256)
+        Xg, Yg = np.meshgrid(xs, ys, indexing="ij")
+        pts = np.column_stack([Xg.ravel(), Yg.ravel()])
+        pdf = np.zeros_like(Xg, dtype=float)
+        for c in range(ws.shape[0]):
+            mu_ij = mus[c, [i, j]]
+            cov_ij = covs[c][np.ix_([i, j], [i, j])]
+            pdf += ws[c] * multivariate_normal(mu_ij, cov_ij).pdf(pts).reshape(Xg.shape)
+        pdf_max = float(np.max(pdf)) if np.any(pdf > 0) else 1.0
+        levels = relative_levels * pdf_max
+        ax.contour(Xg, Yg, pdf, levels=levels, colors=[color], linewidths=1.5)
 
-#     def _plot_gmm_contour(ws, mus, covs, color):
-#         xs = np.linspace(xlo, xhi, 256)
-#         ys = np.linspace(ylo, yhi, 256)
-#         Xg, Yg = np.meshgrid(xs, ys, indexing="ij")
-#         pts = np.column_stack([Xg.ravel(), Yg.ravel()])
-#         pdf = np.zeros_like(Xg, dtype=float)
-#         for c in range(ws.shape[0]):
-#             mu_ij = mus[c, [i, j]]
-#             cov_ij = covs[c][np.ix_([i, j], [i, j])]
-#             pdf += ws[c] * multivariate_normal(mu_ij, cov_ij).pdf(pts).reshape(Xg.shape)
-#         pdf_max = float(np.max(pdf)) if np.any(pdf > 0) else 1.0
-#         levels = relative_levels * pdf_max
-#         ax.contour(Xg, Yg, pdf, levels=levels, colors=[color], linewidths=1.0)
+    # PINN 2D
+    # _plot_pinn_2d_contour(i+1, j+1)
 
-#     # PINN 2D
-#     _plot_pinn_2d_contour(i+1, j+1)
+    # # p_net_gmm_N1
+    # if p_net_gmm_N1 is not None:
+    #     ws, mus, covs = p_net_gmm_N1.weights_means_covs_at(t)
+    #     _plot_gmm_contour(ws.detach().cpu().numpy(),
+    #                       mus.detach().cpu().numpy(),
+    #                       covs.detach().cpu().numpy(),
+    #                       colors_4set[0])
 
-#     # p_net_gmm_N1
-#     if p_net_gmm_N1 is not None:
-#         ws, mus, covs = p_net_gmm_N1.weights_means_covs_at(t)
-#         _plot_gmm_contour(ws.detach().cpu().numpy(),
-#                           mus.detach().cpu().numpy(),
-#                           covs.detach().cpu().numpy(),
-#                           colors_4set[0])
+    # p_net_gmm
+    if p_net_gmm is not None:
+        ws, mus, covs = p_net_gmm.weights_means_covs_at(t)
+        _plot_gmm_contour(ws.detach().cpu().numpy(),
+                          mus.detach().cpu().numpy(),
+                          covs.detach().cpu().numpy(),
+                          colors_4set[3])
 
-#     # p_net_gmm
-#     if p_net_gmm is not None:
-#         ws, mus, covs = p_net_gmm.weights_means_covs_at(t)
-#         _plot_gmm_contour(ws.detach().cpu().numpy(),
-#                           mus.detach().cpu().numpy(),
-#                           covs.detach().cpu().numpy(),
-#                           colors_4set[0])
+    # linear prop (Gaussian)
+    if data_lp is not None:
+        _, _, mu6, P6 = data_lp.get(t)
+        ws = np.array([1.0])
+        mus = np.array([mu6])
+        covs = np.array([P6])
+        _plot_gmm_contour(ws, mus, covs, colors_4set[0])
 
-#     # linear prop (Gaussian)
-#     if data_lp is not None:
-#         _, _, mu6, P6 = data_lp.get(t)
-#         ws = np.array([1.0])
-#         mus = np.array([mu6])
-#         covs = np.array([P6])
-#         _plot_gmm_contour(ws, mus, covs, colors_4set[3])
+    # UT (Gaussian)
+    if data_ut is not None:
+        _, _, mu6, P6 = data_ut.get(t)
+        ws = np.array([1.0])
+        mus = np.array([mu6])
+        covs = np.array([P6])
+        _plot_gmm_contour(ws, mus, covs, colors_4set[1])
 
-#     # UT (Gaussian)
-#     if data_ut is not None:
-#         _, _, mu6, P6 = data_ut.get(t)
-#         ws = np.array([1.0])
-#         mus = np.array([mu6])
-#         covs = np.array([P6])
-#         _plot_gmm_contour(ws, mus, covs, colors_4set[4])
+    # external GMM provider (same color as UT in your full code)
+    if data_gmm is not None:
+        _, ws, mus, covs = data_gmm.get(t)
+        _plot_gmm_contour(ws, mus, covs, colors_4set[2])
 
-#     # external GMM provider (same color as UT in your full code)
-#     if data_gmm is not None:
-#         _, ws, mus, covs = data_gmm.get(t)
-#         _plot_gmm_contour(ws, mus, covs, colors_4set[5])
+    # manual legends
+    cmap = plt.get_cmap('bwr')
+    c_low  = cmap(0.08)   # low density
+    c_high = cmap(0.92)   # high density
+    spacer = Line2D([0], [0], linestyle='None', marker=None, alpha=0.0, label='')
+    handles = [
+        Line2D([0], [0], color=colors_4set[0], lw=2, label='GA'),
+        Line2D([0], [0], color=colors_4set[1], lw=2, label='UT'),
+        Line2D([0], [0], color=colors_4set[2], lw=2, label='GMM'),
+        Line2D([0], [0], color=colors_4set[3], lw=2, label='PINN-GMM'),
+        
+        # # Density legend entries (marker-only squares)
+        # Line2D([0],[0], linestyle='None', marker='s', markersize=12,
+        #     markerfacecolor=c_low, markeredgecolor=c_low,
+        #     alpha=0.8, label='Ref. PDF, low  density'),
+        # Line2D([0],[0], linestyle='None', marker='s', markersize=12,
+        #     markerfacecolor=c_high, markeredgecolor=c_high,
+        #     alpha=0.8, label='Ref. PDF, high density'),
+        # spacer,
+        # spacer
+    ]
+    ax.legend(handles=handles, ncol=2, loc="best")
 
-#     ax.set_xlabel(labels[i]); ax.set_ylabel(labels[j])
-#     ax.set_xlim(xlo, xhi); ax.set_ylim(ylo, yhi)
-#     return fig, ax
+    ax.set_xlabel(x_axis_labels[i]); ax.set_ylabel(x_axis_labels[j])
+    ax.set_xlim(xlo, xhi); ax.set_ylim(ylo, yhi)
+    save_path = "figs/corner_element_t{:.2f}.pdf".format(t)
+    custom_save_plot(save_plot, save_path)
 
 
 def plot_pdf_metrics(metrics, save_plot=False):
@@ -637,3 +664,111 @@ def plot_pdf_metrics(metrics, save_plot=False):
     custom_save_plot(save_plot, save_path)
 
     plt.show()
+
+
+def plot_event_triptych_simple(constants, X_event, t, p_net_gmm=None, 
+        data_lp=None, data_ut=None, data_gmm=None):
+    """
+    X_event: (D,2) array for x = [a, P1, P2, Q1, Q2, lambda], D>=6.
+    Shows 1x3 panels for (a,lambda), (P1,P2), (Q1,Q2).
+    """   
+    D = 4 
+    def _plot_pinn_gmm_contour(x_ranges, ws, mus, covs, plot_axes, color):
+        xlo = x_ranges[plot_axes[0], 0]
+        xhi = x_ranges[plot_axes[0], 1]
+        ylo = x_ranges[plot_axes[1], 0]
+        yhi = x_ranges[plot_axes[1], 1]
+        relative_levels = np.array([0.01, 0.05, 0.50, 0.95])
+        xs = np.linspace(xlo, xhi, num=256, endpoint=True)
+        ys = np.linspace(ylo, yhi, num=256, endpoint=True)
+        X_grid, Y_grid = np.meshgrid(xs, ys, indexing="ij")
+        grid_pts = np.vstack([X_grid.ravel(), Y_grid.ravel()]).T
+        pdf_values = np.copy(X_grid) * 0.0
+        for k in range(ws.shape[0]):
+            ws_k = ws[k]
+            mus_k = mus[k, :]
+            covs_k = covs[k, :, :]
+            marginal_mu = mus_k[list(plot_axes)]
+            marginal_cov = covs_k[np.ix_(list(plot_axes), list(plot_axes))]
+            pdf_func = make_gmm_pdf(1., marginal_mu, marginal_cov)
+            p_k = pdf_func(grid_pts).reshape(X_grid.shape)
+            pdf_values = pdf_values + ws_k * p_k
+        pdf_max = np.max(pdf_values).item()
+        levels = relative_levels * pdf_max
+        ax.contour(X_grid, Y_grid, pdf_values, levels=levels, colors=[color], 
+                    linewidths=1.)
+        
+    def _plot_gmm_contour(x_ranges, ws, mus, covs, plot_axes, color):
+        xlo = x_ranges[plot_axes[0], 0]
+        xhi = x_ranges[plot_axes[0], 1]
+        ylo = x_ranges[plot_axes[1], 0]
+        yhi = x_ranges[plot_axes[1], 1]
+        relative_levels = np.array([0.01, 0.05, 0.50, 0.95])
+        xs = np.linspace(xlo, xhi, num=256, endpoint=True)
+        ys = np.linspace(ylo, yhi, num=256, endpoint=True)
+        X_grid, Y_grid = np.meshgrid(xs, ys, indexing="ij")
+        grid_pts = np.vstack([X_grid.ravel(), Y_grid.ravel()]).T
+        pdf_values = np.copy(X_grid) * 0.0
+        for k in range(ws.shape[0]):
+            ws_k = ws[k]
+            mus_k = mus[k, :]
+            covs_k = covs[k, :, :]
+            marginal_mu = mus_k[list(plot_axes)]
+            marginal_cov = covs_k[np.ix_(list(plot_axes), list(plot_axes))]
+            pdf_func = make_gmm_pdf(1., marginal_mu, marginal_cov)
+            p_k = pdf_func(grid_pts).reshape(X_grid.shape)
+            pdf_values = pdf_values + ws_k * p_k
+        pdf_max = np.max(pdf_values).item()
+        levels = relative_levels * pdf_max
+        ax.contour(X_grid, Y_grid, pdf_values, levels=levels, colors=[color], 
+                   linewidths=1.)
+
+    x_ranges = constants._NX_RANGE_NP
+          
+    pairs  = [(0, 1), (2, 3)]
+    labels = ['r', 'ph', 'r_dot', 'phi_dot']
+
+    set_publication_plot_style()
+    fig, axs = plt.subplots(1, 2, figsize=(6, 3), constrained_layout=True)
+
+    for ax, (ix, iy) in zip(axs, pairs):
+        x0, x1 = X_event[ix]
+        y0, y1 = X_event[iy]
+        print(x0, x1, y0, y1)
+        # simple 5% padding (fallback 1.0 if zero-width)
+        px = 0.05 * (x1 - x0 if x1 > x0 else 1.0)
+        py = 0.05 * (y1 - y0 if y1 > y0 else 1.0)
+
+        # ax.set_xlim(x0 - px, x1 + px)
+        # ax.set_ylim(y0 - py, y1 + py)
+        ax.set_xlabel(labels[ix])
+        ax.set_ylabel(labels[iy])
+
+        ax.add_patch(Rectangle((x0, y0), x1 - x0, y1 - y0,
+                               fill=False, edgecolor='tab:green',
+                               linewidth=2.0, linestyle='--'))
+        
+        if(p_net_gmm is not None):
+            ws, mus, covs = p_net_gmm.weights_means_covs_at(t)
+            ws = ws.detach().cpu().numpy()
+            mus = mus.detach().cpu().numpy()
+            covs = covs.detach().cpu().numpy()
+            _plot_pinn_gmm_contour(x_ranges, ws, mus, covs, [ix, iy], color=colors_4set[3])
+
+        if(data_lp is not None):
+            _, ws, mus, covs = data_lp.get(t)
+            mus = mus.reshape((-1, D))
+            covs = covs.reshape((-1, D, D))
+            _plot_gmm_contour(x_ranges, ws, mus, covs, [ix, iy], color=colors_4set[0])
+
+        if(data_ut is not None):
+            _, ws, mus, covs = data_ut.get(t)
+            mus = mus.reshape((-1, D))
+            covs = covs.reshape((-1, D, D))
+            _plot_gmm_contour(x_ranges, ws, mus, covs, [ix, iy], color=colors_4set[1])
+
+        if(data_gmm is not None):
+            _, ws, mus, covs = data_gmm.get(t)
+            mus = mus.reshape((-1, D))
+            covs = covs.reshape((-1, D, D))
+            _plot_gmm_contour(x_ranges, ws, mus, covs, [ix, iy], color=colors_4set[2])

@@ -8,7 +8,7 @@ import sys
 from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]   # repo_root
 sys.path.insert(0, str(ROOT))
-from utilities._General.neuralnetworks import PNet_XL, TimeToGMM_V0, load_trained_model
+from utilities._General.neuralnetworks import PNet_XL, TimeToGMM_V0, TimeToGMM_NoEncoder, load_trained_model
 import utilities._General.train_pinn as PINN
 from utilities._General.util import RunLogger, save_config_human
 
@@ -109,6 +109,7 @@ def config_training(constants, option=""):
         "iterations_per_rar": 100,
         "RAR_eps": 0.01,
         "bias_fac": 0.,
+        "x_range": constants.NX_RANGE,
     }
 
     if option == "pinn-xl_vanilla":
@@ -132,10 +133,20 @@ def config_training(constants, option=""):
     #     configuration["training_fcn"] = PINN.train_pinngmm_expcase1equin
     #     p_net = TimeToGMM6D_V0(constants, K=11, alpha_floor=0.01)
 
+    if option == "pinn-gmm-noencoder":
+        configuration["training_fcn"] = PINN.train_pinngmm
+        configuration["bias_fac"] = 0.5
+        p_net = TimeToGMM_NoEncoder(constants, D=4, K=11, alpha_floor=0.01)
+
     if option == "pinn-gmm_bias":
         configuration["training_fcn"] = PINN.train_pinngmm
         configuration["bias_fac"] = 0.5
         p_net = TimeToGMM_V0(constants, D=4, K=11, alpha_floor=0.01)
+
+    if option == "pinn-gmm_bias-test":
+        configuration["training_fcn"] = PINN.train_pinngmm
+        configuration["bias_fac"] = 0.5
+        p_net = TimeToGMM_V0(constants, D=4, K=5, alpha_floor=0.01)
 
     return configuration, p_net
 
@@ -145,7 +156,7 @@ def main():
     torch.manual_seed(0); np.random.seed(0)  # Set a fixed seed for reproducibility
 
     # Setup config
-    config, p_net = config_training(constants, option="pinn-gmm_vanilla")
+    config, p_net = config_training(constants, option="pinn-gmm_bias-test")
     save_config_human(config, model_name="p_net")
 
     # Train & log

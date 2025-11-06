@@ -1,0 +1,25 @@
+constants: <exp_utilities.constants.Case2_4D_Constants object at 0x1234decc0>
+iterations: 40000
+sample_ic: <bound method Case2_4D_Constants.sample_init_points of <exp_utilities.constants.Case2_4D_Constants object at 0x1234decc0>>
+sample_res: <bound method Case2_4D_Constants.sample_res_points_uniform of <exp_utilities.constants.Case2_4D_Constants object at 0x1234decc0>>
+p_ic: <bound method Case2_4D_Constants.p_init_torch of <exp_utilities.constants.Case2_4D_Constants object at 0x1234decc0>>
+res_func: <function diff_opt at 0x169273a60>
+res_weight: 1.0
+save_path: output/pinn-gmm_bias-test
+beta_incre: 0.02
+loss_normalize: 0.20439179241657257
+reg_tv: None
+N0_samples_initial: 4000
+Nr_samples_initial: 4000
+iterations_per_decay: 1000
+N_RAR: 30000
+N_RAR_TO_ADD: 32
+N_RAR_CAP: 4000
+iterations_per_rar: 100
+RAR_eps: 0.01
+bias_fac: 0.5
+x_range: tensor([[ 18.,  24.],
+        [ -2.,   3.],
+        [-20.,  20.],
+        [-22.,  32.]])
+training_fcn: <function train_pinngmm at 0x168f7d800>
