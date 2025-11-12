@@ -1,6 +1,7 @@
 import numpy as np
 import torch
 import argparse
+from functools import partial
 from monte import p_init
 from exp_utilities.constants import Case2_4D_Constants_Low_Thrust
 from exp_utilities.plot_util import plot_marginal_pdf_cart, plt
@@ -119,7 +120,7 @@ def config_training(constants, option=""):
 
     configuration = {
         "constants": constants,
-        "iterations": 40000,
+        "iterations": 60000,
         "sample_ic": constants.sample_init_points,
         "sample_res": constants.sample_res_points_uniform,
         "p_ic": constants.p_init_torch,
@@ -168,7 +169,7 @@ def config_training(constants, option=""):
         p_net = TimeToGMM_NoEncoder(constants, D=4, K=11, alpha_floor=0.01)
 
     if option == "pinn-gmm_bias":
-        configuration["training_fcn"] = PINN.train_pinngmm
+        configuration["training_fcn"] = partial(PINN.train_pinngmm, beta_0=1.)
         configuration["bias_fac"] = 0.5
         p_net = TimeToGMM_V0(constants, D=4, K=11, alpha_floor=0.01)
         p_net = load_trained_model(p_net,
@@ -199,11 +200,6 @@ def main():
     
     # Load the best network after training
     p_net = load_trained_model(p_net, path=config["save_path"]+"/p_net.pth"); p_net.eval()
-
-    data_mc = f"data/Xsamples_1e+4_np64/"
-    _data_folder_no_thrust = "../exp_case2_j2/data/Xsamples_1e+6_np64/"
-    plot_marginal_pdf_cart(constants, data_mc, _data_folder_no_thrust, p_net_gmm=p_net)
-    plt.show()
 
 
 if __name__ == "__main__":

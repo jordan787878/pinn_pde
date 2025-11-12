@@ -78,7 +78,8 @@ def x_samples_monte_new(t_list, data_folder, stat_sample=10000):
 
     # Time-stepping parameters for propagation (float64)
     dtt = np.float64(1e-4)
-    steps = {int(round(t / dtt)): np.float64(t) for t in _f64(t_list)}  # use float64 keys/values
+    # steps = {int(round(t / dtt)): np.float64(t) for t in _f64(t_list)}  # use float64 keys/values
+    steps = {int(round(t / dtt)): int(round(t / dtt)) * dtt for t in _f64(t_list)}
 
     # Initial samples (float64)
     X_samples = np.random.multivariate_normal(c64["N_MEAN_I"], c64["N_COV_I"], stat_sample).astype(np.float64)

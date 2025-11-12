@@ -89,12 +89,21 @@ def linear_propagation_master(
     P0 = np.asarray(P0, dtype=np.float64).reshape((n, n))
     # P0 = 0.5 * (P0 + P0.T)
 
-    t0, tf = float(t_span[0]), float(t_span[1])
+    # t0, tf = float(t_span[0]), float(t_span[1])
+    # if tf < t0:
+    #     raise ValueError("t_span must have tf >= t0")
+
+    # # output grid
+    # t_eval = np.round(np.arange(t0, tf + 0.5 * dt_save, dt_save, dtype=np.float64), 2) 
+    t0 = np.float64(np.round(t_span[0], 2))
+    tf = np.float64(np.round(t_span[1], 2))
     if tf < t0:
         raise ValueError("t_span must have tf >= t0")
+    if dt_save <= 0:
+        raise ValueError("dt_save must be positive.")
 
-    # output grid
-    t_eval = np.round(np.arange(t0, tf + 0.5 * dt_save, dt_save, dtype=np.float64), 2) 
+    # output grid (rounded to 2; saved rounded to 3)
+    t_eval = np.round(np.arange(t0, tf + 0.5*dt_save, dt_save, dtype=np.float64), 2)
 
     # Q evaluator
     def Q_eval(t: float, x: NDArray[np.float64]) -> NDArray[np.float64]:

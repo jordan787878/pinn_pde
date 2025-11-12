@@ -536,7 +536,7 @@ def train_pinn(p_net, config):
         np.savez(save_path+"/p_net-RARsamples.npz", 
             X_BC_RAR=x_bc_rar, X_RES_RAR=x_res_rar, T_RES_RAR=t_res_rar)
         
-def train_pinngmm(p_net, config):
+def train_pinngmm(p_net, config, beta_0=0.):
     p_net.train()
     p_net.to(device)
     x_dim = p_net.D
@@ -584,7 +584,7 @@ def train_pinngmm(p_net, config):
     x_res_rar = torch.empty(0, x_dim, device=device)
     t_res_rar = torch.empty(0, 1, device=device)
     FLAG = False
-    beta = np.float32(0.0)
+    beta = np.float32(beta_0)
     
     start_time = time.time()
     print("[check] bias_fac: ", bias_fac)

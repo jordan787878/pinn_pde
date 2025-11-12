@@ -54,7 +54,7 @@ def get_error_bound_at_time(t, atol=1e-5):
     if idx.size == 0:
         raise ValueError(f"t={t} not found within atol={atol}. Available times include e.g. {tspan[:5]}...")
     print("[debug] B1s: ", B1s)
-    return B1s[idx[0]]
+    return B1s[idx[0]]*1e-3
 
 
 def sample_event_box(X_dom, frac=0.1, *, bias=None, rng=None, seed=None, dtype=np.float32):
@@ -150,15 +150,15 @@ def heaviest_component_mean(ws: np.ndarray, mus: np.ndarray):
 
 def set_static_X_event(problem):
     p_net, _ = problem["networks"]
-    teval = 0.15
+    teval = 0.21
     ws, mus, covs = p_net.weights_means_covs_at(teval)
     ws = ws.detach().numpy()
     mus = mus.detach().numpy()
     covs = covs.detach().numpy()
     _, bias_center, _ = heaviest_component_mean(ws, mus)
-    bias_center[0] = 19.3
-    bias_center[5] = 25.
-    problem["X_event"] = sample_event_box(problem["X_dom"], seed=2, frac=0.2, bias=bias_center)
+    bias_center[0] = 20.25
+    bias_center[-1] = 12
+    problem["X_event"] = sample_event_box(problem["X_dom"], seed=2, frac=0.11, bias=bias_center)
     return problem
 
 
@@ -292,13 +292,13 @@ def plot_summary(problem, result_label):
         axs.plot(tspan, problem[key], linestyle=linestyles_4set[idx],
                  color=colors_4set[idx], marker=markers_4set[idx], label=problem["Pr_keys_labels"][idx])
 
-    # axs.fill_between(
-    #     tspan,
-    #     Pr_lower, Pr_upper,
-    #     color='black',
-    #     alpha=0.3,
-    #     label=r"Bounds $\mathbb{P}^-, \mathbb{P}^+$"
-    # )
+    axs.fill_between(
+        tspan,
+        Pr_lower, Pr_upper,
+        color='black',
+        alpha=0.3,
+        label=r"Bounds $\mathbb{P}^-, \mathbb{P}^+$"
+    )
 
     # problem_coarse = load_problem_result_npz("output/solver_Nx1_Ndeg10_GMMguide1_Cheap0.npz")
     # Pr_lower = np.array(problem_coarse["Pr_opt_lower"])
@@ -333,9 +333,9 @@ def main():
     problem = {
         "D": 6,
         "N_x": 1, 
-        "N_degree": 1, 
-        "use_event_guidance": False, "use_gmm_guidance": False, 
-        "cap_per_degree" : 256,
+        "N_degree": 100, 
+        "use_event_guidance": True, "use_gmm_guidance": True, 
+        "cap_per_degree" : 360,
         "cheap": False,
         "verbose_refine": True,
         "X_dom": constants._NX_RANGE_NP,
@@ -384,8 +384,7 @@ def main():
     data_gmm = PropagationData(SAVE_PATH_GMM_PROPAGATE)
     plot_event_triptych_simple(constants, problem["X_event"], 0.3, 
             p_net_gmm=p_net_gmm, data_lp=data_lp, data_ut=data_ut, data_gmm=data_gmm)
-    plt.show()
-    return
+    # plt.show(); return
 
     # Solving
     if(COMPUTE):

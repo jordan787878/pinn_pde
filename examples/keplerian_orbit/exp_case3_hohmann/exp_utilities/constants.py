@@ -1,6 +1,5 @@
 import numpy as np
 import torch
-from scipy.stats import qmc
 
 
 class Case2_4D_Constants_Low_Thrust:
@@ -27,15 +26,15 @@ class Case2_4D_Constants_Low_Thrust:
                                     1e-12/(_PHI/_T)**2]))
     _J2 = np.float32(1.0826e-3)
     _J2_VR = 2.0*(3*_T**2 * _J2 * _MU_EARTH * _R_EARTH**2)/(2*_R**5)
-    _A_THRUST = np.float32(4e-2)
+    _A_THRUST = np.float32(2e-2)
 
     # Domain of TF = 0.2*T
-    _N_X1_RANGE = np.float32(np.array([19.0, 26.0]))
-    _N_X2_RANGE = np.float32(np.array([-3.0, 5.0]))
+    _N_X1_RANGE = np.float32(np.array([18.0, 30.0]))
+    _N_X2_RANGE = np.float32(np.array([-3.0, 6.0]))
     _N_X3_RANGE = np.float32(np.array([-6.0, 50.0]))
-    _N_X4_RANGE = np.float32(np.array([-20.0, 30.0]))
+    _N_X4_RANGE = np.float32(np.array([-57.0, 35.0]))
     
-    _T_PRIME_SPAN   = np.float32(np.array([0.0, 0.04, 0.08, 0.12, 0.16, 0.20]))
+    _T_PRIME_SPAN   = np.round(np.float32(np.array([0.00, 0.04, 0.08, 0.12, 0.16, 0.20, 0.24, 0.28, 0.32])), 2)
 
     _N_Q_NOISE = np.array([1e-8/(_R**2*_T**3), 
                            1e-22/(_PHI**2*_T**3)])
