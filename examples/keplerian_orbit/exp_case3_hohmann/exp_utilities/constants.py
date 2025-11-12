@@ -1,29 +1,46 @@
 import numpy as np
 import torch
+from scipy.stats import qmc
 
 
-class Case2_Planar_Transfer:
-    _MU_EARTH = np.float32(398600.4418) # km3/s2
-    _A        = np.float32(7000.0)
-    _W        = np.float32(np.sqrt(_MU_EARTH / _A**3))
+class Case2_4D_Constants_Low_Thrust:
+    """
+    define the constants of Case 2 in the ref. paper
+    the state X = [r', phi', r'_dot, phi'_dot] is the normalized shperical coordinates
+    """
+    _MU_EARTH = np.float32(3.9859e+14)
+    _R_EARTH  = np.float32(6.378e+6)
+    _A        = np.float32(4.2164e+7)
+    _W        = np.float32(np.sqrt(_MU_EARTH/_A**3))
     _T        = np.float32(2*np.pi/_W)
-    _R        = np.float32(7000.0)
-    _PHI      = np.float32(1e-2)
-    _THRUST_ACCEL = np.float32(0.2/1000.0) # km/s2
-
-    _N_MEAN_I = np.array([1.0, -1.67459435e-05, -2.45221932e-06,  6.95868034e-04], dtype=np.float32)
-    _N_COV_I  = np.array([[ 2.0525357247940360e-07, -4.6723394355242229e-09, -1.6435472554973773e-08, -1.2867636903456074e-04],
-                [-4.6723394355242229e-09,  2.0313095740378804e-03,  1.2741515425425539e-04, -2.3081932630343769e-04],
-                [-1.6435472554973773e-08,  1.2741515425425539e-04,  7.7740487012882304e-05,  2.7601120338146077e-06],
-                [-1.2867636903456074e-04, -2.3081932630343769e-04,  2.7601120338146077e-06,  7.7202150591966046e-01]], dtype=np.float32)
+    _R        = np.float32(2e+6)
+    _THETA    = np.float32(0.015)
+    _PHI      = np.float32(0.0387)
+    _MEAN_I   = np.float32([_A, 0.0, 0.0, _W])
+    _N_MEAN_I = np.float32([_MEAN_I[0]/_R, 
+                            _MEAN_I[1]/_PHI,
+                            _MEAN_I[2]/(_R/_T),
+                            (_MEAN_I[3]-_W)/(_PHI/_T)])  
+    _N_COV_I  = np.float32(np.diag([1e+11/(_R**2),
+                                    1e-4/(_PHI**2),
+                                    1e+3/(_R/_T)**2,
+                                    1e-12/(_PHI/_T)**2]))
+    _J2 = np.float32(1.0826e-3)
+    _J2_VR = 2.0*(3*_T**2 * _J2 * _MU_EARTH * _R_EARTH**2)/(2*_R**5)
+    _A_THRUST = np.float32(4e-2)
 
     # Domain of TF = 0.2*T
-    _N_X1_RANGE = np.float32(np.array([18.0, 24.0]))
-    _N_X2_RANGE = np.float32(np.array([-2.0, 3.0]))
-    _N_X3_RANGE = np.float32(np.array([-20.0, 20.0]))
-    _N_X4_RANGE = np.float32(np.array([-22.0, 32.0]))
+    _N_X1_RANGE = np.float32(np.array([19.0, 26.0]))
+    _N_X2_RANGE = np.float32(np.array([-3.0, 5.0]))
+    _N_X3_RANGE = np.float32(np.array([-6.0, 50.0]))
+    _N_X4_RANGE = np.float32(np.array([-20.0, 30.0]))
     
-    _T_PRIME_SPAN   = np.float32(np.array([0.0, 0.4, 0.8, 1.2, 1.6, 2.0]))
+    _T_PRIME_SPAN   = np.float32(np.array([0.0, 0.04, 0.08, 0.12, 0.16, 0.20]))
+
+    _N_Q_NOISE = np.array([1e-8/(_R**2*_T**3), 
+                           1e-22/(_PHI**2*_T**3)])
+    
+    _N_Q_NOISE_TENSOR = torch.tensor(_N_Q_NOISE, dtype=torch.float32, device="cpu")
     
     _NX_RANGE_NP = np.array([
         _N_X1_RANGE,
@@ -31,24 +48,37 @@ class Case2_Planar_Transfer:
         _N_X3_RANGE,
         _N_X4_RANGE,
     ])
+
     _NX_RANGE = torch.from_numpy(_NX_RANGE_NP)
 
-    # _N_MEAN_I_TENSOR = torch.as_tensor(_N_MEAN_I, dtype=torch.float32, device="cpu")
-    # _N_COV_I_TENSOR = torch.as_tensor(_N_COV_I, dtype=torch.float32, device="cpu")
-    # _D = 4
-    # _COV_INV_TENSOR = torch.linalg.inv(_N_COV_I_TENSOR)
-    # _COV_DET_TENSOR = torch.linalg.det(_N_COV_I_TENSOR)
-    # _NORM_CONST = 1.0 / torch.sqrt((2 * torch.pi) ** _D * _COV_DET_TENSOR)
+    _N_MEAN_I_TENSOR = torch.as_tensor(_N_MEAN_I, dtype=torch.float32, device="cpu")
+    _N_COV_I_TENSOR = torch.as_tensor(_N_COV_I, dtype=torch.float32, device="cpu")
+    _D = 4
+    _COV_INV_TENSOR = torch.linalg.inv(_N_COV_I_TENSOR)
+    _COV_DET_TENSOR = torch.linalg.det(_N_COV_I_TENSOR)
+    _NORM_CONST = 1.0 / torch.sqrt((2 * torch.pi) ** _D * _COV_DET_TENSOR)
 
-    # def p_init_torch(self, x):
-    #     diff = x - self._N_MEAN_I_TENSOR
-    #     mahal = torch.einsum("ni,ij,nj->n", diff, self._COV_INV_TENSOR, diff)
-    #     pdf_eval = self._NORM_CONST * torch.exp(-0.5 * mahal)
-    #     return pdf_eval.view(-1, 1)
+    def p_init_torch(self, x):
+        diff = x - self._N_MEAN_I_TENSOR
+        mahal = torch.einsum("ni,ij,nj->n", diff, self._COV_INV_TENSOR, diff)
+        pdf_eval = self._NORM_CONST * torch.exp(-0.5 * mahal)
+        return pdf_eval.view(-1, 1)
+    
+    @property
+    def N_Q_NOISE_TENSOR(self):
+        return self._N_Q_NOISE_TENSOR
+    
+    @property
+    def A_THRUST(self):
+        return self._A_THRUST
 
     @property
     def MU_EARTH(self):
         return self._MU_EARTH
+    
+    @property
+    def R_EARTH(self):
+        return self._R_EARTH
     
     @property
     def W(self):
@@ -63,12 +93,12 @@ class Case2_Planar_Transfer:
         return self._R
     
     @property
-    def PHI(self):
-        return self._PHI
+    def THETA(self):
+        return self._THETA
     
     @property
-    def THRUST_ACCEL(self):
-        return self._THRUST_ACCEL
+    def PHI(self):
+        return self._PHI
     
     @property
     def N_MEAN_I(self):
@@ -77,6 +107,14 @@ class Case2_Planar_Transfer:
     @property
     def N_COV_I(self):
         return self._N_COV_I
+    
+    @property
+    def J2(self):
+        return self._J2
+    
+    @property
+    def J2_VR(self):
+        return self._J2_VR
     
     @property
     def N_X1_RANGE(self):
@@ -99,65 +137,19 @@ class Case2_Planar_Transfer:
         return self._T_PRIME_SPAN
     
     @property
+    def N_Q_NOISE(self):
+        return self._N_Q_NOISE
+
+    @property
     def NX_RANGE(self):
         return self._NX_RANGE
-    
-    def dyn_f1(self, x):
-        v_rho = x[:,2]
-        return v_rho
-    
-    def dyn_f2(self, x):
-        v_phi = x[:,3]
-        return v_phi
-    
-    def dyn_f3(self, x):
-        rho = x[:,0]
-        phi = x[:,1]
-        v_rho = x[:,2]
-        v_phi = x[:,3]
-        # R, PHI, W, T, MU_EARTH, THRUST_ACCEL
-
-        r = self._R * rho
-        rdot = (self._R / self._T) * v_rho
-        thetadot = self._W + (self.PHI / self._T) * v_phi
-
-        # Physical speed magnitude
-        V = np.sqrt(rdot*rdot + (r*thetadot)**2)
-
-        # Thrust components (physical)
-        a_r     = self._THRUST_ACCEL * (rdot / V)
-
-        # Physical dynamics
-        rddot      = r * thetadot**2 - self._MU_EARTH / (r*r) + a_r
-        return (self._T**2 / self._R) * rddot
-    
-    def dyn_f4(self, x):
-        rho = x[:,0]
-        phi = x[:,1]
-        v_rho = x[:,2]
-        v_phi = x[:,3]
-        # R, PHI, W, T, MU_EARTH, THRUST_ACCEL
-
-        r = self._R * rho
-        rdot = (self._R / self._T) * v_rho
-        thetadot = self._W + (self.PHI / self._T) * v_phi
-
-        # Physical speed magnitude
-        V = np.sqrt(rdot*rdot + (r*thetadot)**2)
-
-        # Thrust components (physical)
-        a_theta = self._THRUST_ACCEL * (r * thetadot / V)
-
-        # Physical dynamics
-        thetaddot  = (a_theta - 2.0 * rdot * thetadot) / r
-        return (self._T**2 / self._PHI) * thetaddot
-    
     
     def test_printout(self):
         print("MU_EARTH: ", self.MU_EARTH)
         print("W: ", self.W)
         print("T: ", self.T)
         print("R: ", self.R)
+        print("THETA: ", self.THETA)
         print("PHI: ", self.PHI)
         print("N_MEAN_I: ", self.N_MEAN_I)
         print("N_COV_I: ", self.N_COV_I)
@@ -236,51 +228,3 @@ class Case2_Planar_Transfer:
         ])
         return X
     
-    def cart2polar_state(self, x_cart):
-        """
-        Cartesian (x,y,vx,vy) -> polar state [r, theta, rdot, thetadot].
-        """
-        x, y, vx, vy = x_cart
-        r = np.sqrt(x*x + y*y)
-        theta = np.arctan2(y, x)
-        rdot = (x*vx + y*vy) / r
-        thetadot = (x*vy - y*vx) / (r*r)  # z-component of angular momentum / r^2
-        return np.array([r, theta, rdot, thetadot])
-    
-    def to_rot_norm(self, t, x_polar):
-        """
-        (r,theta,rdot,thetadot) at physical time t -> (rho,phi,rhod,phid) where
-        rhod = d(rho)/d(tau), phid = d(phi)/d(tau), tau = t / S_T
-        """
-        r, th, rd, thd = x_polar
-        SR, ST, SW, STi = self.R, self.PHI, self.W, self.T
-        return np.array([
-            r / SR,
-            (th - SW * t) / ST,
-            (STi / SR) * rd,
-            (STi / ST) * (thd - SW)
-        ])
-    
-    def get_initial_mean_covariance_normalized(self, N_samples=1000000):
-        mean_vector = np.array([7000.0, 0., 0., 7.54605329]).astype(np.float32)
-        covariance_matrix = np.diag([10. , 10., 1e-4, 1e-4]).astype(np.float32)
-        samples = np.random.multivariate_normal(mean_vector, covariance_matrix, size=N_samples)
-        samples_nsph = np.empty_like(samples)
-        for idx, x in enumerate(samples):
-            _x = self.to_rot_norm(0., self.cart2polar_state(x))
-            samples_nsph[idx, :] = _x
-        # Compute mean and covariance after the loop
-        mean_nsph = np.mean(samples_nsph, axis=0)
-        cov_nsph = np.cov(samples_nsph, rowvar=False)
-
-        def mvn_pdf_at_mean(C):
-            s, ld = np.linalg.slogdet(C)
-            if s <= 0: raise np.linalg.LinAlgError("covariance must be PD")
-            d = C.shape[0]
-            return float(np.exp(-0.5*(d*np.log(2*np.pi)+ld)))
-        
-        print(mean_nsph)
-        s = np.array2string(cov_nsph, precision=17, separator=', ', max_line_width=10**9)
-        print(f"cov_nsph = np.array({s}, dtype=np.float64)")
-        print(mvn_pdf_at_mean(cov_nsph))
-        print(np.linalg.cond(cov_nsph))

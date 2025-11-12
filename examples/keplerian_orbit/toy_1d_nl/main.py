@@ -126,8 +126,8 @@ def load_train_model(net, PATH):
     net.load_state_dict(checkpoint['model_state_dict'])
     epoch = checkpoint['epoch']
     loss = checkpoint['loss']
-    print("load pinn from: ", PATH)
-    print("best epoch: ", epoch, ", loss:", loss, "train time:", checkpoint['train_time'])
+    # print("load pinn from: ", PATH)
+    # print("best epoch: ", epoch, ", loss:", loss, "train time:", checkpoint['train_time'])
     net.eval()
     return net
 
@@ -141,6 +141,16 @@ def train_helper_sample_ic(batch_size):
 def train_helper_sample_res(batch_size):
     x = (torch.rand(batch_size, 1, requires_grad=True) * (x_hig - x_low) + x_low).to(device)
     t = (torch.rand(batch_size, 1, requires_grad=True) * (T_end - t0) + t0).to(device)
+    return x, t
+
+def train_helper_sample_ic_after_t(batch_size, t):
+    x_bc = (torch.rand(batch_size, 1) * (x_hig - x_low) + x_low).to(device)
+    t_bc = (torch.ones(batch_size, 1) * t).to(device)
+    return x_bc, t_bc
+
+def train_helper_sample_res_after_t(batch_size, t, t2=1):
+    x = (torch.rand(batch_size, 1, requires_grad=True) * (x_hig - x_low) + x_low).to(device)
+    t = (torch.rand(batch_size, 1, requires_grad=True) * (t+t2 - t) + t).to(device)
     return x, t
 
 

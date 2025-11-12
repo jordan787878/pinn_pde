@@ -1,3 +1,4 @@
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -68,6 +69,39 @@ class TimeToGMM1D(nn.Module):
         # Mixture weights
         pi = F.softmax(g, dim=-1)
         return m, s, pi
+    
+    def get_params(self, t_scalar):
+        """
+        Args
+        ----
+        t_scalar : float or scalar-like
+            A single time point in R.
+
+        Returns
+        -------
+        weights : np.ndarray, shape (K,)
+        means   : np.ndarray, shape (K, 1)
+        covs    : np.ndarray, shape (K, 1, 1)   # variances (std^2)
+        """
+        # coerce to a Python float
+        if isinstance(t_scalar, (np.ndarray, torch.Tensor, list, tuple)):
+            t_val = float(np.asarray(t_scalar).reshape(-1)[0])
+        else:
+            t_val = float(t_scalar)
+
+        with torch.no_grad():
+            # keep dtype/device consistent with the model
+            w = self.head.weight
+            t = torch.tensor([[t_val]], dtype=w.dtype, device=w.device)  # shape (1,1)
+
+            m, s, pi = self.params(t)  # each shape (1, K)
+            m, s, pi = m.squeeze(0), s.squeeze(0), pi.squeeze(0)  # shape (K,)
+
+            means   = m.detach().cpu().numpy().reshape(self.K, 1)       # (K,1)
+            covs    = (s * s).detach().cpu().numpy().reshape(self.K, 1, 1)  # (K,1,1)
+            weights = pi.detach().cpu().numpy().reshape(self.K,)        # (K,)
+
+        return weights, means, covs
 
     def _component_logpdf(self, x: torch.Tensor, means: torch.Tensor, scales: torch.Tensor):
         """

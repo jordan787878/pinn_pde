@@ -5,16 +5,17 @@ import os
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 import time
-from scipy.stats import multivariate_normal
-from exp_utilities.constants import Case2_Planar_Transfer
+from scipy.stats import norm, multivariate_normal
+from scipy.interpolate import griddata
+from exp_utilities.constants import Case2_4D_Constants_Low_Thrust
+from exp_utilities.plot_util import plot_marginal_pdf_cart
 
 import sys
 from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]   # repo_root
 sys.path.insert(0, str(ROOT))
-from utilities._General.classic_gmm import GMMWhitenedModel
+from utilities._General.classic_gmm import GMMWhitenedModel, fit_classic_gmm, plot_1d_true_vs_gmm_marginals_model
 from utilities._General.astrodynamics import *
-
 
 GRID_FOLDER = "data/grids/"
 SAMPLES_FOLDER = "data/samples/"
@@ -22,9 +23,9 @@ SAMPLES_FOLDER = "data/samples/"
 # --- globals (module scope) ---
 GENERATE: bool = True
 SHOW_PLOT: bool = True
-NSAMPLES: int = 1000
+NSAMPLES: int = 1000000
 
-constants = Case2_Planar_Transfer()
+constants = Case2_4D_Constants_Low_Thrust()
 np.random.seed(0)
 
 
@@ -41,7 +42,7 @@ def parse_args():
     p = argparse.ArgumentParser()
     p.add_argument("--generate",   type=_str2bool, default=True,  help="Generate data (True/False)")
     p.add_argument("--showplot",   type=_str2bool, default=False, help="Show plots (True/False)")
-    p.add_argument("--Nsamples",   type=int, default=10000, help="Number of samples (int)")
+    p.add_argument("--Nsamples",   type=int, default=NSAMPLES, help="Number of samples (int)")
     return p.parse_args()
 
 
@@ -56,16 +57,23 @@ def x_samples_monte_new(t_list, data_folder, stat_sample=10000):
     # ---- cast all constants used here to float64 once ----
     N_MEAN_I   = _f64(constants.N_MEAN_I)
     N_COV_I    = _f64(constants.N_COV_I)
+    THETA      = _f64(constants.THETA)
+    N_Q_NOISE  = _f64(constants.N_Q_NOISE)
+    J2         = _f64(constants.J2)
     W          = _f64(constants.W)
     PHI        = _f64(constants.PHI)
     T          = _f64(constants.T)
     MU_EARTH   = _f64(constants.MU_EARTH)
     R          = _f64(constants.R)
+    R_EARTH    = _f64(constants.R_EARTH)
+    A_THRUST   = _f64(constants.A_THRUST)
 
     # Pack the float64 constants we need into a simple namespace-like dict
     c64 = {
-        "N_MEAN_I": N_MEAN_I, "N_COV_I": N_COV_I, "W": W, "PHI": PHI, "T": T,
-        "MU_EARTH": MU_EARTH, "R": R,
+        "N_MEAN_I": N_MEAN_I, "N_COV_I": N_COV_I, "THETA": THETA,
+        "N_Q_NOISE": N_Q_NOISE, "J2": J2, "W": W, "PHI": PHI, "T": T,
+        "MU_EARTH": MU_EARTH, "R": R, "R_EARTH": R_EARTH,
+        "A_THRUST": A_THRUST,
     }
 
     # Time-stepping parameters for propagation (float64)
@@ -96,8 +104,10 @@ def x_samples_monte_new(t_list, data_folder, stat_sample=10000):
             x[5] = X_samples[i, 3]
 
             # Brownian increment (float64)
-            dW3 = np.sqrt(c64["N_Q_NOISE"]) * np.sqrt(dtt) * np.random.randn(3).astype(np.float64)
-            dW  = np.concatenate([np.zeros(3, dtype=np.float64), dW3])  # g = diag([0,0,0,1,1,1])
+            dW2 = np.sqrt(c64["N_Q_NOISE"]) * np.sqrt(dtt) * np.random.randn(2).astype(np.float64)
+            dW = np.zeros(6)
+            dW[3] = dW2[0]
+            dW[5] = dW2[1]
 
             # Dynamics + noise (float64)
             x = x + fourdorbit_dyn_normsph(x, c64, use_j2=True) * dtt + dW
@@ -125,6 +135,7 @@ def fourdorbit_dyn_normsph(x, c64, use_j2):
     MU   = c64["MU_EARTH"]
     R    = c64["R"]
     RE   = c64["R_EARTH"]
+    aT   = c64["A_THRUST"]
 
     f1 = vr
     f2 = vth
@@ -137,6 +148,12 @@ def fourdorbit_dyn_normsph(x, c64, use_j2):
 
     f5 = np.float64(0.0)
     f6 = -np.float64(2.0) * T * vr * aux / (r * PHI)
+
+    rdot_phys = (R / T) * vr                
+    r_phys   = R * r
+    V_mag = np.sqrt(rdot_phys*rdot_phys + (r_phys*aux)**2)
+    f4 += (T**2 / R) * aT * (rdot_phys / V_mag)
+    f6 += (T**2 / PHI) * aT * (aux / V_mag)
 
     return np.array([f1, f2, f3, f4, f5, f6], dtype=np.float64)
 
@@ -158,23 +175,6 @@ def generate_data(constants, data_folder, N_samples):
         x_samples_monte_new(T_monte, data_folder, stat_sample=N_samples)
 
 
-def fit_classic_gmm(t_prime, X_tr, mu_whiten, cov_whiten, data_folder):
-    # Whiten statistics
-    mu  = np.asarray(mu_whiten, dtype=np.float64)
-    std = np.sqrt(np.asarray(np.diag(cov_whiten), dtype=np.float64))
-
-    # Draw training data from the push-forward in x
-    n_train = len(X_tr)
-    print("data size: ", n_train)
-
-    # 1) Fit
-    model = GMMWhitenedModel(K_list=(1, 2, 4, 8, 16), n_init=3, tol=1e-5, max_iter=2000, reg_covar=1e-6, random_state=0)
-    model.fit(X_tr, mu_x=mu, std_x=std)
-
-    # 2) Save to disk
-    model.save(data_folder+"gmm_whitened_t{:.2f}.npz".format(t_prime))
-
-
 def generate_true_pdf_by_fitting_gmm(constants, data_folder):
     if(GENERATE):
         T_monte = np.round(constants.T_PRIME_SPAN, 2)
@@ -183,75 +183,6 @@ def generate_true_pdf_by_fitting_gmm(constants, data_folder):
         for t_prime in T_monte:
             Xsamples = np.load(data_folder + "X_t{:.2f}.npy".format(t_prime))  # saved as float64
             fit_classic_gmm(t_prime, Xsamples, mu_whiten, cov_whiten, data_folder)
-
-
-def plot_1d_true_vs_gmm_marginals_model(model,
-                                        X_true,
-                                        dims=None,
-                                        bins="fd",
-                                        qrange=(0.001, 0.999),
-                                        figsize=(12, 6),
-                                        title="True vs GMM (1D marginals)"):
-    """
-    Overlay histograms of true samples with analytical GMM 1D marginals (in x-space).
-
-    model  : GMMWhitenedModel (must have model.params with weights, means_z, covs_z, mu_x, std_x)
-    X_true : (N, D) true samples in x-space
-    dims   : list of dims to plot (default: all)
-    bins   : 'fd' | 'scott' | int
-    qrange : robust plotting range from true-sample quantiles
-    """
-    assert hasattr(model, "params") and model.params is not None, "Model must be fitted/loaded."
-    p = model.params
-
-    X_true = np.asarray(X_true)
-    N, D = X_true.shape
-    if dims is None:
-        dims = list(range(D))
-
-    w     = p.weights              # (K,)
-    m_z   = p.means_z              # (K,D)
-    covs  = p.covs_z               # (K,D,D)
-    mu_x  = p.mu_x                 # (D,)
-    std_x = p.std_x                # (D,)
-
-    # per-dim std in z (for analytic 1D marginals)
-    var_z = np.stack([np.diag(C) for C in covs], axis=0)  # (K,D)
-    sd_z  = np.sqrt(var_z + 0.0)                          # (K,D)
-
-    ncols = min(3, len(dims))
-    nrows = (len(dims) + ncols - 1) // ncols
-    fig, axes = plt.subplots(nrows, ncols, figsize=figsize, squeeze=False)
-    axes = axes.ravel()
-
-    for idx, j in enumerate(dims):
-        ax = axes[idx]
-        # robust range from true data
-        lo, hi = np.quantile(X_true[:, j], qrange[0]), np.quantile(X_true[:, j], qrange[1])
-        xs = np.linspace(lo, hi, 600)
-
-        # analytical 1D marginal in x:
-        # z_j = (x_j - mu_x[j]) / std_x[j]
-        # p_xj(x) = (1/std_x[j]) * Σ_k w_k * N(z_j | m_z[k,j], var_z[k,j])
-        zj  = (xs - mu_x[j]) / std_x[j]
-        mk  = m_z[:, j]          # (K,)
-        sdk = sd_z[:, j]         # (K,)
-        phi = (np.exp(-0.5 * ((zj[None, :] - mk[:, None]) / sdk[:, None])**2) /
-               (sdk[:, None] * np.sqrt(2.0 * np.pi)))                 # (K, M)
-        p_xj = (w[:, None] * phi).sum(axis=0) / std_x[j]              # (M,)
-
-        ax.hist(X_true[:, j], bins=bins, range=(lo, hi), density=True, alpha=0.45, label="True")
-        ax.plot(xs, p_xj, lw=2, label="GMM marginal")
-        ax.set_title(f"x{j}")
-        if idx == 0:
-            ax.legend(frameon=False)
-
-    # hide empty axes
-    for k in range(len(dims), len(axes)):
-        axes[k].axis("off")
-
-    fig.suptitle(title)
-    fig.tight_layout()
 
 
 def show_fitted_gmm(constants, data_folder):
@@ -285,15 +216,9 @@ def main():
     generate_true_pdf_by_fitting_gmm(constants, data_folder)
     show_fitted_gmm(constants, data_folder)
 
-
-    # --- Test MC results ---
-    X = np.load(data_folder+"X_t0.20.npy")
-    print(X.shape, X.dtype)
-    # test_monte_accuracy()
-    # test_J2effect_exp_case2()
-    # check_pdf_Nrphi(constants, mc_folder=data_folder)
-    # check_pdf_cartesian_wrt_samples(constants, mc_folder=data_folder)
-    # test_monte_cartesian_pdf_xy(constants, data_folder)
+    _data_folder_no_thrust = "../exp_case2_j2/data/Xsamples_1e+6_np64/"
+    plot_marginal_pdf_cart(constants, data_folder, _data_folder_no_thrust)
+    plt.show()
     
 
 if __name__ == "__main__":

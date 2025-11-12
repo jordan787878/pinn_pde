@@ -78,8 +78,8 @@ def compute_generalKL(t, X, p_data_normal=None, p_net=None):
     if np.any(mask):
         KL = np.mean(-np.log(pdf_eval[mask])).item()
     else:
-        print("All pdf_lp values are below machine precision!")
-        KL = np.NaN
+        print("All pdf values are below machine precision!")
+        KL = np.inf
     return KL
 
 
@@ -133,6 +133,7 @@ def print_metrics_block(metrics, idx, colw=12, prec=6):
         ("PINN",      get("rel_error_pinn"),    get("tv_pinn"),    get("g_kl_pinn"),    get("B1_pinn")),
         ("PINN-GMM",  get("rel_error_pinngmm"), get("tv_pinngmm"), get("g_kl_pinngmm"), get("B1_pinngmm")),
         ("PINN-GMM(vanilla)",  get("rel_error_pinngmm_vanilla"), get("tv_pinngmm_vanilla"), get("g_kl_pinngmm_vanilla"), None),
+        ("PINN-GMM(noencod)",  get("rel_error_pinngmm_noencoder"), get("tv_pinngmm_noencoder"), get("g_kl_pinngmm_noencoder"), None),
     ]
 
     for name, rel, tv, gkl, b1 in rows:
@@ -145,8 +146,8 @@ def print_metrics_block(metrics, idx, colw=12, prec=6):
         )
 
 
-def compute_pdf_variations(data_mc=None, p_net=None, p_net_gmm=None, p_net_gmm_vanilla= None,
-                           p_net_gmm_noimp=None, p_net_gmm_uniform=None,
+def compute_pdf_variations(data_mc=None, p_net=None, p_net_gmm=None, 
+                           p_net_gmm_vanilla= None, p_net_gmm_noencoder=None,
                            data_lp=None, data_ut=None, data_gmm=None,
                            e1_net=None, e1_net_gmm=None, save_path=None):
     global constants
@@ -157,6 +158,7 @@ def compute_pdf_variations(data_mc=None, p_net=None, p_net_gmm=None, p_net_gmm_v
         "rel_error_pinn": [],
         "rel_error_pinngmm": [],
         "rel_error_pinngmm_vanilla": [],
+        "rel_error_pinngmm_noencoder": [],
 
         "tv_lp": [],
         "tv_ut": [],
@@ -164,6 +166,7 @@ def compute_pdf_variations(data_mc=None, p_net=None, p_net_gmm=None, p_net_gmm_v
         "tv_pinn": [],
         "tv_pinngmm": [],
         "tv_pinngmm_vanilla": [],
+        "tv_pinngmm_noencoder": [],
 
         "g_kl_lp": [],
         "g_kl_ut": [],
@@ -171,6 +174,7 @@ def compute_pdf_variations(data_mc=None, p_net=None, p_net_gmm=None, p_net_gmm_v
         "g_kl_pinn": [],
         "g_kl_pinngmm": [],
         "g_kl_pinngmm_vanilla": [],
+        "g_kl_pinngmm_noencoder": [],
 
         # "g_kl_pinngmm(no-imp)": [],
         # "g_kl_pinngmm(uniform)": [],
@@ -210,6 +214,10 @@ def compute_pdf_variations(data_mc=None, p_net=None, p_net_gmm=None, p_net_gmm_v
         delta_p_pinngmm_vanilla_max = 0.0
         tv_pinngmm_vanilla = 0.0
         g_kl_pinngmm_vanilla = 0.0
+
+        delta_p_pinngmm_noencoder_max = 0.0
+        tv_pinngmm_noencoder = 0.0
+        g_kl_pinngmm_noencoder = 0.0
         
         delta_p_lp_max = 0.0
         tv_lp = 0.0
@@ -251,6 +259,10 @@ def compute_pdf_variations(data_mc=None, p_net=None, p_net_gmm=None, p_net_gmm_v
 
             if(p_net_gmm_vanilla is not None):
                 g_kl_pinngmm_vanilla += (compute_generalKL(t, X_mc, p_net=p_net_gmm_vanilla))/N_datarun
+
+            if(p_net_gmm_noencoder is not None):
+                g_kl_pinngmm_noencoder += (compute_generalKL(t, X_mc, p_net=p_net_gmm_noencoder))/N_datarun
+                print("debug", g_kl_pinngmm_noencoder)
 
             if(data_lp is not None):
                 g_kl_lp += (compute_generalKL(t, X_mc, p_data_normal=data_lp))/N_datarun
@@ -305,17 +317,16 @@ def compute_pdf_variations(data_mc=None, p_net=None, p_net_gmm=None, p_net_gmm_v
                 _tv = p_total_variation(pdf_pinn, pdf_ref, vol_est)
                 tv_pinngmm_vanilla += _tv/N_batch
                 del pdf_pinn 
+
+            if(p_net_gmm_noencoder is not None):
+                pdf_pinn = p_net_gmm_noencoder(_x_tensor, _t_tensor).detach().cpu().numpy().reshape(-1,)
+                _delta_p = np.max(np.abs(pdf_pinn - pdf_ref)).item()
+                delta_p_pinngmm_noencoder_max = max(delta_p_pinngmm_noencoder_max, _delta_p)
+                _tv = p_total_variation(pdf_pinn, pdf_ref, vol_est)
+                tv_pinngmm_noencoder += _tv/N_batch
+                del pdf_pinn 
+
             del _t, _t_tensor, _x_tensor
-
-            # if(p_net_gmm_noimp is not None):
-            #     _gkl = compute_generalKL(t, X_mc, p_net=p_net_gmm_noimp)
-            #     g_kl_pinngmm_noimp += _gkl/N_batch
-            #     metrics["g_kl_pinngmm(no-imp)"].append(g_kl_pinngmm_noimp)
-
-            # if(p_net_gmm_uniform is not None):
-            #     _gkl = compute_generalKL(t, X_mc, p_net=p_net_gmm_uniform)
-            #     g_kl_pinngmm_uniform += _gkl/N_batch
-            #     metrics["g_kl_pinngmm(uniform)"].append(g_kl_pinngmm_uniform)
 
             if(data_lp is not None):
                 _, _, _mu_lp, _cov_lp = data_lp.get(t)
@@ -355,7 +366,7 @@ def compute_pdf_variations(data_mc=None, p_net=None, p_net_gmm=None, p_net_gmm_v
         
         # After all batch
         g_kl_pinn += Z_pinn
-        g_kl_pinngmm += 1; g_kl_pinngmm_vanilla += 1
+        g_kl_pinngmm += 1; g_kl_pinngmm_vanilla += 1; g_kl_pinngmm_noencoder += 1
         g_kl_lp += 1
         g_kl_ut += 1
         g_kl_gmm += 1
@@ -383,6 +394,10 @@ def compute_pdf_variations(data_mc=None, p_net=None, p_net_gmm=None, p_net_gmm_v
         metrics["rel_error_pinngmm_vanilla"].append(100.*delta_p_pinngmm_vanilla_max/pdf_ref_max)
         metrics["tv_pinngmm_vanilla"].append(tv_pinngmm_vanilla)
         metrics["g_kl_pinngmm_vanilla"].append(g_kl_pinngmm_vanilla)
+
+        metrics["rel_error_pinngmm_noencoder"].append(100.*delta_p_pinngmm_noencoder_max/pdf_ref_max)
+        metrics["tv_pinngmm_noencoder"].append(tv_pinngmm_noencoder)
+        metrics["g_kl_pinngmm_noencoder"].append(g_kl_pinngmm_noencoder)
 
         metrics["B1_pinngmm"].append(100. * 2. * e1_pinngmm_max/pdf_ref_max)
         # print("[debug] B1_pinngmm: ", e1_pinngmm_max, pdf_ref_max)
@@ -608,6 +623,7 @@ def main():
 
     # load pinn-gmm
     p_net_gmm_vanilla, _, _ = load_model_by_key(trained_models, key="PINN-GMM_vanilla")
+    p_net_gmm_noencoder, _, _ = load_model_by_key(trained_models, key="PINN-GMM-noencoder")
     p_net_gmm, e1_net_gmm, rar_samples = load_model_by_key(trained_models, key="PINN-GMM_bias")
 
     # baseline methods
@@ -620,7 +636,7 @@ def main():
     if(COMPUTE):
         compute_pdf_variations(data_mc=data_mc, 
             p_net=p_net, p_net_gmm=p_net_gmm,
-            p_net_gmm_vanilla=p_net_gmm_vanilla,
+            p_net_gmm_vanilla=p_net_gmm_vanilla, p_net_gmm_noencoder=p_net_gmm_noencoder,
             data_lp=data_lp, data_ut=data_ut, data_gmm=data_gmm,
             e1_net=e1_net, e1_net_gmm=e1_net_gmm,
             save_path=metrics_path)

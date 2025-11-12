@@ -152,19 +152,20 @@ def print_metrics_block(metrics, idx, colw=12, prec=6):
         ("PINN",      get("rel_error_pinn"),    get("tv_pinn"),    get("g_kl_pinn"),    get("B1_pinn")),
         ("PINN-GMM",  get("rel_error_pinngmm"), get("tv_pinngmm"), get("g_kl_pinngmm"), get("B1_pinngmm")),
         ("PINN-GMM(vanilla)",  get("rel_error_pinngmm_vanilla"), get("tv_pinngmm_vanilla"), get("g_kl_pinngmm_vanilla"), None),
+        ("PINN-GMM(noencod)",  get("rel_error_pinngmm_noencoder"), get("tv_pinngmm_noencoder"), get("g_kl_pinngmm_noencoder"), None),
     ]
 
-    for name, rel, tv, gkl, b1 in rows:
+    for name, rel, tv, g_kl, b1 in rows:
         print(
             f"{name:<{name_w}}"
             f"{_fmt_num(rel)}"
             f"{_fmt_num(tv)}"
-            f"{_fmt_num(gkl)}"
+            f"{_fmt_num(g_kl)}"
             f"{_fmt_num(b1)}"
         )
 
 
-def compute_pdf_variations(N_batch=1, p_net=None, p_net_gmm=None, p_net_gmm_vanilla= None,
+def compute_pdf_variations(N_batch=1, p_net=None, p_net_gmm=None, p_net_gmm_vanilla= None, p_net_gmm_noencoder=None,
                            data_lp=None, data_ut=None, data_gmm=None,
                            e1_net=None,  e1_net_gmm=None, save_path=None):
     global constants
@@ -175,18 +176,21 @@ def compute_pdf_variations(N_batch=1, p_net=None, p_net_gmm=None, p_net_gmm_vani
         "rel_error_pinn": [],
         "rel_error_pinngmm": [],
         "rel_error_pinngmm_vanilla": [],
+        "rel_error_pinngmm_noencoder": [],
         "tv_lp": [],
         "tv_ut": [],
         "tv_gmm": [],
         "tv_pinn": [],
         "tv_pinngmm": [],
         "tv_pinngmm_vanilla": [],
+        "tv_pinngmm_noencoder": [],
         "g_kl_lp": [],
         "g_kl_ut": [],
         "g_kl_gmm": [],
         "g_kl_pinn": [],
         "g_kl_pinngmm": [],
         "g_kl_pinngmm_vanilla": [],
+        "g_kl_pinngmm_noencoder": [],
         "B1_pinn": [],
         "B1_pinngmm": [],
         "B1_pinngmm_raw": [],
@@ -211,27 +215,31 @@ def compute_pdf_variations(N_batch=1, p_net=None, p_net_gmm=None, p_net_gmm_vani
 
         delta_p_pinn_max = 0.0
         tv_pinn = 0.0
-        gkl_pinn = 0.0
+        g_kl_pinn = 0.0
 
         delta_p_pinngmm_max = 0.0
         tv_pinngmm = 0.0
-        gkl_pinngmm = 0.0
+        g_kl_pinngmm = 0.0
 
         delta_p_pinngmm_vanilla_max = 0.0
         tv_pinngmm_vanilla = 0.0
-        gkl_pinngmm_vanilla = 0.0
+        g_kl_pinngmm_vanilla = 0.0
+
+        delta_p_pinngmm_noencoder_max = 0.0
+        tv_pinngmm_noencoder = 0.0
+        g_kl_pinngmm_noencoder = 0.0
 
         delta_p_lp_max = 0.0
         tv_lp = 0.0
-        gkl_lp = 0.0
+        g_kl_lp = 0.0
 
         delta_p_ut_max = 0.0
         tv_ut = 0.0
-        gkl_ut = 0.0
+        g_kl_ut = 0.0
 
         delta_p_gmm_max = 0.0
         tv_gmm = 0.0
-        gkl_gmm = 0.0
+        g_kl_gmm = 0.0
 
         # additional data for pinn
         e1_pinn_max = 0.0
@@ -266,8 +274,8 @@ def compute_pdf_variations(N_batch=1, p_net=None, p_net_gmm=None, p_net_gmm_vani
             delta_p_pinn_max = max(delta_p_pinn_max, _delta_p)
             _tv = p_total_variation(pdf_pinn, pdf_ref, vol_est)
             tv_pinn += _tv/N_batch
-            _gkl = compute_generalKL(t, X_mc, p_net=p_net)
-            gkl_pinn += _gkl/N_batch
+            _g_kl = compute_generalKL(t, X_mc, p_net=p_net)
+            g_kl_pinn += _g_kl/N_batch
             _Z_pinn = np.mean(pdf_pinn) * vol_est
             Z_pinn += _Z_pinn/N_batch
             del pdf_pinn
@@ -282,8 +290,8 @@ def compute_pdf_variations(N_batch=1, p_net=None, p_net_gmm=None, p_net_gmm_vani
             delta_p_pinngmm_max = max(delta_p_pinngmm_max, _delta_p)
             _tv = p_total_variation(pdf_pinn, pdf_ref, vol_est)
             tv_pinngmm += _tv/N_batch
-            _gkl = compute_generalKL(t, X_mc, p_net=p_net_gmm)
-            gkl_pinngmm += _gkl/N_batch
+            _g_kl = compute_generalKL(t, X_mc, p_net=p_net_gmm)
+            g_kl_pinngmm += _g_kl/N_batch
             del pdf_pinn
             if(e1_net_gmm is not None):
                 e1_pinngmm = constants.SCALING_PDF * e1_net_gmm(_x_tensor, _t_tensor).detach().cpu().numpy().reshape(-1,)
@@ -296,8 +304,18 @@ def compute_pdf_variations(N_batch=1, p_net=None, p_net_gmm=None, p_net_gmm_vani
             delta_p_pinngmm_vanilla_max = max(delta_p_pinngmm_vanilla_max, _delta_p)
             _tv = p_total_variation(pdf_pinn, pdf_ref, vol_est)
             tv_pinngmm_vanilla += _tv/N_batch
-            _gkl = compute_generalKL(t, X_mc, p_net=p_net_gmm_vanilla)
-            gkl_pinngmm_vanilla += _gkl/N_batch
+            _g_kl = compute_generalKL(t, X_mc, p_net=p_net_gmm_vanilla)
+            g_kl_pinngmm_vanilla += _g_kl/N_batch
+            del pdf_pinn
+
+            # pinn-gmm-noencoder
+            pdf_pinn = constants.SCALING_PDF * p_net_gmm_noencoder(_x_tensor, _t_tensor).detach().cpu().numpy().reshape(-1,)
+            _delta_p = np.max(np.abs(pdf_pinn - pdf_ref)).item()
+            delta_p_pinngmm_noencoder_max = max(delta_p_pinngmm_noencoder_max, _delta_p)
+            _tv = p_total_variation(pdf_pinn, pdf_ref, vol_est)
+            tv_pinngmm_noencoder += _tv/N_batch
+            _g_kl = compute_generalKL(t, X_mc, p_net=p_net_gmm_noencoder)
+            g_kl_pinngmm_noencoder += _g_kl/N_batch
             del pdf_pinn, _t, _t_tensor, X_scaled, _x_tensor  
             
             # LP
@@ -310,8 +328,8 @@ def compute_pdf_variations(N_batch=1, p_net=None, p_net_gmm=None, p_net_gmm_vani
             delta_p_lp_max = max(delta_p_lp_max, _delta_p)
             _tv = p_total_variation(pdf_lp, pdf_ref, vol_est)
             tv_lp += _tv/N_batch
-            _gkl = compute_generalKL(t, X_mc, p_data_normal=data_lp)
-            gkl_lp += _gkl/N_batch
+            _g_kl = compute_generalKL(t, X_mc, p_data_normal=data_lp)
+            g_kl_lp += _g_kl/N_batch
             del pdf_lp, _pdf_lp_func
 
             # UT
@@ -324,8 +342,8 @@ def compute_pdf_variations(N_batch=1, p_net=None, p_net_gmm=None, p_net_gmm_vani
             delta_p_ut_max = max(delta_p_ut_max, _delta_p)
             _tv = p_total_variation(pdf_ut, pdf_ref, vol_est)
             tv_ut += _tv/N_batch
-            _gkl = compute_generalKL(t, X_mc, p_data_normal=data_ut)
-            gkl_ut += _gkl/N_batch
+            _g_kl = compute_generalKL(t, X_mc, p_data_normal=data_ut)
+            g_kl_ut += _g_kl/N_batch
             del pdf_ut, _pdf_ut_func
 
             # GMM
@@ -336,39 +354,43 @@ def compute_pdf_variations(N_batch=1, p_net=None, p_net_gmm=None, p_net_gmm_vani
             delta_p_gmm_max = max(delta_p_gmm_max, _delta_p)
             _tv = p_total_variation(pdf_gmm, pdf_ref, vol_est)
             tv_gmm += _tv/N_batch
-            _gkl = compute_generalKL(t, X_mc, p_data_normal=data_gmm)
-            gkl_gmm += _gkl/N_batch
+            _g_kl = compute_generalKL(t, X_mc, p_data_normal=data_gmm)
+            g_kl_gmm += _g_kl/N_batch
             del pdf_gmm
         
         # After all batch
-        gkl_pinn += Z_pinn
-        gkl_pinngmm += 1; gkl_pinngmm_vanilla += 1
-        gkl_lp += 1
-        gkl_ut += 1
-        gkl_gmm += 1
+        g_kl_pinn += Z_pinn
+        g_kl_pinngmm += 1; g_kl_pinngmm_vanilla += 1; g_kl_pinngmm_noencoder += 1
+        g_kl_lp += 1
+        g_kl_ut += 1
+        g_kl_gmm += 1
         metrics["rel_error_pinn"].append(100.*delta_p_pinn_max/pdf_ref_max)
         metrics["tv_pinn"].append(tv_pinn)
-        metrics["g_kl_pinn"].append(gkl_pinn)
+        metrics["g_kl_pinn"].append(g_kl_pinn)
 
         metrics["rel_error_pinngmm"].append(100.*delta_p_pinngmm_max/pdf_ref_max)
         metrics["tv_pinngmm"].append(tv_pinngmm)
-        metrics["g_kl_pinngmm"].append(gkl_pinngmm)
+        metrics["g_kl_pinngmm"].append(g_kl_pinngmm)
 
         metrics["rel_error_pinngmm_vanilla"].append(100.*delta_p_pinngmm_vanilla_max/pdf_ref_max)
         metrics["tv_pinngmm_vanilla"].append(tv_pinngmm_vanilla)
-        metrics["g_kl_pinngmm_vanilla"].append(gkl_pinngmm_vanilla)
+        metrics["g_kl_pinngmm_vanilla"].append(g_kl_pinngmm_vanilla)
+
+        metrics["rel_error_pinngmm_noencoder"].append(100.*delta_p_pinngmm_noencoder_max/pdf_ref_max)
+        metrics["tv_pinngmm_noencoder"].append(tv_pinngmm_noencoder)
+        metrics["g_kl_pinngmm_noencoder"].append(g_kl_pinngmm_noencoder)
 
         metrics["rel_error_lp"].append(100.*delta_p_lp_max/pdf_ref_max)
         metrics["tv_lp"].append(tv_lp)
-        metrics["g_kl_lp"].append(gkl_lp)
+        metrics["g_kl_lp"].append(g_kl_lp)
 
         metrics["rel_error_ut"].append(100.*delta_p_ut_max/pdf_ref_max)
         metrics["tv_ut"].append(tv_ut)
-        metrics["g_kl_ut"].append(gkl_ut)
+        metrics["g_kl_ut"].append(g_kl_ut)
 
         metrics["rel_error_gmm"].append(100.*delta_p_gmm_max/pdf_ref_max)
         metrics["tv_gmm"].append(tv_gmm)
-        metrics["g_kl_gmm"].append(gkl_gmm)
+        metrics["g_kl_gmm"].append(g_kl_gmm)
 
         metrics["B1_pinn"].append(100. * 2. * e1_pinn_max/pdf_ref_max)
         metrics["B1_pinngmm"].append(100. * 2. * e1_pinngmm_max/pdf_ref_max)
@@ -553,6 +575,7 @@ def main():
 
     # load pinn-gmm
     p_net_gmm_vanilla, _, _ = load_model_by_key(trained_models, key="PINN-GMM_vanilla")
+    p_net_gmm_noencoder, _, _ = load_model_by_key(trained_models, key="PINN-GMM-noencoder")
     p_net_gmm, e1_net_gmm, rar_samples = load_model_by_key(trained_models, key="PINN-GMM_bias")
 
     # load baseline methods
@@ -563,7 +586,7 @@ def main():
     metrics_path = "output/metric_NB="+str(NBATCH)+".npz"
     if(COMPUTE):
         compute_pdf_variations(N_batch=NBATCH, p_net=p_net, p_net_gmm=p_net_gmm, 
-            p_net_gmm_vanilla=p_net_gmm_vanilla,
+            p_net_gmm_vanilla=p_net_gmm_vanilla, p_net_gmm_noencoder=p_net_gmm_noencoder,
             data_lp=data_lp, data_ut=data_ut, data_gmm=data_gmm,
             e1_net=e1_net, e1_net_gmm=e1_net_gmm, save_path=metrics_path)
     metrics = load_metrics_npz(metrics_path); plot_pdf_metrics(metrics, save_plot=SAVEPLOT)

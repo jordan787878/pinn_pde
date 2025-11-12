@@ -155,8 +155,8 @@ def set_static_X_event(problem):
     covs = covs.detach().numpy()
     # Define the X_event as a random (0.1 - per dimension of the X_dom)
     _, bias_center, _ = heaviest_component_mean(ws, mus)
-    bias_center = bias_center*1.05
-    problem["X_event"] = sample_event_box(problem["X_dom"], seed=2, frac=0.2, bias=bias_center)
+    bias_center = bias_center*1.01
+    problem["X_event"] = sample_event_box(problem["X_dom"], seed=2, frac=0.14, bias=bias_center)
     return problem
 
 
@@ -293,35 +293,32 @@ def plot_summary(problem, result_label):
                  color=colors_4set[idx], marker=markers_4set[idx], 
                  markersize=9,
                  label=problem["Pr_keys_labels"][idx])
+        
+    problem_coarse = load_problem_result_npz("output/solver_Nx1_Ndeg10_GMMguide1_Cheap0.npz")
+    _Pr_lower = np.array(problem_coarse["Pr_opt_lower"])
+    _Pr_upper = np.array(problem_coarse["Pr_opt_upper"])
+    axs.fill_between(
+        tspan,
+        _Pr_lower, _Pr_upper,
+        color='black',
+        alpha=0.1,
+        label=r"Bounds $\mathbb{P}^-, \mathbb{P}^+$ (Coarse grid)"
+    )
 
     axs.fill_between(
         tspan,
         Pr_lower, Pr_upper,
         color='black',
         alpha=0.3,
-        hatch = "//",
-        lw=2,
-        label=r"Bounds $\mathbb{P}^-, \mathbb{P}^+$"
-    )
-
-    problem_coarse = load_problem_result_npz("output/solver_Nx1_Ndeg10_GMMguide1_Cheap0.npz")
-    Pr_lower = np.array(problem_coarse["Pr_opt_lower"])
-    Pr_upper = np.array(problem_coarse["Pr_opt_upper"])
-    axs.fill_between(
-        tspan,
-        Pr_lower, Pr_upper,
-        color='black',
-        alpha=0.1,
-        label=r"Bounds $\mathbb{P}^-, \mathbb{P}^+$ (Coarse)"
+        label=r"Bounds $\mathbb{P}^-, \mathbb{P}^+$ (Refined grid)"
     )
 
     # axs.plot(tspan, Pr_lower, color=lower_color)
     # axs.plot(tspan, Pr_upper, color=upper_color)
-
     axs.set_xlabel("t")
     axs.set_ylabel("Probability")
-    axs.set_ylim([-0.05, min(1.0, 1.5*Pr_upper.max())])
-    plt.legend(ncol=1)
+    # axs.set_ylim([-0.05, min(1.0, 1.5*Pr_upper.max())])
+    plt.legend(ncol=2)
     custom_save_plot(True, "figs/"+result_label+".pdf")
 
 
@@ -337,14 +334,15 @@ def main():
     problem = {
         "D": 6,
         "N_x": 1, 
-        "N_degree": 500, 
+        "N_degree": 2000, 
         "use_event_guidance": True, "use_gmm_guidance": True, 
-        "cap_per_degree" : 256,
+        "cap_per_degree" : 360,
         "cheap": False,
-        "verbose_refine": True,
+        "verbose_refine": False,
         "X_dom": constants._NX_RANGE_NP,
         "time_points_ref": np.round(np.arange(0., 0.3+0.05, 0.05, dtype=np.float32),2),
-        "time_points": data_lp.data["times"],# np.round(np.arange(0., 0.3+0.05, 0.05, dtype=np.float32),2),
+        "time_points": np.round(np.arange(0., 0.3+0.05, 0.05, dtype=np.float32),2),
+        # "time_points": data_lp.data["times"],# np.round(np.arange(0., 0.3+0.05, 0.05, dtype=np.float32),2),
         "networks": networks
     }
     result_label = "solver_Nx{:d}_Ndeg{:d}_GMMguide{:d}_Cheap{:d}".format(
@@ -373,13 +371,11 @@ def main():
     # logout
     print("Pr ref: ", end="\t")
     print_list(problem["Pr_ref"])
-    for key in problem["Pr_keys"]:
-        print(key, ": ", end="\t",)
-        print_list(problem[key])
-    # # plot probability estimate only
-    # plot_est_summary(problem)
-    # plt.show()
-    # return
+    # for key in problem["Pr_keys"]:
+    #     print(key, ": ", end="\t",)
+    #     print_list(problem[key])
+    # plot probability estimate only
+    plot_est_summary(problem)
 
     # Solving
     if(COMPUTE):

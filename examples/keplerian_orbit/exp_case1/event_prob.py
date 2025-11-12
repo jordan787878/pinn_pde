@@ -156,7 +156,9 @@ def set_static_X_event(problem):
     mus = mus.detach().numpy()
     covs = covs.detach().numpy()
     _, bias_center, _ = heaviest_component_mean(ws, mus)
-    problem["X_event"] = sample_event_box(problem["X_dom"], seed=2, frac=0.05, bias=bias_center)
+    bias_center[0] = 19.3
+    bias_center[5] = 25.
+    problem["X_event"] = sample_event_box(problem["X_dom"], seed=2, frac=0.2, bias=bias_center)
     return problem
 
 
@@ -338,7 +340,8 @@ def main():
         "verbose_refine": True,
         "X_dom": constants._NX_RANGE_NP,
         "time_points_ref": constants.T_PRIME_SPAN,
-        "time_points": data_lp.data["times"],
+        "time_points": constants.T_PRIME_SPAN,
+        # "time_points": data_lp.data["times"],
         "networks": networks
     }
     result_label = "solver_Nx{:d}_Ndeg{:d}_GMMguide{:d}_Cheap{:d}".format(
@@ -374,23 +377,20 @@ def main():
 
     # plot probability estimate only
     plot_est_summary(problem)
-    plt.show()
-    return
 
     # visualize X_event
-    # data_lp = PropagationData(SAVE_PATH_LINEAR_PROPAGATE)
-    # data_ut = PropagationData(SAVE_PATH_UNSCENT_PROPAGATE)
-    # data_gmm = PropagationData(SAVE_PATH_GMM_PROPAGATE)
-    # plot_event_triptych_simple(constants, problem["X_event"], 0.3, 
-    #         p_net_gmm=p_net_gmm, data_lp=data_lp, data_ut=data_ut, data_gmm=data_gmm)
-    # plt.show()
-    # return
+    data_lp = PropagationData(SAVE_PATH_LINEAR_PROPAGATE)
+    data_ut = PropagationData(SAVE_PATH_UNSCENT_PROPAGATE)
+    data_gmm = PropagationData(SAVE_PATH_GMM_PROPAGATE)
+    plot_event_triptych_simple(constants, problem["X_event"], 0.3, 
+            p_net_gmm=p_net_gmm, data_lp=data_lp, data_ut=data_ut, data_gmm=data_gmm)
+    plt.show()
+    return
 
     # Solving
     if(COMPUTE):
         problem = run_solver(problem)
-        save_problem_result_npz(result_path, problem, 
-                                keys=problem.keys())
+        save_problem_result_npz(result_path, problem)
     
     # I/O
     problem_result = load_problem_result_npz(result_path, problem)

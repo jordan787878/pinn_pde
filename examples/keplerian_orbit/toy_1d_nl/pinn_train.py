@@ -68,6 +68,7 @@ def train_pnet(p_net, configuration):
 
 # --- V0 PNet training ---
 def train_pnet_v0(p_net, configuration):
+    p_net.train()
     # --- get configuration ---
     iterations = configuration["iterations"]
     train_helper_sample_ic = configuration["sample_ic"]
@@ -145,12 +146,12 @@ def train_pnet_v0(p_net, configuration):
         # --- Learning rate decay ---
         if (epoch + 1) % iterations_per_decay == 0:
             scheduler.step()
-            print(f"[info] Training epoch: {epoch+1}, LR: {optimizer.param_groups[0]['lr']:.2e}")
+            # print(f"[info] Training epoch: {epoch+1}, LR: {optimizer.param_groups[0]['lr']:.2e}")
 
         # --- Save min loss model and update beta ---
         if loss.data < 0.95 * min_loss:
             train_time = time.time() - start_time
-            print(f"--- Save Epoch: {epoch+1}, Loss: {loss.item():.4f}, IC: {mse_u.item():.4f}, Res: {mse_res.item():.4f}, Beta: {beta:.2f} ---")
+            # print(f"--- Save Epoch: {epoch+1}, Loss: {loss.item():.4f}, IC: {mse_u.item():.4f}, Res: {mse_res.item():.4f}, Beta: {beta:.2f} ---")
             torch.save({
                     'epoch': epoch,
                     'model_state_dict': p_net.state_dict(),
@@ -178,7 +179,7 @@ def train_pnet_v0(p_net, configuration):
                     max_indices = torch.topk(ic_errors.squeeze(), 10).indices
                     x_bc_rar = torch.cat((x_bc_rar, x_bc_check[max_indices, :]), dim=0)
                     t_bc_rar = torch.cat((t_bc_rar, t_bc_check[max_indices]), dim=0)
-                    print(f"... RAR IC, added {len(max_indices)} points. Max IC error: {max_error_ic:.4f}")
+                    # print(f"... RAR IC, added {len(max_indices)} points. Max IC error: {max_error_ic:.4f}")
 
             # Add Residual points
             x_res_check, t_res_check = train_helper_sample_res(N_RAR)
@@ -190,10 +191,10 @@ def train_pnet_v0(p_net, configuration):
                 max_indices = torch.topk(res_errors.squeeze(), 10).indices
                 x_res_rar = torch.cat((x_res_rar, x_res_check[max_indices, :]), dim=0)
                 t_res_rar = torch.cat((t_res_rar, t_res_check[max_indices]), dim=0)
-                print(f"... RAR Res, added {len(max_indices)} points. Max Res error: {max_error_res:.4f}")
+                # print(f"... RAR Res, added {len(max_indices)} points. Max Res error: {max_error_res:.4f}")
         
     end_time = time.time()
-    print(f"Total training time: {(end_time - start_time):.2f} seconds.")
+    # print(f"Total training time: {(end_time - start_time):.2f} seconds.")
 
 
 # --- V0 E1Net training ---

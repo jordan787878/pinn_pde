@@ -722,7 +722,7 @@ def plot_event_triptych_simple(constants, X_event, t, p_net_gmm=None,
 
     x_ranges = constants._NX_RANGE_NP
           
-    pairs  = [(0, 3), (1, 4), (2, 5)]
+    pairs  = [(0, 5), (1, 2), (3, 4)]
     labels = ['r', 'th', 'ph', 'r_dot', 'th_dot', 'phi_dot']
 
     set_publication_plot_style()

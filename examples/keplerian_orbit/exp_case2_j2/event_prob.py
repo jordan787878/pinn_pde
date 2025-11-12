@@ -155,7 +155,7 @@ def heaviest_component_mean(ws: np.ndarray, mus: np.ndarray):
 def set_static_X_event(problem):
     p_net, _ = problem["networks"]
     tpoints = problem["time_points"]
-    teval = tpoints[-2]
+    teval = tpoints[-1]
     ws, mus, covs = p_net.weights_means_covs_at(teval)
     ws = ws.detach().numpy()
     mus = mus.detach().numpy()
@@ -163,10 +163,10 @@ def set_static_X_event(problem):
     # Define the X_event as a random (0.1 - per dimension of the X_dom)
     _, bias_center, _ = heaviest_component_mean(ws, mus)
     # problem["X_event"] = sample_event_box(problem["X_dom"], seed=2, frac=0.1, bias=bias_center)
-    bias_center[0] -= 0.4
-    bias_center[1] += 0.7
-    bias_center[3] += 0.3
-    problem["X_event"] = sample_event_box(problem["X_dom"], seed=2, frac=0.1, bias=bias_center)
+    bias_center[0] -= 0.1
+    bias_center[1] += 0.2
+    bias_center[3] += 0.1
+    problem["X_event"] = sample_event_box(problem["X_dom"], seed=2, frac=0.06, bias=bias_center)
     print(problem["X_event"])
     return problem
     # (Dynamic) set the X_event
@@ -279,7 +279,7 @@ def plot_est_summary(problem):
     Pr_ref = np.array(problem["Pr_ref"])
     tspan = problem["time_points"]
 
-    axs.plot(tspan_ref, Pr_ref, label=r'$\mathbb{P}_{\text{ref}}(X)$', 
+    axs.plot(tspan_ref, Pr_ref, label=r'$\mathbb{P}_{\text{ref}}$', 
          linestyle='None', 
          marker='o', 
          markersize=12, 
@@ -311,7 +311,7 @@ def plot_summary(problem, result_label):
     Pr_lower = np.array(problem["Pr_opt_lower"])
     Pr_upper = np.array(problem["Pr_opt_upper"])
 
-    axs.plot(tspan_ref, Pr_ref, label=r'$\mathbb{P}_{\text{ref}}(X)$', 
+    axs.plot(tspan_ref, Pr_ref, label=r'$\mathbb{P}_{\text{ref}}$', 
          linestyle='None', 
          marker='o', 
          markersize=9, 
@@ -323,30 +323,31 @@ def plot_summary(problem, result_label):
         axs.plot(tspan, problem[key], linestyle=linestyles_4set[idx],
                  color=colors_4set[idx], marker=markers_4set[idx], label=problem["Pr_keys_labels"][idx])
 
+    problem_coarse = load_problem_result_npz("output/solver_Nx1_Ndeg10_GMMguide1_Cheap0.npz")
+    _Pr_lower = np.array(problem_coarse["Pr_opt_lower"])
+    _Pr_upper = np.array(problem_coarse["Pr_opt_upper"])
+    axs.fill_between(
+        tspan,
+        _Pr_lower, _Pr_upper,
+        color='black',
+        alpha=0.1,
+        label=r"Bounds $\mathbb{P}^-, \mathbb{P}^+$ (Coarse grid)"
+    )
+
     axs.fill_between(
         tspan,
         Pr_lower, Pr_upper,
         color='black',
         alpha=0.3,
-        label=r"Bounds $\mathbb{P}^-, \mathbb{P}^+$"
-    )
-
-    problem_coarse = load_problem_result_npz("output/solver_Nx1_Ndeg10_GMMguide1_Cheap0.npz")
-    Pr_lower = np.array(problem_coarse["Pr_opt_lower"])
-    Pr_upper = np.array(problem_coarse["Pr_opt_upper"])
-    axs.fill_between(
-        tspan,
-        Pr_lower, Pr_upper,
-        color='black',
-        alpha=0.1,
-        label=r"Bounds $\mathbb{P}^-, \mathbb{P}^+$ (Coarse)"
+        label=r"Bounds $\mathbb{P}^-, \mathbb{P}^+$ (Refined grid)"
     )
 
     # axs.plot(tspan, Pr_lower, color=lower_color)
     # axs.plot(tspan, Pr_upper, color=upper_color)
     axs.set_xlabel("t")
     axs.set_ylabel("Probability")
-    plt.legend(ncol=2, loc="best")
+    axs.set_ylim([0.0, 1.5*_Pr_upper.max()])
+    plt.legend(ncol=2)
     custom_save_plot(True, "figs/"+result_label+".pdf")
 
 
@@ -364,15 +365,15 @@ def main():
     problem = {
         "D": 4,
         "N_x": 1, 
-        "N_degree": 500, 
+        "N_degree": 2000, 
         "use_event_guidance": True, "use_gmm_guidance": True, 
-        "cap_per_degree" : 512,
+        "cap_per_degree" : 600,
         "cheap": False,
         "verbose_refine": True,
         "X_dom": constants._NX_RANGE_NP,
         "time_points_ref": constants.T_PRIME_SPAN,
-        # "time_points": constants.T_PRIME_SPAN,
-        "time_points": data_lp.data["times"],
+        "time_points": constants.T_PRIME_SPAN,
+        # "time_points": data_lp.data["times"],
         "networks": networks
     }
     result_label = "solver_Nx{:d}_Ndeg{:d}_GMMguide{:d}_Cheap{:d}".format(
@@ -390,10 +391,10 @@ def main():
     # Compute event probability estimates
     problem["Pr_keys"] = ["Pr_lp", "Pr_ut", "Pr_gmm", "Pr_pinngmm"]
     problem["Pr_keys_labels"] = [
-        r'$\mathbb{P}_{\text{GA}}(X)$',
-        r'$\mathbb{P}_{\text{UT}}(X)$',
-        r'$\mathbb{P}_{\text{GMM}}(X)$',
-        r'$\mathbb{P}_{\text{PINN-GMM}}(X)$'
+        r'$\mathbb{P}_{\text{GA}}$',
+        r'$\mathbb{P}_{\text{UT}}$',
+        r'$\mathbb{P}_{\text{GMM}}$',
+        r'$\mathbb{P}_{\text{PINN-GMM}}$'
     ]
     for key in problem["Pr_keys"]:
         problem = estimate_event_probability(problem, Pr_key=key)
@@ -412,8 +413,7 @@ def main():
     # Solving
     if(COMPUTE):
         problem = run_solver(problem)
-        save_problem_result_npz(result_path, problem, 
-                                keys=problem.keys())
+        save_problem_result_npz(result_path, problem)
     
     # I/O
     problem_result = load_problem_result_npz(result_path, problem)
