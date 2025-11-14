@@ -15,33 +15,33 @@ from utilities._General.util import custom_save_plot
 colors_7set = sns.color_palette([
     "#FF008C",  # GA
     "#00FBFF",  # UT
-        "#00FBFF",  # UT
+        # "#00FBFF",  # UT
     "#FF8400",  # GMM
     "#00FF1E",  # prior
     "#8C00FF",  # PINN-MLP
     "#000000",  # PINN-GMM
-    "#0066FF",  # PINN-Flow  ←
+    # "#0066FF",  # PINN-Flow  ←
 ])
 
 # 7 high-contrast linestyle/marker pairs (index-bound)
 linestyles_7set = [
     (0, (5, 2)),        # GA
     (0, (7, 2, 3, 2)),  # UT
-        (0, (7, 2, 3, 2)),  # UT
+        # (0, (7, 2, 3, 2)),  # UT
     "--",               # GMM
     (0, (9, 2, 1, 2)),  # prior  ←
     "-.",               # PINN-MLP
     "-",                # PINN-GMM
-    ":",                # PINN-Flow
+    # ":",                # PINN-Flow
 ]
 markers_7set = ['o', # GA
                 's', # UT
-                    's', # UT
+                    # 's', # UT
                 '^', # GMM
                 'v',    # prior  ←
                 'D', # PINN-MLP
                 'None', # PINN-GMM
-                'X'  # PINN-Flow
+                # 'X'  # PINN-Flow
                 ] 
 
 
@@ -130,7 +130,7 @@ def plot_metrics(show_flow=False):
     metrics_pinngmm = np.load("data/metrics(pinn-gmm).npz")
     metrics_flow = np.load("data/metrics(flow).npz")
 
-    plot_labels = ["GA", "UT, "+r"$\alpha=10^{-3}$", "UT, "+r"$\alpha=1.0$", "GMM", 
+    plot_labels = ["GA", "UT", "GMM", 
         "PINN-MLP (prior)", "PINN-MLP", "PINN-GMM", "PINN-FLOW"]
 
     set_publication_plot_style(font_size=24, pair_line_marker_cycle=True)
@@ -138,34 +138,34 @@ def plot_metrics(show_flow=False):
     plt.figure()
     plt.plot(metrics["t"], metrics["norm_error_lp"], label=plot_labels[0])
     plt.plot(metrics["t"], metrics["norm_error_ut"], label=plot_labels[1])
-    plt.plot(metrics["t"], metrics["norm_error_ut_alpha_0_1"], label=plot_labels[2])
-    plt.plot(metrics["t"], metrics["norm_error_gmm"], label=plot_labels[3])
-    plt.plot(metrics_pri["t"], metrics_pri["norm_error_pinn"], label=plot_labels[4])
+    # plt.plot(metrics["t"], metrics["norm_error_ut_alpha_0_1"], label=plot_labels[2])
+    plt.plot(metrics["t"], metrics["norm_error_gmm"], label=plot_labels[2])
+    plt.plot(metrics_pri["t"], metrics_pri["norm_error_pinn"], label=plot_labels[3])
     plt.fill_between(
         metrics_pri["t"],
         metrics_pri["norm_error_pinn"],
         metrics_pri["normalize_B1"],
+        color=colors_7set[3],
+        alpha=0.2,
+        label="Error Bound"
+    )
+
+    plt.plot(metrics["t"], metrics["norm_error_pinn"], label=plot_labels[4])
+    plt.fill_between(
+        metrics["t"],
+        metrics["norm_error_pinn"],
+        metrics["normalize_B1"],
         color=colors_7set[4],
         alpha=0.2,
         label="Error Bound"
     )
 
-    plt.plot(metrics["t"], metrics["norm_error_pinn"], label=plot_labels[5])
-    plt.fill_between(
-        metrics["t"],
-        metrics["norm_error_pinn"],
-        metrics["normalize_B1"],
-        color=colors_7set[5],
-        alpha=0.2,
-        label="Error Bound"
-    )
-
-    plt.plot(metrics_pinngmm["t"], metrics_pinngmm["norm_error_pinn"], label=plot_labels[6])
+    plt.plot(metrics_pinngmm["t"], metrics_pinngmm["norm_error_pinn"], label=plot_labels[5])
     plt.fill_between(
         metrics_pinngmm["t"],
         metrics_pinngmm["norm_error_pinn"],
         metrics_pinngmm["normalize_B1"],
-        color=colors_7set[6],
+        color=colors_7set[5],
         alpha=0.2,
         hatch='//',                 # tilt/density: '/', '//', '///', etc.
         linewidth=0.0,               # hide polygon outline
@@ -192,7 +192,7 @@ def plot_metrics(show_flow=False):
     plt.figure()
     plt.plot(metrics["t"], metrics["tv_lp"], label=plot_labels[0])
     plt.plot(metrics["t"], metrics["tv_ut"], label=plot_labels[1])
-    plt.plot(metrics["t"], metrics["tv_ut_alpha_0_1"], label=plot_labels[2])
+    # plt.plot(metrics["t"], metrics["tv_ut_alpha_0_1"], label=plot_labels[2])
     plt.plot(metrics["t"], metrics["tv_gmm"], label=plot_labels[3])
     plt.plot(metrics_pri["t"], metrics_pri["tv_pinn"], label=plot_labels[4])
     plt.plot(metrics["t"], metrics["tv_pinn"], label=plot_labels[5])
@@ -209,7 +209,7 @@ def plot_metrics(show_flow=False):
     plt.figure()
     plt.plot(metrics["t"], metrics["g_kl_lp"], label=plot_labels[0])
     plt.plot(metrics["t"], metrics["g_kl_ut"], label=plot_labels[1])
-    plt.plot(metrics["t"], metrics["g_kl_ut_alpha_0_1"], label=plot_labels[2])
+    # plt.plot(metrics["t"], metrics["g_kl_ut_alpha_0_1"], label=plot_labels[2])
     plt.plot(metrics["t"], metrics["g_kl_gmm"], label=plot_labels[3])
     plt.plot(metrics_pri["t"], metrics_pri["g_kl_pinn"], label=plot_labels[4])
     plt.plot(metrics["t"], metrics["g_kl_pinn"], label=plot_labels[5])

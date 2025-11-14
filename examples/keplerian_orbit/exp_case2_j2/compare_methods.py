@@ -555,28 +555,28 @@ def main():
     data_ut = PropagationData(SAVE_PATH_UNSCENT_PROPAGATE)
     data_gmm = PropagationData(SAVE_PATH_GMM_PROPAGATE)
 
-    # # --- metrics ---
-    # metrics_path = "output/metric_NB="+str(NBATCH)+".npz"
-    # if(COMPUTE):
-    #     compute_pdf_variations(data_mc=data_mc, 
-    #         p_net=p_net, p_net_gmm=p_net_gmm, 
-    #         p_net_gmm_vanilla=p_net_gmm_vanilla, p_net_gmm_noencoder=p_net_gmm_noencoder,
-    #         data_lp=data_lp, data_ut=data_ut, data_gmm=data_gmm,
-    #         e1_net=e1_net, e1_net_gmm=e1_net_gmm,
-    #         save_path=metrics_path)
-    # metrics = load_metrics_npz(metrics_path)
-    # plot_pdf_metrics(metrics, save_plot=SAVEPLOT)
+    # --- metrics ---
+    metrics_path = "output/metric_NB="+str(NBATCH)+".npz"
+    if(COMPUTE):
+        compute_pdf_variations(data_mc=data_mc, 
+            p_net=p_net, p_net_gmm=p_net_gmm, 
+            p_net_gmm_vanilla=p_net_gmm_vanilla, p_net_gmm_noencoder=p_net_gmm_noencoder,
+            data_lp=data_lp, data_ut=data_ut, data_gmm=data_gmm,
+            e1_net=e1_net, e1_net_gmm=e1_net_gmm,
+            save_path=metrics_path)
+    metrics = load_metrics_npz(metrics_path)
+    plot_pdf_metrics(metrics, save_plot=SAVEPLOT)
     
-    # # --- plots ---
-    # compare_corner_plots(data_mc, 
-    #                      data_lp=data_lp, data_ut=data_ut, data_gmm=data_gmm,
-    #                      PNet_XL_PATH=None,
-    #                      p_net_gmm=p_net_gmm
-    #                      )
-    # # compare_corner_plots_XYZ(MC_FOLDER)
+    # --- plots ---
+    compare_corner_plots(data_mc, 
+                         data_lp=data_lp, data_ut=data_ut, data_gmm=data_gmm,
+                         PNet_XL_PATH=None,
+                         p_net_gmm=p_net_gmm
+                         )
+    # compare_corner_plots_XYZ(MC_FOLDER)
 
-    # # --- plot training history ---
-    # plot_training_history(trained_models)
+    # --- plot training history ---
+    plot_training_history(trained_models)
 
     plot_marginal_pdf_cart(constants, data_mc, p_net_gmm)
     plt.show()

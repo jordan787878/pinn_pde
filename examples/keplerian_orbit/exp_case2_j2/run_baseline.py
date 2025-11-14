@@ -98,7 +98,7 @@ def main():
     x_dim = x0.size
     dyn_fcn = lambda t, x, c: orbit_dyn(c, x)
     jac_fcn = lambda t, x, c: get_Jacobian(c, x)
-    Q = np.diag([0, 0, constants.N_Q_NOISE[0], constants.N_Q_NOISE[2]]).astype(np.float64)
+    Q = np.diag([0, 0, constants.N_Q_NOISE[0], constants.N_Q_NOISE[1]]).astype(np.float64)
     t_span = (np.float64(np.round(constants.T_PRIME_SPAN[0], 2)), np.float64(np.round(constants.T_PRIME_SPAN[-1], 2)))
 
     # --- Do linear propagation and save result to SAVE_PATH_LINEAR_PROPAGATE ---
@@ -125,6 +125,10 @@ def main():
         t_span=t_span,
         dt_save=0.01,
         Q=Q,
+        G=np.array([[0.0, 0.0, 0.0, 0.0],
+                    [0.0, 0.0, 0.0, 0.0],
+                    [0.0, 0.0, 1.0, 0.0],
+                    [0.0, 0.0, 0.0, 1.0]]),
         save_path=SAVE_PATH_UNSCENT_PROPAGATE,
         alpha=1.0,
     )

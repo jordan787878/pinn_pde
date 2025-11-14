@@ -3,7 +3,7 @@ import os
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.stats import norm
-from scipy.optimize import brentq 
+from scipy.optimize import brentq, minimize_scalar
 import seaborn as sns
 from functools import partial
 import copy
@@ -38,6 +38,15 @@ def load_samples_as_trajectories(t_span):
     return x_traj_true
 
 
+def gmm_pdf(x, weights, means, covars):
+    weights_flat = weights.flatten()
+    means_flat = means.flatten()
+    covars_flat = covars.flatten()
+    stds = np.sqrt(covars_flat)
+    # vectorized mixture pdf at scalar x
+    return np.sum(weights_flat * norm.pdf(x, loc=means_flat, scale=stds))
+
+
 def gmm_cdf(x, weights, means, covars):
     weights_flat = weights.flatten()
     means_flat = means.flatten()
@@ -56,34 +65,71 @@ def find_gmm_percentile(target_p, weights, means, covars):
     min_mean = np.min(means_flat)
     max_mean = np.max(means_flat)
     max_std = np.max(np.sqrt(covars_flat))
+
     lower_bound = min_mean - 10 * max_std
     upper_bound = max_mean + 10 * max_std
+
     if func(lower_bound) > 0:
-        while func(lower_bound) > 0: lower_bound -= max_std 
+        while func(lower_bound) > 0:
+            lower_bound -= max_std
     if func(upper_bound) < 0:
-        while func(upper_bound) < 0: upper_bound += max_std 
+        while func(upper_bound) < 0:
+            upper_bound += max_std
+
     percentile_value = brentq(func, lower_bound, upper_bound)
     return percentile_value
+
+
+def find_gmm_mode_in_interval(weights, means, covars, lower_bound, upper_bound):
+    """
+    Find argmax_x GMM(x) for x in [lower_bound, upper_bound].
+    """
+
+    def neg_pdf(x):
+        return -gmm_pdf(x, weights, means, covars)
+
+    # bounded 1D optimization
+    res = minimize_scalar(neg_pdf, bounds=(lower_bound, upper_bound), method="bounded")
+    mode_x = res.x
+
+    # (optional) you can also return the pdf value at the mode if useful:
+    mode_pdf = gmm_pdf(mode_x, weights, means, covars)
+    return mode_x, mode_pdf
 
 
 def calculate_gmm_prediction_interval(weights, means, covars, confidence_level=0.95):
     alpha = 1.0 - confidence_level
     lower_p = alpha / 2.0
     upper_p = 1.0 - alpha / 2.0
+
     lower_bound = find_gmm_percentile(lower_p, weights, means, covars)
     upper_bound = find_gmm_percentile(upper_p, weights, means, covars)
-    return [[lower_bound, upper_bound]] # Return as list of intervals
+
+    # find maximum likelihood point (mode) within this CI
+    ml_point, ml_pdf_val = find_gmm_mode_in_interval(
+        weights, means, covars, lower_bound, upper_bound
+    )
+
+    # # You can choose whatever return format you like; e.g.:
+    # return {
+    #     "interval": [lower_bound, upper_bound],
+    #     "ml_point": ml_point,
+    #     "ml_pdf": ml_pdf_val,   # optional
+    # }
+    return [[lower_bound, upper_bound]], ml_point # Return as list of intervals
 
 
 def get_confidence_interval(t_span, p_net_gmm, confidence_level=0.95):
     confidence_interval = []
+    ml_points_tspan = []
     for t in t_span:
         ws, mus, covs = p_net_gmm.get_params(t)
-        ci = calculate_gmm_prediction_interval(ws, mus, covs, confidence_level=confidence_level)
+        ci, ml_point = calculate_gmm_prediction_interval(ws, mus, covs, confidence_level=confidence_level)
         confidence_interval.append(ci)
+        ml_points_tspan.append(ml_point)
     confidence_interval = np.array(confidence_interval)
     # print(confidence_interval.shape)
-    return confidence_interval
+    return confidence_interval, ml_points_tspan
 
 
 def get_confidence_interval_classic(t_span, classic_gmm, confidence_level=0.95):
@@ -91,7 +137,7 @@ def get_confidence_interval_classic(t_span, classic_gmm, confidence_level=0.95):
     for t in t_span:
         _, ws, mus, covs = classic_gmm.get(t)
         ws = ws.reshape(-1,); mus = mus.reshape((-1, 1)); covs = covs.reshape((-1, 1, 1))
-        ci = calculate_gmm_prediction_interval(ws, mus, covs, confidence_level=confidence_level)
+        ci, _ = calculate_gmm_prediction_interval(ws, mus, covs, confidence_level=confidence_level)
         confidence_interval.append(ci)
     confidence_interval = np.array(confidence_interval)
     # print(confidence_interval.shape)
@@ -99,8 +145,8 @@ def get_confidence_interval_classic(t_span, classic_gmm, confidence_level=0.95):
 
 
 def get_confidence_interval_core(ws, mus, covs, confidence_level=0.95):
-    ci = calculate_gmm_prediction_interval(ws, mus, covs, confidence_level=confidence_level)
-    return np.array(ci[0]).reshape((1, -1))
+    ci, ml_point = calculate_gmm_prediction_interval(ws, mus, covs, confidence_level=confidence_level)
+    return np.array(ci[0]).reshape((1, -1)), ml_point
 
 
 def validate_confidence_interval(t_span, x_traj_true, conf_interval_pinn_gmm, label):
@@ -115,26 +161,44 @@ def validate_confidence_interval(t_span, x_traj_true, conf_interval_pinn_gmm, la
                                         (shape: T, 1, 2) where the last dim is [min, max].
 
     Returns:
-        float: The overall average coverage frequency across all time steps.
+        overall_coverage_frequency (float): Average coverage across all time steps and trajectories.
+        last_time_coverage_frequency (float): Coverage at the final time T[-1] across trajectories.
     """
     N_trajectories, T = x_traj_true.shape
     total_coverage_count = 0
     print(f"Validating coverage for {N_trajectories} trajectories over {T} time steps...")
+
     for idx in range(T):
-        # Extract the specific time slice of data and the CI bounds
-        # _ci_t is expected to be of shape (1, 2)
-        _ci_t = conf_interval_pinn_gmm[idx] 
+        # CI at time t_idx, shape (1, 2): [min, max]
+        _ci_t = conf_interval_pinn_gmm[idx]
         lower_bound = _ci_t[0, 0]
         upper_bound = _ci_t[0, 1]
+
+        # True states at this time
         _x_traj_true_t = x_traj_true[:, idx]
-        # Check if data points are within the interval [lower_bound, upper_bound]
+
+        # Inside [lower_bound, upper_bound]
         is_inside = (_x_traj_true_t >= lower_bound) & (_x_traj_true_t <= upper_bound)
-        # Sum the counts and add to total
+
+        # Accumulate coverage over all times and trajectories
         total_coverage_count += np.sum(is_inside)
-    # Calculate overall average coverage across all time points and trajectories
+
+    # Overall average coverage across all time points and trajectories
     overall_coverage_frequency = total_coverage_count / (N_trajectories * T)
-    print(label, f"Coverage Frequency: {overall_coverage_frequency*100:.4f}%")
-    return overall_coverage_frequency
+
+    # --- Coverage at final time T[-1] ---
+    ci_last = conf_interval_pinn_gmm[T - 1]   # or conf_interval_pinn_gmm[-1]
+    lower_last = ci_last[0, 0]
+    upper_last = ci_last[0, 1]
+
+    x_last = x_traj_true[:, T - 1]            # or x_traj_true[:, -1]
+    is_inside_last = (x_last >= lower_last) & (x_last <= upper_last)
+    last_time_coverage_frequency = np.mean(is_inside_last)
+
+    print(label, f"Overall Coverage Frequency: {overall_coverage_frequency*100:.4f}%")
+    print(label, f"Final-Time Coverage Frequency: {last_time_coverage_frequency*100:.4f}%")
+
+    return overall_coverage_frequency, last_time_coverage_frequency
         
 
 def plot_x_traj_true(t_span, x_traj_true, conf_interval_list, label_list, 
@@ -277,7 +341,7 @@ def get_conf_interval_size(conf_interval):
 def state_est_pinn_gmm(t_span, x_traj_true, p_net_gmm, traj_pick=0, confidence_level=0.95, seed=2):
     single_x_traj_true = x_traj_true[traj_pick, :]
     p_net_gmm_copy = copy.deepcopy(p_net_gmm)
-    conf_interval_prior = get_confidence_interval(t_span, p_net_gmm, confidence_level=confidence_level)
+    conf_interval_prior, ml_points_tspan_prior = get_confidence_interval(t_span, p_net_gmm, confidence_level=confidence_level)
 
     # compute measurements: y = H*x + e, H = 1, e~N(0, R)
     gap = 1
@@ -292,6 +356,7 @@ def state_est_pinn_gmm(t_span, x_traj_true, p_net_gmm, traj_pick=0, confidence_l
     t_Y = []
     conf_interval_pos = [conf_interval_prior[0]]
     conf_interval_pos_size = [get_conf_interval_size(conf_interval_prior[0])]
+    X_maxL = [ml_points_tspan_prior[0]]
     conf_interval_prior_retrain = []
     config = {
         "iterations": 4000,
@@ -316,7 +381,7 @@ def state_est_pinn_gmm(t_span, x_traj_true, p_net_gmm, traj_pick=0, confidence_l
             ws, mus, covs = p_net_gmm.get_params(t)
         else:
             ws, mus, covs = p_net_gmm_copy.get_params(t)
-        conf_interval_prior_t = get_confidence_interval_core(ws, mus, covs, confidence_level=confidence_level)
+        conf_interval_prior_t, _ = get_confidence_interval_core(ws, mus, covs, confidence_level=confidence_level)
         conf_interval_prior_retrain.append(conf_interval_prior_t)
         _gmm_prior = make_gmm_pdf(ws, mus, covs)
 
@@ -333,14 +398,15 @@ def state_est_pinn_gmm(t_span, x_traj_true, p_net_gmm, traj_pick=0, confidence_l
             ws_pos, mus_pos, covs_pos = data_assimilation_gmm_prior(t, y_at_t, obs_model, ws, mus, covs)
         else:
             ws_pos, mus_pos, covs_pos = ws, mus, covs
-        conf_interval_pos_t = get_confidence_interval_core(ws_pos, mus_pos, covs_pos, confidence_level=confidence_level)
+        conf_interval_pos_t, ml_point_t = get_confidence_interval_core(ws_pos, mus_pos, covs_pos, confidence_level=confidence_level)
         conf_interval_pos_size.append(get_conf_interval_size(conf_interval_pos_t))
         conf_interval_pos.append(conf_interval_pos_t)
+        X_maxL.append(ml_point_t)
         _gmm_pos = make_gmm_pdf(ws_pos, mus_pos, covs_pos)
 
         # visualization
         plot_data_assimilation(t_span, single_x_traj_true, t_Y, Y, 
-            conf_interval_prior, conf_interval_pos, conf_interval_prior_retrain)
+            conf_interval_prior, conf_interval_pos, conf_interval_prior_retrain, X_maxL)
         custom_save_plot(True, "figs/CI_t{:.2f}.pdf".format(t))
 
         plot_prior_and_post(_gmm_fixed_prior, _gmm_prior, _gmm_pos, single_x_traj_true[idx_t], y_at_t,
@@ -360,16 +426,16 @@ def state_est_pinn_gmm(t_span, x_traj_true, p_net_gmm, traj_pick=0, confidence_l
         #     p_net_gmm_copy = load_train_model(p_net_gmm_copy, PATH=config["save_path"])
 
     # evaluate the frequency that the conf_interval_pos includes the single_x_traj_true
-    coverage_frequency = validate_confidence_interval(t_span, single_x_traj_true.reshape((1,-1)), conf_interval_pos, "")
-    return coverage_frequency, np.array(conf_interval_pos_size)
+    coverage_frequency, last_time_coverage_frequency = validate_confidence_interval(t_span, single_x_traj_true.reshape((1,-1)), conf_interval_pos, "")
+    return coverage_frequency, np.array(conf_interval_pos_size), last_time_coverage_frequency
 
 
 def plot_data_assimilation(t_span, single_x_traj_true, t_Y, Y, 
-    conf_interval_prior, conf_interval_pos, conf_interval_prior_retrain):
+    conf_interval_prior, conf_interval_pos, conf_interval_prior_retrain, X_maxL):
     set_publication_plot_style(font_size=22)
     fig, axs = plt.subplots()
     axs.plot(t_span, single_x_traj_true, "black", label=r"$X^*$")
-    axs.scatter(t_Y, Y, marker="*", color="green", label=r"$Y$")
+    axs.scatter(t_Y, Y, marker="x", color="green", label=r"$Y$", s=100)
     
     # plot confidence interval from fixed prior
     for idx_t, t in enumerate(t_span):
@@ -411,6 +477,9 @@ def plot_data_assimilation(t_span, single_x_traj_true, t_Y, Y,
             alpha=0.8,
             label=label
         )
+        label_x_maxL = None
+        if(idx_t) == 0: label_x_maxL=r"$X$ (max-Like)"
+        axs.scatter(t_span[idx_t], X_maxL[idx_t], marker="o", color="black", label=label_x_maxL, s=100)
     axs.set_xlabel("t")
     axs.set_ylabel("x")
     axs.legend()
@@ -478,7 +547,7 @@ def main():
     x_traj_true = load_samples_as_trajectories(t_span)
 
     confidence_level = 0.95
-    conf_interval_pinn_gmm = get_confidence_interval(t_span, p_net, confidence_level=confidence_level)
+    conf_interval_pinn_gmm, _ = get_confidence_interval(t_span, p_net, confidence_level=confidence_level)
     conf_interval_lp = get_confidence_interval_classic(t_span, data_lp, confidence_level=confidence_level)
     coverage_size_pinn_gmm_baseline = []
     for ci in conf_interval_pinn_gmm:
@@ -494,18 +563,21 @@ def main():
     # plt.show()
 
     # [Monte-Carlo testing]
-    N_trials = 1
+    N_trials = 10
     coverage_freq = 0.
+    coverage_freq_last_time = 0.
     coverage_size = []
     for i in range(0, N_trials+0):
         print("trial: ", i)
-        _coverage_freq, _ci_size = state_est_pinn_gmm(t_span, x_traj_true, p_net, 
+        _coverage_freq, _ci_size, _coverage_freq_last_time = state_est_pinn_gmm(t_span, x_traj_true, p_net, 
             traj_pick=i, confidence_level=confidence_level, seed=i)
         coverage_freq += _coverage_freq/N_trials
+        coverage_freq_last_time += _coverage_freq_last_time/N_trials
         coverage_size.append(_ci_size)
     coverage_size = np.array(coverage_size)
     print("-" * 40)
-    print("# MC overall coverage frequency: {:.2f} %".format(100. * coverage_freq))
+    print("# MC overall   coverage frequency: {:.2f} %".format(100. * coverage_freq))
+    print("# MC Last-time coverage frequency: {:.2f} %".format(100. * coverage_freq_last_time))
     print("-" * 40)
     # print("coverage size pinn-gmm baseline: ", coverage_size_pinn_gmm_baseline)
     # print("coverage size pinn-gmm with obs: ", coverage_size)

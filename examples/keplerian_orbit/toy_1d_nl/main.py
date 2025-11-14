@@ -22,7 +22,7 @@ import sys
 sys.path.insert(0, '../utilities/')
 from _General.baseline_methods import (PropagationData, 
     linear_propagation_master, unscent_propagation_master, gmm_propagation_master)
-from _General.util import set_publication_plot_style
+from _General.util import set_publication_plot_style, custom_save_plot
 from _General.classic_gmm import GMMWhitenedModel, fit_classic_gmm, make_gmm_pdf
 
 # --------------------------
@@ -417,7 +417,8 @@ def main(METHOD, TRAIN_FLAG=False, RUN_BASELINE=False):
             constants=constants,
             t_span=t_span,
             dt_save=0.01,
-            Q=Q,
+            Q=None,
+            G=np.array([[const_e]]),
             save_path=ut_path,
             alpha=1e-3,
         )
@@ -428,7 +429,8 @@ def main(METHOD, TRAIN_FLAG=False, RUN_BASELINE=False):
             constants=constants,
             t_span=t_span,
             dt_save=0.01,
-            Q=Q,
+            Q=None,
+            G=np.array([[const_e]]),
             save_path=ut_path_alpha0_1,
             alpha=1.0,
         )
@@ -458,9 +460,10 @@ def main(METHOD, TRAIN_FLAG=False, RUN_BASELINE=False):
     data_gmm = PropagationData(path=gmm_path)
 
     set_publication_plot_style()
-    colors = sns.color_palette("husl", 4)
-    fig = plt.figure(figsize=(12, 8))
+    fig = plt.figure(figsize=(10, 8))
     ax = fig.add_subplot(111, projection="3d")
+    colors = sns.color_palette("husl", 4)
+
     x_tensor = torch.from_numpy(x.reshape(-1,1)).to(device)
     t_span = np.array(t1s).astype(np.float32)
     metrics = {
@@ -614,7 +617,7 @@ def main(METHOD, TRAIN_FLAG=False, RUN_BASELINE=False):
         Line2D([0], [0], color=colors_4set[0], linestyle=linestyles_4set[0], 
                label="GA"),
         Line2D([0], [0], color=colors_4set[1], linestyle=linestyles_4set[1], 
-               label=r"UT $\alpha=10^{-3}$"),
+               label="UT"),
         Line2D([0], [0], color=colors_4set[2], linestyle=linestyles_4set[2], 
                label="GMM"),
         Line2D([0], [0], color=colors_4set[3], linestyle=linestyles_4set[3], 
@@ -622,8 +625,17 @@ def main(METHOD, TRAIN_FLAG=False, RUN_BASELINE=False):
     ]
     ax.set_xlabel("t")
     ax.set_ylabel("x")
-    ax.set_zlabel("PDF")
-    ax.legend(handles=legend_elements, loc="best", frameon=True)
+    ax.text2D(0.99, 0.8, "PDF", transform=ax.transAxes,
+          ha="center", va="bottom")
+    ax.legend(handles=legend_elements, 
+        loc="upper left",             # corner inside the axes
+        bbox_to_anchor=(0.4, 0.85),  # (x, y) in axes fraction coords
+        borderaxespad=0.0,
+        frameon=True,
+        framealpha=0.9,
+        facecolor="white",
+    )
+    custom_save_plot(True, "figs/pdfs.pdf")
 
     # metric 1: worst relative error %
     set_publication_plot_style()

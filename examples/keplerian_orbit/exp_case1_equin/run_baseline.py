@@ -108,6 +108,7 @@ def main():
         t_span=t_span,
         dt_save=0.01,
         Q=None,
+        G=np.zeros((6, 6)),
         save_path=SAVE_PATH_UNSCENT_PROPAGATE,
         alpha=1e-3,
     )

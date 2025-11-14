@@ -2,7 +2,7 @@ import numpy as np
 from numpy.typing import NDArray
 from typing import Callable, Optional, Tuple, Any, Union, Dict
 from scipy.integrate import solve_ivp
-from scipy.linalg import cholesky
+from numpy.linalg import cholesky, LinAlgError
 
 
 """ Common wrappers for other signatures
@@ -146,148 +146,311 @@ def linear_propagation_master(
                  method="lp")
 
 
-def _unscented_sigma_points(mean, cov, alpha=1e-3, beta=2.0, kappa=0.0):
-    m = np.asarray(mean, dtype=np.float64).reshape(-1)
-    n = m.size
-    P = np.asarray(cov,  dtype=np.float64).reshape(n, n)
-    # optional guard:
-    # P = 0.5*(P + P.T)
-
-    lam = alpha**2 * (n + kappa) - n
-    c = n + lam
-    if c <= 0:
-        raise ValueError("n + lambda must be positive; adjust alpha/kappa.")
-    try:
-        S = cholesky(P, lower=True)
-    except np.linalg.LinAlgError:
-        S = cholesky(P + 1e-12*np.eye(n), lower=True)
-    S *= np.sqrt(c)
-
-    X = np.empty((2*n + 1, n), dtype=np.float64)
-    X[0] = m
-    X[1:n+1]     = m + S.T
-    X[n+1:2*n+1] = m - S.T
-
-    Wm = np.full(2*n + 1, 1.0/(2.0*c), dtype=np.float64)
-    Wc = np.full(2*n + 1, 1.0/(2.0*c), dtype=np.float64)
-    Wm[0] = lam / c
-    Wc[0] = lam / c + (1.0 - alpha**2 + beta)
-    return X, Wm, Wc
-
-
 def unscent_propagation_master(
     x0: NDArray[np.float64],
     P0: NDArray[np.float64],
     dyn_fcn: Callable[[float, NDArray[np.float64], Any], NDArray[np.float64]],
-    jac_fcn: Callable[[float, NDArray[np.float64], Any], NDArray[np.float64]],   # used for Qd integration
+    jac_fcn: Callable[[float, NDArray[np.float64], Any], NDArray[np.float64]],   # unused
     constants: Any,
+    G: NDArray[np.float64],  # constant diffusion matrix (n x m_w)
     t_span: Tuple[float, float],
     dt_save: float = 1e-2,
-    Q: Optional[Union[NDArray[np.float64], Callable[[float, NDArray[np.float64], Any], NDArray[np.float64]]]] = None,
+    Q: Optional[NDArray[np.float64]] = None,  # covariance of dW_t; defaults to I
     rtol: float = 1e-9,
     atol: float = 1e-12,
     solver: str = "RK45",
     save_path: Optional[str] = None,
-    # UT hyperparameters:
+    # Sigma-point / UT hyperparameters for the Gaussian integration rule:
     alpha: float = 1e-3,
-    beta: float  = 2.0,
+    beta: float  = 2.0,   # kept for API compatibility; not used explicitly in Alg. 9.5
     kappa: float = 0.0,
 ) -> Dict[str, NDArray[np.float64]]:
     """
-    UT propagation using solve_ivp per sigma point on each [t_k, t_{k+1}] interval.
-    Process-noise contribution Q_d is computed by integrating dS = A S + S A^T + Q
-    with S(t_a)=0 over the same interval, using A from jac_fcn (local linearization).
+    Sigma-point (Algorithm 9.5) propagation of mean and covariance for the SDE
+
+        dx = f(x, t) dt + G dW_t,
+        E[dW_t dW_t^T] = Q dt,
+
+    where G is a constant (n x m_w) diffusion matrix and Q is an (m_w x m_w)
+    covariance matrix of the driving Wiener process.
+
+    We approximate the moment dynamics via Algorithm 9.5:
+
+        dm/dt ≈ Σ_i W^(i) f(m + sqrt(P) ξ_i, t)
+
+        dP/dt ≈ Σ_i W^(i) [
+                           f_i ξ_i^T sqrt(P)^T
+                         + sqrt(P) ξ_i f_i^T
+                         ]
+                + Σ_i W^(i) G Q G^T,
+
+    where ξ_i and W^(i) form a Gaussian integration rule for N(0, I),
+    sqrt(P) is a matrix square root of P (here, Cholesky S with P = S S^T),
+    and f_i = f(m + sqrt(P) ξ_i, t).
     """
-    # ---- init ----
+    # ---- init mean/cov ----
     m = np.asarray(x0, dtype=np.float64).reshape(-1)
     n = m.size
     P = np.asarray(P0, dtype=np.float64).reshape(n, n)
-    # P = 0.5*(P + P.T)
+    P = 0.5 * (P + P.T)  # enforce symmetry
 
-    t0 = np.float64(np.round(t_span[0], 2))
-    tf = np.float64(np.round(t_span[1], 2))
+    # diffusion matrix G (n x m_w)
+    G = np.asarray(G, dtype=np.float64)
+    if G.ndim != 2 or G.shape[0] != n:
+        raise ValueError(f"G must have shape (n, m_w) with n={n}, got {G.shape}")
+    m_w = G.shape[1]
+
+    # Brownian covariance Q_w (m_w x m_w)
+    if Q is None:
+        Q_w = np.eye(m_w, dtype=np.float64)
+    else:
+        Q_w = np.asarray(Q, dtype=np.float64).reshape(m_w, m_w)
+        Q_w = 0.5 * (Q_w + Q_w.T)
+
+    # effective diffusion in x: Q_eff = G Q_w G^T (n x n)
+    Q_eff = G @ Q_w @ G.T
+    Q_eff = 0.5 * (Q_eff + Q_eff.T)
+
+    # ----- Sigma-point rule for N(0, I) (Algorithm 9.5) -----
+    # Scaled UT canonical sigma vectors ξ_i and weights W^(i)
+    lam = alpha**2 * (n + kappa) - n
+    c = n + lam
+    if c <= 0:
+        raise ValueError("n + lambda must be positive; adjust alpha/kappa.")
+
+    Xi = np.zeros((2 * n + 1, n), dtype=np.float64)  # ξ_i
+    Xi[1:n+1]     =  np.sqrt(c) * np.eye(n, dtype=np.float64)
+    Xi[n+1:2*n+1] = -np.sqrt(c) * np.eye(n, dtype=np.float64)
+
+    # Weights for Gaussian expectations under N(0, I)
+    W = np.full(2 * n + 1, 1.0 / (2.0 * c), dtype=np.float64)
+    W[0] = lam / c
+    # (These W^(i) satisfy Σ W^(i) = 1 and Σ W^(i) ξ_i ξ_i^T = I.)
+
+    # ---- time grid ----
+    t0 = float(t_span[0])
+    tf = float(t_span[1])
     if tf < t0:
         raise ValueError("t_span must have tf >= t0")
     if dt_save <= 0:
         raise ValueError("dt_save must be positive.")
 
-    # output grid (rounded to 2; saved rounded to 3)
-    times = np.round(np.arange(t0, tf + 0.5*dt_save, dt_save, dtype=np.float64), 2)
-
-    def Q_eval(t: float, x: NDArray[np.float64]) -> NDArray[np.float64]:
-        if Q is None:
-            return np.zeros((n, n), dtype=np.float64)
-        M = Q(t, x, constants) if callable(Q) else Q
-        return np.asarray(M, dtype=np.float64).reshape(n, n)
+    times = np.round(
+        np.arange(t0, tf + 0.5 * dt_save, dt_save, dtype=np.float64),
+        2,
+    )
 
     means = np.empty((times.size, n), dtype=np.float64)
     covs  = np.empty((times.size, n, n), dtype=np.float64)
     means[0] = m
     covs[0]  = P
 
+    # ---- time stepping: integrate (m, P) over each [t_k, t_{k+1}] with solve_ivp ----
     for k in range(1, times.size):
-        ta = float(times[k-1])
+        ta = float(times[k - 1])
         tb = float(times[k])
 
-        # 1) sigma points at (m, P)
-        X, Wm, Wc = _unscented_sigma_points(m, P, alpha=alpha, beta=beta, kappa=kappa)
+        # pack current (m, P) into a single vector for solve_ivp
+        y0 = np.concatenate([m, P.ravel()])
 
-        # 2) propagate each sigma point ta->tb with solve_ivp
-        Xp = np.empty_like(X)
-        for i in range(X.shape[0]):
-            x_i0 = X[i]
+        def rhs(t: float, y: NDArray[np.float64]) -> NDArray[np.float64]:
+            # unpack state
+            m_t = y[:n]
+            P_t = y[n:].reshape(n, n)
+            P_t = 0.5 * (P_t + P_t.T)  # keep symmetric
 
-            def rhs(t, x):
-                return np.asarray(dyn_fcn(t, x, constants), dtype=np.float64)
+            # sqrt(P_t) via Cholesky: P_t = S S^T
+            try:
+                S = cholesky(P_t)
+            except LinAlgError:
+                eps = 1e-10 * np.eye(n, dtype=np.float64)
+                S = cholesky(P_t + eps)
 
-            sol = solve_ivp(rhs, (ta, tb), x_i0, rtol=rtol, atol=atol, method=solver)
-            if not sol.success:
-                raise RuntimeError(f"Sigma point integration failed: {sol.message}")
-            Xp[i] = sol.y[:, -1]
+            # Algorithm 9.5 sigma points:
+            # χ_i(t) = m_t + sqrt(P_t) ξ_i = m_t + S ξ_i
+            # Vectorized: (2n+1, n) = (1,n) + (2n+1,n) @ (n,n)^T
+            X = m_t[None, :] + Xi @ S.T
 
-        # 3) recombine flow part: Φ P Φ^T via sigma points
-        m_flow = Wm @ Xp
-        Xm = Xp - m_flow
-        P_flow = (Xm.T * Wc) @ Xm
+            # Drift at each sigma point: f_i = f(χ_i(t), t)
+            F_vals = np.empty_like(X)
+            for i in range(2 * n + 1):
+                F_vals[i] = np.asarray(
+                    dyn_fcn(t, X[i], constants),
+                    dtype=np.float64,
+                ).reshape(n)
 
-        # 4) integrate noise accumulator S over [ta, tb]:
-        #    dS = A S + S A^T + Q(t, m_ref),   S(ta)=0
-        # choose reference mean for linearization (use previous mean m)
-        # A_ref = np.asarray(jac_fcn(ta, m, constants), dtype=np.float64).reshape(n, n)
-        t_mid = 0.5*(ta + tb)
-        A_ref = np.asarray(jac_fcn(t_mid, m_flow, constants), dtype=np.float64).reshape(n, n)
+            # Mean ODE: dm/dt = Σ_i W^(i) f(χ_i(t), t)
+            dm_dt = W @ F_vals  # (n,)
 
-        def rhs_S(t, s_vec):
-            S = s_vec.reshape(n, n)
-            # evaluate Q at the (deterministic) mean; you could also use m_flow
-            # Qt = Q_eval(t, m)
-            Qt = Q_eval(t, m_flow)   # <-- use m_flow, not previous m
-            dS = A_ref @ S + S @ A_ref.T + Qt
-            return dS.ravel()
+            # Covariance ODE drift term (Alg. 9.5):
+            #
+            # dP/dt |_drift = Σ_i W^(i) [
+            #       f_i ξ_i^T S^T + S ξ_i f_i^T
+            # ]
+            dP_drift = np.zeros((n, n), dtype=np.float64)
+            for i in range(2 * n + 1):
+                xi = Xi[i].reshape(n, 1)   # (n,1)
+                fi = F_vals[i].reshape(n, 1)  # (n,1)
 
-        if Q is None:   
-            S_end = np.zeros((n, n), dtype=np.float64)
-        else:
-            s0 = np.zeros(n*n, dtype=np.float64)
-            solS = solve_ivp(rhs_S, (ta, tb), s0, rtol=rtol, atol=atol, method=solver)
-            if not solS.success:
-                raise RuntimeError(f"Noise integral failed: {solS.message}")
-            S_end = solS.y[:, -1].reshape(n, n)
+                term1 = fi @ xi.T @ S.T    # f_i ξ_i^T sqrt(P)^T
+                term2 = S @ xi @ fi.T      # sqrt(P) ξ_i f_i^T
 
-        # 5) assemble, symmetrize
-        m = m_flow
-        P = P_flow + S_end
-        # P = 0.5 * (P + P.T)
+                dP_drift += W[i] * (term1 + term2)
+
+            # Diffusion term: Σ_i W^(i) G Q G^T = G Q G^T = Q_eff
+            dP_dt = dP_drift + Q_eff
+
+            return np.concatenate([dm_dt, dP_dt.ravel()])
+
+        sol = solve_ivp(
+            rhs,
+            (ta, tb),
+            y0,
+            t_eval=[tb],
+            method=solver,
+            rtol=rtol,
+            atol=atol,
+        )
+        if not sol.success:
+            raise RuntimeError(f"Sigma-point mean/cov integration failed: {sol.message}")
+
+        y_end = sol.y[:, -1]
+        m = y_end[:n]
+        P = y_end[n:].reshape(n, n)
+        P = 0.5 * (P + P.T)
 
         means[k] = m
         covs[k]  = P
 
     if save_path is not None:
-        np.savez(save_path,
-                 times=np.round(times, 3),
-                 means=means,
-                 covs=covs,
-                 method="ut")
+        np.savez(
+            save_path,
+            times=np.round(times, 3),
+            means=means,
+            covs=covs,
+            method="sigma_point_alg9_5",
+        )
+
+    return {
+        "times": np.round(times, 3),
+        "means": means,
+        "covs": covs,
+    }
+
+
+# def unscent_propagation_master(
+#     x0: NDArray[np.float64],
+#     P0: NDArray[np.float64],
+#     dyn_fcn: Callable[[float, NDArray[np.float64], Any], NDArray[np.float64]],
+#     jac_fcn: Callable[[float, NDArray[np.float64], Any], NDArray[np.float64]],   # used for Qd integration
+#     constants: Any,
+#     t_span: Tuple[float, float],
+#     dt_save: float = 1e-2,
+#     Q: Optional[Union[NDArray[np.float64], Callable[[float, NDArray[np.float64], Any], NDArray[np.float64]]]] = None,
+#     rtol: float = 1e-9,
+#     atol: float = 1e-12,
+#     solver: str = "RK45",
+#     save_path: Optional[str] = None,
+#     # UT hyperparameters:
+#     alpha: float = 1e-3,
+#     beta: float  = 2.0,
+#     kappa: float = 0.0,
+# ) -> Dict[str, NDArray[np.float64]]:
+#     """
+#     UT propagation using solve_ivp per sigma point on each [t_k, t_{k+1}] interval.
+#     Process-noise contribution Q_d is computed by integrating dS = A S + S A^T + Q
+#     with S(t_a)=0 over the same interval, using A from jac_fcn (local linearization).
+#     """
+#     # ---- init ----
+#     m = np.asarray(x0, dtype=np.float64).reshape(-1)
+#     n = m.size
+#     P = np.asarray(P0, dtype=np.float64).reshape(n, n)
+#     # P = 0.5*(P + P.T)
+
+#     t0 = np.float64(np.round(t_span[0], 2))
+#     tf = np.float64(np.round(t_span[1], 2))
+#     if tf < t0:
+#         raise ValueError("t_span must have tf >= t0")
+#     if dt_save <= 0:
+#         raise ValueError("dt_save must be positive.")
+
+#     # output grid (rounded to 2; saved rounded to 3)
+#     times = np.round(np.arange(t0, tf + 0.5*dt_save, dt_save, dtype=np.float64), 2)
+
+#     def Q_eval(t: float, x: NDArray[np.float64]) -> NDArray[np.float64]:
+#         if Q is None:
+#             return np.zeros((n, n), dtype=np.float64)
+#         M = Q(t, x, constants) if callable(Q) else Q
+#         return np.asarray(M, dtype=np.float64).reshape(n, n)
+
+#     means = np.empty((times.size, n), dtype=np.float64)
+#     covs  = np.empty((times.size, n, n), dtype=np.float64)
+#     means[0] = m
+#     covs[0]  = P
+
+#     for k in range(1, times.size):
+#         ta = float(times[k-1])
+#         tb = float(times[k])
+
+#         # 1) sigma points at (m, P)
+#         X, Wm, Wc = _unscented_sigma_points(m, P, alpha=alpha, beta=beta, kappa=kappa)
+
+#         # 2) propagate each sigma point ta->tb with solve_ivp
+#         Xp = np.empty_like(X)
+#         for i in range(X.shape[0]):
+#             x_i0 = X[i]
+
+#             def rhs(t, x):
+#                 return np.asarray(dyn_fcn(t, x, constants), dtype=np.float64)
+
+#             sol = solve_ivp(rhs, (ta, tb), x_i0, rtol=rtol, atol=atol, method=solver)
+#             if not sol.success:
+#                 raise RuntimeError(f"Sigma point integration failed: {sol.message}")
+#             Xp[i] = sol.y[:, -1]
+
+#         # 3) recombine flow part: Φ P Φ^T via sigma points
+#         m_flow = Wm @ Xp
+#         Xm = Xp - m_flow
+#         P_flow = (Xm.T * Wc) @ Xm
+
+#         # 4) integrate noise accumulator S over [ta, tb]:
+#         #    dS = A S + S A^T + Q(t, m_ref),   S(ta)=0
+#         # choose reference mean for linearization (use previous mean m)
+#         # A_ref = np.asarray(jac_fcn(ta, m, constants), dtype=np.float64).reshape(n, n)
+#         t_mid = 0.5*(ta + tb)
+#         A_ref = np.asarray(jac_fcn(t_mid, m_flow, constants), dtype=np.float64).reshape(n, n)
+
+#         def rhs_S(t, s_vec):
+#             S = s_vec.reshape(n, n)
+#             # evaluate Q at the (deterministic) mean; you could also use m_flow
+#             # Qt = Q_eval(t, m)
+#             Qt = Q_eval(t, m_flow)   # <-- use m_flow, not previous m
+#             dS = A_ref @ S + S @ A_ref.T + Qt
+#             return dS.ravel()
+
+#         if Q is None:   
+#             S_end = np.zeros((n, n), dtype=np.float64)
+#         else:
+#             s0 = np.zeros(n*n, dtype=np.float64)
+#             solS = solve_ivp(rhs_S, (ta, tb), s0, rtol=rtol, atol=atol, method=solver)
+#             if not solS.success:
+#                 raise RuntimeError(f"Noise integral failed: {solS.message}")
+#             S_end = solS.y[:, -1].reshape(n, n)
+
+#         # 5) assemble, symmetrize
+#         m = m_flow
+#         P = P_flow + S_end
+#         # P = 0.5 * (P + P.T)
+
+#         means[k] = m
+#         covs[k]  = P
+
+#     if save_path is not None:
+#         np.savez(save_path,
+#                  times=np.round(times, 3),
+#                  means=means,
+#                  covs=covs,
+#                  method="ut")
 
 
 def gmm_propagation_master(

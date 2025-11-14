@@ -94,7 +94,8 @@ def load_metrics_npz(path):
 def set_publication_plot_style(font_family='Times New Roman', font_size=18,
                                sci_power=(-3, 3), tick_pad=6,
                                legend_loc='upper left', legend_frame=True,
-                               pair_line_marker_cycle=False):
+                               pair_line_marker_cycle=False,
+                               save_tight_pad=0.03):
     """
     Publication-ready Matplotlib defaults with consistent tick formatting.
     """
@@ -160,7 +161,7 @@ def set_publication_plot_style(font_family='Times New Roman', font_size=18,
 
         # Save tight
         'savefig.bbox': 'tight',
-        'savefig.pad_inches': 0.03,
+        'savefig.pad_inches': save_tight_pad,
 
         # Figure size
         'figure.figsize': (8, 6),

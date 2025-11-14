@@ -389,9 +389,9 @@ def run_baseline(lp_path, ut_path):
         constants=None,
         t_span=t_span,
         dt_save=0.01,
-        Q=Q,
+        Q=None,
+        G=np.array([[np.sqrt(2*D)]]),
         save_path=ut_path,
-        alpha=1e-3,
     )
 
 
@@ -443,8 +443,8 @@ def main(TRAIN_FLAG=False, RUN_BASELINE=False):
         "t": t_span
     }
 
-    set_publication_plot_style(font_size=24)
-    fig = plt.figure()
+    set_publication_plot_style()
+    fig = plt.figure(figsize=(10, 8))
     ax = fig.add_subplot(111, projection="3d")
     for t in t_span:
         Xsamples = sample_x_from_exact(t, seed=0)
@@ -520,9 +520,17 @@ def main(TRAIN_FLAG=False, RUN_BASELINE=False):
     ]
     ax.set_xlabel("\nt")
     ax.set_ylabel("\nx")
-    ax.set_zlabel("\nPDF")
-    apply_default_locators(ax)
-    ax.legend(handles=legend_elements, loc="best", frameon=True)
+    # ax.set_zlabel("\nPDF")
+    ax.text2D(0.99, 0.8, "PDF", transform=ax.transAxes,
+          ha="center", va="bottom")
+    ax.legend(handles=legend_elements, 
+        loc="upper left",             # corner inside the axes
+        bbox_to_anchor=(0.6, 0.85),  # (x, y) in axes fraction coords
+        borderaxespad=0.0,
+        frameon=True,
+        framealpha=0.9,
+        facecolor="white",
+    )
     custom_save_plot(True, "figs/pdfs.pdf")
 
     # Plot metrics
@@ -571,4 +579,4 @@ def main(TRAIN_FLAG=False, RUN_BASELINE=False):
 
 if __name__ == "__main__":
     main(TRAIN_FLAG=False,
-         RUN_BASELINE=False)
+         RUN_BASELINE=True)
