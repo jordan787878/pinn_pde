@@ -1,0 +1,27 @@
+constants: <exp_utilities.constants.Case1_6D_Constants_Equin object at 0x15aed8b60>
+iterations: 60000
+sample_ic: <bound method Case1_6D_Constants_Equin.sample_init_points of <exp_utilities.constants.Case1_6D_Constants_Equin object at 0x15aed8b60>>
+sample_res: <bound method Case1_6D_Constants_Equin.sample_res_points_uniform of <exp_utilities.constants.Case1_6D_Constants_Equin object at 0x15aed8b60>>
+p_ic: <bound method Case1_6D_Constants_Equin.p_init_unscaled_torch of <exp_utilities.constants.Case1_6D_Constants_Equin object at 0x15aed8b60>>
+res_func: <function diff_opt at 0x15c482e80>
+res_weight: 1.0
+save_path: output/pinn-gmm-noencoder
+beta_incre: 0.02
+loss_normalize: 0.004031441640108824
+reg_tv: None
+N0_samples_initial: 4000
+Nr_samples_initial: 4000
+iterations_per_decay: 1000
+N_RAR: 30000
+N_RAR_TO_ADD: 32
+N_RAR_CAP: 4000
+iterations_per_rar: 100
+RAR_eps: 0.01
+bias_fac: 0.5
+x_range: tensor([[ 3.5249e+07,  5.2605e+07],
+        [-4.8391e-02,  4.9567e-02],
+        [-1.5889e-01,  1.7487e-01],
+        [-7.9594e-03,  7.5198e-03],
+        [-1.0296e-02,  1.0723e-02],
+        [-2.5000e-01,  2.7000e+00]])
+training_fcn: <function train_pinngmm at 0x15c482a20>
