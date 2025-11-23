@@ -157,6 +157,10 @@ def main():
         t_span=t_span,
         dt_save=0.01,
         Q=Q,
+        G=np.array([[0.0, 0.0, 0.0, 0.0],
+                    [0.0, 0.0, 0.0, 0.0],
+                    [0.0, 0.0, 1.0, 0.0],
+                    [0.0, 0.0, 0.0, 1.0]]),
         save_path=SAVE_PATH_UNSCENT_PROPAGATE,
         alpha=1.0,
     )
@@ -171,7 +175,7 @@ def main():
     t_prime = 0.0
     fit_classic_gmm(t_prime, X_tr, np.asarray(x0, dtype=np.float64).reshape(-1,), 
                     np.asarray(P0, dtype=np.float64).reshape((x_dim, x_dim)), "output/baseline_methods/",
-                    K_list=(20, 30, 40))
+                    K_list=(10, 20, 30, 40))
     model = GMMWhitenedModel.load("output/baseline_methods/"+"gmm_whitened_t{:.2f}.npz".format(t_prime))
     set_publication_plot_style()
     plot_1d_true_vs_gmm_marginals_model(model, X_tr)

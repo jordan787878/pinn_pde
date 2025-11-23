@@ -10,7 +10,7 @@ import sys
 from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]   # repo_root
 sys.path.insert(0, str(ROOT))
-from utilities._General.neuralnetworks import PNet_XL, TimeToGMM_V0, TimeToGMM_NoEncoder, load_trained_model
+from utilities._General.neuralnetworks import PNet_XL, TimeToGMM_V0, TimeToGMM_NoEncoder, TimeToGMM_IC, load_trained_model
 import utilities._General.train_pinn as PINN
 from utilities._General.util import RunLogger, save_config_human
 
@@ -31,12 +31,16 @@ def dyn_f3(x):
     global constants
 
     r = x[:,0]
+    phi = x[:,1]
     vr = x[:,2]
+    vphi = x[:,3]
+
     aT = constants.A_THRUST
+
     rdot_phys = (constants.R / constants.T) * vr                
     r_phys   = constants.R * r
-    aux = constants.W +constants.PHI *x[:,3]/constants.T
-    V_mag = (rdot_phys*rdot_phys + (r_phys*aux)**2)**0.5
+    aux = constants.W + (constants.PHI / constants.T) * vphi
+    V_mag = (rdot_phys**2 + (r_phys*aux)**2)**0.5
 
     return constants.T**2 *x[:,0] *(aux)**2 - \
            constants.T**2 *constants.MU_EARTH/(constants.R**3 * x[:,0]**2) + \
@@ -48,12 +52,16 @@ def dyn_f4(x):
     global constants
 
     r = x[:,0]
+    phi = x[:,1]
     vr = x[:,2]
+    vphi = x[:,3]
+
     aT = constants.A_THRUST
+
     rdot_phys = (constants.R / constants.T) * vr                
     r_phys   = constants.R * r
-    aux = constants.W +constants.PHI *x[:,3]/constants.T
-    V_mag = (rdot_phys*rdot_phys + (r_phys*aux)**2)**0.5
+    aux = constants.W + (constants.PHI / constants.T) * vphi
+    V_mag = (rdot_phys**2 + (r_phys*aux)**2)**0.5
 
     return -2*constants.T*x[:,2]*(aux)/(x[:,0]*constants.PHI) + \
            (constants.T**2 / constants.PHI) * aT * (aux / V_mag)
@@ -169,17 +177,17 @@ def config_training(constants, option=""):
         p_net = TimeToGMM_NoEncoder(constants, D=4, K=11, alpha_floor=0.01)
 
     if option == "pinn-gmm_bias":
-        configuration["training_fcn"] = partial(PINN.train_pinngmm, beta_0=1.)
+        configuration["training_fcn"] = partial(PINN.train_pinngmm, beta_0=0.0)
         configuration["bias_fac"] = 0.5
         p_net = TimeToGMM_V0(constants, D=4, K=11, alpha_floor=0.01)
         p_net = load_trained_model(p_net,
                 path="../exp_case2_j2/output/pinn-gmm_bias/p_net.pth")
         p_net.train()
 
-    if option == "pinn-gmm_bias-test":
-        configuration["training_fcn"] = PINN.train_pinngmm
+    if option == "pinn-gmm_bias-ic":
+        configuration["training_fcn"] = PINN.train_pinngmm_exactic
         configuration["bias_fac"] = 0.5
-        p_net = TimeToGMM_V0(constants, D=4, K=5, alpha_floor=0.01)
+        p_net = TimeToGMM_IC(constants, D=4, K=11, alpha_floor=0.01)
 
     return configuration, p_net
 
@@ -189,7 +197,7 @@ def main():
     torch.manual_seed(0); np.random.seed(0)  # Set a fixed seed for reproducibility
 
     # Setup config
-    config, p_net = config_training(constants, option="pinn-gmm_bias")
+    config, p_net = config_training(constants, option="pinn-gmm_bias-ic")
     save_config_human(config, model_name="p_net")
 
     # Train & log

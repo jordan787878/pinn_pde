@@ -82,6 +82,7 @@ def plot_full_corner(constants, t, X_samples,
         ranges = [(float(lo[i] - pad[i]), float(hi[i] + pad[i])) for i in range(D)]
     else:
         raise("range for full corner plot not implemented.")
+    print(ranges)
 
     fig, axes = plt.subplots(
         D, D,
@@ -144,8 +145,8 @@ def plot_full_corner(constants, t, X_samples,
             x_vals = np.linspace(lo, hi, num=128)
             ws, mus, covs = p_net_gmm.weights_means_covs_at(t)
             ws = ws.detach().cpu().numpy()
-            # if(d == 0):
-            #     print(ws)
+            if(d == 0):
+                print(np.round(ws,4))
             mus = mus.detach().cpu().numpy()
             covs = covs.detach().cpu().numpy()
             pdf_values = np.copy(x_vals) * 0.0
@@ -615,16 +616,16 @@ def plot_pdf_metrics(metrics, save_plot=False):
     plt.legend(handles=handles, ncol=2)
     plt.xlabel("t")
     plt.ylabel("Worst Normalized Error %")
-    ymin = np.min(np.array([metrics["rel_error_lp"].min().item(),
-                            metrics["rel_error_ut"].min().item(),
-                            metrics["rel_error_gmm"].min().item(),
-                            ]))
-    ymax = np.max(np.array([metrics["rel_error_lp"].max().item(),
-                            metrics["rel_error_ut"].max().item(),
-                            metrics["rel_error_gmm"].max().item(),
-                            ]))
-    # print(ymin, ymax)
-    plt.ylim([ymin, ymax])
+    # ymin = np.min(np.array([metrics["rel_error_lp"].min().item(),
+    #                         metrics["rel_error_ut"].min().item(),
+    #                         metrics["rel_error_gmm"].min().item(),
+    #                         ]))
+    # ymax = np.max(np.array([metrics["rel_error_lp"].max().item(),
+    #                         metrics["rel_error_ut"].max().item(),
+    #                         metrics["rel_error_gmm"].max().item(),
+    #                         ]))
+    # # print(ymin, ymax)
+    # plt.ylim([ymin, ymax])
     save_path = "figs/metric-WNE.pdf"
     custom_save_plot(save_plot, save_path)
 
@@ -637,16 +638,16 @@ def plot_pdf_metrics(metrics, save_plot=False):
     plt.legend(ncol=2)
     plt.xlabel("t")
     plt.ylabel("Total Variation %")
-    ymin = np.min(np.array([metrics["tv_lp"].min().item(),
-                            metrics["tv_ut"].min().item(),
-                            metrics["tv_gmm"].min().item(),
-                            ]))
-    ymax = np.max(np.array([metrics["tv_lp"].max().item(),
-                            metrics["tv_ut"].max().item(),
-                            metrics["tv_gmm"].max().item(),
-                            ]))
-    # print(ymin, ymax)
-    plt.ylim([ymin, ymax])
+    # ymin = np.min(np.array([metrics["tv_lp"].min().item(),
+    #                         metrics["tv_ut"].min().item(),
+    #                         metrics["tv_gmm"].min().item(),
+    #                         ]))
+    # ymax = np.max(np.array([metrics["tv_lp"].max().item(),
+    #                         metrics["tv_ut"].max().item(),
+    #                         metrics["tv_gmm"].max().item(),
+    #                         ]))
+    # # print(ymin, ymax)
+    # plt.ylim([ymin, ymax])
     save_path = "figs/metric-TV.pdf"
     custom_save_plot(save_plot, save_path)
 
@@ -660,16 +661,16 @@ def plot_pdf_metrics(metrics, save_plot=False):
     plt.legend(ncol=2)
     plt.xlabel("t")
     plt.ylabel("Relative Divergence")
-    ymin = np.min(np.array([metrics["g_kl_lp"].min().item(),
-                            metrics["g_kl_ut"].min().item(),
-                            metrics["g_kl_gmm"].min().item(),
-                            ]))
-    ymax = np.max(np.array([metrics["g_kl_lp"].max().item(),
-                            metrics["g_kl_ut"].max().item(),
-                            metrics["g_kl_gmm"].max().item(),
-                            ]))
-    # print(ymin, ymax)
-    plt.ylim([ymin, ymax])
+    # ymin = np.min(np.array([metrics["g_kl_lp"].min().item(),
+    #                         metrics["g_kl_ut"].min().item(),
+    #                         metrics["g_kl_gmm"].min().item(),
+    #                         ]))
+    # ymax = np.max(np.array([metrics["g_kl_lp"].max().item(),
+    #                         metrics["g_kl_ut"].max().item(),
+    #                         metrics["g_kl_gmm"].max().item(),
+    #                         ]))
+    # # print(ymin, ymax)
+    # plt.ylim([ymin, ymax])
     save_path = "figs/metric-RD.pdf"
     custom_save_plot(save_plot, save_path)
 
@@ -857,7 +858,6 @@ def plot_marginal_pdf_cart(constants, data_mc, data_mc_no_thrust, p_net_gmm=None
             ws_approx = ws_torch.detach().cpu().numpy()
             mus_approx = mus_torch.detach().cpu().numpy()
             covs_approx = covs_torch.detach().cpu().numpy()
-            # print("[debug] p_net_gmm weights: ", ws_approx)
 
             X_a, Y_a, Z_a = _eval_marginal_xy_from_gmm(
                 constants, ws_approx, mus_approx, covs_approx, t, n_rphi_grid_pts, num
@@ -898,8 +898,8 @@ def plot_marginal_pdf_cart(constants, data_mc, data_mc_no_thrust, p_net_gmm=None
             X_r,
             Y_r,
             Z_r_plot,          # <-- use lifted version
-            rstride=20,
-            cstride=20,
+            rstride=10,
+            cstride=10,
             color="k",
             linewidth=1.0,
         )
@@ -921,28 +921,28 @@ def plot_marginal_pdf_cart(constants, data_mc, data_mc_no_thrust, p_net_gmm=None
             va="bottom",
         )
 
-        # ---- Reference PDF (blue wireframe) ----
-        if(t <= 0.2):
-            gmm = GMMWhitenedModel.load(data_mc_no_thrust + f"gmm_whitened_t{t:.2f}.npz")
-            gmm_params = gmm.print_x_params()
-            ws_ref = gmm_params["weights"]
-            mus_ref = gmm_params["means_x"]
-            covs_ref = gmm_params["covs_x"]
-            X_r, Y_r, Z_r = _eval_marginal_xy_from_gmm(
-                constants, ws_ref, mus_ref, covs_ref, t, n_rphi_grid_pts, num
-            )
-            # compute a small vertical offset based on the scale of Z
-            Z_r_plot = Z_r + delta_z
-            ax.plot_wireframe(
-                X_r,
-                Y_r,
-                Z_r_plot,          # <-- use lifted version
-                rstride=20,
-                cstride=20,
-                color="blue",
-                linewidth=0.3,
-                linestyle="--"
-            )
+        # # ---- Reference PDF (blue wireframe) ----
+        # if(t <= 0.2):
+        #     gmm = GMMWhitenedModel.load(data_mc_no_thrust + f"gmm_whitened_t{t:.2f}.npz")
+        #     gmm_params = gmm.print_x_params()
+        #     ws_ref = gmm_params["weights"]
+        #     mus_ref = gmm_params["means_x"]
+        #     covs_ref = gmm_params["covs_x"]
+        #     X_r, Y_r, Z_r = _eval_marginal_xy_from_gmm(
+        #         constants, ws_ref, mus_ref, covs_ref, t, n_rphi_grid_pts, num
+        #     )
+        #     # compute a small vertical offset based on the scale of Z
+        #     Z_r_plot = Z_r + delta_z
+        #     ax.plot_wireframe(
+        #         X_r,
+        #         Y_r,
+        #         Z_r_plot,          # <-- use lifted version
+        #         rstride=20,
+        #         cstride=20,
+        #         color="blue",
+        #         linewidth=0.3,
+        #         linestyle="--"
+        #     )
 
     ax.view_init(18, 46)
     ax.set_xlabel(r"$x$ [m]", labelpad=15)
