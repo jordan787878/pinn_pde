@@ -1181,4 +1181,398 @@ class ENet_XL(nn.Module):
             return y * self.scale - p_net_out
         else:
             return y * self.scale
- 
+
+class ENet_GMM(nn.Module):
+    """
+    Time-conditioned 6D Gaussian Mixture with K components.
+    Covariance parameterization: Σ_k(t) = L_k(t) L_k(t)^T, L lower-triangular with positive diag.
+
+    inputs
+        x: (N, D)
+        t: (N, 1)
+    outputs
+        pdf(x|t): (N, 1)
+
+    Also provides:
+        - log_prob(x,t): (N,1)
+        - params(t): means_z (N,K,D), Ls_z (N,K,D,D), log_weights (N,K)
+        - weights_means_covs_at(t): x-space mixture params
+        - _zparams_to_xparams(): helper function to map GMM parameters from z-space to x-space
+
+    Guarantees:
+        - Learned in latent z-space.
+        - At tau = 0, the x-space PDF is exactly N(x_mean0, diag(x_var0)).
+        - For tau in (0,1], returns time-conditioned GMM parameters.
+    """
+    def __init__(self, constants, p_net, K=1, D=6, hidden=64, depth=5, min_diag=1e-2,
+                 alpha_floor=0.1, act="softplus", dtype=torch.float32, device="cpu"):
+        super().__init__()
+        self.D = D
+        self.Kc = int(K)
+        self.K_tril = self.D * (self.D + 1) // 2
+        self.min_diag = float(min_diag)
+        self.depth = depth
+        self.softplus_beta = 1.0
+        self.alpha_floor = alpha_floor
+        self.act = get_activation(act)
+
+        # ---- keep p_net but DO NOT register as submodule ----
+        # Put it directly in __dict__ so nn.Module doesn't track it.
+        object.__setattr__(self, "_p_net", p_net)
+
+        # Freeze and eval once.
+        for p in self._p_net.parameters():
+            p.requires_grad_(False)
+        self._p_net.eval()
+
+        # ---------- normalization buffers ----------
+        # x normalization from initial state stats
+        x_mean0 = torch.as_tensor(np.copy(constants.N_MEAN_I), dtype=dtype)
+        x_var0  = torch.as_tensor(np.copy(np.diag(constants.N_COV_I)), dtype=dtype)
+        self.register_buffer("x_mean0",    x_mean0)          # (D,)
+        self.register_buffer("x_var0",     x_var0)           # (D,)
+
+        # time normalization
+        T_end = float(constants.T_PRIME_SPAN[-1])
+        self.register_buffer("T_end", torch.as_tensor(T_end, dtype=dtype))  # scalar
+
+        # ---------- shared backbone: tau -> hidden ----------
+        layers = [nn.Linear(1, hidden), self.act]
+        for _ in range(max(depth - 1, 0)):
+            layers += [nn.Linear(hidden, hidden), self.act]
+        self.backbone = nn.Sequential(*layers)
+
+        # ---------- small heads from shared features ----------
+        # means_z head
+        self.mean_head = nn.Linear(hidden, self.Kc * self.D)
+
+        # tril head (covers diag and off-diag in single vector)
+        self.tri_head = nn.Linear(hidden, self.Kc * self.K_tril)
+
+        # weight logits head
+        self.weight_head = nn.Linear(hidden, self.Kc)
+
+        # indices/masks for LOWER triangle
+        i, j = torch.tril_indices(self.D, self.D, 0)
+        self.register_buffer("_i_tril", i, persistent=False)
+        self.register_buffer("_j_tril", j, persistent=False)
+        self.register_buffer("_diag_mask", (i == j), persistent=False)  # (K_tril,)
+
+        self.register_buffer(
+            "LOG_2PI",
+            torch.log(torch.full((), math.tau, dtype=dtype))
+        )
+
+        self._init_weights()
+        self.to(device=device, dtype=dtype)
+
+    def _init_weights(self):
+        # standard Kaiming for all Linear layers
+        for m in self.modules():
+            if isinstance(m, nn.Linear):
+                nn.init.kaiming_uniform_(m.weight, a=math.sqrt(5))
+                if m.bias is not None:
+                    fan_in, _ = nn.init._calculate_fan_in_and_fan_out(m.weight)
+                    bound = 1 / math.sqrt(fan_in)
+                    nn.init.uniform_(m.bias, -bound, bound)
+
+    def _zparams_to_xparams(self, tau, means_z, Ls_z):
+        """
+        means_z: (N,K,D), Ls_z: (N,K,D,D) [lower-tri in z]
+        returns means_x: (N,K,D), Ls_x: (N,K,D,D) [lower-tri in x]
+        """
+        x_std0 = torch.sqrt(self.x_var0)                     # (D,)
+        x_std0_b = x_std0.view(1, 1, self.D)                 # (1,1,D) for broadcast
+        tau_m    = tau.to(means_z.dtype).to(means_z.device).view(-1, 1, 1)  # (N,1,1)
+
+        # NOTE: unchanged by design.
+        means_x = self.x_mean0.view(1, 1, self.D) + means_z * x_std0_b * tau_m
+        Ls_x  = Ls_z * x_std0_b.unsqueeze(-1)                # row-scale each L by std
+        return means_x, Ls_x
+
+    # ---------------- parameters in z-space ----------------
+    def params(self, tau: torch.Tensor):
+        """
+        Inputs:
+          normalized time: tau ∈ [0,1], shape (N,1)
+        Returns:
+          means_z: (N, K, D)
+          Ls_z   : (N, K, D, D)  lower-tri with positive diag
+          logw   : (N, K)
+
+        At tau = 0:
+          - means_x = x_mean0
+          - cov_x   = diag(x_var0)
+          - weights ~= uniform (mixture of identical Gaussians => same Normal)
+        """
+        p = next(self.parameters())
+        N = tau.shape[0]
+
+        # Clamp tau to [0,1] for safety
+        tau = tau.clamp(min=0.0, max=1.0)        # (N,1)
+
+        # shared features
+        h = self.backbone(tau)                   # (N, hidden)
+
+        # ---------- means in z-space ----------
+        # No special constraint needed: tau enters z->x map.
+        means_z = self.mean_head(h).view(N, self.Kc, self.D)   # (N,K,D)
+
+        # ---------- Cholesky in z-space ----------
+        # tri_head outputs unconstrained tril entries
+        tri_raw = self.tri_head(h).view(N, self.Kc, self.K_tril)   # (N,K,K_tril)
+
+        diag_raw = tri_raw[..., self._diag_mask]          # (N,K,D)
+        off_raw  = tri_raw[..., ~self._diag_mask]         # (N,K,K_tril-D)
+
+        # Gate with tau so that at tau=0, Lz = I
+        tau_m = tau.view(N, 1, 1)                         # (N,1,1)
+
+        # Diagonal: diag_z(tau) = exp(tau * diag_raw)
+        # ⇒ diag_z(0) = 1  (identity), diag_z > 0 for tau>0.
+        diag = torch.exp(tau_m * diag_raw)                # (N,K,D), strictly > 0
+
+        # Off-diagonals vanish at tau=0 and become trainable for tau>0
+        off = tau_m * off_raw                             # (N,K,K_tril-D)
+
+        # Reassemble vectorized lower-tri
+        raw = tri_raw.new_zeros(N, self.Kc, self.K_tril)  # (N,K,K_tril)
+        raw[..., self._diag_mask] = diag
+        raw[..., ~self._diag_mask] = off
+
+        # Build full L_z
+        raw_flat = raw.view(-1, self.K_tril)              # (N*K, K_tril)
+        NK = raw_flat.shape[0]
+        L = torch.zeros(NK, self.D, self.D, dtype=p.dtype, device=p.device)
+        L[:, self._i_tril, self._j_tril] = raw_flat       # (N*K,D,D)
+        Ls_z = L.view(N, self.Kc, self.D, self.D)         # (N,K,D,D)
+
+        # ---------- log-weights ----------
+        v = self.weight_head(h)                           # (N,K)
+
+        temp = getattr(self, "softmax_temp_w", 1.0)
+        logw = F.log_softmax(v / max(temp, 1e-6), dim=-1)   # (N,K)
+
+        # alpha_floor to avoid vanishing components (optional)
+        w = logw.exp()                                    # (N,K)
+        Kc = w.size(-1)
+        w = (1.0 - self.alpha_floor) * w + (self.alpha_floor / Kc)
+        eps = torch.finfo(w.dtype).tiny
+        logw = torch.log(w.clamp_min(eps))
+
+        return means_z, Ls_z, logw
+
+    # ---------------- densities ----------------
+    def log_prob(self, x: torch.Tensor, t: torch.Tensor) -> torch.Tensor:
+        """
+        Evaluate mixture log-pdf directly in x-space:
+        1) normalize time only (tau = t/T_end)
+        2) get z-space params
+        3) map to x-space
+        4) compute log N(x | mu_x, Σ_x) and log-sum-exp over K
+        Returns (N,1).
+        """
+        if x.ndim == 1:
+            x = x.unsqueeze(0)
+        tau = t / self.T_end                                # (N,1)
+
+        means_z, Ls_z, logw = self.params(tau)              # (N,K,D), (N,K,D,D), (N,K)
+        means_x, Ls_x = self._zparams_to_xparams(tau, means_z, Ls_z)
+
+        x = x.to(dtype=means_x.dtype, device=means_x.device)   # (N,D)
+
+        # center and solve with the x-space Cholesky
+        xm = x.unsqueeze(1) - means_x                        # (N,K,D)
+        N, K, D = xm.shape
+        y = torch.linalg.solve_triangular(
+            Ls_x.reshape(N*K, D, D), xm.reshape(N*K, D, 1),
+            upper=False
+        ).reshape(N, K, D, 1)
+
+        quad = (y.squeeze(-1) ** 2).sum(-1)                  # (N,K)
+        sum_log_diag = torch.log(torch.diagonal(
+            Ls_x, dim1=-2, dim2=-1
+        )).sum(-1)                                           # (N,K)
+
+        log_comp = -0.5 * quad - sum_log_diag - 0.5 * D * self.LOG_2PI  # (N,K)
+        logp = torch.logsumexp(logw + log_comp, dim=-1, keepdim=True)   # (N,1)
+        return logp
+
+    def pdf(self, x: torch.Tensor, t: torch.Tensor) -> torch.Tensor:
+        return torch.exp(self.log_prob(x, t))
+
+    def forward(self, x, t):
+        # p_net treated as constant baseline
+        with torch.no_grad():
+            p_out = self._p_net(x, t)
+        return self.pdf(x, t) - p_out
+
+    # ---------------- mixture stats in x-space ----------------
+    @torch.no_grad()
+    def weights_means_covs_at(self, t: float):
+        """
+        Return x-space mixture parameters at time t (no batch dim):
+        weights: (K,)
+        means  : (K, D)
+        covs   : (K, D, D)
+        """
+        p = next(self.parameters())
+        t_tensor   = torch.as_tensor([[t]], dtype=p.dtype, device=p.device)  # (1,1)
+        tau_tensor = t_tensor / self.T_end
+
+        means_z, Ls_z, logw = self.params(tau_tensor)        # (1,K,D), (1,K,D,D), (1,K)
+        means_x, Ls_x = self._zparams_to_xparams(tau_tensor, means_z, Ls_z)
+
+        means_x = means_x[0]                                 # (K,D)
+        Ls_x    = Ls_x[0]                                    # (K,D,D)
+        covs_x  = Ls_x @ Ls_x.transpose(-1, -2)              # (K,D,D)
+
+        weights = logw[0].exp()                              # (K,)
+
+        return weights, means_x, covs_x
+
+
+# class ENet_GMM(nn.Module):
+#     def __init__(self, constants, p_net, K=1, D=6, hidden=64, depth=2,
+#                  min_diag=1e-4, alpha_floor=0.1, dtype=torch.float32, device="cpu"):
+#         super().__init__()
+#         self.D = D
+#         self.Kc = int(K)
+#         self.K_tril = self.D * (self.D + 1) // 2
+#         self.min_diag = float(min_diag)
+#         self.depth = depth
+#         self.softplus_beta = 1.
+#         self.alpha_floor = alpha_floor
+
+#         # ---- keep p_net but DO NOT register as submodule ----
+#         # Put it directly in __dict__ so nn.Module doesn't track it.
+#         object.__setattr__(self, "_p_net", p_net)
+
+#         # Freeze and eval once.
+#         for p in self._p_net.parameters():
+#             p.requires_grad_(False)
+#         self._p_net.eval()
+
+#         # ---------- normalization buffers ----------
+#         x_mean0 = torch.as_tensor(np.copy(constants.N_MEAN_I), dtype=dtype)
+#         x_var0  = torch.as_tensor(np.copy(np.diag(constants.N_COV_I)), dtype=dtype)
+#         self.register_buffer("x_mean0", x_mean0)
+#         self.register_buffer("x_var0",  x_var0)
+#         T_end = float(constants.T_PRIME_SPAN[-1])
+#         self.register_buffer("T_end", torch.as_tensor(T_end, dtype=dtype))
+
+#         # ----- your heads (unchanged) -----
+#         self.mean_head = nn.Sequential(
+#             nn.Linear(1, hidden),
+#             nn.Softplus(beta=self.softplus_beta),
+#             nn.Linear(hidden, hidden),
+#             nn.Softplus(beta=self.softplus_beta),
+#             nn.Linear(hidden, self.Kc * self.D),
+#         )
+
+#         self.tri_head = nn.Sequential(
+#             nn.Linear(1, hidden),
+#             nn.Softplus(beta=self.softplus_beta),
+#             nn.Linear(hidden, hidden),
+#             nn.Softplus(beta=self.softplus_beta),
+#             nn.Linear(hidden, self.Kc * self.K_tril),
+#         )
+
+#         self.weight_head = nn.Sequential(
+#             nn.Linear(1, hidden),
+#             nn.Softplus(beta=self.softplus_beta),
+#             nn.Linear(hidden, hidden),
+#             nn.Softplus(beta=self.softplus_beta),
+#             nn.Linear(hidden, self.Kc),
+#         )
+
+#         i, j = torch.tril_indices(self.D, self.D, 0)
+#         self.register_buffer("_i_tril", i, persistent=False)
+#         self.register_buffer("_j_tril", j, persistent=False)
+#         self.register_buffer("_diag_mask", (i == j), persistent=False)
+#         self.register_buffer("LOG_2PI", torch.log(torch.full((), math.tau, dtype=dtype)))
+
+#         self._init_weights()
+#         self.to(device=device, dtype=dtype)
+
+#     # ---- optional: keep p_net in eval always ----
+#     def train(self, mode: bool = True):
+#         super().train(mode)
+#         self._p_net.eval()
+#         return self
+
+#     def _init_weights(self):
+#         for m in self.modules():
+#             if isinstance(m, nn.Linear):
+#                 nn.init.kaiming_uniform_(m.weight, a=math.sqrt(5))
+#                 if m.bias is not None:
+#                     fan_in, _ = nn.init._calculate_fan_in_and_fan_out(m.weight)
+#                     bound = 1 / math.sqrt(fan_in)
+#                     nn.init.uniform_(m.bias, -bound, bound)
+
+#     def _zparams_to_xparams(self, tau, means_z, Ls_z):
+#         x_std0 = torch.sqrt(self.x_var0)
+#         x_std0_b = x_std0.view(1, 1, self.D)
+#         means_x = self.x_mean0.view(1, 1, self.D) + means_z * x_std0_b
+#         Ls_x  = Ls_z * x_std0_b.unsqueeze(-1)
+#         return means_x, Ls_x
+
+#     def params(self, tau: torch.Tensor):
+#         p = next(self.mean_head.parameters())
+
+#         h = tau
+#         means = self.mean_head(h).view(-1, self.Kc, self.D)
+
+#         raw = self.tri_head(h).view(-1, self.Kc, self.K_tril)
+#         raw = raw.reshape(-1, self.K_tril)
+#         raw_adj = raw.clone()
+#         diag_raw = raw[:, self._diag_mask]
+#         diag_pos = F.softplus(diag_raw, beta=self.softplus_beta) + self.min_diag
+#         raw_adj[:, self._diag_mask] = diag_pos
+
+#         NK = raw.shape[0]
+#         L = torch.zeros(NK, self.D, self.D, dtype=p.dtype, device=p.device)
+#         L[:, self._i_tril, self._j_tril] = raw_adj
+#         Ls = L.view(-1, self.Kc, self.D, self.D)
+
+#         v = self.weight_head(h)
+#         logw = F.log_softmax(v, dim=-1)
+#         w = logw.exp()
+#         alpha_floor = self.alpha_floor
+#         Kc = w.size(-1)
+#         w = (1.0 - alpha_floor) * w + (alpha_floor / Kc)
+#         eps = torch.finfo(w.dtype).tiny
+#         logw = torch.log(w.clamp_min(eps))
+#         return means, Ls, logw
+
+#     def log_prob(self, x: torch.Tensor, t: torch.Tensor) -> torch.Tensor:
+#         if x.ndim == 1: x = x.unsqueeze(0)
+#         tau = t / self.T_end
+
+#         means_z, Ls_z, logw = self.params(tau)
+#         means_x, Ls_x = self._zparams_to_xparams(tau, means_z, Ls_z)
+
+#         x = x.to(dtype=means_x.dtype, device=means_x.device)
+#         xm = x.unsqueeze(1) - means_x
+#         N, K, D = xm.shape
+
+#         y = torch.linalg.solve_triangular(
+#             Ls_x.reshape(N*K, D, D), xm.reshape(N*K, D, 1),
+#             upper=False
+#         ).reshape(N, K, D, 1)
+
+#         quad = (y.squeeze(-1) ** 2).sum(-1)
+#         sum_log_diag = torch.log(torch.diagonal(Ls_x, dim1=-2, dim2=-1)).sum(-1)
+#         log_comp = -0.5 * quad - sum_log_diag - 0.5 * D * self.LOG_2PI
+
+#         logp = torch.logsumexp(logw + log_comp, dim=-1, keepdim=True)
+#         return logp
+
+#     def pdf(self, x, t):
+#         return torch.exp(self.log_prob(x, t))
+
+#     def forward(self, x, t):
+#         # p_net treated as constant baseline
+#         with torch.no_grad():
+#             p_out = self._p_net(x, t)
+#         return self.pdf(x, t) - p_out

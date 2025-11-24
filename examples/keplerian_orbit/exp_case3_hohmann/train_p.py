@@ -165,24 +165,20 @@ def config_training(constants, option=""):
 
     if option == "pinn-gmm_vanilla":
         configuration["training_fcn"] = PINN.train_pinn_vanilla
-        p_net = TimeToGMM_V0(constants, D=4, K=11, alpha_floor=0.01)
+        p_net = TimeToGMM_IC(constants, D=4, K=11, alpha_floor=0.01)
         
-    # if option == "pinn-gmm":
-    #     configuration["training_fcn"] = PINN.train_pinngmm_expcase1equin
-    #     p_net = TimeToGMM6D_V0(constants, K=11, alpha_floor=0.01)
-
     if option == "pinn-gmm-noencoder":
         configuration["training_fcn"] = PINN.train_pinngmm
         configuration["bias_fac"] = 0.5
         p_net = TimeToGMM_NoEncoder(constants, D=4, K=11, alpha_floor=0.01)
 
-    if option == "pinn-gmm_bias":
-        configuration["training_fcn"] = partial(PINN.train_pinngmm, beta_0=0.0)
-        configuration["bias_fac"] = 0.5
-        p_net = TimeToGMM_V0(constants, D=4, K=11, alpha_floor=0.01)
-        p_net = load_trained_model(p_net,
-                path="../exp_case2_j2/output/pinn-gmm_bias/p_net.pth")
-        p_net.train()
+    # if option == "pinn-gmm_bias":
+    #     configuration["training_fcn"] = partial(PINN.train_pinngmm, beta_0=0.0)
+    #     configuration["bias_fac"] = 0.5
+    #     p_net = TimeToGMM_V0(constants, D=4, K=11, alpha_floor=0.01)
+    #     p_net = load_trained_model(p_net,
+    #             path="../exp_case2_j2/output/pinn-gmm_bias/p_net.pth")
+    #     p_net.train()
 
     if option == "pinn-gmm_bias-ic":
         configuration["training_fcn"] = PINN.train_pinngmm_exactic
@@ -197,7 +193,7 @@ def main():
     torch.manual_seed(0); np.random.seed(0)  # Set a fixed seed for reproducibility
 
     # Setup config
-    config, p_net = config_training(constants, option="pinn-gmm_bias-ic")
+    config, p_net = config_training(constants, option="pinn-gmm-noencoder")
     save_config_human(config, model_name="p_net")
 
     # Train & log

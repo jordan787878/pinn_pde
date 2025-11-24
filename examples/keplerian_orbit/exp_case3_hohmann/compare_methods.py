@@ -19,6 +19,7 @@ from utilities._General.util import (compute_volume, save_metrics_npz, load_metr
                                      p_total_variation, plot_training_history)
 from utilities._General.baseline_methods import PropagationData
 from utilities._General.classic_gmm import GMMWhitenedModel, make_gmm_pdf
+from utilities._General.neuralnetworks import ENet_GMM
 
 
 COMPUTE = False
@@ -445,13 +446,13 @@ def compare_corner_plots(data_mc=None, data_lp=None, data_ut=None, data_gmm=None
 
 def config_trained_models():
     trained_models = {
-        # "PINN-MLP_vanilla": "output/pinn-xl_vanilla",
+        "PINN-MLP_vanilla": "output/pinn-xl_vanilla",
         # "PINN-MLP": "output/pinn-xl",
         # "PINN-MLP_bias": "output/pinn-xl_bias",
         # "PINN-XL_bias-test": "output/pinn-xl_bias-test",
-        # "PINN-GMM_vanilla" : "output/pinn-gmm_vanilla",
-        # "PINN-GMM-noencoder": "output/pinn-gmm-noencoder",
-        "PINN-GMM_bias" : "output/pinn-gmm_bias",
+        "PINN-GMM_vanilla" : "output/pinn-gmm_vanilla",
+        "PINN-GMM-noencoder": "output/pinn-gmm-noencoder",
+        # "PINN-GMM_bias" : "output/pinn-gmm_bias",
         "PINN-GMM_bias-ic": "output/pinn-gmm_bias-ic",
     }
     return trained_models
@@ -483,7 +484,7 @@ def load_model_by_key(trained_models, key=""):
         return p_net, e1_net, rar_samples
     
     if(key == "PINN-GMM_vanilla"):
-        p_net = TimeToGMM_V0(constants, D=4, K=11, alpha_floor=0.01)
+        p_net = TimeToGMM_IC(constants, D=4, K=11, alpha_floor=0.01)
         p_net = load_trained_model(p_net, path=KEY_PATH+"/p_net.pth"); p_net.eval()
         e1_net = None
         rar_samples = None
@@ -502,25 +503,10 @@ def load_model_by_key(trained_models, key=""):
         del _p
         return p_net, e1_net, rar_samples
     
-    if(key == "PINN-GMM_bias"):
-        p_net = TimeToGMM_V0(constants, D=4, K=11, alpha_floor=0.01)
-        p_net = load_trained_model(p_net, path=KEY_PATH+"/p_net.pth"); p_net.eval()
-        e1_net = None
-        # e1_net = ENet_XL(constants, scale=scale_torch, normalize=scale_torch*0.02, input_feature=5)
-        # e1_net = load_trained_model(e1_net, path=KEY_PATH+"/e1_net.pth"); e1_net.eval()
-        rar_samples = None
-        # _p = Path(KEY_PATH) / "p_net-RARsamples.npz"
-        # if _p.is_file(): 
-        #     rar_samples = np.load(_p)
-        # else:
-        #     rar_samples = None
-        # del _p
-        return p_net, e1_net, rar_samples
-    
     if(key == "PINN-GMM_bias-ic"):
         p_net = TimeToGMM_IC(constants, D=4, K=11, alpha_floor=0.01)
         p_net = load_trained_model(p_net, path=KEY_PATH+"/p_net.pth"); p_net.eval()
-        e1_net = ENet_XL(constants, scale=scale_torch, normalize=scale_torch*0.02, input_feature=5)
+        e1_net = ENet_GMM(constants, p_net=p_net, D=4, K=16, alpha_floor=0.01)
         e1_net = load_trained_model(e1_net, path=KEY_PATH+"/e1_net.pth"); e1_net.eval()
         rar_samples = None
         # _p = Path(KEY_PATH) / "p_net-RARsamples.npz"
@@ -540,18 +526,18 @@ def print_mc_time(mc_folder):
 def main():
     global constants; constants.test_printout()
 
-    data_mc = "data/Xsamples_1e+5_np64/"
+    data_mc = "data/Xsamples_1e+6_np64/"
     print_mc_time(data_mc)
 
     # setup trained models dictionary
     trained_models = config_trained_models()
 
     # load pinn-mlp
-    # p_net, e1_net, _ = load_model_by_key(trained_models, key="PINN-MLP_vanilla")
+    p_net, e1_net, _ = load_model_by_key(trained_models, key="PINN-MLP_vanilla")
 
     # load pinn-gmm
-    # p_net_gmm_vanilla, _, _ = load_model_by_key(trained_models, key="PINN-GMM_vanilla")
-    # p_net_gmm_noencoder, _, _ = load_model_by_key(trained_models, key="PINN-GMM-noencoder")
+    p_net_gmm_vanilla, _, _ = load_model_by_key(trained_models, key="PINN-GMM_vanilla")
+    p_net_gmm_noencoder, _, _ = load_model_by_key(trained_models, key="PINN-GMM-noencoder")
     p_net_gmm, e1_net_gmm, rar_samples = load_model_by_key(trained_models, key="PINN-GMM_bias-ic")
     # p_net_gmm = None
 
@@ -564,10 +550,10 @@ def main():
     metrics_path = "output/metric_NB="+str(NBATCH)+".npz"
     if(COMPUTE):
         compute_pdf_variations(data_mc=data_mc, 
-            p_net=None, p_net_gmm=p_net_gmm, 
-            p_net_gmm_vanilla=None, p_net_gmm_noencoder=None,
+            p_net=p_net, p_net_gmm=p_net_gmm, 
+            p_net_gmm_vanilla=p_net_gmm_vanilla, p_net_gmm_noencoder=p_net_gmm_noencoder,
             data_lp=data_lp, data_ut=data_ut, data_gmm=data_gmm,
-            e1_net=None, e1_net_gmm=e1_net_gmm,
+            e1_net=e1_net, e1_net_gmm=e1_net_gmm,
             save_path=metrics_path)
     metrics = load_metrics_npz(metrics_path)
     plot_pdf_metrics(metrics, save_plot=SAVEPLOT)
