@@ -272,12 +272,16 @@ def compute_pdf_variations(data_mc=None, p_net=None, p_net_gmm=None,
                 pdf_pinngmm = p_net_gmm(_x_tensor, _t_tensor).detach().cpu().numpy().reshape(-1,)
                 _delta_p = np.max(np.abs(pdf_pinngmm - pdf_ref)).item()
                 delta_p_pinngmm_max = max(delta_p_pinngmm_max, _delta_p)
+                if(idx == 0):
+                    delta_p_pinngmm_max = 0.
                 _tv = p_total_variation(pdf_pinngmm, pdf_ref, vol_est)
                 tv_pinngmm += _tv/N_batch
                 del pdf_pinngmm
             if(e1_net_gmm is not None):
                 e1_pinngmm = e1_net_gmm(_x_tensor, _t_tensor).detach().cpu().numpy().reshape(-1,)
                 e1_pinngmm_max = max(e1_pinngmm_max, np.max(np.abs(e1_pinngmm)).item())
+                if(idx == 0):
+                    e1_pinngmm_max = 0
                 del e1_pinngmm
 
             # pinn-gmm_vanilla
@@ -506,7 +510,8 @@ def load_model_by_key(trained_models, key=""):
     if(key == "PINN-GMM_bias-ic"):
         p_net = TimeToGMM_IC(constants, D=4, K=11, alpha_floor=0.01)
         p_net = load_trained_model(p_net, path=KEY_PATH+"/p_net.pth"); p_net.eval()
-        e1_net = ENet_GMM(constants, p_net=p_net, D=4, K=16, alpha_floor=0.01)
+        # e1_net = ENet_GMM(constants, p_net=p_net, D=4, K=16, alpha_floor=0.01)
+        e1_net = ENet_XL(constants, scale=scale_torch, normalize=0.02*scale_torch, input_feature=5)
         e1_net = load_trained_model(e1_net, path=KEY_PATH+"/e1_net.pth"); e1_net.eval()
         rar_samples = None
         # _p = Path(KEY_PATH) / "p_net-RARsamples.npz"

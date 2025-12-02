@@ -77,11 +77,12 @@ def config_training_ENet_XL(constants, fac=0.02, option=""):
     #     p_net = load_trained_model(p_net, path=config["save_path"]+"/p_net.pth"); p_net.eval()
 
     if option == "pinn-gmm_bias-ic":
-        config["training_fcn"] = PINN.train_pinn_error_test_ic
+        config["training_fcn"] = PINN.train_pinn_error
         config["bias_fac"] = 0.5
         p_net = TimeToGMM_IC(constants, D=4, K=11, alpha_floor=0.01)
         p_net = load_trained_model(p_net, path=config["save_path"]+"/p_net.pth"); p_net.eval()
-        e1_net = ENet_GMM(constants, p_net=p_net, D=4, K=16, alpha_floor=0.01)
+        e1_net = ENet_XL(constants, scale=scale_torch, normalize=config["loss_normalize"], input_feature=5)
+        # e1_net = ENet_GMM(constants, p_net=p_net, D=4, K=16, alpha_floor=0.01)
 
     return config, p_net, e1_net
 
@@ -94,7 +95,7 @@ def main():
 
     # Setup config
     fac = 0.02
-    config, p_net, e1_net = config_training_ENet_XL(constants, fac=fac, option="pinn-gmm_bias-ic_test")
+    config, p_net, e1_net = config_training_ENet_XL(constants, fac=fac, option="pinn-gmm_bias-ic")
     save_config_human(config, model_name="e1_net")
 
     # Train & log
