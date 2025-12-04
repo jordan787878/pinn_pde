@@ -145,8 +145,8 @@ def plot_full_corner(constants, t, X_samples,
             x_vals = np.linspace(lo, hi, num=128)
             ws, mus, covs = p_net_gmm.weights_means_covs_at(t)
             ws = ws.detach().cpu().numpy()
-            if(d == 0):
-                print(np.round(ws,4))
+            # if(d == 0):
+            #     print(np.round(ws,4))
             mus = mus.detach().cpu().numpy()
             covs = covs.detach().cpu().numpy()
             pdf_values = np.copy(x_vals) * 0.0
