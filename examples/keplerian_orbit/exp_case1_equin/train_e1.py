@@ -13,7 +13,7 @@ import sys
 from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]   # repo_root
 sys.path.insert(0, str(ROOT))
-from utilities._General.neuralnetworks import PNet_XL, ENet_XL, TimeToGMM_V0, load_trained_model
+from utilities._General.neuralnetworks import PNet_XL, ENet_XL, ENet_XL_IC, TimeToGMM_V0, TimeToGMM_IC, load_trained_model
 import utilities._General.train_pinn as PINN
 from utilities._General.util import RunLogger, save_config_human
 
@@ -187,6 +187,15 @@ def config_training_ENet_XL(constants, fac=0.02, option=""):
         p_net = load_trained_model(p_net, path=configuration["save_path"]+"/p_net.pth"); p_net.eval()
         configuration["bias_fac"] = 0.5
 
+    if option == "pinn-gmm_bias-ic":
+        e1_net = ENet_XL_IC(constants, K=11, alpha_floor=0.01)
+        configuration["training_fcn"] = PINN.train_pinn_error_test_ic
+        configuration["bias_fac"] = 0.5
+        configuration["iterations"] = 30000
+        p_net = TimeToGMM_IC(constants, K=11, alpha_floor=0.01)
+        p_net = load_trained_model(p_net, path=configuration["save_path"]+"/p_net.pth"); p_net.eval()
+        e1_net.p_net = p_net
+
     return configuration, p_net, e1_net
 
 
@@ -198,7 +207,7 @@ def main():
 
     # Setup config
     fac = 0.02
-    config, p_net, e1_net = config_training_ENet_XL(constants, fac=fac, option="pinn-xl_vanilla")
+    config, p_net, e1_net = config_training_ENet_XL(constants, fac=fac, option="pinn-gmm_bias-ic")
     save_config_human(config, model_name="e1_net")
 
     # Train & log

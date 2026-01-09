@@ -181,6 +181,7 @@ def run_solver(problem):
             cap_per_degree = problem["cap_per_degree"],
             cheap=problem["cheap"],
             verbose=problem["verbose_refine"],
+            far_N=10,
         )
         problem.update(grid)
         print("[debug] number of inside & intersect cells: ", sum(problem["mask_lower"]), sum(problem["mask_upper"]))
@@ -248,7 +249,7 @@ def plot_est_summary(problem):
     Pr_ref = np.array(problem["Pr_ref"])
     tspan = problem["time_points"]
 
-    axs.plot(tspan_ref, Pr_ref, label=r'$\mathbb{P}_{\text{ref}}(X)$', 
+    axs.plot(tspan_ref, Pr_ref, label=r'$\mathbb{P}_{\text{ref}}$', 
          linestyle='None', 
          marker='o', 
          markersize=12, 
@@ -267,6 +268,7 @@ def plot_est_summary(problem):
 
 
 def plot_summary(problem, result_label):
+    print(problem["X_event"])
     set_publication_plot_style()
     print_list(problem["Pr_opt_lower"])
     print_list(problem["Pr_ref"])
@@ -280,7 +282,7 @@ def plot_summary(problem, result_label):
     Pr_lower = np.array(problem["Pr_opt_lower"])
     Pr_upper = np.array(problem["Pr_opt_upper"])
 
-    axs.plot(tspan_ref, Pr_ref, label=r'$\mathbb{P}_{\text{ref}}(X)$', 
+    axs.plot(tspan_ref, Pr_ref, label=r'$\mathbb{P}_{\text{ref}}$', 
          linestyle='None', 
          marker='o', 
          markersize=9, 
@@ -290,33 +292,38 @@ def plot_summary(problem, result_label):
     
     for idx, key in enumerate(problem["Pr_keys"]):
         axs.plot(tspan, problem[key], linestyle=linestyles_4set[idx],
-                 color=colors_4set[idx], marker=markers_4set[idx], label=problem["Pr_keys_labels"][idx])
+                 color=colors_4set[idx], marker=markers_4set[idx], 
+                 markersize=9,
+                 label=problem["Pr_keys_labels"][idx])
+        
+    problem_coarse = load_problem_result_npz("output/solver_Nx1_Ndeg10_GMMguide1_Cheap0.npz")
+    _Pr_lower = np.array(problem_coarse["Pr_opt_lower"])
+    _Pr_upper = np.array(problem_coarse["Pr_opt_upper"])
+    axs.fill_between(
+        tspan,
+        _Pr_lower, _Pr_upper,
+        color='black',
+        alpha=0.1,
+        label=r"Bounds $\mathbb{P}^-, \mathbb{P}^+$ (Coarse grid)"
+    )
+    print("[debug]")
+    print_list(problem_coarse["Pr_opt_lower"])
+    print_list(problem_coarse["Pr_opt_upper"])
+    print("################")
 
     axs.fill_between(
         tspan,
         Pr_lower, Pr_upper,
         color='black',
         alpha=0.3,
-        label=r"Bounds $\mathbb{P}^-, \mathbb{P}^+$"
+        label=r"Bounds $\mathbb{P}^-, \mathbb{P}^+$ (Refined grid)"
     )
-
-    # problem_coarse = load_problem_result_npz("output/solver_Nx1_Ndeg10_GMMguide1_Cheap0.npz")
-    # Pr_lower = np.array(problem_coarse["Pr_opt_lower"])
-    # Pr_upper = np.array(problem_coarse["Pr_opt_upper"])
-    # axs.fill_between(
-    #     tspan,
-    #     Pr_lower, Pr_upper,
-    #     color='black',
-    #     alpha=0.1,
-    #     label=r"Bounds $\mathbb{P}^-, \mathbb{P}^+$ (Coarse)"
-    # )
 
     # axs.plot(tspan, Pr_lower, color=lower_color)
     # axs.plot(tspan, Pr_upper, color=upper_color)
-
     axs.set_xlabel("t")
     axs.set_ylabel("Probability")
-    axs.set_ylim([-0.01, min(1., Pr_upper.max()*1.5)])
+    # axs.set_ylim([-0.05, min(1.0, 1.5*Pr_upper.max())])
     plt.legend(ncol=2)
     custom_save_plot(True, "figs/"+result_label+".pdf")
 
@@ -333,11 +340,11 @@ def main():
     problem = {
         "D": 6,
         "N_x": 1, 
-        "N_degree": 100, 
+        "N_degree": 2000, 
         "use_event_guidance": True, "use_gmm_guidance": True, 
         "cap_per_degree" : 360,
         "cheap": False,
-        "verbose_refine": True,
+        "verbose_refine": False,
         "X_dom": constants._NX_RANGE_NP,
         "time_points_ref": constants.T_PRIME_SPAN,
         "time_points": constants.T_PRIME_SPAN,
@@ -359,10 +366,10 @@ def main():
     # Compute event probability estimates
     problem["Pr_keys"] = ["Pr_lp", "Pr_ut", "Pr_gmm", "Pr_pinngmm"]
     problem["Pr_keys_labels"] = [
-        r'$\mathbb{P}_{\text{GA}}(X)$',
-        r'$\mathbb{P}_{\text{UT}}(X)$',
-        r'$\mathbb{P}_{\text{GMM}}(X)$',
-        r'$\mathbb{P}_{\text{PINN-GMM}}(X)$'
+        r'$\mathbb{P}_{\text{GA}}$',
+        r'$\mathbb{P}_{\text{UT}}$',
+        r'$\mathbb{P}_{\text{GMM}}$',
+        r'$\mathbb{P}_{\text{PINN-GMM}}$'
     ]
     for key in problem["Pr_keys"]:
         problem = estimate_event_probability(problem, Pr_key=key)

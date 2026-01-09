@@ -611,6 +611,10 @@ def load_model_by_key(trained_models, key=""):
 
 def main():
     global constants
+    # print(constants.N_MEAN_I)
+    # print(constants.N_COV_I)
+    # print(constants.NX_RANGE)
+    # return
 
     # data_mc = "dataset/run1/"
     data_mc = "dataset/"

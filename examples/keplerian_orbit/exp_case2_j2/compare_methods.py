@@ -4,7 +4,7 @@ import argparse
 import torch
 from tqdm import tqdm
 from exp_utilities.constants import Case2_4D_Constants
-from exp_utilities.plot_util import plot_pdf_metrics, plot_full_corner, plot_corner_elem, plot_marginal_pdf_cart, plt
+from exp_utilities.plot_util import plot_pdf_metrics, plot_full_corner, plot_corner_elem, plot_marginal_pdf_cart, animate_pinn_surface_with_static_ref_wireframes, plt
 from run_baseline import SAVE_PATH_LINEAR_PROPAGATE, SAVE_PATH_UNSCENT_PROPAGATE, SAVE_PATH_GMM_PROPAGATE
 from monte import p_init
 
@@ -13,7 +13,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]   # repo_root
 sys.path.insert(0, str(ROOT))
 from utilities._General.astrodynamics import *
-from utilities._General.neuralnetworks import PNet_XL, ENet_XL, TimeToGMM_V0, TimeToGMM_NoEncoder, load_trained_model
+from utilities._General.neuralnetworks import PNet_XL, ENet_XL, TimeToGMM_V0, TimeToGMM_NoEncoder, TimeToGMM_IC, load_trained_model
 from utilities._General.util import (compute_volume, save_metrics_npz, load_metrics_npz, 
                                      p_total_variation, plot_training_history)
 from utilities._General.baseline_methods import PropagationData
@@ -133,7 +133,8 @@ def print_metrics_block(metrics, idx, colw=12, prec=6):
 def compute_pdf_variations(data_mc=None, p_net=None, p_net_gmm=None, 
                            p_net_gmm_vanilla=None, p_net_gmm_noencoder=None,
                            data_lp=None, data_ut=None, data_gmm=None,
-                           e1_net=None, e1_net_gmm=None, save_path=None):
+                           e1_net=None, e1_net_gmm=None, save_path=None,
+                           topK=512):
     global constants
     metrics = {
         "rel_error_lp": [],
@@ -163,9 +164,24 @@ def compute_pdf_variations(data_mc=None, p_net=None, p_net_gmm=None,
         "B1_pinn": [],
         "B1_pinngmm": [],
         "B1_pinngmm_raw": [],
+        "topK_delta_p_pinngmm": [],
+        "topK_e1_pinngmm": [],
 
         "t": constants.T_PRIME_SPAN,
     } 
+
+    def topk_merge(global_top, batch_top, K):
+        """
+        Merge existing global_top (1D array or None) with batch_top (1D array)
+        and keep only the largest K values.
+        """
+        if global_top is None:
+            return batch_top.copy()
+
+        combined = np.concatenate([global_top, batch_top])
+        K_eff = min(K, combined.size)
+        idx = np.argpartition(combined, -K_eff)[-K_eff:]
+        return combined[idx]
 
     print("evaluate metrics over times: ", metrics["t"])
     N_batch = NBATCH
@@ -214,6 +230,10 @@ def compute_pdf_variations(data_mc=None, p_net=None, p_net_gmm=None,
         e1_pinn_max = 0.0
         e1_pinngmm_max = 0.0
         Z_pinn = 0.0
+
+        # --- global top-K (per-sample) across batches for this time t ---
+        global_top_delta_p_pinngmm = None   # |pdf_pinngmm - pdf_ref|
+        global_top_e1_pinngmm = None        # |e1_pinngmm|
         
         # --- choose the source 'true' gmm pdf ---
         gmm = GMMWhitenedModel.load(data_mc+"gmm_whitened_t{:.2f}.npz".format(t))
@@ -268,14 +288,36 @@ def compute_pdf_variations(data_mc=None, p_net=None, p_net_gmm=None,
 
             if(p_net_gmm is not None):
                 pdf_pinngmm = p_net_gmm(_x_tensor, _t_tensor).detach().cpu().numpy().reshape(-1,)
-                _delta_p = np.max(np.abs(pdf_pinngmm - pdf_ref)).item()
-                delta_p_pinngmm_max = max(delta_p_pinngmm_max, _delta_p)
+                err_batch = np.abs(pdf_pinngmm - pdf_ref)  # per-sample |Δp|
+                _delta_p_batch_max = err_batch.max().item()
+                delta_p_pinngmm_max = max(delta_p_pinngmm_max, _delta_p_batch_max)
+
+                # per-batch top-K |Δp|
+                K_eff = min(topK, err_batch.size)
+                batch_top_delta = np.partition(err_batch, -K_eff)[-K_eff:]
+
+                # merge with global top-K
+                global_top_delta_p_pinngmm = topk_merge(global_top_delta_p_pinngmm,
+                                                        batch_top_delta,
+                                                        topK)
                 _tv = p_total_variation(pdf_pinngmm, pdf_ref, vol_est)
                 tv_pinngmm += _tv/N_batch
                 del pdf_pinngmm
             if(e1_net_gmm is not None):
                 e1_pinngmm = e1_net_gmm(_x_tensor, _t_tensor).detach().cpu().numpy().reshape(-1,)
-                e1_pinngmm_max = max(e1_pinngmm_max, np.max(np.abs(e1_pinngmm)).item())
+                e1_batch = np.abs(e1_pinngmm)              # per-sample |e1|
+                _e1_batch_max = e1_batch.max().item()
+                e1_pinngmm_max = max(e1_pinngmm_max, _e1_batch_max)
+
+                # per-batch top-K |e1|
+                K_eff_e1 = min(topK, e1_batch.size)
+                batch_top_e1 = np.partition(e1_batch, -K_eff_e1)[-K_eff_e1:]
+
+                # merge with global top-K
+                global_top_e1_pinngmm = topk_merge(global_top_e1_pinngmm,
+                                                batch_top_e1,
+                                                topK)
+                # e1_pinngmm_max = e1_net_gmm.analytic_upper_bound_abs_output(t)
                 del e1_pinngmm
 
             # pinn-gmm_vanilla
@@ -383,6 +425,13 @@ def compute_pdf_variations(data_mc=None, p_net=None, p_net_gmm=None,
         # print("[debug] B1_pinn: ", e1_pinn_max, pdf_ref_max)
         metrics["B1_pinngmm_raw"].append(2. * e1_pinngmm_max)
         print("[debug] B1_pinngmm_raw: ", 2. * e1_pinngmm_max)
+
+        idx_sort_delta = np.argsort(global_top_delta_p_pinngmm)[::-1]
+        top_delta_norm = (global_top_delta_p_pinngmm[idx_sort_delta])
+        idx_sort_e1 = np.argsort(global_top_e1_pinngmm)[::-1]
+        top_e1_norm = (global_top_e1_pinngmm[idx_sort_e1])
+        metrics["topK_delta_p_pinngmm"].append(top_delta_norm)
+        metrics["topK_e1_pinngmm"].append(top_e1_norm)
             
         print_metrics_block(metrics, idx)
 
@@ -451,6 +500,7 @@ def config_trained_models():
         "PINN-GMM-noencoder": "output/pinn-gmm-noencoder",
         "PINN-GMM_bias" : "output/pinn-gmm_bias",
         # "PINN-GMM_bias-test": "output/pinn-gmm_bias-test",
+        "PINN-GMM_bias-ic" : "output/pinn-gmm_bias-ic",
     }
     return trained_models
 
@@ -527,6 +577,20 @@ def load_model_by_key(trained_models, key=""):
         del _p
         return p_net, e1_net, rar_samples
     
+    if(key == "PINN-GMM_bias-ic"):
+        p_net = TimeToGMM_IC(constants, D=4, K=11, alpha_floor=0.01)
+        p_net = load_trained_model(p_net, path=KEY_PATH+"/p_net.pth"); p_net.eval()
+        # e1_net = ENet_XL(constants, scale=scale_torch, normalize=scale_torch*0.02, input_feature=5, width=128, depth=4)
+        e1_net = ENet_XL_IC(constants, D=4, K=22, depth=2, p_net=p_net, alpha_floor=0.01)
+        e1_net = load_trained_model(e1_net, path=KEY_PATH+"/e1_net.pth"); e1_net.eval()
+        _p = Path(KEY_PATH) / "p_net-RARsamples.npz"
+        if _p.is_file(): 
+            rar_samples = np.load(_p)
+        else:
+            rar_samples = None
+        del _p
+        return p_net, e1_net, rar_samples
+    
 
 def print_mc_time(mc_folder):
     mc_time = np.load(mc_folder+"mc_time.npy") # print mc computation time
@@ -534,7 +598,14 @@ def print_mc_time(mc_folder):
 
 
 def main():
-    global constants; constants.test_printout()
+    global constants
+    # print(constants.R)
+    # print(constants.T)
+    # print(constants.W)
+    # print(constants.N_MEAN_I)
+    # print(constants.N_COV_I)
+    # print(constants.NX_RANGE)
+    # return
 
     data_mc = "data/Xsamples_1e+6_np64/"
     print_mc_time(data_mc)
@@ -545,7 +616,7 @@ def main():
     # load pinn-mlp
     p_net, e1_net, _ = load_model_by_key(trained_models, key="PINN-MLP_vanilla")
 
-    # load pinn-gmm
+    # # load pinn-gmm
     p_net_gmm_vanilla, _, _ = load_model_by_key(trained_models, key="PINN-GMM_vanilla")
     p_net_gmm_noencoder, _, _ = load_model_by_key(trained_models, key="PINN-GMM-noencoder")
     p_net_gmm, e1_net_gmm, rar_samples = load_model_by_key(trained_models, key="PINN-GMM_bias")
@@ -562,7 +633,7 @@ def main():
             p_net=p_net, p_net_gmm=p_net_gmm, 
             p_net_gmm_vanilla=p_net_gmm_vanilla, p_net_gmm_noencoder=p_net_gmm_noencoder,
             data_lp=data_lp, data_ut=data_ut, data_gmm=data_gmm,
-            e1_net=e1_net, e1_net_gmm=e1_net_gmm,
+            e1_net=None, e1_net_gmm=e1_net_gmm,
             save_path=metrics_path)
     metrics = load_metrics_npz(metrics_path)
     plot_pdf_metrics(metrics, save_plot=SAVEPLOT)
@@ -573,12 +644,27 @@ def main():
                          PNet_XL_PATH=None,
                          p_net_gmm=p_net_gmm
                          )
-    # compare_corner_plots_XYZ(MC_FOLDER)
 
     # --- plot training history ---
     plot_training_history(trained_models)
 
     plot_marginal_pdf_cart(constants, data_mc, p_net_gmm)
+
+    # Static ref wireframes at your existing MC time points:
+    t_ref = list(constants.T_PRIME_SPAN)
+
+    # Dense animation times for hat p (e.g., 200 frames):
+    t_surf = np.linspace(min(t_ref), max(t_ref), 200)
+
+    fig, anim = animate_pinn_surface_with_static_ref_wireframes(
+        constants, data_mc, p_net_gmm,
+        num=256,
+        t_ref_list=t_ref,
+        t_surf_list=t_surf,
+        interval_ms=60,
+        save_path="figs/pdf_over_time.mp4"
+    )
+
     plt.show()
 
 

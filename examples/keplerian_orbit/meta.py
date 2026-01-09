@@ -51,6 +51,7 @@ method_list = [
     # "gmm", 
     "pinn", 
     "pinngmm_vanilla", 
+    "pinngmm_noencoder",
     "pinngmm"
 ]
 
@@ -60,7 +61,8 @@ label_list = [
     # "GMM",
     "PINN-MLP (vanilla)",
     "PINN-GMM (vanilla)",
-    "PINN-GMM"
+    "PINN-GMM (no-encoder)",
+    "PINN-GMM",
 ]
 
 colors_6set = sns.color_palette([
@@ -68,7 +70,8 @@ colors_6set = sns.color_palette([
     # "#00FBFF",  # UT
     # "#FF8400",  # GMM
     "#8C00FF",  # PINN-MLP
-    "#0066FF",  # PINN-GMM-vanilla
+    "#0066FF",  # PINN-GMM (vanilla)
+    "#00FF1E",  # PINN-GMM (no-encoder)
     "#000000",  # PINN-GMM
 ])
 
@@ -78,6 +81,7 @@ linestyles_6set = [
     # "--",               # GMM
     "-.",               # PINN-MLP
     ":",                # PINN-GMM-vanilla
+    "--",
     "-",                # PINN-GMM
 ]
 markers_6set = [
@@ -86,6 +90,7 @@ markers_6set = [
     # '^', # GMM
     'D', # PINN-MLP
     'X',  # PINN-GMM-vanilla
+    "*",
     'None', # PINN-GMM
 ] 
 
@@ -95,8 +100,9 @@ def _format_mean_std(vals):
     Format a list/array as 'mean\\pmstd' for LaTeX.
 
     - If vals is None or empty -> '-'
-    - If any non-finite (NaN/inf) -> 'nan'
-    - Otherwise -> 'm.s\\pms.s' with 1 decimal place
+    - If all values are non-finite (NaN/inf) -> 'nan'
+    - Otherwise -> compute mean/std over finite values only
+                  and format 'm.s\\pms.s' with 2 decimals
     """
     if vals is None:
         return "-"
@@ -105,11 +111,12 @@ def _format_mean_std(vals):
     if arr.size == 0:
         return "-"
 
-    if not np.all(np.isfinite(arr)):
+    finite = arr[np.isfinite(arr)]
+    if finite.size == 0:
         return "nan"
 
-    mean = float(arr.mean())
-    std = float(arr.std())  # population std
+    mean = float(finite.mean())
+    std  = float(finite.std())  # population std over finite entries
     return f"{mean:.2f}$\\pm${std:.2f}"
 
 
@@ -134,7 +141,7 @@ def meta_table(exp_dict):
         ("gmm",             "GMM"),
         ("pinn",            "PINN-MLP (vanilla)"),
         ("pinngmm_vanilla", "PINN-GMM (vanilla)"),
-        # ("pinngmm_noenc", "PINN-GMM (no-encoder)"),  # not recorded yet
+        ("pinngmm_noencoder", "PINN-GMM (no-encoder)"),  # not recorded yet
         ("pinngmm",         "PINN-GMM"),
     ]
 
@@ -175,10 +182,10 @@ def meta_table(exp_dict):
 
             train_loss_vals = None  # not in your current metrics; keep as '-'
 
-            train_loss_str = _format_mean_std(train_loss_vals)
+            # train_loss_str = _format_mean_std(train_loss_vals)
             tv_str         = _format_mean_std(tv_vals)
             wne_str        = _format_mean_std(rel_vals)
-            eb_str         = _format_mean_std(eb_vals)
+            # eb_str         = _format_mean_std(eb_vals)
             rd_str         = _format_mean_std(rd_vals)
 
             if first_row:
@@ -186,13 +193,13 @@ def meta_table(exp_dict):
                 n_methods = len(method_rows)
                 print(
                     f"      \\multirow{{{n_methods}}}{{2cm}}{{{exp_label}}} & "
-                    f"{method_label} & {train_loss_str} & {tv_str} & {wne_str} & {eb_str} & {rd_str} \\\\"
+                    f"{method_label} & {tv_str} & {wne_str} & {rd_str} \\\\"
                 )
                 first_row = False
             else:
                 print(
                     f"      & {method_label} & "
-                    f"{train_loss_str} & {tv_str} & {wne_str} & {eb_str} & {rd_str} \\\\"
+                    f" {tv_str} & {wne_str} & {rd_str} \\\\"
                 )
 
 
@@ -209,6 +216,7 @@ def plot_total_variation(exp_dict, n_grid=10):
         t_common = np.linspace(0.0, 1.0, n_grid+idx_method)
         metric_label = f"tv_{method}"
         interp_stack = []
+        print(metric_label)
 
         # collect all experiments for this method
         for key, metrics in exp_dict.items():
@@ -245,7 +253,7 @@ def plot_total_variation(exp_dict, n_grid=10):
 
         c = colors_6set[idx_method]
         alpha=0.2
-        if(method == "pinngmm"): alpha=0.2
+        if(method == "pinngmm"): alpha=0.4
         show_metric_label = label_list[idx_method]
         ax.fill_between(t_common, y_min, y_max, alpha=alpha, color=c,
                         # zorder=zorder[idx_method]
@@ -328,7 +336,7 @@ def plot_worst_normalized_error(exp_dict, n_grid=10):
 
         c = colors_6set[idx_method]
         alpha=0.2
-        if(method == "pinngmm"): alpha=0.2
+        if(method == "pinngmm"): alpha=0.4
         show_metric_label = label_list[idx_method]
         ax.fill_between(t_common, y_min, y_max, alpha=alpha, color=c,
                         # zorder=zorder[idx_method]
@@ -409,7 +417,7 @@ def plot_relative_divergence(exp_dict, n_grid=10):
 
         c = colors_6set[idx_method]
         alpha=0.2
-        if(method == "pinngmm"): alpha=0.2
+        if(method == "pinngmm"): alpha=0.4
         show_metric_label = label_list[idx_method]
         ax.fill_between(t_common, y_min, y_max, alpha=alpha, color=c,
                         # label=f"{show_metric_label} "
@@ -517,7 +525,7 @@ def main():
         metrics = load_metrics_npz(metrics_path)
         exp_dict[key] = metrics
 
-    meta_table(exp_dict)
+    # meta_table(exp_dict)
 
     plot_total_variation(exp_dict)
 

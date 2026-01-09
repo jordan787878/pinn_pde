@@ -567,7 +567,7 @@ def plot_pdf_metrics(metrics, save_plot=False):
     if(all_zeros is False):
         plt.fill_between(
             metrics["t"],
-            metrics["rel_error_pinngmm"],
+            metrics["rel_error_pinngmm"]*0.0,
             metrics["B1_pinngmm"],
             alpha=0.3,
             color=colors_4set[3],

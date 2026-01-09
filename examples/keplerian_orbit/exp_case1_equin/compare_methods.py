@@ -167,7 +167,7 @@ def print_metrics_block(metrics, idx, colw=12, prec=6):
 
 def compute_pdf_variations(N_batch=1, p_net=None, p_net_gmm=None, p_net_gmm_vanilla= None, p_net_gmm_noencoder=None,
                            data_lp=None, data_ut=None, data_gmm=None,
-                           e1_net=None,  e1_net_gmm=None, save_path=None):
+                           e1_net=None,  e1_net_gmm=None, save_path=None, topK=512):
     global constants
     metrics = {
         "rel_error_lp": [],
@@ -194,8 +194,24 @@ def compute_pdf_variations(N_batch=1, p_net=None, p_net_gmm=None, p_net_gmm_vani
         "B1_pinn": [],
         "B1_pinngmm": [],
         "B1_pinngmm_raw": [],
+        "topK_delta_p_pinngmm": [],
+        "topK_e1_pinngmm": [],
         "t": np.round(np.arange(0.0, 0.3+0.05, 0.05, dtype=np.float32),2)
     } 
+
+    def topk_merge(global_top, batch_top, K):
+        """
+        Merge existing global_top (1D array or None) with batch_top (1D array)
+        and keep only the largest K values.
+        """
+        if global_top is None:
+            return batch_top.copy()
+
+        combined = np.concatenate([global_top, batch_top])
+        K_eff = min(K, combined.size)
+        idx = np.argpartition(combined, -K_eff)[-K_eff:]
+        return combined[idx]
+
     print("evaluate metrics over times: ", metrics["t"])
     N_samples = int(1e+5)
 
@@ -246,6 +262,10 @@ def compute_pdf_variations(N_batch=1, p_net=None, p_net_gmm=None, p_net_gmm_vani
         Z_pinn = 0.0
         e1_pinngmm_max = 0.0
 
+        # --- global top-K (per-sample) across batches for this time t ---
+        global_top_delta_p_pinngmm = None   # |pdf_pinngmm - pdf_ref|
+        global_top_e1_pinngmm = None        # |e1_pinngmm|
+
         # --- pinn-gmm verbose ---
         ws, mus, covs = p_net_gmm.weights_means_covs_at(t)
         ws, mus, covs = (ws.detach().cpu().numpy(),
@@ -286,8 +306,18 @@ def compute_pdf_variations(N_batch=1, p_net=None, p_net_gmm=None, p_net_gmm_vani
 
             # pinn-gmm
             pdf_pinn = constants.SCALING_PDF * p_net_gmm(_x_tensor, _t_tensor).detach().cpu().numpy().reshape(-1,)
-            _delta_p = np.max(np.abs(pdf_pinn - pdf_ref)).item()
-            delta_p_pinngmm_max = max(delta_p_pinngmm_max, _delta_p)
+            err_batch = np.abs(pdf_pinn - pdf_ref)  # per-sample |Δp|
+            _delta_p_batch_max = err_batch.max().item()
+            delta_p_pinngmm_max = max(delta_p_pinngmm_max, _delta_p_batch_max)
+
+            # per-batch top-K |Δp|
+            K_eff = min(topK, err_batch.size)
+            batch_top_delta = np.partition(err_batch, -K_eff)[-K_eff:]
+
+            # merge with global top-K
+            global_top_delta_p_pinngmm = topk_merge(global_top_delta_p_pinngmm,
+                                                    batch_top_delta,
+                                                    topK)
             _tv = p_total_variation(pdf_pinn, pdf_ref, vol_est)
             tv_pinngmm += _tv/N_batch
             _g_kl = compute_generalKL(t, X_mc, p_net=p_net_gmm)
@@ -295,7 +325,16 @@ def compute_pdf_variations(N_batch=1, p_net=None, p_net_gmm=None, p_net_gmm_vani
             del pdf_pinn
             if(e1_net_gmm is not None):
                 e1_pinngmm = constants.SCALING_PDF * e1_net_gmm(_x_tensor, _t_tensor).detach().cpu().numpy().reshape(-1,)
-                e1_pinngmm_max = max(e1_pinngmm_max, np.max(np.abs(e1_pinngmm)).item())
+                e1_batch = np.abs(e1_pinngmm)              # per-sample |e1|
+                _e1_batch_max = e1_batch.max().item()
+                e1_pinngmm_max = max(e1_pinngmm_max, _e1_batch_max)
+                # per-batch top-K |e1|
+                K_eff_e1 = min(topK, e1_batch.size)
+                batch_top_e1 = np.partition(e1_batch, -K_eff_e1)[-K_eff_e1:]
+                # merge with global top-K
+                global_top_e1_pinngmm = topk_merge(global_top_e1_pinngmm,
+                                                batch_top_e1,
+                                                topK)
                 del e1_pinngmm
 
             # pinn-gmm_vanilla
@@ -399,6 +438,13 @@ def compute_pdf_variations(N_batch=1, p_net=None, p_net_gmm=None, p_net_gmm_vani
         metrics["B1_pinngmm_raw"].append(B1_pinngmm_raw)
         print("[debug] B1_pinngmm_raw: ", B1_pinngmm_raw)
         print("[debug]: ", metrics["rel_error_pinngmm_vanilla"])
+
+        idx_sort_delta = np.argsort(global_top_delta_p_pinngmm)[::-1]
+        top_delta_norm = (global_top_delta_p_pinngmm[idx_sort_delta])
+        idx_sort_e1 = np.argsort(global_top_e1_pinngmm)[::-1]
+        top_e1_norm = (global_top_e1_pinngmm[idx_sort_e1])
+        metrics["topK_delta_p_pinngmm"].append(top_delta_norm)
+        metrics["topK_e1_pinngmm"].append(top_e1_norm)
         
         print_metrics_block(metrics, idx)
 
@@ -565,7 +611,10 @@ def load_model_by_key(trained_models, key=""):
 
 def main():
     global constants
-    print(SAVEPLOT)
+    # print(constants._MEAN_I)
+    # print(constants._COV_I)
+    # print(constants.NX_RANGE)
+    # return
 
     # setup trained models dictionary
     trained_models = config_trained_models()

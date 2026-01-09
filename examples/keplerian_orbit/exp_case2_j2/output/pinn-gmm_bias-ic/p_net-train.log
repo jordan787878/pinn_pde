@@ -1,0 +1,868 @@
+
+===== logging start 2025-11-15 09:02:36 =====
+[check] bias_fac:  0.5
+--- Save Epoch: 1, Loss: 5.2016e+00, Res: 5.2016e+00, Beta: 0.00 ---
+... RAR RES, Max residual error: 24.3919, t: tensor([[0.1920],
+        [0.1891],
+        [0.1888]])
+--- Save Epoch: 2, Loss: 4.0334e+00, Res: 4.0334e+00, Beta: 0.02 ---
+--- Save Epoch: 3, Loss: 3.0192e+00, Res: 3.0192e+00, Beta: 0.04 ---
+--- Save Epoch: 4, Loss: 1.3398e+00, Res: 1.3398e+00, Beta: 0.06 ---
+--- Save Epoch: 5, Loss: 9.8234e-01, Res: 9.8234e-01, Beta: 0.08 ---
+--- Save Epoch: 6, Loss: 6.6118e-01, Res: 6.6118e-01, Beta: 0.10 ---
+--- Save Epoch: 7, Loss: 2.9156e-01, Res: 2.9156e-01, Beta: 0.12 ---
+--- Save Epoch: 9, Loss: 2.0180e-01, Res: 2.0180e-01, Beta: 0.14 ---
+--- Save Epoch: 11, Loss: 1.3433e-01, Res: 1.3433e-01, Beta: 0.16 ---
+--- Save Epoch: 12, Loss: 1.1652e-01, Res: 1.1652e-01, Beta: 0.18 ---
+--- Save Epoch: 15, Loss: 1.1214e-01, Res: 1.1214e-01, Beta: 0.20 ---
+--- Save Epoch: 18, Loss: 1.0258e-01, Res: 1.0258e-01, Beta: 0.22 ---
+--- Save Epoch: 19, Loss: 1.0238e-01, Res: 1.0238e-01, Beta: 0.24 ---
+--- Save Epoch: 25, Loss: 9.5978e-02, Res: 9.5978e-02, Beta: 0.26 ---
+--- Save Epoch: 28, Loss: 9.3237e-02, Res: 9.3237e-02, Beta: 0.28 ---
+--- Save Epoch: 32, Loss: 8.4931e-02, Res: 8.4931e-02, Beta: 0.30 ---
+--- Save Epoch: 38, Loss: 7.4964e-02, Res: 7.4964e-02, Beta: 0.32 ---
+--- Save Epoch: 44, Loss: 6.9498e-02, Res: 6.9498e-02, Beta: 0.34 ---
+--- Save Epoch: 49, Loss: 6.3186e-02, Res: 6.3186e-02, Beta: 0.36 ---
+--- Save Epoch: 56, Loss: 6.2807e-02, Res: 6.2807e-02, Beta: 0.38 ---
+--- Save Epoch: 68, Loss: 4.6913e-02, Res: 4.6913e-02, Beta: 0.40 ---
+--- Save Epoch: 82, Loss: 4.2530e-02, Res: 4.2530e-02, Beta: 0.42 ---
+--- Save Epoch: 87, Loss: 4.1493e-02, Res: 4.1493e-02, Beta: 0.44 ---
+... RAR RES, Max residual error: 1.6885, t: tensor([[0.0004],
+        [0.0104],
+        [0.0004]])
+--- Save Epoch: 127, Loss: 3.4905e-02, Res: 3.4905e-02, Beta: 0.46 ---
+--- Save Epoch: 154, Loss: 3.4282e-02, Res: 3.4282e-02, Beta: 0.48 ---
+--- Save Epoch: 158, Loss: 3.3666e-02, Res: 3.3666e-02, Beta: 0.50 ---
+--- Save Epoch: 166, Loss: 3.1133e-02, Res: 3.1133e-02, Beta: 0.52 ---
+--- Save Epoch: 189, Loss: 2.6943e-02, Res: 2.6943e-02, Beta: 0.54 ---
+... RAR RES, Max residual error: 1.9165, t: tensor([[0.1960],
+        [0.1960],
+        [0.1898]])
+--- Save Epoch: 228, Loss: 2.6498e-02, Res: 2.6498e-02, Beta: 0.56 ---
+--- Save Epoch: 265, Loss: 2.6074e-02, Res: 2.6074e-02, Beta: 0.58 ---
+--- Save Epoch: 283, Loss: 2.2230e-02, Res: 2.2230e-02, Beta: 0.60 ---
+... RAR RES, Max residual error: 1.1883, t: tensor([[0.1951],
+        [0.1937],
+        [0.1802]])
+--- Save Epoch: 384, Loss: 2.0971e-02, Res: 2.0971e-02, Beta: 0.62 ---
+... RAR RES, Max residual error: 1.5790, t: tensor([[0.1916],
+        [0.1897],
+        [0.1897]])
+--- Save Epoch: 432, Loss: 2.0230e-02, Res: 2.0230e-02, Beta: 0.64 ---
+--- Save Epoch: 486, Loss: 1.8346e-02, Res: 1.8346e-02, Beta: 0.66 ---
+... RAR RES, Max residual error: 1.1532, t: tensor([[0.1973],
+        [0.1953],
+        [0.1946]])
+--- Save Epoch: 603, Loss: 1.7538e-02, Res: 1.7538e-02, Beta: 0.68 ---
+--- Save Epoch: 630, Loss: 1.7233e-02, Res: 1.7233e-02, Beta: 0.70 ---
+--- Save Epoch: 678, Loss: 1.7219e-02, Res: 1.7219e-02, Beta: 0.72 ---
+... RAR RES, Max residual error: 1.5741, t: tensor([[0.1982],
+        [0.1874],
+        [0.1954]])
+--- Save Epoch: 777, Loss: 1.6433e-02, Res: 1.6433e-02, Beta: 0.74 ---
+... RAR RES, Max residual error: 1.0651, t: tensor([[0.1886],
+        [0.1953],
+        [0.1958]])
+--- Save Epoch: 981, Loss: 1.4616e-02, Res: 1.4616e-02, Beta: 0.76 ---
+[info] Training epoch: 1000, LR: 9.50e-04
+... RAR RES, Max residual error: 1.5178, t: tensor([[0.1972],
+        [0.1867],
+        [0.1923]])
+--- Save Epoch: 1125, Loss: 1.4561e-02, Res: 1.4561e-02, Beta: 0.78 ---
+--- Save Epoch: 1137, Loss: 1.3299e-02, Res: 1.3299e-02, Beta: 0.80 ---
+... RAR RES, Max residual error: 1.1340, t: tensor([[0.1996],
+        [0.1992],
+        [0.1992]])
+--- Save Epoch: 1521, Loss: 1.2901e-02, Res: 1.2901e-02, Beta: 0.82 ---
+... RAR RES, Max residual error: 1.3369, t: tensor([[0.1998],
+        [0.1998],
+        [0.1990]])
+[info] Training epoch: 2000, LR: 9.02e-04
+--- Save Epoch: 2025, Loss: 1.2650e-02, Res: 1.2650e-02, Beta: 0.84 ---
+--- Save Epoch: 2043, Loss: 1.0227e-02, Res: 1.0227e-02, Beta: 0.86 ---
+... RAR RES, Max residual error: 1.3475, t: tensor([[0.1998],
+        [0.1998],
+        [0.1998]])
+--- Save Epoch: 2607, Loss: 1.0199e-02, Res: 1.0199e-02, Beta: 0.88 ---
+--- Save Epoch: 2618, Loss: 9.8250e-03, Res: 9.8250e-03, Beta: 0.90 ---
+--- Save Epoch: 2637, Loss: 9.4611e-03, Res: 9.4611e-03, Beta: 0.92 ---
+... RAR RES, Max residual error: 1.0372, t: tensor([[0.1998],
+        [0.1998],
+        [0.1908]])
+[info] Training epoch: 3000, LR: 8.57e-04
+--- Save Epoch: 3753, Loss: 8.7190e-03, Res: 8.7190e-03, Beta: 0.94 ---
+... RAR RES, Max residual error: 1.1364, t: tensor([[0.1936],
+        [0.1977],
+        [0.1984]])
+--- Save Epoch: 3989, Loss: 7.6819e-03, Res: 7.6819e-03, Beta: 0.96 ---
+[info] Training epoch: 4000, LR: 8.15e-04
+... RAR RES, Max residual error: 1.6655, t: tensor([[0.1989],
+        [0.1972],
+        [0.1961]])
+--- Save Epoch: 4049, Loss: 7.6789e-03, Res: 7.6789e-03, Beta: 0.98 ---
+... RAR RES, Max residual error: 0.8785, t: tensor([[0.1910],
+        [0.1967],
+        [0.1985]])
+--- Save Epoch: 4439, Loss: 7.2526e-03, Res: 7.2526e-03, Beta: 1.00 ---
+... RAR RES, Max residual error: 1.0885, t: tensor([[0.1982],
+        [0.1974],
+        [0.1961]])
+[info] Training epoch: 5000, LR: 7.74e-04
+--- Save Epoch: 5003, Loss: 6.9581e-03, Res: 6.9581e-03, Beta: 1.00 ---
+--- Save Epoch: 5051, Loss: 6.8786e-03, Res: 6.8786e-03, Beta: 1.00 ---
+--- Save Epoch: 5083, Loss: 6.5254e-03, Res: 6.5254e-03, Beta: 1.00 ---
+... RAR RES, Max residual error: 0.5443, t: tensor([[0.1868],
+        [0.1886],
+        [0.1839]])
+--- Save Epoch: 5415, Loss: 6.5023e-03, Res: 6.5023e-03, Beta: 1.00 ---
+--- Save Epoch: 5420, Loss: 5.9895e-03, Res: 5.9895e-03, Beta: 1.00 ---
+--- Save Epoch: 5421, Loss: 5.9128e-03, Res: 5.9128e-03, Beta: 1.00 ---
+--- Save Epoch: 5425, Loss: 5.4358e-03, Res: 5.4358e-03, Beta: 1.00 ---
+... RAR RES, Max residual error: 0.7466, t: tensor([[0.1998],
+        [0.1977],
+        [0.1908]])
+--- Save Epoch: 5995, Loss: 5.3097e-03, Res: 5.3097e-03, Beta: 1.00 ---
+--- Save Epoch: 5998, Loss: 4.9784e-03, Res: 4.9784e-03, Beta: 1.00 ---
+[info] Training epoch: 6000, LR: 7.35e-04
+... RAR RES, Max residual error: 0.6000, t: tensor([[0.1982],
+        [0.1968],
+        [0.1939]])
+--- Save Epoch: 6004, Loss: 4.8587e-03, Res: 4.8587e-03, Beta: 1.00 ---
+... RAR RES, Max residual error: 1.1799, t: tensor([[0.1964],
+        [0.1949],
+        [0.1949]])
+--- Save Epoch: 6246, Loss: 4.4623e-03, Res: 4.4623e-03, Beta: 1.00 ---
+... RAR RES, Max residual error: 0.7559, t: tensor([[0.1996],
+        [0.1937],
+        [0.1937]])
+[info] Training epoch: 7000, LR: 6.98e-04
+--- Save Epoch: 7039, Loss: 4.4567e-03, Res: 4.4567e-03, Beta: 1.00 ---
+--- Save Epoch: 7083, Loss: 4.2441e-03, Res: 4.2441e-03, Beta: 1.00 ---
+... RAR RES, Max residual error: 0.4207, t: tensor([[0.1826],
+        [0.1938],
+        [0.1523]])
+--- Save Epoch: 7565, Loss: 3.9154e-03, Res: 3.9154e-03, Beta: 1.00 ---
+... RAR RES, Max residual error: 0.8076, t: tensor([[0.1876],
+        [0.1906],
+        [0.1950]])
+[info] Training epoch: 8000, LR: 6.63e-04
+--- Save Epoch: 8316, Loss: 3.7149e-03, Res: 3.7149e-03, Beta: 1.00 ---
+... RAR RES, Max residual error: 0.6011, t: tensor([[0.1969],
+        [0.1984],
+        [0.1984]])
+--- Save Epoch: 8468, Loss: 3.5549e-03, Res: 3.5549e-03, Beta: 1.00 ---
+--- Save Epoch: 8471, Loss: 2.8265e-03, Res: 2.8265e-03, Beta: 1.00 ---
+... RAR RES, Max residual error: 0.5149, t: tensor([[0.1975],
+        [0.1975],
+        [0.1931]])
+[info] Training epoch: 9000, LR: 6.30e-04
+--- Save Epoch: 9656, Loss: 2.8231e-03, Res: 2.8231e-03, Beta: 1.00 ---
+--- Save Epoch: 9672, Loss: 2.7997e-03, Res: 2.7997e-03, Beta: 1.00 ---
+... RAR RES, Max residual error: 0.3248, t: tensor([[0.1996],
+        [0.1961],
+        [0.1937]])
+--- Save Epoch: 9764, Loss: 2.7153e-03, Res: 2.7153e-03, Beta: 1.00 ---
+... RAR RES, Max residual error: 0.4558, t: tensor([[0.1984],
+        [0.1995],
+        [0.1995]])
+[info] Training epoch: 10000, LR: 5.99e-04
+--- Save Epoch: 10204, Loss: 2.6307e-03, Res: 2.6307e-03, Beta: 1.00 ---
+... RAR RES, Max residual error: 0.3569, t: tensor([[0.1995],
+        [0.1903],
+        [0.1932]])
+--- Save Epoch: 10508, Loss: 2.2655e-03, Res: 2.2655e-03, Beta: 1.00 ---
+--- Save Epoch: 10537, Loss: 2.1637e-03, Res: 2.1637e-03, Beta: 1.00 ---
+... RAR RES, Max residual error: 0.5791, t: tensor([[0.1910],
+        [0.1910],
+        [0.1963]])
+[info] Training epoch: 11000, LR: 5.69e-04
+--- Save Epoch: 11407, Loss: 2.1256e-03, Res: 2.1256e-03, Beta: 1.00 ---
+... RAR RES, Max residual error: 0.2745, t: tensor([[0.1201],
+        [0.1883],
+        [0.1134]])
+--- Save Epoch: 11862, Loss: 2.0955e-03, Res: 2.0955e-03, Beta: 1.00 ---
+--- Save Epoch: 11865, Loss: 2.0164e-03, Res: 2.0164e-03, Beta: 1.00 ---
+... RAR RES, Max residual error: 0.5835, t: tensor([[0.1964],
+        [0.1964],
+        [0.1907]])
+[info] Training epoch: 12000, LR: 5.40e-04
+[info] Training epoch: 13000, LR: 5.13e-04
+--- Save Epoch: 13780, Loss: 1.9281e-03, Res: 1.9281e-03, Beta: 1.00 ---
+... RAR RES, Max residual error: 0.2986, t: tensor([[0.1930],
+        [0.1996],
+        [0.1869]])
+--- Save Epoch: 13992, Loss: 1.8249e-03, Res: 1.8249e-03, Beta: 1.00 ---
+--- Save Epoch: 13996, Loss: 1.7190e-03, Res: 1.7190e-03, Beta: 1.00 ---
+[info] Training epoch: 14000, LR: 4.88e-04
+... RAR RES, Max residual error: 0.3843, t: tensor([[0.1986],
+        [0.1983],
+        [0.1973]])
+--- Save Epoch: 14348, Loss: 1.6923e-03, Res: 1.6923e-03, Beta: 1.00 ---
+... RAR RES, Max residual error: 0.2370, t: tensor([[0.1997],
+        [0.1997],
+        [0.1997]])
+[info] Training epoch: 15000, LR: 4.63e-04
+--- Save Epoch: 15142, Loss: 1.6704e-03, Res: 1.6704e-03, Beta: 1.00 ---
+... RAR RES, Max residual error: 0.2864, t: tensor([[0.1952],
+        [0.1959],
+        [0.1992]])
+--- Save Epoch: 15874, Loss: 1.5590e-03, Res: 1.5590e-03, Beta: 1.00 ---
+--- Save Epoch: 15892, Loss: 1.3103e-03, Res: 1.3103e-03, Beta: 1.00 ---
+... RAR RES, Max residual error: 0.3569, t: tensor([[0.1993],
+        [0.1771],
+        [0.1932]])
+[info] Training epoch: 16000, LR: 4.40e-04
+[info] Training epoch: 17000, LR: 4.18e-04
+--- Save Epoch: 17115, Loss: 1.1224e-03, Res: 1.1224e-03, Beta: 1.00 ---
+... RAR RES, Max residual error: 0.7781, t: tensor([[0.1923],
+        [0.1994],
+        [0.1978]])
+[info] Training epoch: 18000, LR: 3.97e-04
+--- Save Epoch: 18933, Loss: 1.0710e-03, Res: 1.0710e-03, Beta: 1.00 ---
+[info] Training epoch: 19000, LR: 3.77e-04
+... RAR RES, Max residual error: 0.4266, t: tensor([[0.1976],
+        [0.1976],
+        [0.1928]])
+--- Save Epoch: 19182, Loss: 1.0013e-03, Res: 1.0013e-03, Beta: 1.00 ---
+... RAR RES, Max residual error: 0.2124, t: tensor([[0.1985],
+        [0.1942],
+        [0.1942]])
+[info] Training epoch: 20000, LR: 3.58e-04
+--- Save Epoch: 20048, Loss: 9.2731e-04, Res: 9.2731e-04, Beta: 1.00 ---
+--- Save Epoch: 20082, Loss: 8.6684e-04, Res: 8.6684e-04, Beta: 1.00 ---
+... RAR RES, Max residual error: 0.2188, t: tensor([[0.1940],
+        [0.1938],
+        [0.1940]])
+[info] Training epoch: 21000, LR: 3.41e-04
+[info] Training epoch: 22000, LR: 3.24e-04
+[info] Training epoch: 23000, LR: 3.07e-04
+--- Save Epoch: 23430, Loss: 7.1772e-04, Res: 7.1772e-04, Beta: 1.00 ---
+... RAR RES, Max residual error: 0.2026, t: tensor([[0.0959],
+        [0.0959],
+        [0.1986]])
+[info] Training epoch: 24000, LR: 2.92e-04
+[info] Training epoch: 25000, LR: 2.77e-04
+--- Save Epoch: 25625, Loss: 7.1173e-04, Res: 7.1173e-04, Beta: 1.00 ---
+--- Save Epoch: 25628, Loss: 5.9246e-04, Res: 5.9246e-04, Beta: 1.00 ---
+... RAR RES, Max residual error: 0.3217, t: tensor([[0.1985],
+        [0.1985],
+        [0.1984]])
+[info] Training epoch: 26000, LR: 2.64e-04
+[info] Training epoch: 27000, LR: 2.50e-04
+[info] Training epoch: 28000, LR: 2.38e-04
+--- Save Epoch: 28210, Loss: 5.4740e-04, Res: 5.4740e-04, Beta: 1.00 ---
+--- Save Epoch: 28217, Loss: 4.8773e-04, Res: 4.8773e-04, Beta: 1.00 ---
+--- Save Epoch: 28224, Loss: 4.8591e-04, Res: 4.8591e-04, Beta: 1.00 ---
+... RAR RES, Max residual error: 0.2246, t: tensor([[0.1977],
+        [0.1955],
+        [0.1839]])
+--- Save Epoch: 28885, Loss: 4.8535e-04, Res: 4.8535e-04, Beta: 1.00 ---
+--- Save Epoch: 28888, Loss: 4.7437e-04, Res: 4.7437e-04, Beta: 1.00 ---
+... RAR RES, Max residual error: 0.4148, t: tensor([[0.2000],
+        [0.1996],
+        [0.1943]])
+[info] Training epoch: 29000, LR: 2.26e-04
+[info] Training epoch: 30000, LR: 2.15e-04
+--- Save Epoch: 30384, Loss: 4.1597e-04, Res: 4.1597e-04, Beta: 1.00 ---
+... RAR RES, Max residual error: 0.1849, t: tensor([[0.1920],
+        [0.1961],
+        [0.1981]])
+[info] Training epoch: 31000, LR: 2.04e-04
+[info] Training epoch: 32000, LR: 1.94e-04
+--- Save Epoch: 32907, Loss: 3.8907e-04, Res: 3.8907e-04, Beta: 1.00 ---
+--- Save Epoch: 32910, Loss: 3.5679e-04, Res: 3.5679e-04, Beta: 1.00 ---
+[info] Training epoch: 33000, LR: 1.84e-04
+... RAR RES, Max residual error: 0.1821, t: tensor([[0.1993],
+        [0.1815],
+        [0.1931]])
+[info] Training epoch: 34000, LR: 1.75e-04
+[info] Training epoch: 35000, LR: 1.66e-04
+[info] Training epoch: 36000, LR: 1.58e-04
+--- Save Epoch: 36714, Loss: 3.5145e-04, Res: 3.5145e-04, Beta: 1.00 ---
+... RAR RES, Max residual error: 0.2217, t: tensor([[0.1992],
+        [0.1992],
+        [0.1959]])
+[info] Training epoch: 37000, LR: 1.50e-04
+[info] Training epoch: 38000, LR: 1.42e-04
+--- Save Epoch: 38774, Loss: 3.3398e-04, Res: 3.3398e-04, Beta: 1.00 ---
+... RAR RES, Max residual error: 0.2107, t: tensor([[0.1955],
+        [0.1982],
+        [0.0710]])
+[info] Training epoch: 39000, LR: 1.35e-04
+[info] Training epoch: 40000, LR: 1.29e-04
+===== logging end   2025-11-15 10:43:20 =====
+
+===== logging start 2025-11-16 07:37:25 =====
+[check] bias_fac:  0.5
+--- Save Epoch: 1, Loss: 5.2016e+00, Res: 5.2016e+00, Beta: 0.00 ---
+... RAR RES, Max residual error: 24.3919, t: tensor([[0.1920],
+        [0.1891],
+        [0.1888]])
+--- Save Epoch: 2, Loss: 4.0334e+00, Res: 4.0334e+00, Beta: 0.02 ---
+--- Save Epoch: 3, Loss: 3.0192e+00, Res: 3.0192e+00, Beta: 0.04 ---
+--- Save Epoch: 4, Loss: 1.3398e+00, Res: 1.3398e+00, Beta: 0.06 ---
+--- Save Epoch: 5, Loss: 9.8234e-01, Res: 9.8234e-01, Beta: 0.08 ---
+--- Save Epoch: 6, Loss: 6.6118e-01, Res: 6.6118e-01, Beta: 0.10 ---
+--- Save Epoch: 7, Loss: 2.9156e-01, Res: 2.9156e-01, Beta: 0.12 ---
+--- Save Epoch: 9, Loss: 2.0180e-01, Res: 2.0180e-01, Beta: 0.14 ---
+--- Save Epoch: 11, Loss: 1.3433e-01, Res: 1.3433e-01, Beta: 0.16 ---
+--- Save Epoch: 12, Loss: 1.1652e-01, Res: 1.1652e-01, Beta: 0.18 ---
+--- Save Epoch: 15, Loss: 1.1214e-01, Res: 1.1214e-01, Beta: 0.20 ---
+--- Save Epoch: 18, Loss: 1.0258e-01, Res: 1.0258e-01, Beta: 0.22 ---
+--- Save Epoch: 19, Loss: 1.0238e-01, Res: 1.0238e-01, Beta: 0.24 ---
+--- Save Epoch: 25, Loss: 9.5978e-02, Res: 9.5978e-02, Beta: 0.26 ---
+--- Save Epoch: 28, Loss: 9.3237e-02, Res: 9.3237e-02, Beta: 0.28 ---
+--- Save Epoch: 32, Loss: 8.4931e-02, Res: 8.4931e-02, Beta: 0.30 ---
+--- Save Epoch: 38, Loss: 7.4964e-02, Res: 7.4964e-02, Beta: 0.32 ---
+--- Save Epoch: 44, Loss: 6.9498e-02, Res: 6.9498e-02, Beta: 0.34 ---
+--- Save Epoch: 49, Loss: 6.3186e-02, Res: 6.3186e-02, Beta: 0.36 ---
+--- Save Epoch: 56, Loss: 6.2807e-02, Res: 6.2807e-02, Beta: 0.38 ---
+--- Save Epoch: 68, Loss: 4.6913e-02, Res: 4.6913e-02, Beta: 0.40 ---
+--- Save Epoch: 82, Loss: 4.2530e-02, Res: 4.2530e-02, Beta: 0.42 ---
+--- Save Epoch: 87, Loss: 4.1493e-02, Res: 4.1493e-02, Beta: 0.44 ---
+... RAR RES, Max residual error: 1.6885, t: tensor([[0.0004],
+        [0.0104],
+        [0.0004]])
+--- Save Epoch: 127, Loss: 3.4905e-02, Res: 3.4905e-02, Beta: 0.46 ---
+--- Save Epoch: 154, Loss: 3.4282e-02, Res: 3.4282e-02, Beta: 0.48 ---
+--- Save Epoch: 158, Loss: 3.3666e-02, Res: 3.3666e-02, Beta: 0.50 ---
+--- Save Epoch: 166, Loss: 3.1133e-02, Res: 3.1133e-02, Beta: 0.52 ---
+--- Save Epoch: 189, Loss: 2.6943e-02, Res: 2.6943e-02, Beta: 0.54 ---
+... RAR RES, Max residual error: 1.9165, t: tensor([[0.1960],
+        [0.1960],
+        [0.1898]])
+--- Save Epoch: 228, Loss: 2.6498e-02, Res: 2.6498e-02, Beta: 0.56 ---
+--- Save Epoch: 265, Loss: 2.6074e-02, Res: 2.6074e-02, Beta: 0.58 ---
+--- Save Epoch: 283, Loss: 2.2230e-02, Res: 2.2230e-02, Beta: 0.60 ---
+... RAR RES, Max residual error: 1.1883, t: tensor([[0.1951],
+        [0.1937],
+        [0.1802]])
+--- Save Epoch: 384, Loss: 2.0971e-02, Res: 2.0971e-02, Beta: 0.62 ---
+... RAR RES, Max residual error: 1.5790, t: tensor([[0.1916],
+        [0.1897],
+        [0.1897]])
+--- Save Epoch: 432, Loss: 2.0230e-02, Res: 2.0230e-02, Beta: 0.64 ---
+--- Save Epoch: 486, Loss: 1.8346e-02, Res: 1.8346e-02, Beta: 0.66 ---
+... RAR RES, Max residual error: 1.1532, t: tensor([[0.1973],
+        [0.1953],
+        [0.1946]])
+===== logging end   2025-11-16 07:38:45 =====
+
+===== logging start 2025-11-16 07:39:22 =====
+[check] bias_fac:  0.5
+--- Save Epoch: 1, Loss: 2.8103e-01, Res: 2.8103e-01, Beta: 0.00 ---
+... RAR RES, Max residual error: 3.2953, t: tensor([[0.1895],
+        [0.1590],
+        [0.1629]])
+--- Save Epoch: 3, Loss: 2.3594e-01, Res: 2.3594e-01, Beta: 0.02 ---
+--- Save Epoch: 4, Loss: 1.8916e-01, Res: 1.8916e-01, Beta: 0.04 ---
+--- Save Epoch: 5, Loss: 1.6012e-01, Res: 1.6012e-01, Beta: 0.06 ---
+--- Save Epoch: 6, Loss: 1.3619e-01, Res: 1.3619e-01, Beta: 0.08 ---
+--- Save Epoch: 8, Loss: 1.2819e-01, Res: 1.2819e-01, Beta: 0.10 ---
+--- Save Epoch: 10, Loss: 1.1698e-01, Res: 1.1698e-01, Beta: 0.12 ---
+--- Save Epoch: 12, Loss: 1.1379e-01, Res: 1.1379e-01, Beta: 0.14 ---
+--- Save Epoch: 14, Loss: 1.0739e-01, Res: 1.0739e-01, Beta: 0.16 ---
+--- Save Epoch: 18, Loss: 1.0478e-01, Res: 1.0478e-01, Beta: 0.18 ---
+--- Save Epoch: 21, Loss: 1.0456e-01, Res: 1.0456e-01, Beta: 0.20 ---
+--- Save Epoch: 26, Loss: 9.0246e-02, Res: 9.0246e-02, Beta: 0.22 ---
+--- Save Epoch: 29, Loss: 8.7646e-02, Res: 8.7646e-02, Beta: 0.24 ---
+--- Save Epoch: 34, Loss: 8.1721e-02, Res: 8.1721e-02, Beta: 0.26 ---
+--- Save Epoch: 38, Loss: 8.0969e-02, Res: 8.0969e-02, Beta: 0.28 ---
+--- Save Epoch: 42, Loss: 7.5004e-02, Res: 7.5004e-02, Beta: 0.30 ---
+--- Save Epoch: 44, Loss: 7.2450e-02, Res: 7.2450e-02, Beta: 0.32 ---
+--- Save Epoch: 47, Loss: 6.5366e-02, Res: 6.5366e-02, Beta: 0.34 ---
+--- Save Epoch: 58, Loss: 5.6111e-02, Res: 5.6111e-02, Beta: 0.36 ---
+--- Save Epoch: 59, Loss: 5.1020e-02, Res: 5.1020e-02, Beta: 0.38 ---
+--- Save Epoch: 64, Loss: 5.0290e-02, Res: 5.0290e-02, Beta: 0.40 ---
+--- Save Epoch: 75, Loss: 4.7710e-02, Res: 4.7710e-02, Beta: 0.42 ---
+--- Save Epoch: 79, Loss: 3.5230e-02, Res: 3.5230e-02, Beta: 0.44 ---
+--- Save Epoch: 99, Loss: 3.0100e-02, Res: 3.0100e-02, Beta: 0.46 ---
+... RAR RES, Max residual error: 1.6877, t: tensor([[0.0001],
+        [0.0001],
+        [0.0031]])
+--- Save Epoch: 141, Loss: 2.7620e-02, Res: 2.7620e-02, Beta: 0.48 ---
+--- Save Epoch: 168, Loss: 2.7017e-02, Res: 2.7017e-02, Beta: 0.50 ---
+--- Save Epoch: 175, Loss: 2.5572e-02, Res: 2.5572e-02, Beta: 0.52 ---
+--- Save Epoch: 183, Loss: 2.4719e-02, Res: 2.4719e-02, Beta: 0.54 ---
+... RAR RES, Max residual error: 1.4606, t: tensor([[0.1992],
+        [0.1862],
+        [0.1878]])
+--- Save Epoch: 236, Loss: 2.2699e-02, Res: 2.2699e-02, Beta: 0.56 ---
+--- Save Epoch: 264, Loss: 2.0992e-02, Res: 2.0992e-02, Beta: 0.58 ---
+... RAR RES, Max residual error: 1.8549, t: tensor([[0.1952],
+        [0.1944],
+        [0.1985]])
+--- Save Epoch: 360, Loss: 2.0450e-02, Res: 2.0450e-02, Beta: 0.60 ---
+... RAR RES, Max residual error: 2.1870, t: tensor([[0.1953],
+        [0.1844],
+        [0.1799]])
+--- Save Epoch: 503, Loss: 2.0421e-02, Res: 2.0421e-02, Beta: 0.62 ---
+--- Save Epoch: 544, Loss: 1.7309e-02, Res: 1.7309e-02, Beta: 0.64 ---
+... RAR RES, Max residual error: 1.1800, t: tensor([[0.1968],
+        [0.0027],
+        [0.1956]])
+--- Save Epoch: 770, Loss: 1.5758e-02, Res: 1.5758e-02, Beta: 0.66 ---
+... RAR RES, Max residual error: 1.0969, t: tensor([[0.1940],
+        [0.1896],
+        [0.1926]])
+--- Save Epoch: 835, Loss: 1.4763e-02, Res: 1.4763e-02, Beta: 0.68 ---
+... RAR RES, Max residual error: 1.3177, t: tensor([[0.1983],
+        [0.1932],
+        [0.1963]])
+[info] Training epoch: 1000, LR: 9.50e-04
+--- Save Epoch: 1077, Loss: 1.4238e-02, Res: 1.4238e-02, Beta: 0.70 ---
+... RAR RES, Max residual error: 2.3123, t: tensor([[0.1995],
+        [0.1977],
+        [0.1976]])
+--- Save Epoch: 1152, Loss: 1.3357e-02, Res: 1.3357e-02, Beta: 0.72 ---
+... RAR RES, Max residual error: 1.5319, t: tensor([[0.1931],
+        [0.1952],
+        [0.1952]])
+--- Save Epoch: 1380, Loss: 1.3235e-02, Res: 1.3235e-02, Beta: 0.74 ---
+... RAR RES, Max residual error: 0.9627, t: tensor([[0.1963],
+        [0.1973],
+        [0.0513]])
+--- Save Epoch: 1677, Loss: 1.2587e-02, Res: 1.2587e-02, Beta: 0.76 ---
+... RAR RES, Max residual error: 1.4324, t: tensor([[0.1987],
+        [0.1998],
+        [0.1987]])
+[info] Training epoch: 2000, LR: 9.02e-04
+--- Save Epoch: 2459, Loss: 1.2315e-02, Res: 1.2315e-02, Beta: 0.78 ---
+--- Save Epoch: 2494, Loss: 1.1343e-02, Res: 1.1343e-02, Beta: 0.80 ---
+... RAR RES, Max residual error: 0.9833, t: tensor([[0.1982],
+        [0.1864],
+        [0.1982]])
+[info] Training epoch: 3000, LR: 8.57e-04
+--- Save Epoch: 3080, Loss: 1.0598e-02, Res: 1.0598e-02, Beta: 0.82 ---
+... RAR RES, Max residual error: 1.1383, t: tensor([[0.1972],
+        [0.1977],
+        [0.1834]])
+--- Save Epoch: 3215, Loss: 1.0297e-02, Res: 1.0297e-02, Beta: 0.84 ---
+... RAR RES, Max residual error: 1.4775, t: tensor([[0.1846],
+        [0.1860],
+        [0.1894]])
+--- Save Epoch: 3544, Loss: 8.9653e-03, Res: 8.9653e-03, Beta: 0.86 ---
+... RAR RES, Max residual error: 1.3587, t: tensor([[0.1965],
+        [0.1976],
+        [0.1953]])
+[info] Training epoch: 4000, LR: 8.15e-04
+--- Save Epoch: 4913, Loss: 8.1881e-03, Res: 8.1881e-03, Beta: 0.88 ---
+[info] Training epoch: 5000, LR: 7.74e-04
+... RAR RES, Max residual error: 0.8536, t: tensor([[0.1982],
+        [0.1853],
+        [0.1942]])
+[info] Training epoch: 6000, LR: 7.35e-04
+--- Save Epoch: 6245, Loss: 8.1142e-03, Res: 8.1142e-03, Beta: 0.90 ---
+--- Save Epoch: 6293, Loss: 8.0652e-03, Res: 8.0652e-03, Beta: 0.92 ---
+... RAR RES, Max residual error: 0.6768, t: tensor([[0.1881],
+        [0.1470],
+        [0.1969]])
+[info] Training epoch: 7000, LR: 6.98e-04
+[info] Training epoch: 8000, LR: 6.63e-04
+--- Save Epoch: 8053, Loss: 7.9512e-03, Res: 7.9512e-03, Beta: 0.94 ---
+... RAR RES, Max residual error: 0.6048, t: tensor([[0.1923],
+        [0.1944],
+        [0.1848]])
+[info] Training epoch: 9000, LR: 6.30e-04
+--- Save Epoch: 9933, Loss: 7.8280e-03, Res: 7.8280e-03, Beta: 0.96 ---
+[info] Training epoch: 10000, LR: 5.99e-04
+... RAR RES, Max residual error: 0.7957, t: tensor([[0.1999],
+        [0.1992],
+        [0.1999]])
+[info] Training epoch: 11000, LR: 5.69e-04
+--- Save Epoch: 11255, Loss: 7.1818e-03, Res: 7.1818e-03, Beta: 0.98 ---
+... RAR RES, Max residual error: 0.7560, t: tensor([[0.1897],
+        [0.1973],
+        [0.1914]])
+[info] Training epoch: 12000, LR: 5.40e-04
+[info] Training epoch: 13000, LR: 5.13e-04
+[info] Training epoch: 14000, LR: 4.88e-04
+--- Save Epoch: 14410, Loss: 7.1638e-03, Res: 7.1638e-03, Beta: 1.00 ---
+--- Save Epoch: 14488, Loss: 7.0468e-03, Res: 7.0468e-03, Beta: 1.00 ---
+... RAR RES, Max residual error: 0.7509, t: tensor([[0.1973],
+        [0.1997],
+        [0.1997]])
+[info] Training epoch: 15000, LR: 4.63e-04
+--- Save Epoch: 15466, Loss: 6.9059e-03, Res: 6.9059e-03, Beta: 1.00 ---
+--- Save Epoch: 15471, Loss: 6.8728e-03, Res: 6.8728e-03, Beta: 1.00 ---
+--- Save Epoch: 15481, Loss: 6.6131e-03, Res: 6.6131e-03, Beta: 1.00 ---
+... RAR RES, Max residual error: 0.6212, t: tensor([[0.1981],
+        [0.1994],
+        [0.1955]])
+--- Save Epoch: 15636, Loss: 6.3857e-03, Res: 6.3857e-03, Beta: 1.00 ---
+--- Save Epoch: 15686, Loss: 6.3729e-03, Res: 6.3729e-03, Beta: 1.00 ---
+... RAR RES, Max residual error: 0.5951, t: tensor([[0.1986],
+        [0.1986],
+        [0.1851]])
+--- Save Epoch: 15896, Loss: 6.2272e-03, Res: 6.2272e-03, Beta: 1.00 ---
+... RAR RES, Max residual error: 0.6641, t: tensor([[0.1992],
+        [0.1992],
+        [0.1992]])
+[info] Training epoch: 16000, LR: 4.40e-04
+--- Save Epoch: 16320, Loss: 6.1311e-03, Res: 6.1311e-03, Beta: 1.00 ---
+... RAR RES, Max residual error: 0.6182, t: tensor([[0.1988],
+        [0.1996],
+        [0.1996]])
+--- Save Epoch: 16758, Loss: 6.1110e-03, Res: 6.1110e-03, Beta: 1.00 ---
+--- Save Epoch: 16762, Loss: 5.8194e-03, Res: 5.8194e-03, Beta: 1.00 ---
+... RAR RES, Max residual error: 0.4506, t: tensor([[0.1938],
+        [0.1961],
+        [0.1804]])
+[info] Training epoch: 17000, LR: 4.18e-04
+--- Save Epoch: 17070, Loss: 5.7313e-03, Res: 5.7313e-03, Beta: 1.00 ---
+... RAR RES, Max residual error: 0.3758, t: tensor([[0.1984],
+        [0.1984],
+        [0.1896]])
+--- Save Epoch: 17394, Loss: 5.6800e-03, Res: 5.6800e-03, Beta: 1.00 ---
+... RAR RES, Max residual error: 0.3541, t: tensor([[0.1991],
+        [0.1973],
+        [0.1979]])
+--- Save Epoch: 17798, Loss: 5.5422e-03, Res: 5.5422e-03, Beta: 1.00 ---
+... RAR RES, Max residual error: 0.4028, t: tensor([[0.1984],
+        [0.1984],
+        [0.1549]])
+[info] Training epoch: 18000, LR: 3.97e-04
+--- Save Epoch: 18041, Loss: 5.3550e-03, Res: 5.3550e-03, Beta: 1.00 ---
+--- Save Epoch: 18042, Loss: 5.3003e-03, Res: 5.3003e-03, Beta: 1.00 ---
+--- Save Epoch: 18048, Loss: 5.2284e-03, Res: 5.2284e-03, Beta: 1.00 ---
+... RAR RES, Max residual error: 0.4940, t: tensor([[0.1998],
+        [0.1944],
+        [0.1983]])
+--- Save Epoch: 18253, Loss: 5.1967e-03, Res: 5.1967e-03, Beta: 1.00 ---
+--- Save Epoch: 18290, Loss: 5.0860e-03, Res: 5.0860e-03, Beta: 1.00 ---
+... RAR RES, Max residual error: 0.3571, t: tensor([[0.1945],
+        [0.1999],
+        [0.1957]])
+--- Save Epoch: 18550, Loss: 4.8547e-03, Res: 4.8547e-03, Beta: 1.00 ---
+... RAR RES, Max residual error: 0.3512, t: tensor([[0.1912],
+        [0.1888],
+        [0.1838]])
+--- Save Epoch: 18646, Loss: 4.8037e-03, Res: 4.8037e-03, Beta: 1.00 ---
+... RAR RES, Max residual error: 0.2803, t: tensor([[0.1949],
+        [0.1756],
+        [0.1180]])
+[info] Training epoch: 19000, LR: 3.77e-04
+--- Save Epoch: 19011, Loss: 4.7507e-03, Res: 4.7507e-03, Beta: 1.00 ---
+--- Save Epoch: 19013, Loss: 4.4521e-03, Res: 4.4521e-03, Beta: 1.00 ---
+... RAR RES, Max residual error: 0.4360, t: tensor([[0.1953],
+        [0.1998],
+        [0.1992]])
+--- Save Epoch: 19198, Loss: 4.2213e-03, Res: 4.2213e-03, Beta: 1.00 ---
+... RAR RES, Max residual error: 0.3205, t: tensor([[0.1993],
+        [0.1946],
+        [0.1928]])
+--- Save Epoch: 19658, Loss: 4.0889e-03, Res: 4.0889e-03, Beta: 1.00 ---
+--- Save Epoch: 19662, Loss: 3.9022e-03, Res: 3.9022e-03, Beta: 1.00 ---
+... RAR RES, Max residual error: 0.3738, t: tensor([[0.1974],
+        [0.1959],
+        [0.1925]])
+--- Save Epoch: 19936, Loss: 3.8083e-03, Res: 3.8083e-03, Beta: 1.00 ---
+--- Save Epoch: 19987, Loss: 3.7576e-03, Res: 3.7576e-03, Beta: 1.00 ---
+--- Save Epoch: 19989, Loss: 3.6905e-03, Res: 3.6905e-03, Beta: 1.00 ---
+[info] Training epoch: 20000, LR: 3.58e-04
+... RAR RES, Max residual error: 0.3724, t: tensor([[0.1987],
+        [0.1987],
+        [0.1968]])
+--- Save Epoch: 20015, Loss: 3.5935e-03, Res: 3.5935e-03, Beta: 1.00 ---
+... RAR RES, Max residual error: 0.3602, t: tensor([[0.1989],
+        [0.1989],
+        [0.1905]])
+--- Save Epoch: 20380, Loss: 3.3910e-03, Res: 3.3910e-03, Beta: 1.00 ---
+... RAR RES, Max residual error: 0.2695, t: tensor([[0.1988],
+        [0.1839],
+        [0.1810]])
+--- Save Epoch: 20759, Loss: 3.3632e-03, Res: 3.3632e-03, Beta: 1.00 ---
+--- Save Epoch: 20763, Loss: 3.2941e-03, Res: 3.2941e-03, Beta: 1.00 ---
+--- Save Epoch: 20774, Loss: 3.2770e-03, Res: 3.2770e-03, Beta: 1.00 ---
+... RAR RES, Max residual error: 0.5695, t: tensor([[0.1997],
+        [0.1997],
+        [0.1982]])
+--- Save Epoch: 20999, Loss: 3.2412e-03, Res: 3.2412e-03, Beta: 1.00 ---
+[info] Training epoch: 21000, LR: 3.41e-04
+... RAR RES, Max residual error: 0.3761, t: tensor([[0.1987],
+        [0.1954],
+        [0.1995]])
+--- Save Epoch: 21219, Loss: 3.2077e-03, Res: 3.2077e-03, Beta: 1.00 ---
+--- Save Epoch: 21224, Loss: 3.1523e-03, Res: 3.1523e-03, Beta: 1.00 ---
+... RAR RES, Max residual error: 0.4690, t: tensor([[0.1981],
+        [0.1861],
+        [0.1981]])
+--- Save Epoch: 21479, Loss: 3.0854e-03, Res: 3.0854e-03, Beta: 1.00 ---
+... RAR RES, Max residual error: 0.2971, t: tensor([[0.1967],
+        [0.1998],
+        [0.1998]])
+[info] Training epoch: 22000, LR: 3.24e-04
+--- Save Epoch: 22302, Loss: 2.6306e-03, Res: 2.6306e-03, Beta: 1.00 ---
+--- Save Epoch: 22388, Loss: 2.5260e-03, Res: 2.5260e-03, Beta: 1.00 ---
+... RAR RES, Max residual error: 0.5971, t: tensor([[0.1990],
+        [0.1950],
+        [0.1965]])
+[info] Training epoch: 23000, LR: 3.07e-04
+--- Save Epoch: 23556, Loss: 2.4889e-03, Res: 2.4889e-03, Beta: 1.00 ---
+--- Save Epoch: 23561, Loss: 2.4643e-03, Res: 2.4643e-03, Beta: 1.00 ---
+--- Save Epoch: 23590, Loss: 2.1641e-03, Res: 2.1641e-03, Beta: 1.00 ---
+... RAR RES, Max residual error: 0.5202, t: tensor([[0.1997],
+        [0.1997],
+        [0.1835]])
+[info] Training epoch: 24000, LR: 2.92e-04
+--- Save Epoch: 24932, Loss: 1.9514e-03, Res: 1.9514e-03, Beta: 1.00 ---
+--- Save Epoch: 24945, Loss: 1.9045e-03, Res: 1.9045e-03, Beta: 1.00 ---
+--- Save Epoch: 24948, Loss: 1.8184e-03, Res: 1.8184e-03, Beta: 1.00 ---
+[info] Training epoch: 25000, LR: 2.77e-04
+... RAR RES, Max residual error: 0.3517, t: tensor([[0.1984],
+        [0.1984],
+        [0.1985]])
+--- Save Epoch: 25054, Loss: 1.7523e-03, Res: 1.7523e-03, Beta: 1.00 ---
+... RAR RES, Max residual error: 0.3307, t: tensor([[0.1968],
+        [0.1927],
+        [0.1928]])
+[info] Training epoch: 26000, LR: 2.64e-04
+--- Save Epoch: 26732, Loss: 1.7512e-03, Res: 1.7512e-03, Beta: 1.00 ---
+--- Save Epoch: 26738, Loss: 1.5094e-03, Res: 1.5094e-03, Beta: 1.00 ---
+--- Save Epoch: 26745, Loss: 1.3226e-03, Res: 1.3226e-03, Beta: 1.00 ---
+... RAR RES, Max residual error: 0.2036, t: tensor([[0.1284],
+        [0.1275],
+        [0.1967]])
+[info] Training epoch: 27000, LR: 2.50e-04
+--- Save Epoch: 27632, Loss: 1.1267e-03, Res: 1.1267e-03, Beta: 1.00 ---
+... RAR RES, Max residual error: 0.2873, t: tensor([[0.1990],
+        [0.1978],
+        [0.1990]])
+[info] Training epoch: 28000, LR: 2.38e-04
+[info] Training epoch: 29000, LR: 2.26e-04
+--- Save Epoch: 29248, Loss: 1.1072e-03, Res: 1.1072e-03, Beta: 1.00 ---
+... RAR RES, Max residual error: 0.2047, t: tensor([[0.1984],
+        [0.1986],
+        [0.1984]])
+--- Save Epoch: 29391, Loss: 1.0485e-03, Res: 1.0485e-03, Beta: 1.00 ---
+... RAR RES, Max residual error: 0.2193, t: tensor([[0.1999],
+        [0.1999],
+        [0.1997]])
+[info] Training epoch: 30000, LR: 2.15e-04
+===== logging end   2025-11-16 08:27:56 =====
+
+===== logging start 2025-11-16 13:23:22 =====
+[check] bias_fac:  0.5
+--- Save Epoch: 1, Loss: 2.6456e-01, Res: 2.6456e-01, Beta: 0.00 ---
+... RAR RES, Max residual error: 2.6768, t: tensor([[0.0042],
+        [0.0090],
+        [0.1934]])
+--- Save Epoch: 3, Loss: 1.9395e-01, Res: 1.9395e-01, Beta: 0.02 ---
+--- Save Epoch: 4, Loss: 1.5927e-01, Res: 1.5927e-01, Beta: 0.04 ---
+--- Save Epoch: 5, Loss: 1.2967e-01, Res: 1.2967e-01, Beta: 0.06 ---
+--- Save Epoch: 6, Loss: 1.1330e-01, Res: 1.1330e-01, Beta: 0.08 ---
+--- Save Epoch: 7, Loss: 9.1918e-02, Res: 9.1918e-02, Beta: 0.10 ---
+--- Save Epoch: 10, Loss: 7.1859e-02, Res: 7.1859e-02, Beta: 0.12 ---
+--- Save Epoch: 14, Loss: 6.0260e-02, Res: 6.0260e-02, Beta: 0.14 ---
+--- Save Epoch: 17, Loss: 5.8353e-02, Res: 5.8353e-02, Beta: 0.16 ---
+--- Save Epoch: 22, Loss: 5.6331e-02, Res: 5.6331e-02, Beta: 0.18 ---
+--- Save Epoch: 26, Loss: 5.3828e-02, Res: 5.3828e-02, Beta: 0.20 ---
+--- Save Epoch: 30, Loss: 5.3367e-02, Res: 5.3367e-02, Beta: 0.22 ---
+--- Save Epoch: 35, Loss: 4.6070e-02, Res: 4.6070e-02, Beta: 0.24 ---
+--- Save Epoch: 46, Loss: 4.4345e-02, Res: 4.4345e-02, Beta: 0.26 ---
+--- Save Epoch: 51, Loss: 4.3707e-02, Res: 4.3707e-02, Beta: 0.28 ---
+--- Save Epoch: 57, Loss: 4.2123e-02, Res: 4.2123e-02, Beta: 0.30 ---
+--- Save Epoch: 64, Loss: 4.1505e-02, Res: 4.1505e-02, Beta: 0.32 ---
+--- Save Epoch: 67, Loss: 3.9606e-02, Res: 3.9606e-02, Beta: 0.34 ---
+--- Save Epoch: 76, Loss: 3.2175e-02, Res: 3.2175e-02, Beta: 0.36 ---
+--- Save Epoch: 83, Loss: 3.0628e-02, Res: 3.0628e-02, Beta: 0.38 ---
+... RAR RES, Max residual error: 1.3282, t: tensor([[0.0123],
+        [0.0058],
+        [0.0049]])
+--- Save Epoch: 111, Loss: 2.9868e-02, Res: 2.9868e-02, Beta: 0.40 ---
+--- Save Epoch: 121, Loss: 2.7921e-02, Res: 2.7921e-02, Beta: 0.42 ---
+--- Save Epoch: 129, Loss: 2.4312e-02, Res: 2.4312e-02, Beta: 0.44 ---
+--- Save Epoch: 145, Loss: 2.4176e-02, Res: 2.4176e-02, Beta: 0.46 ---
+--- Save Epoch: 156, Loss: 2.1354e-02, Res: 2.1354e-02, Beta: 0.48 ---
+--- Save Epoch: 171, Loss: 1.9881e-02, Res: 1.9881e-02, Beta: 0.50 ---
+--- Save Epoch: 189, Loss: 1.9670e-02, Res: 1.9670e-02, Beta: 0.52 ---
+... RAR RES, Max residual error: 1.2998, t: tensor([[0.1937],
+        [0.1996],
+        [0.1883]])
+--- Save Epoch: 218, Loss: 1.9107e-02, Res: 1.9107e-02, Beta: 0.54 ---
+--- Save Epoch: 265, Loss: 1.6946e-02, Res: 1.6946e-02, Beta: 0.56 ---
+--- Save Epoch: 291, Loss: 1.6644e-02, Res: 1.6644e-02, Beta: 0.58 ---
+... RAR RES, Max residual error: 1.0083, t: tensor([[0.1862],
+        [0.1901],
+        [0.1880]])
+--- Save Epoch: 338, Loss: 1.6133e-02, Res: 1.6133e-02, Beta: 0.60 ---
+--- Save Epoch: 394, Loss: 1.6038e-02, Res: 1.6038e-02, Beta: 0.62 ---
+... RAR RES, Max residual error: 1.3174, t: tensor([[0.1998],
+        [0.1991],
+        [0.1985]])
+--- Save Epoch: 455, Loss: 1.5479e-02, Res: 1.5479e-02, Beta: 0.64 ---
+--- Save Epoch: 475, Loss: 1.5376e-02, Res: 1.5376e-02, Beta: 0.66 ---
+... RAR RES, Max residual error: 1.0308, t: tensor([[0.1943],
+        [0.1973],
+        [0.1975]])
+--- Save Epoch: 607, Loss: 1.4892e-02, Res: 1.4892e-02, Beta: 0.68 ---
+--- Save Epoch: 678, Loss: 1.4526e-02, Res: 1.4526e-02, Beta: 0.70 ---
+... RAR RES, Max residual error: 0.8636, t: tensor([[0.1975],
+        [0.1975],
+        [0.1999]])
+--- Save Epoch: 767, Loss: 1.3982e-02, Res: 1.3982e-02, Beta: 0.72 ---
+... RAR RES, Max residual error: 1.0397, t: tensor([[0.1995],
+        [0.1995],
+        [0.1997]])
+--- Save Epoch: 854, Loss: 1.3422e-02, Res: 1.3422e-02, Beta: 0.74 ---
+... RAR RES, Max residual error: 0.7150, t: tensor([[0.1981],
+        [0.1906],
+        [0.1383]])
+--- Save Epoch: 942, Loss: 1.2944e-02, Res: 1.2944e-02, Beta: 0.76 ---
+[info] Training epoch: 1000, LR: 9.50e-04
+... RAR RES, Max residual error: 0.9881, t: tensor([[0.1964],
+        [0.1921],
+        [0.1955]])
+--- Save Epoch: 1194, Loss: 1.2361e-02, Res: 1.2361e-02, Beta: 0.78 ---
+... RAR RES, Max residual error: 0.8145, t: tensor([[0.1983],
+        [0.1985],
+        [0.1957]])
+--- Save Epoch: 1330, Loss: 1.2169e-02, Res: 1.2169e-02, Beta: 0.80 ---
+... RAR RES, Max residual error: 0.8738, t: tensor([[0.1991],
+        [0.1999],
+        [0.1980]])
+--- Save Epoch: 1517, Loss: 1.2005e-02, Res: 1.2005e-02, Beta: 0.82 ---
+... RAR RES, Max residual error: 0.7288, t: tensor([[0.1917],
+        [0.1914],
+        [0.1993]])
+--- Save Epoch: 1816, Loss: 1.1623e-02, Res: 1.1623e-02, Beta: 0.84 ---
+--- Save Epoch: 1884, Loss: 1.1538e-02, Res: 1.1538e-02, Beta: 0.86 ---
+... RAR RES, Max residual error: 1.4029, t: tensor([[0.1964],
+        [0.1897],
+        [0.1950]])
+[info] Training epoch: 2000, LR: 9.02e-04
+--- Save Epoch: 2067, Loss: 1.1145e-02, Res: 1.1145e-02, Beta: 0.88 ---
+... RAR RES, Max residual error: 1.3221, t: tensor([[0.1975],
+        [0.1899],
+        [0.1992]])
+--- Save Epoch: 2476, Loss: 1.0075e-02, Res: 1.0075e-02, Beta: 0.90 ---
+... RAR RES, Max residual error: 0.7173, t: tensor([[0.1933],
+        [0.1943],
+        [0.1949]])
+--- Save Epoch: 2624, Loss: 8.4615e-03, Res: 8.4615e-03, Beta: 0.92 ---
+... RAR RES, Max residual error: 0.9280, t: tensor([[0.1984],
+        [0.1892],
+        [0.1892]])
+[info] Training epoch: 3000, LR: 8.57e-04
+--- Save Epoch: 3277, Loss: 8.0415e-03, Res: 8.0415e-03, Beta: 0.94 ---
+... RAR RES, Max residual error: 0.8611, t: tensor([[0.1985],
+        [0.1876],
+        [0.1992]])
+--- Save Epoch: 3905, Loss: 7.6525e-03, Res: 7.6525e-03, Beta: 0.96 ---
+[info] Training epoch: 4000, LR: 8.15e-04
+... RAR RES, Max residual error: 0.5635, t: tensor([[0.1950],
+        [0.1952],
+        [0.1952]])
+--- Save Epoch: 4044, Loss: 7.2221e-03, Res: 7.2221e-03, Beta: 0.98 ---
+... RAR RES, Max residual error: 0.7439, t: tensor([[0.1946],
+        [0.1996],
+        [0.1957]])
+--- Save Epoch: 4320, Loss: 6.7667e-03, Res: 6.7667e-03, Beta: 1.00 ---
+... RAR RES, Max residual error: 0.6481, t: tensor([[0.1968],
+        [0.1895],
+        [0.1933]])
+--- Save Epoch: 4412, Loss: 6.4577e-03, Res: 6.4577e-03, Beta: 1.00 ---
+... RAR RES, Max residual error: 0.7316, t: tensor([[0.1994],
+        [0.1960],
+        [0.1994]])
+--- Save Epoch: 4550, Loss: 5.9700e-03, Res: 5.9700e-03, Beta: 1.00 ---
+... RAR RES, Max residual error: 0.9767, t: tensor([[0.1993],
+        [0.1993],
+        [0.1848]])
+--- Save Epoch: 4693, Loss: 5.9361e-03, Res: 5.9361e-03, Beta: 1.00 ---
+... RAR RES, Max residual error: 0.7149, t: tensor([[0.1999],
+        [0.1999],
+        [0.1968]])
+[info] Training epoch: 5000, LR: 7.74e-04
+--- Save Epoch: 5039, Loss: 5.8763e-03, Res: 5.8763e-03, Beta: 1.00 ---
+... RAR RES, Max residual error: 0.5137, t: tensor([[0.1989],
+        [0.1964],
+        [0.1992]])
+--- Save Epoch: 5555, Loss: 5.6191e-03, Res: 5.6191e-03, Beta: 1.00 ---
+... RAR RES, Max residual error: 0.4085, t: tensor([[0.1927],
+        [0.1968],
+        [0.1968]])
+[info] Training epoch: 6000, LR: 7.35e-04
+--- Save Epoch: 6271, Loss: 5.4600e-03, Res: 5.4600e-03, Beta: 1.00 ---
+... RAR RES, Max residual error: 0.4667, t: tensor([[0.1948],
+        [0.1988],
+        [0.1990]])
+--- Save Epoch: 6423, Loss: 5.2992e-03, Res: 5.2992e-03, Beta: 1.00 ---
+... RAR RES, Max residual error: 0.3737, t: tensor([[0.1977],
+        [0.1957],
+        [0.1950]])
+[info] Training epoch: 7000, LR: 6.98e-04
+--- Save Epoch: 7095, Loss: 5.1050e-03, Res: 5.1050e-03, Beta: 1.00 ---
+... RAR RES, Max residual error: 0.3781, t: tensor([[0.1997],
+        [0.1997],
+        [0.1984]])
+--- Save Epoch: 7407, Loss: 5.0732e-03, Res: 5.0732e-03, Beta: 1.00 ---
+... RAR RES, Max residual error: 0.3730, t: tensor([[0.1989],
+        [0.1985],
+        [0.1951]])
+--- Save Epoch: 7643, Loss: 5.0675e-03, Res: 5.0675e-03, Beta: 1.00 ---
+--- Save Epoch: 7647, Loss: 4.5211e-03, Res: 4.5211e-03, Beta: 1.00 ---
+... RAR RES, Max residual error: 0.3086, t: tensor([[0.1975],
+        [0.1975],
+        [0.1998]])
+--- Save Epoch: 7766, Loss: 4.4250e-03, Res: 4.4250e-03, Beta: 1.00 ---
+--- Save Epoch: 7781, Loss: 3.9835e-03, Res: 3.9835e-03, Beta: 1.00 ---
+... RAR RES, Max residual error: 0.7826, t: tensor([[0.1951],
+        [0.1985],
+        [0.1951]])
+--- Save Epoch: 7922, Loss: 3.4779e-03, Res: 3.4779e-03, Beta: 1.00 ---
+--- Save Epoch: 7940, Loss: 2.9646e-03, Res: 2.9646e-03, Beta: 1.00 ---
+[info] Training epoch: 8000, LR: 6.63e-04
+... RAR RES, Max residual error: 1.0054, t: tensor([[0.1882],
+        [0.1949],
+        [0.1949]])
+--- Save Epoch: 8182, Loss: 2.7035e-03, Res: 2.7035e-03, Beta: 1.00 ---
+... RAR RES, Max residual error: 0.4250, t: tensor([[0.1967],
+        [0.1967],
+        [0.1850]])
+[info] Training epoch: 9000, LR: 6.30e-04
+--- Save Epoch: 9112, Loss: 2.1447e-03, Res: 2.1447e-03, Beta: 1.00 ---
+... RAR RES, Max residual error: 0.4890, t: tensor([[0.1995],
+        [0.1932],
+        [0.1935]])
+[info] Training epoch: 10000, LR: 5.99e-04
+--- Save Epoch: 10249, Loss: 1.9339e-03, Res: 1.9339e-03, Beta: 1.00 ---
+... RAR RES, Max residual error: 0.5879, t: tensor([[0.1999],
+        [0.1966],
+        [0.1958]])
+[info] Training epoch: 11000, LR: 5.69e-04
+--- Save Epoch: 11657, Loss: 1.4130e-03, Res: 1.4130e-03, Beta: 1.00 ---
+... RAR RES, Max residual error: 0.2793, t: tensor([[0.1984],
+        [0.1840],
+        [0.0234]])
+[info] Training epoch: 12000, LR: 5.40e-04
+[info] Training epoch: 13000, LR: 5.13e-04
+--- Save Epoch: 13438, Loss: 1.2652e-03, Res: 1.2652e-03, Beta: 1.00 ---
+... RAR RES, Max residual error: 0.7427, t: tensor([[0.1902],
+        [0.1924],
+        [0.1912]])
+--- Save Epoch: 13599, Loss: 1.2143e-03, Res: 1.2143e-03, Beta: 1.00 ---
+... RAR RES, Max residual error: 0.5281, t: tensor([[0.1996],
+        [0.1925],
+        [0.1919]])
+--- Save Epoch: 13657, Loss: 1.1609e-03, Res: 1.1609e-03, Beta: 1.00 ---
+... RAR RES, Max residual error: 0.2654, t: tensor([[0.1984],
+        [0.0780],
+        [0.1948]])
+[info] Training epoch: 14000, LR: 4.88e-04
+[info] Training epoch: 15000, LR: 4.63e-04
+[info] Training epoch: 16000, LR: 4.40e-04
+--- Save Epoch: 16658, Loss: 8.5797e-04, Res: 8.5797e-04, Beta: 1.00 ---
+... RAR RES, Max residual error: 0.4039, t: tensor([[0.1942],
+        [0.1951],
+        [0.1994]])
+[info] Training epoch: 17000, LR: 4.18e-04
+[info] Training epoch: 18000, LR: 3.97e-04
+[info] Training epoch: 19000, LR: 3.77e-04
+--- Save Epoch: 19435, Loss: 8.1282e-04, Res: 8.1282e-04, Beta: 1.00 ---
+--- Save Epoch: 19436, Loss: 6.8717e-04, Res: 6.8717e-04, Beta: 1.00 ---
+... RAR RES, Max residual error: 0.2275, t: tensor([[0.1976],
+        [0.1976],
+        [0.1960]])
+[info] Training epoch: 20000, LR: 3.58e-04
+===== logging end   2025-11-16 13:57:18 =====

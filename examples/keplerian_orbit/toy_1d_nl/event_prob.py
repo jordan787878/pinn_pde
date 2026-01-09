@@ -86,7 +86,7 @@ def estimate_event_probability(problem, Pr_key):
             ws = ws.detach().numpy().reshape(-1,) # (K,)
             mus = mus.detach().numpy().reshape((-1, 1)) # (K, 1)
             covs = covs.detach().numpy().reshape((-1, 1, 1)) # (K, 1, 1)
-            _Pr = integrate_gmm_over_box_whitened(ws, mus, covs, problem)
+            _Pr = integrate_gmm_over_box_whitened(ws, mus, covs, problem["X_event"])
             problem[Pr_key].append(_Pr)
 
     if(Pr_key == "Pr_lp"):
@@ -97,7 +97,7 @@ def estimate_event_probability(problem, Pr_key):
             ws = ws.reshape(-1,) # (K,)
             mus = mus.reshape((-1, 1)) # (K, 1)
             covs = covs.reshape((-1, 1, 1)) # (K, 1, 1)
-            _Pr = integrate_gmm_over_box_whitened(ws, mus, covs, problem)
+            _Pr = integrate_gmm_over_box_whitened(ws, mus, covs, problem["X_event"])
             problem[Pr_key].append(_Pr)
     
     if(Pr_key == "Pr_ut"):
@@ -108,7 +108,7 @@ def estimate_event_probability(problem, Pr_key):
             ws = ws.reshape(-1,) # (K,)
             mus = mus.reshape((-1, 1)) # (K, 1)
             covs = covs.reshape((-1, 1, 1)) # (K, 1, 1)
-            _Pr = integrate_gmm_over_box_whitened(ws, mus, covs, problem)
+            _Pr = integrate_gmm_over_box_whitened(ws, mus, covs, problem["X_event"])
             problem[Pr_key].append(_Pr)
 
     if(Pr_key == "Pr_gmm"):
@@ -119,7 +119,7 @@ def estimate_event_probability(problem, Pr_key):
             ws = ws.reshape(-1,) # (K,)
             mus = mus.reshape((-1, 1)) # (K, 1)
             covs = covs.reshape((-1, 1, 1)) # (K, 1, 1)
-            _Pr = integrate_gmm_over_box_whitened(ws, mus, covs, problem)
+            _Pr = integrate_gmm_over_box_whitened(ws, mus, covs, problem["X_event"])
             problem[Pr_key].append(_Pr)
 
     return problem
@@ -423,6 +423,7 @@ def main():
             cheap=problem["cheap"],
             parallel=False,
             verbose=False,
+            far_N=6,
         )
         problem.update(grid)
         # print(problem["midpts"].shape[0])

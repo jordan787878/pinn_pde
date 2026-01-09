@@ -516,7 +516,7 @@ def plot_pdf_metrics(metrics, save_plot=False):
     if(all_zeros is False):
         plt.fill_between(
             metrics["t"],
-            metrics["rel_error_pinngmm"],
+            metrics["rel_error_pinngmm"]*0.0,
             metrics["B1_pinngmm"],
             alpha=0.3,
             color=colors_4set[3],
@@ -609,6 +609,39 @@ def plot_pdf_metrics(metrics, save_plot=False):
     plt.ylim([ymin, ymax])
     save_path = "figs/metric-RD.pdf"
     custom_save_plot(save_plot, save_path)
+
+    # # Top-512 Error vs PINN Error (Not Good....)
+    # i_plot = [2, 4, 6]   # change if you want other times
+    # set_publication_plot_style(save_tight_pad=0.3)
+    # fig, axes = plt.subplots(1, 3, figsize=(12, 5), sharey=True)
+    # plot_idx = 0
+    # for i in i_plot:
+    #     ax = axes[plot_idx]
+    #     top_delta = metrics["topK_delta_p_pinngmm"][i]
+    #     top_e1    = metrics["topK_e1_pinngmm"][i]
+    #     x = np.arange(len(top_delta))
+
+    #     # --- plot on this subplot ---
+    #     # true error (subsampled, with markers)
+    #     ax.plot(x, top_delta,
+    #             color="#0066FF", linestyle="-", marker="o", markersize=3,
+    #             label=r"$|e|$")
+
+    #     # PINN error approximation (full line)
+    #     ax.plot(x, top_e1,
+    #             color=colors_4set[3], linestyle=linestyles_4set[3],
+    #             label=r"$|\hat{e}|$")
+        
+    #     ax.axhline(0.0, color="k", linewidth=0.6, alpha=0.5)
+
+    #     t = metrics["t"][i]
+    #     ax.set_title(rf"$t = {t:.2f}T$", pad=4)
+    #     ax.set_xlabel("State index")
+
+    #     if plot_idx == 0:
+    #         ax.set_ylabel("Error (Top-512)")
+    #         ax.legend(loc="best")
+    #     plot_idx += 1
 
     plt.show()
 

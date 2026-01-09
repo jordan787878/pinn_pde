@@ -13,7 +13,7 @@ import sys
 from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]   # repo_root
 sys.path.insert(0, str(ROOT))
-from utilities._General.neuralnetworks import PNet_XL, TimeToGMM_V0, TimeToGMM_NoEncoder, load_trained_model
+from utilities._General.neuralnetworks import PNet_XL, TimeToGMM_V0, TimeToGMM_NoEncoder, TimeToGMM_IC, load_trained_model
 import utilities._General.train_pinn as PINN
 from utilities._General.util import RunLogger, save_config_human
 
@@ -233,6 +233,12 @@ def config_training(constants, option=""):
         # configuration["reg_tv"] = torch.tensor(0.0)
         p_net = TimeToGMM_V0(constants, K=5, alpha_floor=0.01)
 
+    if option == "pinn-gmm_bias-ic":
+        configuration["training_fcn"] = PINN.train_pinngmm_exactic
+        configuration["bias_fac"] = 0.5
+        configuration["iterations"] = 30000
+        p_net = TimeToGMM_IC(constants, K=11, alpha_floor=0.01)
+
     return configuration, p_net
 
 def main():
@@ -242,7 +248,7 @@ def main():
     torch.manual_seed(0); np.random.seed(0)
 
     # Setup config
-    config, p_net = config_training(constants, option="pinn-gmm-noencoder")
+    config, p_net = config_training(constants, option="pinn-gmm_bias-ic")
     save_config_human(config, model_name="p_net")
 
     # Train & log

@@ -569,7 +569,7 @@ def plot_pdf_metrics(metrics, save_plot=False):
     if(all_zeros is False):
         plt.fill_between(
             metrics["t"],
-            metrics["rel_error_pinngmm"],
+            metrics["rel_error_pinngmm"]*0.0,
             metrics["B1_pinngmm"],
             alpha=0.3,
             color=colors_4set[3],
@@ -662,6 +662,39 @@ def plot_pdf_metrics(metrics, save_plot=False):
     plt.ylim([ymin, ymax])
     save_path = "figs/metric-RD.pdf"
     custom_save_plot(save_plot, save_path)
+
+    # # Top-512 Error vs PINN Error (Not Good....)
+    # i_plot = [1, 3, 5]   # change if you want other times
+    # set_publication_plot_style(save_tight_pad=0.3)
+    # fig, axes = plt.subplots(1, 3, figsize=(12, 5), sharey=True)
+    # plot_idx = 0
+    # for i in i_plot:
+    #     ax = axes[plot_idx]
+    #     top_delta = metrics["topK_delta_p_pinngmm"][i]
+    #     top_e1    = metrics["topK_e1_pinngmm"][i]
+    #     x = np.arange(len(top_delta))
+
+    #     # --- plot on this subplot ---
+    #     # true error (subsampled, with markers)
+    #     ax.plot(x, top_delta,
+    #             color="#0066FF", linestyle="-", marker="o", markersize=3,
+    #             label=r"$|e|$")
+
+    #     # PINN error approximation (full line)
+    #     ax.plot(x, top_e1,
+    #             color=colors_4set[3], linestyle=linestyles_4set[3],
+    #             label=r"$|\hat{e}|$")
+        
+    #     ax.axhline(0.0, color="k", linewidth=0.6, alpha=0.5)
+
+    #     t = metrics["t"][i]
+    #     ax.set_title(rf"$t = {t:.2f}T$", pad=4)
+    #     ax.set_xlabel("State index")
+
+    #     if plot_idx == 0:
+    #         ax.set_ylabel("Error (Top-512)")
+    #         ax.legend(loc="best")
+    #     plot_idx += 1
 
     plt.show()
 
@@ -935,3 +968,268 @@ def plot_marginal_pdf_cart(constants, data_mc, p_net_gmm, num=256):
         facecolor="white",
     )
     custom_save_plot(True, "figs/pdf_cart.pdf")
+
+
+import numpy as np
+import matplotlib.pyplot as plt
+from matplotlib import cm, colors
+from matplotlib.animation import FuncAnimation
+from matplotlib.lines import Line2D
+
+
+def animate_pinn_surface_with_static_ref_wireframes(
+    constants,
+    data_mc,
+    p_net_gmm,
+    num: int = 256,
+    # wireframes (Ref. p): shown ONCE for these times
+    t_ref_list=None,
+    # surface (hat p): animated on a denser time grid
+    t_surf_list=None,
+    n_surf_frames: int = 80,
+    interval_ms: int = 100,
+    save_path: str | None = None,
+    dpi: int = 150,
+    elev: float = 20,
+    azim: float = 66,
+    rstride_surf: int = 10,
+    cstride_surf: int = 10,
+    rstride_wire: int = 24,
+    cstride_wire: int = 24,
+    # visual separation for multiple wireframes
+    wire_lift_frac: float = 0.002,
+    wire_stack_lift_frac: float = 0.0004,   # extra lift per ref time index (optional)
+    wire_alpha: float = 0.9,
+    # fixed axes
+    z_pad_frac: float = 0.08,
+    xy_pad_frac: float = 0.02,
+    time_fmt: str = r"$t={:.2f}T$",
+):
+    """
+    - Draw ALL MC reference PDFs (Ref. p) as static wireframes at t_ref_list (default: constants.T_PRIME_SPAN).
+    - Animate ONLY the PINN surface (hat p) over a denser time grid t_surf_list
+      (default: linspace over the same time span with n_surf_frames frames).
+    - Fix x/y/z limits across all frames.
+
+    Requirements (same as your plot function):
+      - _eval_marginal_xy_from_gmm(constants, ws, mus, covs, t, grid_pts, num) -> (X, Y, Z)
+      - GMMWhitenedModel.load(npz_path) and gmm.print_x_params()
+      - set_publication_plot_style()
+    """
+    # ----------------------------
+    # Time grids
+    # ----------------------------
+    if t_ref_list is None:
+        t_ref_list = list(constants.T_PRIME_SPAN)
+    else:
+        t_ref_list = list(t_ref_list)
+
+    if t_surf_list is None:
+        t0 = float(np.min(t_ref_list))
+        t1 = float(np.max(t_ref_list))
+        t_surf_list = np.linspace(t0, t1, n_surf_frames, endpoint=True)
+    else:
+        t_surf_list = np.asarray(t_surf_list, dtype=float)
+        n_surf_frames = len(t_surf_list)
+
+    # ----------------------------
+    # Grid in normalized (n_r, n_phi)
+    # ----------------------------
+    n_r_vals = np.linspace(constants.N_X1_RANGE[0], constants.N_X1_RANGE[1], num=num, endpoint=True)
+    n_phi_vals = np.linspace(constants.N_X2_RANGE[0], constants.N_X2_RANGE[1], num=num, endpoint=True)
+    n_r_grid, n_phi_grid = np.meshgrid(n_r_vals, n_phi_vals, indexing="ij")
+    n_rphi_grid_pts = np.vstack([n_r_grid.ravel(), n_phi_grid.ravel()]).T  # (num^2, 2)
+
+    # ----------------------------
+    # Precompute static reference wireframes
+    # ----------------------------
+    ref_surfaces = []
+    x_min, x_max = np.inf, -np.inf
+    y_min, y_max = np.inf, -np.inf
+    z_min, z_max = np.inf, -np.inf
+    global_z_range_hat = 0.0
+
+    # Also get a coarse bound on hat-p z-range from the ref times (enough for fixed zlim in practice)
+    for t in t_ref_list:
+        # --- ref (MC-fit GMM) ---
+        gmm = GMMWhitenedModel.load(data_mc + f"gmm_whitened_t{t:.2f}.npz")
+        gmm_params = gmm.print_x_params()
+        ws_ref = gmm_params["weights"]
+        mus_ref = gmm_params["means_x"]
+        covs_ref = gmm_params["covs_x"]
+
+        X_r, Y_r, Z_r = _eval_marginal_xy_from_gmm(
+            constants, ws_ref, mus_ref, covs_ref, t, n_rphi_grid_pts, num
+        )
+        ref_surfaces.append((t, X_r, Y_r, Z_r))
+
+        x_min = min(x_min, float(np.nanmin(X_r)))
+        x_max = max(x_max, float(np.nanmax(X_r)))
+        y_min = min(y_min, float(np.nanmin(Y_r)))
+        y_max = max(y_max, float(np.nanmax(Y_r)))
+        z_min = min(z_min, float(np.nanmin(Z_r)))
+        z_max = max(z_max, float(np.nanmax(Z_r)))
+
+        # --- hat (PINN) at same t (for z-limit calibration) ---
+        ws_torch, mus_torch, covs_torch = p_net_gmm.weights_means_covs_at(t)
+        ws_hat = ws_torch.detach().cpu().numpy()
+        mus_hat = mus_torch.detach().cpu().numpy()
+        covs_hat = covs_torch.detach().cpu().numpy()
+        _, _, Z_hat = _eval_marginal_xy_from_gmm(
+            constants, ws_hat, mus_hat, covs_hat, t, n_rphi_grid_pts, num
+        )
+        z_min = min(z_min, float(np.nanmin(Z_hat)))
+        z_max = max(z_max, float(np.nanmax(Z_hat)))
+        global_z_range_hat = max(global_z_range_hat, float(np.nanmax(Z_hat) - np.nanmin(Z_hat)))
+
+    # Fixed limits with padding
+    x_pad = xy_pad_frac * (x_max - x_min + 1e-12)
+    y_pad = xy_pad_frac * (y_max - y_min + 1e-12)
+    z_pad = z_pad_frac * (z_max - z_min + 1e-12)
+
+    x_lim = (x_min - x_pad, x_max + x_pad)
+    y_lim = (y_min - y_pad, y_max + y_pad)
+
+    # A consistent lift to avoid z-fighting
+    wire_lift = wire_lift_frac * (global_z_range_hat + 1e-12)
+
+    # Give enough headroom for stacked wireframes + time label
+    stack_extra = wire_stack_lift_frac * (global_z_range_hat + 1e-12) * max(0, len(t_ref_list) - 1)
+    z_lim = (max(0.0, z_min - z_pad), z_max + wire_lift + stack_extra + 2.0 * z_pad)
+
+    # ----------------------------
+    # Figure setup
+    # ----------------------------
+    set_publication_plot_style()
+    fig = plt.figure(figsize=(10, 8))
+    ax = fig.add_subplot(111, projection="3d")
+
+    ax.view_init(elev, azim)
+    ax.set_xlim(*x_lim)
+    ax.set_ylim(*y_lim)
+    ax.set_zlim(*z_lim)
+
+    ax.set_xlabel(r"$x$ [m]", labelpad=15)
+    ax.set_ylabel(r"$y$ [m]", labelpad=15)
+    ax.set_zlabel(r"$p(x, y)$")
+
+    # Legend proxies
+    approx_proxy = Line2D([], [], color=cm.viridis_r(0.15), lw=6)
+    ref_proxy = Line2D([], [], color="k", lw=1.5)
+
+    ax.legend(
+        [approx_proxy, ref_proxy],
+        [r"PINN $\hat p$", r"Ref. $p$ (MC)"],
+        loc="upper left",
+        bbox_to_anchor=(0.7, 0.85),
+        borderaxespad=0.0,
+        frameon=True,
+        framealpha=0.9,
+        facecolor="white",
+    )
+
+    # ----------------------------
+    # Draw ALL static wireframes (once)
+    # ----------------------------
+    wire_handles = []
+    for k, (t, X_r, Y_r, Z_r) in enumerate(ref_surfaces):
+        # optional small stacking lift per time index to reduce overlap
+        Z_plot = Z_r + wire_lift + k * (wire_stack_lift_frac * (global_z_range_hat + 1e-12))
+
+        h = ax.plot_wireframe(
+            X_r, Y_r, Z_plot,
+            rstride=rstride_wire,
+            cstride=cstride_wire,
+            color="k",
+            linewidth=1.0,
+            alpha=wire_alpha,
+            zorder=2,
+        )
+        wire_handles.append(h)
+
+    # ----------------------------
+    # Animated surface (hat p)
+    # ----------------------------
+    surf_handle = None
+    time_text = None
+
+    def _draw_surface(t):
+        nonlocal surf_handle, time_text
+
+        # remove old surface/text (keep wireframes)
+        if surf_handle is not None:
+            surf_handle.remove()
+            surf_handle = None
+        if time_text is not None:
+            time_text.remove()
+            time_text = None
+
+        ws_torch, mus_torch, covs_torch = p_net_gmm.weights_means_covs_at(t)
+        ws_hat = ws_torch.detach().cpu().numpy()
+        mus_hat = mus_torch.detach().cpu().numpy()
+        covs_hat = covs_torch.detach().cpu().numpy()
+
+        X_a, Y_a, Z_a = _eval_marginal_xy_from_gmm(
+            constants, ws_hat, mus_hat, covs_hat, t, n_rphi_grid_pts, num
+        )
+
+        norm = colors.Normalize(vmin=float(np.nanmin(Z_a)), vmax=float(np.nanmax(Z_a)))
+        surf_handle = ax.plot_surface(
+            X_a, Y_a, Z_a,
+            rstride=rstride_surf,
+            cstride=cstride_surf,
+            cmap=cm.viridis_r,
+            norm=norm,
+            linewidth=0,
+            antialiased=True,
+            shade=False,
+            zorder=1,
+        )
+
+        # place label at the peak of hat p
+        imax = int(np.nanargmax(Z_a))
+        ix, iy = np.unravel_index(imax, Z_a.shape)
+        x_lbl = float(X_a[ix, iy])
+        y_lbl = float(Y_a[ix, iy])
+        z_lbl = float(Z_a[ix, iy] + 0.5 * z_pad)
+
+        time_text = ax.text(
+            x_lbl, y_lbl, z_lbl,
+            time_fmt.format(float(t)),
+            fontsize=16,
+            ha="center",
+            va="bottom",
+        )
+
+        # re-assert fixed limits/view (some mpl backends reset them)
+        ax.view_init(elev, azim)
+        ax.set_xlim(*x_lim)
+        ax.set_ylim(*y_lim)
+        ax.set_zlim(*z_lim)
+
+        return []
+
+    def _update(i):
+        return _draw_surface(t_surf_list[i])
+
+    # initial surface
+    _draw_surface(t_surf_list[0])
+
+    anim = FuncAnimation(
+        fig,
+        _update,
+        frames=n_surf_frames,
+        interval=interval_ms,
+        blit=False,
+        repeat=True,
+    )
+
+    if save_path is not None:
+        if save_path.lower().endswith(".mp4"):
+            anim.save(save_path, writer="ffmpeg", dpi=dpi)
+        elif save_path.lower().endswith(".gif"):
+            anim.save(save_path, writer="pillow", dpi=dpi)
+        else:
+            raise ValueError("save_path must end with .mp4 or .gif (or set save_path=None).")
+
+    return fig, anim

@@ -143,27 +143,27 @@ def plot_metrics(show_flow=False):
     plt.plot(metrics_pri["t"], metrics_pri["norm_error_pinn"], label=plot_labels[3])
     plt.fill_between(
         metrics_pri["t"],
-        metrics_pri["norm_error_pinn"],
+        metrics_pri["norm_error_pinn"]*0.0,
         metrics_pri["normalize_B1"],
         color=colors_7set[3],
-        alpha=0.2,
+        alpha=0.3,
         label="Error Bound"
     )
 
     plt.plot(metrics["t"], metrics["norm_error_pinn"], label=plot_labels[4])
     plt.fill_between(
         metrics["t"],
-        metrics["norm_error_pinn"],
+        metrics["norm_error_pinn"]*0.0,
         metrics["normalize_B1"],
         color=colors_7set[4],
-        alpha=0.2,
+        alpha=0.3,
         label="Error Bound"
     )
 
     plt.plot(metrics_pinngmm["t"], metrics_pinngmm["norm_error_pinn"], label=plot_labels[5])
     plt.fill_between(
         metrics_pinngmm["t"],
-        metrics_pinngmm["norm_error_pinn"],
+        metrics_pinngmm["norm_error_pinn"]*0.0,
         metrics_pinngmm["normalize_B1"],
         color=colors_7set[5],
         alpha=0.2,
@@ -175,7 +175,7 @@ def plot_metrics(show_flow=False):
         plt.plot(metrics_flow["t"], metrics_flow["norm_error_pinn"], label=plot_labels[7])
         plt.fill_between(
             metrics_flow["t"],
-            metrics_flow["norm_error_pinn"],
+            metrics_flow["norm_error_pinn"]*0.0,
             metrics_flow["normalize_B1"],
             color=colors_7set[7],
             alpha=0.2,
@@ -193,10 +193,10 @@ def plot_metrics(show_flow=False):
     plt.plot(metrics["t"], metrics["tv_lp"], label=plot_labels[0])
     plt.plot(metrics["t"], metrics["tv_ut"], label=plot_labels[1])
     # plt.plot(metrics["t"], metrics["tv_ut_alpha_0_1"], label=plot_labels[2])
-    plt.plot(metrics["t"], metrics["tv_gmm"], label=plot_labels[3])
-    plt.plot(metrics_pri["t"], metrics_pri["tv_pinn"], label=plot_labels[4])
-    plt.plot(metrics["t"], metrics["tv_pinn"], label=plot_labels[5])
-    plt.plot(metrics_pinngmm["t"], metrics_pinngmm["tv_pinn"], label=plot_labels[6])
+    plt.plot(metrics["t"], metrics["tv_gmm"], label=plot_labels[2])
+    plt.plot(metrics_pri["t"], metrics_pri["tv_pinn"], label=plot_labels[3])
+    plt.plot(metrics["t"], metrics["tv_pinn"], label=plot_labels[4])
+    plt.plot(metrics_pinngmm["t"], metrics_pinngmm["tv_pinn"], label=plot_labels[5])
     if(show_flow):
         plt.plot(metrics_flow["t"], metrics_flow["tv_pinn"], label=plot_labels[7])
     plt.legend(ncol=2)
@@ -210,10 +210,10 @@ def plot_metrics(show_flow=False):
     plt.plot(metrics["t"], metrics["g_kl_lp"], label=plot_labels[0])
     plt.plot(metrics["t"], metrics["g_kl_ut"], label=plot_labels[1])
     # plt.plot(metrics["t"], metrics["g_kl_ut_alpha_0_1"], label=plot_labels[2])
-    plt.plot(metrics["t"], metrics["g_kl_gmm"], label=plot_labels[3])
-    plt.plot(metrics_pri["t"], metrics_pri["g_kl_pinn"], label=plot_labels[4])
-    plt.plot(metrics["t"], metrics["g_kl_pinn"], label=plot_labels[5])
-    plt.plot(metrics_pinngmm["t"], metrics_pinngmm["g_kl_pinn"], label=plot_labels[6])
+    plt.plot(metrics["t"], metrics["g_kl_gmm"], label=plot_labels[2])
+    plt.plot(metrics_pri["t"], metrics_pri["g_kl_pinn"], label=plot_labels[3])
+    plt.plot(metrics["t"], metrics["g_kl_pinn"], label=plot_labels[4])
+    plt.plot(metrics_pinngmm["t"], metrics_pinngmm["g_kl_pinn"], label=plot_labels[5])
     if(show_flow):
         plt.plot(metrics_flow["t"], metrics_flow["g_kl_pinn"], label=plot_labels[7])
     plt.legend(ncol=2)
