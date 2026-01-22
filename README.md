@@ -4,6 +4,11 @@ Solve PDE with error bounds using physics-informed learning
 - propagated probability density function (uncertainties) over time for orbital problems
 - construct associated worst-case error bound of the approximate PDF function
 
+### Animations
+
+https://github.com/user-attachments/assets/9ac75118-3a00-40e0-9d63-28c5ab3e1681
+
+
 See [this release](https://github.com/aria-systems-group/pinn_pde/tree/release/uai2025) for other applications.
 
 ## Prerequisites
