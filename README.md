@@ -114,3 +114,20 @@ The data "true" solution" is computed by semi-analytical simulation.
 - change the name (main_3d_time) to (main_7d_time) or (main_10d_time) to run higher-D examples.
 
 Note that for 7D and 10D examples, it will take awhile to run since we are generating 10e+7 samples for evaluation.
+
+## Citation
+
+If you use this work, please cite:
+
+Kong, C.-W., Laurenti, L., McMahon, J., & Lahijanian, M.
+*Error Bounds for Physics-Informed Neural Networks in Fokker-Planck PDEs*.
+In **Proceedings of the 41st Conference on Uncertainty in Artificial Intelligence (UAI)**.
+
+```bibtex
+@inproceedings{kongerror,
+  title={Error Bounds for Physics-Informed Neural Networks in Fokker-Planck PDEs},
+  author={Kong, Chun-Wei and Laurenti, Luca and McMahon, Jay and Lahijanian, Morteza},
+  booktitle={The 41st Conference on Uncertainty in Artificial Intelligence}
+}
+
+
